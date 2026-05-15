@@ -225,6 +225,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     request.mutable_settings()->set_bucket(TStringType{settings.Bucket_});
     request.mutable_settings()->set_access_key(TStringType{settings.AccessKey_});
     request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
+    request.mutable_settings()->set_data_format(TProtoAccessor::GetProto(settings.DataFormat_));
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();

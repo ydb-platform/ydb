@@ -163,5 +163,30 @@ NImport::EIndexPopulationMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS
         return NImport::EIndexPopulationMode::Unknown;
     }
 }
+Ydb::Export::ExportToS3Settings::DataFormat TProtoAccessor::GetProto(NExport::TExportToS3Settings::EDataFormat value) {
+    switch (value) {
+    case NExport::TExportToS3Settings::EDataFormat::UNSPECIFIED:
+        return Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED;
+    case NExport::TExportToS3Settings::EDataFormat::CSV:
+        return Ydb::Export::ExportToS3Settings::CSV;
+    case NExport::TExportToS3Settings::EDataFormat::PARQUET:
+        return Ydb::Export::ExportToS3Settings::PARQUET;
+    default:
+        return Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED;
+    }
+}
+
+NExport::TExportToS3Settings::EDataFormat TProtoAccessor::FromProto(Ydb::Export::ExportToS3Settings::DataFormat value) {
+    switch (value) {
+    case Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED:
+        return NExport::TExportToS3Settings::EDataFormat::UNSPECIFIED;
+    case Ydb::Export::ExportToS3Settings::CSV:
+        return NExport::TExportToS3Settings::EDataFormat::CSV;
+    case Ydb::Export::ExportToS3Settings::PARQUET:
+        return NExport::TExportToS3Settings::EDataFormat::PARQUET;
+    default:
+        return NExport::TExportToS3Settings::EDataFormat::UNSPECIFIED;
+    }
+}
 
 } // namespace NYdb

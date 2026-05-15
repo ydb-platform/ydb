@@ -322,7 +322,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetSecretKey(exportSettings.secret_key());
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
-
+            
 
 
             backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
@@ -336,6 +336,17 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 break;
             default:
                 Y_ABORT("Unknown scheme");
+            }
+
+            switch(exportSettings.data_format()) {
+                case Ydb::Export::ExportToS3Settings::CSV:
+                    backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::CSV);
+                    break;
+                case Ydb::Export::ExportToS3Settings::PARQUET:
+                    backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::PARQUET);
+                    break;
+                default:
+                    Y_ABORT("Unknown data format");
             }
 
             if (const auto region = exportSettings.region()) {

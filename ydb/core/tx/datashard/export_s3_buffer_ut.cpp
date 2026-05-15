@@ -63,10 +63,42 @@ public:
         }
     }
 
+    NExportScan::IBuffer* GetParquetBuffer() {
+        if (!ParquetBuffer) {
+            TS3ExportBufferSettings settings = S3ExportBufferSettings;
+            settings.WithColumns(Columns);
+            ParquetBuffer.Reset(CreateS3ParquetExportBuffer(std::move(settings)));
+
+            TVector<ui32> tags;
+            tags.reserve(Columns.size());
+            for (auto&& [tag, _] : Columns) {
+                tags.push_back(tag);
+            }
+            ParquetBuffer->ColumnsOrder(tags);
+        }
+        return ParquetBuffer.Get();
+    }
+
+    void TestParquetMinBufferSize(ui64 minBufferSize) {
+        auto buffer = GetParquetBuffer();
+        for (ui32 i = 0; i < 100; ++i) {
+            UNIT_ASSERT(CollectKeyValue(i, "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"));
+            NExportScan::IBuffer::TStats stats;
+            if (buffer->IsFilled()) {
+                THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+                UNIT_ASSERT(event);
+                auto* evBuffer = dynamic_cast<NKikimr::NDataShard::TEvExportScan::TEvBuffer<TBuffer>*>(event.get());
+                UNIT_ASSERT(evBuffer);
+                UNIT_ASSERT_GE_C(evBuffer->Buffer.Size(), minBufferSize, "Got buffer size " << evBuffer->Buffer.Size() << ". Iteration: " << i);
+            }
+        }
+    }
+
 public:
     IExport::TTableColumns Columns;
     TS3ExportBufferSettings S3ExportBufferSettings;
     THolder<NExportScan::IBuffer> S3ExportBuffer;
+    THolder<NExportScan::IBuffer> ParquetBuffer;
 };
 
 Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
@@ -104,6 +136,42 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             .WithMaxBytes(1'000'000);
 
         TestMinBufferSize(minBufferSize);
+    }
+
+    Y_UNIT_TEST(ParquetMinBufferSize) {
+        ui64 minBufferSize = 5000;
+        Settings()
+            .WithMaxRows(2)
+            .WithMinBytes(minBufferSize)
+            .WithMaxBytes(1'000'000);
+
+        TestParquetMinBufferSize(minBufferSize);
+    }
+
+    Y_UNIT_TEST(ParquetMinBufferSizeWithCompression) {
+        ui64 minBufferSize = 5000;
+        Settings()
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))
+            .WithMaxRows(2)
+            .WithMinBytes(minBufferSize)
+            .WithMaxBytes(1'000'000);
+
+        TestParquetMinBufferSize(minBufferSize);
+    }
+
+    Y_UNIT_TEST(ParquetMinBufferSizeWithCompressionAndEncryption) {
+        ui64 minBufferSize = 5000;
+        Settings()
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))
+            .WithEncryption(TS3ExportBufferSettings::TEncryptionSettings()
+                .WithAlgorithm("AES-256-GCM")
+                .WithIV(NBackup::TEncryptionIV::Generate())
+                .WithKey(NBackup::TEncryptionKey("256 bit test symmetric key bytes")))
+            .WithMaxRows(2)
+            .WithMinBytes(minBufferSize)
+            .WithMaxBytes(1'000'000);
+
+        TestParquetMinBufferSize(minBufferSize);
     }
 }
 

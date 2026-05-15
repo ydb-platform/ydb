@@ -86,6 +86,14 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
         UNKNOWN = std::numeric_limits<int>::max(),
     };
 
+    enum class EDataFormat {
+        UNSPECIFIED = 0,
+        CSV = 1,
+        PARQUET = 2,
+
+        UNKNOWN = std::numeric_limits<int>::max(),
+    };
+
     // For backward compatibility
     using TEncryptionAlgorithm = NExport::TEncryptionAlgorithm;
 
@@ -103,6 +111,7 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPrefix);
     FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
+    FLUENT_SETTING_DEFAULT(EDataFormat, DataFormat, TExportToS3Settings::EDataFormat::UNSPECIFIED);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
         EncryptionAlgorithm_ = algorithm;

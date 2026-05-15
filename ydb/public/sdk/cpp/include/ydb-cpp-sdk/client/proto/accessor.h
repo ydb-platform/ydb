@@ -72,6 +72,8 @@ public:
     template <typename TProtoSettings> static ES3Scheme FromProto(typename TProtoSettings::Scheme value);
     static Ydb::Export::ExportToS3Settings::StorageClass GetProto(NExport::TExportToS3Settings::EStorageClass value);
     static NExport::TExportToS3Settings::EStorageClass FromProto(Ydb::Export::ExportToS3Settings::StorageClass value);
+    static Ydb::Export::ExportToS3Settings::DataFormat GetProto(NExport::TExportToS3Settings::EDataFormat value);
+    static NExport::TExportToS3Settings::EDataFormat FromProto(Ydb::Export::ExportToS3Settings::DataFormat value);
     static NExport::EExportProgress FromProto(Ydb::Export::ExportProgress::Progress value);
     static NImport::EImportProgress FromProto(Ydb::Import::ImportProgress::Progress value);
     static Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetProto(NImport::EIndexPopulationMode value);

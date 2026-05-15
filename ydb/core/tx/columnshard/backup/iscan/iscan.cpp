@@ -1,6 +1,7 @@
 #include "iscan.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 
@@ -61,6 +62,11 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
             NDataShard::NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backupTask, codec)) {
                 return TConclusionStatus::Fail(TStringBuilder() << "Unsupported compression codec: " << backupTask.GetCompression().GetCodec());
+            }
+            if (backupTask.HasS3Settings() && backupTask.GetS3Settings().GetDataFormat() == NKikimrSchemeOp::TS3Settings::PARQUET) {
+                if (!AppData()->FeatureFlags.GetEnableParquetForS3Export()) {
+                    return TConclusionStatus::Fail("Exports to S3 with parquet format are not supported");
+                }
             }
             if (exportFactory) {
                 exp = std::shared_ptr<NDataShard::IExport>(exportFactory->CreateExportToS3(backupTask, tableColumns));

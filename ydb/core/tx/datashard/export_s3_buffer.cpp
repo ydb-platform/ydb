@@ -488,13 +488,19 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     }
 
     IExport::IBuffer* buffer = nullptr;
-    if (AppData()->FeatureFlags.GetEnableParquetForS3Export()) {
-        if (Task.HasS3Settings() && Task.GetS3Settings().GetOutFormat() ==  NKikimrSchemeOp::TS3Settings::PARQUET) {
+    if (Task.HasS3Settings()) {
+        switch (Task.GetS3Settings().GetDataFormat()) {
+        case NKikimrSchemeOp::TS3Settings::CSV:
+            buffer = CreateS3ExportBuffer(std::move(bufferSettings));
+            break;
+        case NKikimrSchemeOp::TS3Settings::PARQUET:
             buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
+            break;
         }
     }
     if (!buffer) {
         buffer = CreateS3ExportBuffer(std::move(bufferSettings));
+        // buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
     }
     return buffer;
 }

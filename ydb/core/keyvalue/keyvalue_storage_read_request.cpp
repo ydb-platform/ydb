@@ -298,12 +298,17 @@ public:
                 Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
                     << " TabletId# " << TabletInfo->TabletID
                     << " Id# " << response.Id
-                    << " Key# " << read.Key);
+                    << " LogoBlobId# " << readItem.LogoBlobId.ToString()
+                    << " Key# " << read.Key
+                    << " ResponseStatus# " << NKikimrProto::EReplyStatus_Name(response.Status)
+                    << " GetResult# " << result->ToString());
                 STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV317,
                         "Unexpected EvGetResult.",
                         (KeyValue, TabletInfo->TabletID),
                         (Status, result->Status),
                         (Id, response.Id),
+                        (LogoBlobId, readItem.LogoBlobId.ToString()),
+                        (Key, read.Key),
                         (ResponseStatus, response.Status),
                         (Deadline, IntermediateResult->Deadline),
                         (Now, TActivationContext::Now()),

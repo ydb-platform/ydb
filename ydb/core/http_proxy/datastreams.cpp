@@ -312,29 +312,30 @@ namespace NKikimr::NHttpProxy {
                         .Exception = exception,
                         .ErrorText = errorText,
                     })
-                }, issueCode);
+                }, status, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(THttpResponseDataNew&& data,std::optional<size_t> issueCode = std::nullopt) {
+            void ReplyToHttpContext(THttpResponseDataNew&& data, NYdb::EStatus status, std::optional<size_t> issueCode = std::nullopt, TStringBuf errorText = "OK") {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
             
                 ReportLatencyCounters(ctx);
-                LogHttpRequestResponse(ctx, issueCode);
-                
+                LogHttpRequestResponse(ctx, status, issueCode, errorText);
+
                 HttpContext.DoReply(std::move(data));
             }
 
-            void LogHttpRequestResponse(const TActorContext& ctx, const std::optional<size_t> issueCode) {
-                const int httpCode = issueCode ? MapToException(HttpContext.ResponseData.Status, Method, *issueCode).second : 200;
+            void LogHttpRequestResponse(const TActorContext& ctx, NYdb::EStatus status, const std::optional<size_t> issueCode, TStringBuf errorText) {
+                const int httpCode = issueCode ? MapToException(status, Method, *issueCode).second : 200;
                 const bool isServerError = IsServerError(httpCode);
                 auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
                 LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::HTTP_PROXY,
                                      NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
-                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, HttpContext.ResponseData.ErrorText));
+                                     "Request [" << HttpContext.RequestId << "] " << 
+                                     LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, errorText));
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -418,7 +419,7 @@ namespace NKikimr::NHttpProxy {
                         .ContentType = AsAwsContentType(HttpContext.ContentType),
                         .Message = "",
                         .Body = NDataStreams::Serialize(HttpContext.ContentType, *ev->Get()->Message)
-                    });
+                    }, NYdb::EStatus::SUCCESS);
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
@@ -578,6 +579,19 @@ namespace NKikimr::NHttpProxy {
             }
 
             return std::unexpected(IHttpController::EError::MethodNotFound);
+        }
+
+        THttpResponseDataNew MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            const auto exception = MapToException(Status, "", issueCode);
+            return {
+                .HttpCode = exception.second,
+                .ContentType = AsAwsContentType(contentType),
+                .Message = exception.first,
+                .Body = NDataStreams::Serialize(contentType, NDataStreams::TErrorResponse{
+                    .Exception = exception,
+                    .ErrorText = TString(message),
+                })
+            };
         }
 
         bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const override {

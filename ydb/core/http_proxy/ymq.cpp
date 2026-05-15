@@ -503,6 +503,19 @@ namespace NKikimr::NHttpProxy {
                 return std::unexpected(IHttpController::EError::MethodNotFound);
             }
 
+            THttpResponseDataNew MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+                const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
+                return {
+                    .HttpCode = httpCode,
+                    .ContentType = AsAwsContentType(contentType),
+                    .Message = errorName,
+                    .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{
+                        .StatusCode = errorName,
+                        .ErrorText = TString(message),
+                    })
+                };
+            }
+            
             bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const override {
                 return apiVersion == "AmazonSQS" && config.GetHttpConfig().GetYmqEnabled();
             }

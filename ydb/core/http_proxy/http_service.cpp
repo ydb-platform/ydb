@@ -106,9 +106,12 @@ namespace NKikimr::NHttpProxy {
             auto methodName = context.MethodName;
             Processors->Execute(std::move(methodName), std::move(context), std::move(signature), ctx);
         } catch (const NKikimr::NSQS::TSQSException& e) {
-            context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
-            context.ResponseData.ErrorText = e.what();
-            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::ACCESS_DENIED));
+            context.DoReply({
+                .HttpCode = 400,
+                .ContentType = "application/x-amz-json-1.1",
+                .Message = "AccessDeniedException",
+                .Body = TStringBuilder() << "{\"__type\": \"AccessDeniedException\", \"message\": \"" << e.what() << "\"}"
+            });
             return;
         }
     }

@@ -55,22 +55,6 @@ struct THttpResponseDataNew {
     TString Body;
 };
 
-// TODO remove it
-struct THttpResponseData {
-    bool IsYmq = false;
-    bool UseYmqStatusCode = false;
-    NYdb::EStatus Status{NYdb::EStatus::SUCCESS};
-    NJson::TJsonValue Body; // TODO remove it
-    TString SerializedBody;
-    TString ErrorText{"OK"};
-    TString YmqStatusCode;
-    ui32 YmqHttpCode = 500;
-    bool YmqIsFifo = false;
-    THashMap<TString, TString> QueueTags;
-
-    TString DumpBody(MimeTypes contentType);
-};
-
 struct THttpRequestContext {
     THttpRequestContext(const NKikimrConfig::TServerlessProxyConfig& config,
                         NHttp::THttpIncomingRequestPtr request,
@@ -83,7 +67,6 @@ struct THttpRequestContext {
     NYdb::TDriver* Driver;
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
 
-    THttpResponseData ResponseData;
     TString ServiceAccountId;
     TString RequestId;
     TString DiscoveryEndpoint;
@@ -107,7 +90,6 @@ struct THttpRequestContext {
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
-    void DoReply(const TActorContext& ctx, size_t issueCode = ISSUE_CODE_GENERIC);
     void ParseHeaders(TStringBuf headers);
 
     void DoReply(THttpResponseDataNew&& data);
@@ -162,6 +144,8 @@ public:
         const THttpRequestContext& context
     ) const = 0;
 
+    virtual THttpResponseDataNew MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
+
     virtual bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };
 
@@ -190,4 +174,4 @@ TString AsAwsContentType(MimeTypes contentType);
 } // namespace NKikimr::NHttpProxy
 
 template <>
-void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p);
+void Out<NKikimr::NHttpProxy::THttpResponseDataNew>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseDataNew& p);

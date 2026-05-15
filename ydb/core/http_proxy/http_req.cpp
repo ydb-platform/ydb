@@ -83,10 +83,6 @@ namespace NKikimr::NHttpProxy {
     THttpRequestProcessors::THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig&) {
     }
 
-    void SetApiVersionDisabledErrorText(THttpRequestContext& context) {
-        context.ResponseData.ErrorText = (TStringBuilder() << context.ApiVersion << " is disabled");
-    }
-
     bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context,
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
@@ -95,14 +91,18 @@ namespace NKikimr::NHttpProxy {
         if (controller) {
             auto proc = controller->GetProcessor(name, context);
             if (proc.has_value()) {
-                proc.value()->Execute(std::move(context), std::move(signature), ctx);
+                try {
+                    proc.value()->Execute(std::move(context), std::move(signature), ctx);
+                } catch (const NKikimr::NSQS::TSQSException& e) {
+                    context.DoReply(controller->MakeError(context.ContentType, NYdb::EStatus::BAD_REQUEST,
+                        e.what(), static_cast<size_t>(NYds::EErrorCodes::ACCESS_DENIED)));
+                }
                 return true;
             } else {
                 switch (proc.error()) {
                     case IHttpController::EError::MethodNotFound:
-                        context.ResponseData.Status = NYdb::EStatus::UNSUPPORTED;
-                        context.ResponseData.ErrorText = TStringBuilder() << "Unknown method name " << name.Quote();
-                        context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION));
+                        context.DoReply(controller->MakeError(context.ContentType, NYdb::EStatus::UNSUPPORTED,
+                            TStringBuilder() << "Unknown method name " << name.Quote(), static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION)));
                         return false;
                 }
             }
@@ -207,105 +207,6 @@ namespace NKikimr::NHttpProxy {
         ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
-    void THttpRequestContext::DoReply(const TActorContext& ctx, size_t issueCode) {
-        auto createResponse = [this](const auto& request,
-                                     TStringBuf status,
-                                     TStringBuf message,
-                                     TStringBuf contentType,
-                                     TStringBuf body) {
-            NHttp::THttpOutgoingResponsePtr response =
-                new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", status, message);
-            response->Set<&NHttp::THttpResponse::Connection>(request->GetConnection());
-            response->Set(REQUEST_ID_HEADER_EXT, RequestId);
-            if (!contentType.empty() && !body.empty()) {
-                response->Set<&NHttp::THttpResponse::ContentType>(contentType);
-                if (!request->Endpoint->CompressContentTypes.empty()) {
-                    contentType = NHttp::Trim(contentType.Before(';'), ' ');
-                    if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
-                        response->EnableCompression();
-                    }
-                }
-            }
-
-            if (response->IsNeedBody() || !body.empty()) {
-                if (request->Method == "HEAD") {
-                    response->Set<&NHttp::THttpResponse::ContentLength>(ToString(body.size()));
-                } else {
-                    response->SetBody(body);
-                }
-            }
-            return response;
-        };
-
-        if (ResponseData.Status == NYdb::EStatus::SUCCESS) {
-            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "reply ok");
-        } else {
-            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                          "reply with status: " << ResponseData.Status <<
-                          " message: " << ResponseData.ErrorText);
-            ResponseData.Body.SetType(NJson::JSON_MAP);
-            ResponseData.Body["message"] = ResponseData.ErrorText;
-            if (ResponseData.UseYmqStatusCode) {
-                ResponseData.Body["__type"] = ResponseData.YmqStatusCode;
-            } else {
-                ResponseData.Body["__type"] = MapToException(ResponseData.Status, MethodName, issueCode).first;
-            }
-        }
-
-        TString errorName;
-        ui32 httpCode;
-        if (ResponseData.UseYmqStatusCode) {
-            httpCode = ResponseData.YmqHttpCode;
-            errorName = ResponseData.YmqStatusCode;
-        } else {
-            std::tie(errorName, httpCode) = MapToException(ResponseData.Status, MethodName, issueCode);
-        }
-        auto response = createResponse(
-            Request,
-            TStringBuilder() << (ui32)httpCode,
-            errorName,
-            AsAwsContentType(ContentType),
-            ResponseData.SerializedBody.empty() ? ResponseData.DumpBody(ContentType) : ResponseData.SerializedBody
-        );
-
-        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
-            // Send request attributes to the metering actor
-            auto reportRequestAttributes = MakeHolder<NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
-
-            auto& requestAttributes = reportRequestAttributes->Data;
-
-            requestAttributes.HttpStatusCode = httpCode;
-            requestAttributes.IsFifo = ResponseData.YmqIsFifo;
-            requestAttributes.FolderId = FolderId;
-            requestAttributes.RequestSizeInBytes = Request->Size();
-            requestAttributes.ResponseSizeInBytes = response->Size();
-            requestAttributes.SourceAddress = SourceAddress;
-            requestAttributes.ResourceId = ResourceId;
-            requestAttributes.Action = NSQS::ActionFromString(MethodName);
-            for (const auto& [k, v] : ResponseData.QueueTags) {
-                requestAttributes.QueueTags[k] = v;
-            }
-
-            LOG_SP_DEBUG_S(
-                ctx,
-                NKikimrServices::HTTP_PROXY,
-                TStringBuilder() << "Send metering event."
-                << " HttpStatusCode: " << requestAttributes.HttpStatusCode
-                << " IsFifo: " << requestAttributes.IsFifo
-                << " FolderId: " << requestAttributes.FolderId
-                << " RequestSizeInBytes: " << requestAttributes.RequestSizeInBytes
-                << " ResponseSizeInBytes: " << requestAttributes.ResponseSizeInBytes
-                << " SourceAddress: " << requestAttributes.SourceAddress
-                << " ResourceId: " << requestAttributes.ResourceId
-                << " Action: " << requestAttributes.Action
-            );
-
-            ctx.Send(NSQS::MakeSqsMeteringServiceID(), reportRequestAttributes.Release());
-        }
-
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-    }
-
     TMaybe<TStringBuf> ExtractUserName(const TStringBuf& authorizationHeader) {
         const size_t spacePos = authorizationHeader.find(' ');
         if (spacePos == TString::npos) {
@@ -360,52 +261,6 @@ namespace NKikimr::NHttpProxy {
         RequestId = GenerateRequestId(sourceReqId);
     }
 
-    // TODO remove it
-    TString THttpResponseData::DumpBody(MimeTypes contentType) {
-        // according to https://json.nlohmann.me/features/binary_formats/cbor/#serialization
-        auto cborBinaryTagBySize = [](size_t size) -> ui8 {
-            if (size <= 23) {
-                return 0x40 + static_cast<ui32>(size);
-            } else if (size <= 255) {
-                return 0x58;
-            } else if (size <= 65536) {
-                return 0x59;
-            }
-
-            return 0x5A;
-        };
-        switch (contentType) {
-        case MIME_CBOR: {
-            bool gotData = false;
-            std::function<bool(int, nlohmann::json::parse_event_t, nlohmann::basic_json<>&)> bz =
-                [&gotData, &cborBinaryTagBySize](int, nlohmann::json::parse_event_t event, nlohmann::json& parsed) {
-                    if (event == nlohmann::json::parse_event_t::key and parsed == nlohmann::json("Data")) {
-                        gotData = true;
-                        return true;
-                    }
-                    if (event == nlohmann::json::parse_event_t::value and gotData) {
-                        gotData = false;
-                        std::string data = parsed.get<std::string>();
-                        parsed = nlohmann::json::binary({data.begin(), data.end()},
-                                                        cborBinaryTagBySize(data.size()));
-                        return true;
-                    }
-                    return true;
-                };
-
-            auto toCborStr = NJson::WriteJson(Body, false);
-            auto json =
-                nlohmann::json::parse(TStringBuf(toCborStr).begin(), TStringBuf(toCborStr).end(), bz, false);
-            auto toCbor = nlohmann::json::to_cbor(json);
-            return {(char*)&toCbor[0], toCbor.size()};
-        }
-        default: {
-        case MIME_JSON:
-            return NJson::WriteJson(Body, false);
-        }
-        }
-    }
-
     TString AsAwsContentType(MimeTypes contentType) {
         switch (contentType) {
             case MIME_JSON:
@@ -422,8 +277,11 @@ namespace NKikimr::NHttpProxy {
 
 
 template <>
-void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p) {
-    TString s = TStringBuilder() << "NYdb status: " << std::to_string(static_cast<size_t>(p.Status)) <<
-    ". Body: " << NJson::WriteJson(p.Body) << ". Error text: " << p.ErrorText;
+void Out<NKikimr::NHttpProxy::THttpResponseDataNew>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseDataNew& p) {
+    TString s = TStringBuilder() << "NYdb status: " << p.HttpCode <<
+        ". Content type: " << p.ContentType <<  
+        ". Message: " << p.Message <<
+        ". Body: " << p.Body;
+
     o.Write(s.data(), s.length());
 }

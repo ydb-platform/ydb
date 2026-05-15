@@ -50,9 +50,9 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
         return node;
     }
 
-    whereLambda = ctx.DeepCopyLambda(whereLambda.GetRef());
+    auto newLambda = ctx.DeepCopyLambda(whereLambda.GetRef());
 
-    VisitExpr(whereLambda, [&sublink](const TExprNode::TPtr& node) {
+    VisitExpr(newLambda, [&sublink](const TExprNode::TPtr& node) {
         if (node->IsCallable("PgSubLink") || node->IsCallable("YqlSubLink")) {
             sublink = node;
             return false;
@@ -91,7 +91,11 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
 
     Y_ENSURE(sublink);
 
-    auto newLambda = ctx.ReplaceNode(std::move(whereLambda), sublink.GetRef(), kqpSublink);
+    newLambda = ctx.ReplaceNode(std::move(newLambda), sublink.GetRef(), kqpSublink);
+
+    newLambda->Child(0)->Child(0)->SetTypeAnn(whereLambda->Child(0)->Child(0)->GetTypeAnn());
+    whereLambda->Child(0)->Child(0)->CopyConstraints(*newLambda->Child(0)->Child(0));
+
     if (node->IsCallable("PgWhere")) {
         return ctx.NewCallable(node->Pos(), "PgWhere", {node->ChildPtr(0), newLambda});
     } else {

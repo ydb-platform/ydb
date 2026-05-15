@@ -20,6 +20,8 @@ def from_part_path_to_device_path(path: str):
         return None
     comp = sd_comp if dirs[2].startswith('sd') else nvme_comp
     match = comp.fullmatch(dirs[2])
+    if match is None:
+        return None
     dirs[2] = match[1]
     return '/' + os.path.join(*dirs)
 

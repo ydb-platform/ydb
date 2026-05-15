@@ -1,8 +1,8 @@
 #pragma once
 
 #include "native_types_support.h"
-#include "overloaded.h"
 
+#include <util/generic/overloaded.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
@@ -61,7 +61,7 @@ struct TNativeTypeCodeMapping {
 
     template <typename T>
     static bool Deserialize(T& value, TNativeTypeCode code, const void* data, std::size_t length) {
-        return Invoke(code, data, length, MakeOverloaded([&value](const T& v) { value = v; }, [](const auto&) {}));
+        return Invoke(code, data, length, TOverloaded{[&value](const T& v) { value = v; }, [](const auto&) {}});
     }
 
     template <typename T>
@@ -123,7 +123,7 @@ struct TNativeTypeCodeMapping<TPair> {
 
     template <typename T>
     static bool Deserialize(T& value, TNativeTypeCode code, const void* data, std::size_t length) {
-        return Invoke(code, data, length, MakeOverloaded([&value](const T& v) { value = v; }, [](const auto&) {}));
+        return Invoke(code, data, length, TOverloaded{[&value](const T& v) { value = v; }, [](const auto&) {}});
     }
 
     template <typename T>

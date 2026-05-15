@@ -49,22 +49,17 @@ bool TJsonWriter::Write(NJsonWriter::TBuf& jsonWriter, const TStructuredMessage&
     TJsonKeyValueWriter keyValueWriter{jsonWriter, ReservedKeyNames, jsonStarted};
     KeyValueWriter = &keyValueWriter;
 
-    auto processValue =
-        [&](const std::vector<TKeyName>& name, TNativeTypeCode typeCode, const void* data, std::size_t length) {
-            auto it = TypeValueWriterMap.find(typeCode);
-            if (it != end(TypeValueWriterMap)) {
-                ValueWriter.KeyName = &name;
-                return it->second(data, length);
-            } else {
-                return false;
-            }
-        };
-    auto result = message.ForEachSerialized(processValue);
+    auto result = MessageWriter.WriteMessage(message);
+
     KeyValueWriter = nullptr;
     keyValueWriter.Done();
     return result;
 }
 
-TJsonWriter::TJsonValueWriter::TJsonValueWriter(TJsonWriter& writer) : Writer(writer) {}
+TJsonWriter::TValueWriter::TValueWriter(TJsonWriter& writer) : TBaseValueWriter<TJsonWriter>(writer) {}
+
+void TJsonWriter::TValueWriter::operator()(const TString& value) const {
+    Writer.KeyValueWriter->AppendKeyValue(*KeyName, value);
+}
 
 }  // namespace NActors::NStructuredLog

@@ -21,13 +21,14 @@ bool TNativeTypeSupport<TString>::Deserialize(TString& value, const void* data, 
         return false;
     }
 
-    TLength stringLength = *(reinterpret_cast<const TLength*>(data));
+    TLength stringLength;
+    memcpy(&stringLength, data,sizeof(TLength));
     if (sizeof(TLength) + stringLength != length) {
         return false;
     }
 
-    auto charPtr = reinterpret_cast<const char*>(data);
-    value = TString(charPtr + sizeof(stringLength), stringLength);
+    auto charPtr = static_cast<const char*>(data);
+    value = TString(charPtr + sizeof(TLength), stringLength);
     return true;
 }
 

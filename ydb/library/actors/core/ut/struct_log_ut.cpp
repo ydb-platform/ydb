@@ -10,6 +10,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/overloaded.h>
+
 namespace NActors::NStructuredLog {
 
 template <typename T>
@@ -146,9 +148,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(ScanValues) {
         auto message = YDB_LOG_CREATE_MESSAGE({"string", static_cast<TString>("abc")});
 
-        message.ForEachTyped(MakeOverloaded([](const std::vector<TKeyName>& name, const TString& value) {
+        message.ForEachTyped(TOverloaded{[](const std::vector<TKeyName>& name, const TString& value) {
             UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc");
-        }));
+        }});
     }
 
     TString GetMessageString(const TStructuredMessage& message) {
@@ -170,9 +172,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
             result += TTypesMapping::ToString(value);
         };
 
-        message.ForEachTyped(MakeOverloaded([&](const std::vector<TKeyName>& name, const TString& value) {
+        message.ForEachTyped(TOverloaded{[&](const std::vector<TKeyName>& name, const TString& value) {
             append(name, value);
-        }));
+        }});
         return result;
     }
 

@@ -1,16 +1,8 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorid.h>
-
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
-#include <charconv>
-#include <cstdint>
-#include <cstring>
-#include <string>
-
-#include <type_traits>
 #include <vector>
 
 namespace NActors::NStructuredLog {

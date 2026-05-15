@@ -5,7 +5,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <memory>
+#include <random>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -31,6 +34,12 @@ TFixture MakeFixture(std::chrono::milliseconds flushInterval,
     settings.FlushInterval = flushInterval;
     settings.ThreadPendingThreshold = threshold;
     auto buffered = CreateBufferedMetricRegistry(fake, settings);
+    return {std::move(fake), std::move(buffered)};
+}
+
+TFixture MakeFixture(TMetricBufferSettings settings) {
+    auto fake = std::make_shared<TFakeMetricRegistry>();
+    auto buffered = CreateBufferedMetricRegistry(fake, std::move(settings));
     return {std::move(fake), std::move(buffered)};
 }
 
@@ -296,4 +305,273 @@ TEST(MetricBufferTest, SelfObservabilityMetricsAreEmitted) {
         "ydb_sdk_metric_buffer_flushes_total", {{"trigger", "shutdown"}});
     ASSERT_NE(shutdownFlushes, nullptr);
     EXPECT_GE(shutdownFlushes->Get(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Best-effort overflow handling and dropped updates accounting.
+// ---------------------------------------------------------------------------
+
+TEST(MetricBufferTest, OverflowDropsUpdatesAndReportsDroppedMetrics) {
+    TMetricBufferSettings settings;
+    settings.FlushInterval = std::chrono::seconds(60); // rely on shutdown drain
+    settings.ThreadPendingThreshold = 0;
+    settings.ThreadPendingLimit = 8;
+    auto fix = MakeFixture(settings);
+
+    auto counter = fix.Buffered->Counter(kCounter, {}, "", "");
+    auto hist = fix.Buffered->Histogram(kHistogram, {1.0}, {}, "", "");
+
+    for (int i = 0; i < 50; ++i) {
+        counter->Inc();
+        hist->Record(0.01 * i);
+    }
+
+    fix.Buffered.reset();
+
+    auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
+    auto fakeHist = fix.Fake->GetHistogram(kHistogram, {});
+    ASSERT_NE(fakeCounter, nullptr);
+    ASSERT_NE(fakeHist, nullptr);
+    EXPECT_LE(fakeCounter->Get(), 8);
+    EXPECT_LE(fakeHist->Count(), 8u);
+
+    auto droppedCounter = fix.Fake->GetCounter(
+        "ydb_sdk_metric_buffer_dropped_updates_total", {{"instrument", "counter"}});
+    auto droppedHistogram = fix.Fake->GetCounter(
+        "ydb_sdk_metric_buffer_dropped_updates_total", {{"instrument", "histogram"}});
+    ASSERT_NE(droppedCounter, nullptr);
+    ASSERT_NE(droppedHistogram, nullptr);
+    EXPECT_GT(droppedCounter->Get(), 0);
+    EXPECT_GT(droppedHistogram->Get(), 0);
+}
+
+TEST(MetricBufferTest, ZeroPendingLimitDisablesDropping) {
+    TMetricBufferSettings settings;
+    settings.FlushInterval = std::chrono::seconds(60);
+    settings.ThreadPendingThreshold = 0;
+    settings.ThreadPendingLimit = 0; // unlimited
+    auto fix = MakeFixture(settings);
+
+    auto counter = fix.Buffered->Counter(kCounter, {}, "", "");
+    for (int i = 0; i < 1000; ++i) {
+        counter->Inc();
+    }
+    fix.Buffered.reset();
+
+    auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
+    ASSERT_NE(fakeCounter, nullptr);
+    EXPECT_EQ(fakeCounter->Get(), 1000);
+
+    auto droppedCounter = fix.Fake->GetCounter(
+        "ydb_sdk_metric_buffer_dropped_updates_total", {{"instrument", "counter"}});
+    if (droppedCounter) {
+        EXPECT_EQ(droppedCounter->Get(), 0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Post-shutdown handle behavior: pass-through mode for still-live handles.
+// ---------------------------------------------------------------------------
+
+TEST(MetricBufferTest, LiveHandlesBecomePassThroughAfterBufferedRegistryDestruction) {
+    auto fix = MakeFixture(std::chrono::seconds(60)); // do not auto-flush
+    auto counter = fix.Buffered->Counter(kCounter, {}, "", "");
+    auto hist = fix.Buffered->Histogram(kHistogram, {1.0}, {}, "", "");
+
+    counter->Inc();      // buffered
+    hist->Record(0.5);   // buffered
+
+    // Destroy buffered registry first; handles remain alive.
+    fix.Buffered.reset();
+
+    // After shutdown handles should bypass the buffer.
+    counter->Add(3);
+    hist->Record(1.5);
+
+    auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
+    auto fakeHist = fix.Fake->GetHistogram(kHistogram, {});
+    ASSERT_NE(fakeCounter, nullptr);
+    ASSERT_NE(fakeHist, nullptr);
+    EXPECT_EQ(fakeCounter->Get(), 4); // 1 buffered + 3 pass-through
+    EXPECT_EQ(fakeHist->Count(), 2u); // 1 buffered + 1 pass-through
+}
+
+// ---------------------------------------------------------------------------
+// Race-ish test: concurrent registration and periodic flushing.
+// ---------------------------------------------------------------------------
+
+TEST(MetricBufferTest, ConcurrentMetricRegistrationAndFlushIsLossless) {
+    auto fix = MakeFixture(std::chrono::milliseconds(5));
+
+    constexpr int kThreads = 4;
+    constexpr int kMetricsPerThread = 50;
+    constexpr int kIncsPerMetric = 200;
+
+    std::vector<std::thread> workers;
+    workers.reserve(kThreads);
+    for (int t = 0; t < kThreads; ++t) {
+        workers.emplace_back([&, t] {
+            for (int m = 0; m < kMetricsPerThread; ++m) {
+                auto name = std::string("race.counter.") + std::to_string(t) + "." + std::to_string(m);
+                auto c = fix.Buffered->Counter(name, {}, "", "");
+                for (int i = 0; i < kIncsPerMetric; ++i) {
+                    c->Inc();
+                }
+            }
+        });
+    }
+    for (auto& w : workers) {
+        w.join();
+    }
+    fix.Buffered.reset();
+
+    const int64_t expected = static_cast<int64_t>(kIncsPerMetric);
+    for (int t = 0; t < kThreads; ++t) {
+        for (int m = 0; m < kMetricsPerThread; ++m) {
+            auto name = std::string("race.counter.") + std::to_string(t) + "." + std::to_string(m);
+            auto c = fix.Fake->GetCounter(name, {});
+            ASSERT_NE(c, nullptr) << name;
+            EXPECT_EQ(c->Get(), expected) << name;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Flush worker resiliency: underlying metric calls may throw.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+class TThrowingCounter final : public ICounter {
+public:
+    explicit TThrowingCounter(std::atomic<std::uint64_t>* calls) : Calls_(calls) {}
+    void Inc() override { throw std::runtime_error("inc throw"); }
+    void Add(std::uint64_t) override {
+        Calls_->fetch_add(1, std::memory_order_relaxed);
+        throw std::runtime_error("add throw");
+    }
+private:
+    std::atomic<std::uint64_t>* Calls_;
+};
+
+class TThrowingHistogram final : public IHistogram {
+public:
+    explicit TThrowingHistogram(std::atomic<std::uint64_t>* calls) : Calls_(calls) {}
+    void Record(double) override { throw std::runtime_error("record throw"); }
+    void RecordMany(const std::vector<double>&) override {
+        Calls_->fetch_add(1, std::memory_order_relaxed);
+        throw std::runtime_error("record many throw");
+    }
+private:
+    std::atomic<std::uint64_t>* Calls_;
+};
+
+class TThrowingRegistry final : public IMetricRegistry {
+public:
+    std::shared_ptr<ICounter> Counter(const std::string&, const TLabels&, const std::string&, const std::string&) override {
+        if (!Counter_) {
+            Counter_ = std::make_shared<TThrowingCounter>(&CounterCalls_);
+        }
+        return Counter_;
+    }
+    std::shared_ptr<IGauge> Gauge(const std::string&, const TLabels&, const std::string&, const std::string&) override {
+        return nullptr;
+    }
+    std::shared_ptr<IHistogram> Histogram(const std::string&, const std::vector<double>&, const TLabels&, const std::string&, const std::string&) override {
+        if (!Histogram_) {
+            Histogram_ = std::make_shared<TThrowingHistogram>(&HistogramCalls_);
+        }
+        return Histogram_;
+    }
+    std::uint64_t CounterCalls() const { return CounterCalls_.load(std::memory_order_relaxed); }
+    std::uint64_t HistogramCalls() const { return HistogramCalls_.load(std::memory_order_relaxed); }
+private:
+    std::shared_ptr<TThrowingCounter> Counter_;
+    std::shared_ptr<TThrowingHistogram> Histogram_;
+    std::atomic<std::uint64_t> CounterCalls_{0};
+    std::atomic<std::uint64_t> HistogramCalls_{0};
+};
+
+} // namespace
+
+TEST(MetricBufferTest, FlushThreadSurvivesUnderlyingExceptions) {
+    auto throwing = std::make_shared<TThrowingRegistry>();
+    TMetricBufferSettings settings;
+    settings.FlushInterval = std::chrono::milliseconds(2);
+    settings.ThreadPendingThreshold = 4;
+    auto buffered = CreateBufferedMetricRegistry(throwing, settings);
+
+    auto c = buffered->Counter("throw.counter", {}, "", "");
+    auto h = buffered->Histogram("throw.hist", {1.0}, {}, "", "");
+    for (int i = 0; i < 100; ++i) {
+        c->Inc();
+        h->Record(0.1 * i);
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_GT(throwing->CounterCalls(), 0u);
+    EXPECT_GT(throwing->HistogramCalls(), 0u);
+
+    EXPECT_NO_THROW(buffered.reset());
+}
+
+// ---------------------------------------------------------------------------
+// Property-style invariant test for deterministic random operations.
+// ---------------------------------------------------------------------------
+
+TEST(MetricBufferTest, RandomOperationSequencePreservesTotalsWithoutDropping) {
+    TMetricBufferSettings settings;
+    settings.FlushInterval = std::chrono::milliseconds(3);
+    settings.ThreadPendingThreshold = 128;
+    settings.ThreadPendingLimit = 0;
+    auto fix = MakeFixture(settings);
+
+    auto counter = fix.Buffered->Counter(kCounter, {}, "", "");
+    auto hist = fix.Buffered->Histogram(kHistogram, {1.0}, {}, "", "");
+
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<int> opDist(0, 3);
+    std::uniform_int_distribution<int> addDist(1, 5);
+
+    int64_t expectedCounter = 0;
+    std::size_t expectedHist = 0;
+    for (int i = 0; i < 5000; ++i) {
+        const int op = opDist(rng);
+        switch (op) {
+            case 0:
+                counter->Inc();
+                ++expectedCounter;
+                break;
+            case 1: {
+                const int d = addDist(rng);
+                counter->Add(d);
+                expectedCounter += d;
+                break;
+            }
+            case 2:
+                hist->Record(static_cast<double>(i) * 0.01);
+                ++expectedHist;
+                break;
+            default: {
+                std::vector<double> batch;
+                const int n = addDist(rng);
+                batch.reserve(n);
+                for (int j = 0; j < n; ++j) {
+                    batch.push_back(static_cast<double>(i + j) * 0.001);
+                }
+                hist->RecordMany(batch);
+                expectedHist += batch.size();
+                break;
+            }
+        }
+    }
+
+    fix.Buffered.reset();
+
+    auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
+    auto fakeHist = fix.Fake->GetHistogram(kHistogram, {});
+    ASSERT_NE(fakeCounter, nullptr);
+    ASSERT_NE(fakeHist, nullptr);
+    EXPECT_EQ(fakeCounter->Get(), expectedCounter);
+    EXPECT_EQ(fakeHist->Count(), expectedHist);
 }

@@ -30,6 +30,7 @@ constexpr const char* kFlushesTotalMetric  = "ydb_sdk_metric_buffer_flushes_tota
 constexpr const char* kEventsBufferedTotal = "ydb_sdk_metric_buffer_events_buffered_total";
 constexpr const char* kUnderlyingCallsTotal= "ydb_sdk_metric_buffer_underlying_calls_total";
 constexpr const char* kPendingUpdatesMetric= "ydb_sdk_metric_buffer_pending_updates";
+constexpr const char* kDroppedUpdatesTotal= "ydb_sdk_metric_buffer_dropped_updates_total";
 
 const std::vector<double>& FlushDurationBuckets() {
     static const std::vector<double> kBuckets = {
@@ -99,7 +100,12 @@ public:
                 // best-effort
             }
         }
-        FlushAll(EFlushTrigger::Shutdown);
+        try {
+            FlushAll(EFlushTrigger::Shutdown);
+        } catch (...) {
+            // best-effort: never let a misbehaving underlying registry crash the
+            // owning application during teardown.
+        }
     }
 
     // -- Handle registration --------------------------------------------------
@@ -136,6 +142,11 @@ public:
             return;
         }
         TThreadState& state = AcquireThreadState();
+        if (ShouldDropUpdate(state, 1)) {
+            ReportDroppedCounter(delta);
+            TriggerFlush(EFlushTrigger::Threshold);
+            return;
+        }
         bool overThreshold = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
@@ -169,6 +180,11 @@ public:
             return;
         }
         TThreadState& state = AcquireThreadState();
+        if (ShouldDropUpdate(state, 1)) {
+            ReportDroppedHistogram(1);
+            TriggerFlush(EFlushTrigger::Threshold);
+            return;
+        }
         bool overThreshold = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
@@ -209,6 +225,11 @@ public:
             return;
         }
         TThreadState& state = AcquireThreadState();
+        if (ShouldDropUpdate(state, values.size())) {
+            ReportDroppedHistogram(values.size());
+            TriggerFlush(EFlushTrigger::Threshold);
+            return;
+        }
         bool overThreshold = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
@@ -239,6 +260,28 @@ private:
         std::shared_ptr<TThreadState> State;
         std::weak_ptr<TMetricBufferCore> Owner;
 
+        TThreadLocalHolder() = default;
+        TThreadLocalHolder(std::shared_ptr<TThreadState> state,
+                           std::weak_ptr<TMetricBufferCore> owner) noexcept
+            : State(std::move(state)), Owner(std::move(owner)) {}
+
+        TThreadLocalHolder(const TThreadLocalHolder&) = delete;
+        TThreadLocalHolder& operator=(const TThreadLocalHolder&) = delete;
+
+        TThreadLocalHolder(TThreadLocalHolder&& other) noexcept
+            : State(std::move(other.State)), Owner(std::move(other.Owner)) {}
+
+        TThreadLocalHolder& operator=(TThreadLocalHolder&& other) noexcept {
+            if (this != &other) {
+                if (State) {
+                    State->Active.store(false, std::memory_order_release);
+                }
+                State = std::move(other.State);
+                Owner = std::move(other.Owner);
+            }
+            return *this;
+        }
+
         ~TThreadLocalHolder() {
             if (State) {
                 State->Active.store(false, std::memory_order_release);
@@ -267,7 +310,7 @@ private:
         tlsTable.emplace_back(this, state);
 
         thread_local std::vector<TThreadLocalHolder> holders;
-        holders.push_back(TThreadLocalHolder{state, weak_from_this()});
+        holders.emplace_back(state, weak_from_this());
 
         return *state;
     }
@@ -275,6 +318,35 @@ private:
     void NudgeOnThreadExit() noexcept {
         std::lock_guard<std::mutex> lock(WaitMutex_);
         Wakeup_.notify_all();
+    }
+
+    bool ShouldDropUpdate(const TThreadState& state, std::size_t incomingOps) const noexcept {
+        if (Settings_.ThreadPendingLimit == 0) {
+            return false;
+        }
+        const std::size_t pending = state.PendingOps.load(std::memory_order_relaxed);
+        if (pending >= Settings_.ThreadPendingLimit) {
+            return true;
+        }
+        return incomingOps > (Settings_.ThreadPendingLimit - pending);
+    }
+
+    void ReportDroppedCounter(std::uint64_t updates) noexcept {
+        if (DroppedCounterUpdates_ && updates != 0) {
+            try {
+                DroppedCounterUpdates_->Add(updates);
+            } catch (...) {
+            }
+        }
+    }
+
+    void ReportDroppedHistogram(std::size_t updates) noexcept {
+        if (DroppedHistogramUpdates_ && updates != 0) {
+            try {
+                DroppedHistogramUpdates_->Add(static_cast<std::uint64_t>(updates));
+            } catch (...) {
+            }
+        }
     }
 
     void TriggerFlush(EFlushTrigger trigger) noexcept {
@@ -322,8 +394,15 @@ private:
                             return false;
                         }
                         std::lock_guard<std::mutex> lk(st->Mutex);
-                        if (st->PendingOps.load(std::memory_order_acquire) != 0) {
-                            return false;
+                        for (std::uint64_t delta : st->CounterDeltas) {
+                            if (delta != 0) {
+                                return false;
+                            }
+                        }
+                        for (const auto& samples : st->HistogramSamples) {
+                            if (!samples.empty()) {
+                                return false;
+                            }
                         }
                         return true;
                     }), ThreadStates_.end());
@@ -372,21 +451,36 @@ private:
                     src.clear();
                 }
             }
-            state->PendingOps.store(0, std::memory_order_release);
+            std::size_t remainingOps = 0;
+            for (std::uint64_t delta : state->CounterDeltas) {
+                if (delta != 0) {
+                    ++remainingOps;
+                }
+            }
+            for (const auto& samples : state->HistogramSamples) {
+                remainingOps += samples.size();
+            }
+            state->PendingOps.store(remainingOps, std::memory_order_release);
         }
 
         std::uint64_t addCalls = 0;
         for (std::size_t i = 0; i < counters.size(); ++i) {
             if (totalCounter[i] != 0 && counters[i]) {
-                counters[i]->Add(totalCounter[i]);
-                ++addCalls;
+                try {
+                    counters[i]->Add(totalCounter[i]);
+                    ++addCalls;
+                } catch (...) {
+                }
             }
         }
         std::uint64_t recordManyCalls = 0;
         for (std::size_t i = 0; i < histograms.size(); ++i) {
             if (!totalSamples[i].empty() && histograms[i]) {
-                histograms[i]->RecordMany(totalSamples[i]);
-                ++recordManyCalls;
+                try {
+                    histograms[i]->RecordMany(totalSamples[i]);
+                    ++recordManyCalls;
+                } catch (...) {
+                }
             }
         }
 
@@ -420,6 +514,14 @@ private:
         PendingHistogramGauge_ = reg->Gauge(
             kPendingUpdatesMetric, {{"instrument", "histogram"}},
             "Pending updates aggregated across all threads at flush start.",
+            "1");
+        DroppedCounterUpdates_ = reg->Counter(
+            kDroppedUpdatesTotal, {{"instrument", "counter"}},
+            "Total dropped metric updates due to ThreadPendingLimit overflow.",
+            "1");
+        DroppedHistogramUpdates_ = reg->Counter(
+            kDroppedUpdatesTotal, {{"instrument", "histogram"}},
+            "Total dropped metric updates due to ThreadPendingLimit overflow.",
             "1");
     }
 
@@ -458,30 +560,37 @@ private:
                           double durationSeconds,
                           std::uint64_t pendingCounters,
                           std::uint64_t pendingHistogramSamples) {
+        auto safe = [](auto&& fn) noexcept {
+            try {
+                fn();
+            } catch (...) {
+            }
+        };
+
         if (FlushDurationHist_) {
-            FlushDurationHist_->Record(durationSeconds);
+            safe([&]{ FlushDurationHist_->Record(durationSeconds); });
         }
         if (auto c = FlushesTotal(trigger)) {
-            c->Inc();
+            safe([&]{ c->Inc(); });
         }
         if (EventsBufferedCounter_ && totalEvents != 0) {
-            EventsBufferedCounter_->Add(totalEvents);
+            safe([&]{ EventsBufferedCounter_->Add(totalEvents); });
         }
         if (addCalls != 0) {
             if (auto c = UnderlyingCalls("add")) {
-                c->Add(addCalls);
+                safe([&]{ c->Add(addCalls); });
             }
         }
         if (recordManyCalls != 0) {
             if (auto c = UnderlyingCalls("record_many")) {
-                c->Add(recordManyCalls);
+                safe([&]{ c->Add(recordManyCalls); });
             }
         }
         if (PendingCounterGauge_) {
-            PendingCounterGauge_->Set(static_cast<double>(pendingCounters));
+            safe([&]{ PendingCounterGauge_->Set(static_cast<double>(pendingCounters)); });
         }
         if (PendingHistogramGauge_) {
-            PendingHistogramGauge_->Set(static_cast<double>(pendingHistogramSamples));
+            safe([&]{ PendingHistogramGauge_->Set(static_cast<double>(pendingHistogramSamples)); });
         }
     }
 
@@ -505,6 +614,8 @@ private:
 
     std::shared_ptr<IHistogram> FlushDurationHist_;
     std::shared_ptr<ICounter> EventsBufferedCounter_;
+    std::shared_ptr<ICounter> DroppedCounterUpdates_;
+    std::shared_ptr<ICounter> DroppedHistogramUpdates_;
     std::shared_ptr<IGauge> PendingCounterGauge_;
     std::shared_ptr<IGauge> PendingHistogramGauge_;
 
@@ -566,6 +677,12 @@ public:
     ~TBufferedMetricRegistry() override {
         if (Core_) {
             Core_->Shutdown();
+        }
+    }
+
+    void FlushBufferedData() {
+        if (Core_) {
+            Core_->Flush();
         }
     }
 
@@ -650,6 +767,15 @@ std::shared_ptr<IMetricRegistry> CreateBufferedMetricRegistry(
                                                     std::move(settings));
     core->Start();
     return std::make_shared<TBufferedMetricRegistry>(std::move(core));
+}
+
+bool FlushBufferedMetricRegistry(const std::shared_ptr<NMetrics::IMetricRegistry>& registry) {
+    auto buffered = std::dynamic_pointer_cast<TBufferedMetricRegistry>(registry);
+    if (!buffered) {
+        return false;
+    }
+    buffered->FlushBufferedData();
+    return true;
 }
 
 } // namespace NYdb::NObservability

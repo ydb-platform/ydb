@@ -12,6 +12,7 @@ struct TMetricBufferSettings {
     std::chrono::milliseconds FlushInterval = std::chrono::milliseconds(100);
 
     std::size_t ThreadPendingThreshold = 65536;
+    std::size_t ThreadPendingLimit = 262144;
 
     std::size_t HistogramReserveSamples = 256;
 
@@ -21,5 +22,7 @@ struct TMetricBufferSettings {
 std::shared_ptr<NMetrics::IMetricRegistry> CreateBufferedMetricRegistry(
     std::shared_ptr<NMetrics::IMetricRegistry> underlying,
     TMetricBufferSettings settings = {});
+
+bool FlushBufferedMetricRegistry(const std::shared_ptr<NMetrics::IMetricRegistry>& registry);
 
 } // namespace NYdb::NObservability

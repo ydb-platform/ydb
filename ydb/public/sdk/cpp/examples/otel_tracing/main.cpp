@@ -88,6 +88,7 @@ nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfi
 nostd::shared_ptr<opentelemetry::metrics::MeterProvider> InitMetrics(const TConfig& cfg) {
     otlp::OtlpHttpMetricExporterOptions opts;
     opts.url = cfg.OtlpEndpoint + "/v1/metrics";
+    opts.aggregation_temporality = otlp::PreferredAggregationTemporality::kCumulative;
 
     auto exporter = otlp::OtlpHttpMetricExporterFactory::Create(opts);
 
@@ -495,8 +496,7 @@ int main(int argc, char** argv) {
 
     std::cout << "Flushing telemetry..." << std::endl;
 
-    ydbMetricRegistry.reset();
-    otelMetricRegistry.reset();
+    NObservability::FlushBufferedMetricRegistry(ydbMetricRegistry);
 
     if (auto* sdkTracerProvider = dynamic_cast<sdktrace::TracerProvider*>(tracerProvider.get())) {
         sdkTracerProvider->ForceFlush();
@@ -504,6 +504,9 @@ int main(int argc, char** argv) {
     if (auto* sdkMeterProvider = dynamic_cast<sdkmetrics::MeterProvider*>(meterProvider.get())) {
         sdkMeterProvider->ForceFlush();
     }
+
+    ydbMetricRegistry.reset();
+    otelMetricRegistry.reset();
 
     std::this_thread::sleep_for(std::chrono::seconds(3));
 

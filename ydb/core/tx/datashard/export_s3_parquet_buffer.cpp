@@ -330,12 +330,12 @@ public:
 
     std::shared_ptr<arrow::Array> Finish() override {
         auto result = builder_->Finish().ValueOrDie();
-        builder_.reset();
+        builder_->Reset();
         return result;
     }
 
     void Reset() override {
-        builder_.reset();
+        builder_->Reset();
     }
 
 private:
@@ -372,12 +372,12 @@ public:
 
     std::shared_ptr<arrow::Array> Finish() override {
         auto result = builder_->Finish().ValueOrDie();
-        builder_.reset();
+        builder_->Reset();
         return result;
     }
 
     void Reset() override {
-        builder_.reset();
+        builder_->Reset();
     }
 
 private:

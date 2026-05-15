@@ -148,6 +148,16 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
         TestParquetMinBufferSize(minBufferSize);
     }
 
+    Y_UNIT_TEST(ParquetMinBufferSizeSmall) {
+        ui64 minBufferSize = 1000;
+        Settings()
+            .WithMaxRows(2)
+            .WithMinBytes(minBufferSize)
+            .WithMaxBytes(1'000'000);
+
+        TestParquetMinBufferSize(minBufferSize);
+    }
+
     Y_UNIT_TEST(ParquetMinBufferSizeWithCompression) {
         ui64 minBufferSize = 5000;
         Settings()

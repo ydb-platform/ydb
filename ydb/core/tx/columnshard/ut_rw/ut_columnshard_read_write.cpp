@@ -2584,6 +2584,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
         TTester::Setup(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
 
         runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
 
@@ -2841,6 +2842,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csDefaultControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
         TTester::Setup(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);

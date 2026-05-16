@@ -157,7 +157,7 @@ namespace NKikimr::NHttpProxy {
                 ReplyToHttpContext({
                     .HttpCode = httpCode,
                     .ContentType = HttpContext.ContentType,
-                    .Message = errorText,
+                    .Message = errorName,
                     .Body = NSQS::Serialize(HttpContext.ContentType, {
                         .StatusCode = errorName,
                         .ErrorText = errorText,
@@ -179,7 +179,7 @@ namespace NKikimr::NHttpProxy {
                 ReplyToHttpContext({
                     .HttpCode = httpStatusCode,
                     .ContentType = HttpContext.ContentType,
-                    .Message = errorText,
+                    .Message = ymqStatusCode,
                     .Body = NSQS::Serialize(HttpContext.ContentType, {
                         .StatusCode = ymqStatusCode,
                         .ErrorText = errorText,

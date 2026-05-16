@@ -312,17 +312,20 @@ public:
     }
 
 private:
-    TStatus ParseNestedType(const NKikimr::NMiniKQL::TType* type) {
+    TStatus ParseNestedType(const NKikimr::NMiniKQL::TType* type, bool isOptional = false) {
         switch (type->GetKind()) {
             case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
                 auto dataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
                 if (!dataSlot) {
-                    return TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "No DataType has no DataSlot");
+                    return TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "DataType has no DataSlot");
                 }
                 return TStatus::Success();
             }
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional: {
-                return ParseNestedType(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType());
+                if (isOptional) {
+                    return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Nested optionals is not supported as input type");
+                }
+                return ParseNestedType(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true);
             }
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
                 auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);

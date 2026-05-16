@@ -2108,6 +2108,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true);
     }
 
+    Y_UNIT_TEST(TPCH_YQL_11) {
+        RunTPC_YqlTest(EBenchType::TPCH, 11, true, true);
+    }
+
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  4, 7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,

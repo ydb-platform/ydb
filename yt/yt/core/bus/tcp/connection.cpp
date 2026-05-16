@@ -2185,7 +2185,7 @@ void TTcpConnection::TryEstablishSslSession()
             Abort(TError(NBus::EErrorCode::SslError, "bus_certs_directory_path is not set in tcp_dispatcher config"));
             return;
         }
-        pathResolver = [&](const TString fileName) {
+        pathResolver = [&](const std::string& fileName) {
             return JoinPaths(*TTcpDispatcher::TImpl::Get()->GetBusCertsDirectoryPath(), fileName);
         };
     }

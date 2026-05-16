@@ -50,7 +50,7 @@ constexpr auto TlsBufferSize = 1_MB;
 ////////////////////////////////////////////////////////////////////////////////
 
 // Gets all saved SSL errors for current thread.
-TError GetLastSslError(TString message)
+TError GetLastSslError(std::string message)
 {
     auto lastSslError = ERR_peek_last_error();
     TStringBuilder errorBuilder;
@@ -96,7 +96,7 @@ void TSslDeleter::operator()(SSL* ssl) const noexcept
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetFingerprintSHA256(const TX509Ptr& certificate)
+std::string GetFingerprintSHA256(const TX509Ptr& certificate)
 {
     auto mdType = EVP_sha256();
     unsigned char md[EVP_MAX_MD_SIZE];
@@ -295,7 +295,7 @@ public:
         OutputBuffer_ = TSharedMutableRef::Allocate<TTlsBufferTag>(TlsBufferSize);
     }
 
-    void SetHost(const TString& host)
+    void SetHost(const std::string& host)
     {
         // Verify hostname in server certificate.
         SSL_set_hostflags(Ssl_.get(), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
@@ -842,7 +842,7 @@ void TSslContext::UseBuiltinOpenSslX509Store()
     SSL_CTX_set_cert_store(Impl_->GetContext(), GetBuiltinOpenSslX509Store().Release());
 }
 
-void TSslContext::SetCipherList(const TString& list)
+void TSslContext::SetCipherList(const std::string& list)
 {
     if (SSL_CTX_set_cipher_list(Impl_->GetContext(), list.data()) == 0) {
         THROW_ERROR GetLastSslError("SSL_CTX_set_cipher_list failed")
@@ -850,7 +850,7 @@ void TSslContext::SetCipherList(const TString& list)
     }
 }
 
-void TSslContext::AddCertificateAuthorityFromFile(const TString& path)
+void TSslContext::AddCertificateAuthorityFromFile(const std::string& path)
 {
     if (SSL_CTX_load_verify_locations(Impl_->GetContext(), path.c_str(), nullptr) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_load_verify_locations failed")
@@ -858,7 +858,7 @@ void TSslContext::AddCertificateAuthorityFromFile(const TString& path)
     }
 }
 
-void TSslContext::AddCertificateFromFile(const TString& path)
+void TSslContext::AddCertificateFromFile(const std::string& path)
 {
     if (SSL_CTX_use_certificate_file(Impl_->GetContext(), path.c_str(), SSL_FILETYPE_PEM) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_use_certificate_file failed")
@@ -866,7 +866,7 @@ void TSslContext::AddCertificateFromFile(const TString& path)
     }
 }
 
-void TSslContext::AddCertificateChainFromFile(const TString& path)
+void TSslContext::AddCertificateChainFromFile(const std::string& path)
 {
     if (SSL_CTX_use_certificate_chain_file(Impl_->GetContext(), path.c_str()) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_use_certificate_chain_file failed")
@@ -874,7 +874,7 @@ void TSslContext::AddCertificateChainFromFile(const TString& path)
     }
 }
 
-void TSslContext::AddPrivateKeyFromFile(const TString& path)
+void TSslContext::AddPrivateKeyFromFile(const std::string& path)
 {
     if (SSL_CTX_use_PrivateKey_file(Impl_->GetContext(), path.c_str(), SSL_FILETYPE_PEM) != 1) {
         THROW_ERROR GetLastSslError("SSL_CTX_use_PrivateKey_file failed")
@@ -882,7 +882,7 @@ void TSslContext::AddPrivateKeyFromFile(const TString& path)
     }
 }
 
-void TSslContext::AddCertificateChain(const TString& certificateChain)
+void TSslContext::AddCertificateChain(const std::string& certificateChain)
 {
     TBioPtr bio(BIO_new_mem_buf(certificateChain.c_str(), certificateChain.size()));
     if (!bio) {
@@ -920,7 +920,7 @@ void TSslContext::AddCertificateChain(const TString& certificateChain)
     }
 }
 
-void TSslContext::AddCertificateAuthority(const TString& ca)
+void TSslContext::AddCertificateAuthority(const std::string& ca)
 {
     TBioPtr bio(BIO_new_mem_buf(ca.data(), ca.size()));
     if (!bio) {
@@ -938,7 +938,7 @@ void TSslContext::AddCertificateAuthority(const TString& ca)
     }
 }
 
-void TSslContext::AddCertificate(const TString& certificate)
+void TSslContext::AddCertificate(const std::string& certificate)
 {
     TBioPtr bio(BIO_new_mem_buf(certificate.c_str(), certificate.size()));
     if (!bio) {
@@ -955,7 +955,7 @@ void TSslContext::AddCertificate(const TString& certificate)
     }
 }
 
-void TSslContext::AddPrivateKey(const TString& privateKey)
+void TSslContext::AddPrivateKey(const std::string& privateKey)
 {
     TBioPtr bio(BIO_new_mem_buf(privateKey.c_str(), privateKey.size()));
     if (!bio) {

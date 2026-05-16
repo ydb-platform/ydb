@@ -353,12 +353,22 @@ def _git(repo: str, *args: str) -> str:
 
 
 def commits_touching_file(
-    repo: str, rel_path: str, since_date: dt.date
+    repo: str, rel_path: str, since_date: dt.date, branch: str = 'main'
 ) -> List[Tuple[str, dt.datetime]]:
-    """[(sha, commit_utc), ...] oldest-first, commits touching rel_path since since_date."""
+    """[(sha, commit_utc), ...] oldest-first, commits touching rel_path since since_date.
+
+    Uses origin/<branch> so the script works correctly regardless of which local
+    branch is currently checked out.
+    """
+    git_ref = f'origin/{branch}'
+    # Fall back to HEAD if origin/<branch> is not available (e.g. offline / shallow)
+    try:
+        _git(repo, 'rev-parse', '--verify', git_ref)
+    except RuntimeError:
+        git_ref = 'HEAD'
     raw = _git(
         repo,
-        'rev-list', '--reverse', f'--since={since_date.isoformat()}', 'HEAD', '--', rel_path,
+        'rev-list', '--reverse', f'--since={since_date.isoformat()}', git_ref, '--', rel_path,
     ).strip()
     if not raw:
         return []
@@ -659,7 +669,7 @@ def main() -> int:
         since_date = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=fallback_days)).date()
 
     # ── Phase 2: git — collect commits and per-commit added lines (no YDB) ───
-    commits = commits_touching_file(repo, rel_path, since_date)
+    commits = commits_touching_file(repo, rel_path, since_date, branch=args.branch)
     if ydb_since_dt is not None:
         commits = [(s, c) for s, c in commits if c > ydb_since_dt]
     if not commits:

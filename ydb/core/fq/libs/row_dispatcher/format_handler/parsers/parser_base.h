@@ -3,6 +3,7 @@
 #include "parser_abstract.h"
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NFq::NRowDispatcher {
 
@@ -15,9 +16,12 @@ public:
 
 protected:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
+    NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
+    NKikimr::NMiniKQL::THolderFactory HolderFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
     std::unique_ptr<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
+    
 };
 
 class TTopicParserBase : public ITopicParser, public TTypeParser {

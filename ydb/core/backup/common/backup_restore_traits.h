@@ -14,6 +14,7 @@ namespace NBackupRestoreTraits {
 enum class EDataFormat: int {
     Invalid /* "invalid" */,
     Csv /* "csv" */,
+    Parquet /* "parquet" */,
 };
 
 enum class ECompressionCodec: int {

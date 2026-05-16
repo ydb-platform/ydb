@@ -36,6 +36,8 @@ ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task) {
 EDataFormat NextDataFormat(EDataFormat cur) {
     switch (cur) {
     case EDataFormat::Csv:
+        return EDataFormat::Parquet;
+    case EDataFormat::Parquet:
         return EDataFormat::Invalid;
     case EDataFormat::Invalid:
         return EDataFormat::Invalid;
@@ -56,6 +58,7 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     static THashMap<EDataFormat, TString> formats = {
         {EDataFormat::Csv, ".csv"},
+        {EDataFormat::Parquet, ".parquet"},
     };
 
     static THashMap<ECompressionCodec, TString> codecs = {

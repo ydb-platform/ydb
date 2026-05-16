@@ -116,7 +116,12 @@ public:
     }
 
     bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isOptional) const {
-        if (jsonValue.type() == simdjson::builtin::ondemand::json_type::null) {
+        simdjson::builtin::ondemand::json_type cellType;
+        CHECK_JSON_ERROR(jsonValue.type().get(cellType)) {
+            SetParsingError(error, jsonValue, "determine json value type", status);
+            return false;
+        }
+        if (cellType == simdjson::builtin::ondemand::json_type::null) {
             if (isOptional || type->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
                 resultValue = {};
                 return true;
@@ -141,7 +146,7 @@ public:
                 return ParseNestedValue(std::move(jsonValue), resultValue, status, AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true);
             }
             case NKikimr::NMiniKQL::TTypeBase::EKind::List: {
-                if (jsonValue.type() != simdjson::builtin::ondemand::json_type::array) {
+                if (cellType != simdjson::builtin::ondemand::json_type::array) {
                     status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse nested json value (List), expected array");
                     return false;
                 }
@@ -162,7 +167,7 @@ public:
                 break;
             }
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
-                if (jsonValue.type() != simdjson::builtin::ondemand::json_type::array) {
+                if (cellType != simdjson::builtin::ondemand::json_type::array) {
                     status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse nested json value (Tuple), expected array");
                     return false;
                 }
@@ -195,7 +200,7 @@ public:
                 break;
             }
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
-                if (jsonValue.type() != simdjson::builtin::ondemand::json_type::object) {
+                if (cellType != simdjson::builtin::ondemand::json_type::object) {
                     status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse nested json value (Struct), expected object");
                     return false;
                 }
@@ -232,7 +237,7 @@ public:
             }
 #if 0 // TODO
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
-                if (jsonValue.type() != simdjson::builtin::ondemand::json_type::object) {
+                if (cellType) != simdjson::builtin::ondemand::json_type::object) {
                     status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse nested json value (Dict), expected object");
                     return false;
                 }

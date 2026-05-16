@@ -473,9 +473,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             "Failed to parse column 'a1' type [[BAD TYPE]] subissue: { <main>: Error: Failed to parse type from yson: Failed to parse scheme from YSON:"
         );
         CheckError(
-            MakeParser({{"a2", "[OptionalType; [DataType; String]]"}, {"a1", "[ListType; [DataType; String]]"}}),
+            MakeParser({{"a2", "[OptionalType; [DataType; String]]"}, {"a1", "[DictType; [DataType; String]; [DataType; Uint8]]"}}),
             EStatusId::UNSUPPORTED,
-            "Failed to create parser for column 'a1' with type [ListType; [DataType; String]] subissue: { <main>: Error: Unsupported type kind: List }"
+            "Failed to create parser for column 'a1' with type [DictType; [DataType; String]; [DataType; Uint8]] subissue: { <main>: Error: Unsupported type kind: Dict }"
         );
     }
 

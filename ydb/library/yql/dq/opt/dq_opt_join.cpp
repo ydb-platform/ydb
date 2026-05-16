@@ -1574,7 +1574,7 @@ TExprBase DqBuildHashJoin(
                 .KeyColumns()
                     .Add(keys)
                     .Build()
-                .UseSpilling().Build(true)
+                .UseSpilling().Build(!useBlockHashJoin)
                 .Done().Ptr();
     };
 
@@ -2101,7 +2101,7 @@ bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
             if (auto maybeForceStreamLookupOption = inner.Maybe<TCoAtom>()) {
                 if (maybeForceStreamLookupOption.Cast().StringValue() == "forceStreamLookup") {
                     return true;
-                } 
+                }
             }
         }
     }
@@ -2183,7 +2183,7 @@ ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEqui
     return idx + 1;
 }
 
-} // anonymous namespace 
+} // anonymous namespace
 
 TExprBase DqRewriteStreamEquiJoinWithLookup(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
     const auto equiJoin = node.Cast<TCoEquiJoin>();

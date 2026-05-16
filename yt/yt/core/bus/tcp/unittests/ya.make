@@ -1,4 +1,4 @@
-GTEST(unittester-core-bus)
+GTEST(unittester-core-bus-tcp)
 
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
@@ -9,13 +9,15 @@ PROTO_NAMESPACE(yt)
 SRCS(
     bus_ut.cpp
     ssl_ut.cpp
+    tcp_specific_ut.cpp
+    traits.cpp
 )
 
 IF (YT_CUSTOM_INTERNAL_BUILD)
     SRCS(
-        ssl_2_ut.cpp
+        ssl2_ut.cpp
     )
-    INCLUDE(${ARCADIA_ROOT}/yt/yt/core/bus/unittests/yt_custom_internal_testdata/yt_custom_internal.inc)
+    INCLUDE(${ARCADIA_ROOT}/yt/yt/core/bus/tcp/unittests/yt_custom_internal_testdata/yt_custom_internal.inc)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
@@ -23,6 +25,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
+    yt/yt/core/bus/unittests/lib
     library/cpp/testing/common
     library/cpp/resource
 )

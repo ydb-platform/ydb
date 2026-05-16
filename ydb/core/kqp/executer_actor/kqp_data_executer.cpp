@@ -31,6 +31,9 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr {
 namespace NKqp {
@@ -105,8 +108,9 @@ public:
                     sb << "CA " << shardId.first << ", ";
                 }
             }
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << sb,
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << sb,
+                {"Marker", "KQPDATA"},
+                {"trace_id", TraceId()});
         }
         return false;
     }
@@ -206,9 +210,10 @@ public:
             return;
         }  else if (Request.LocksOp == ELocksOp::Commit && !ReadOnlyTx) {
             Become(&TKqpDataExecuter::FinalizeState);
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send Commit to BufferActor",
-                (buffer_actor_id, BufferActorId),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send Commit to BufferActor",
+                {"Marker", "KQPDATA"},
+                {"buffer_actor_id", BufferActorId},
+                {"trace_id", TraceId()});
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
@@ -222,9 +227,10 @@ public:
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send Rollback to BufferActor",
-                (buffer_actor_id, BufferActorId),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send Rollback to BufferActor",
+                {"Marker", "KQPDATA"},
+                {"buffer_actor_id", BufferActorId},
+                {"trace_id", TraceId()});
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
@@ -237,9 +243,10 @@ public:
             return;
         } else if (Request.UseImmediateEffects) {
             Become(&TKqpDataExecuter::FinalizeState);
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send Flush to BufferActor",
-                (buffer_actor_id, BufferActorId),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Send Flush to BufferActor",
+                {"Marker", "KQPDATA"},
+                {"buffer_actor_id", BufferActorId},
+                {"trace_id", TraceId()});
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
@@ -288,9 +295,10 @@ public:
         if (IsCancelAfterAllowed(ev)) {
             TBase::HandleAbortExecution(ev);
         } else {
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got TEvAbortExecution, but cancellation is not allowed",
-                (sender, ev->Sender),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got TEvAbortExecution, but cancellation is not allowed",
+                {"Marker", "KQPDATA"},
+                {"sender", ev->Sender},
+                {"trace_id", TraceId()});
         }
     }
 
@@ -303,9 +311,10 @@ public:
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
         AFL_ENSURE(ev->Sender == BufferActorId);
-        STLOG(PRI_WARN, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got Undelivered from BufferActor",
-            (sender, ev->Sender),
-            (trace_id, TraceId()));
+        YDB_LOG_WARN("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got Undelivered from BufferActor",
+            {"Marker", "KQPDATA"},
+            {"sender", ev->Sender},
+            {"trace_id", TraceId()});
     }
 
     void MakeResponseAndPassAway() {
@@ -433,9 +442,10 @@ private:
         if (IsCancelAfterAllowed(ev)) {
             TBase::HandleAbortExecution(ev);
         } else {
-            STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got TEvAbortExecution, but cancellation is not allowed",
-                (sender, ev->Sender),
-                (trace_id, TraceId()));
+            YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Got TEvAbortExecution, but cancellation is not allowed",
+                {"Marker", "KQPDATA"},
+                {"sender", ev->Sender},
+                {"trace_id", TraceId()});
         }
     }
 
@@ -489,9 +499,10 @@ private:
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
-            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Can not find default state storage group for database",
-                (database, Database),
-                (trace_id, TraceId()));
+            YDB_LOG_ERROR("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Can not find default state storage group for database",
+                {"Marker", "KQPDATA"},
+                {"database", Database},
+                {"trace_id", TraceId()});
         }
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
         ResourceSnapshotRequired = false;
@@ -600,8 +611,9 @@ private:
                     }
 
                     if (error) {
-                        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << *error,
-                            (trace_id, TraceId()));
+                        YDB_LOG_ERROR("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << *error,
+                            {"Marker", "KQPDATA"},
+                            {"trace_id", TraceId()});
                         ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error));
                         return;
@@ -611,8 +623,9 @@ private:
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))) {
                     auto error = TStringBuilder()
                         << "Data manipulation queries with column-oriented tables are supported only by API QueryService.";
-                    STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << error,
-                        (trace_id, TraceId()));
+                    YDB_LOG_ERROR("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << error,
+                        {"Marker", "KQPDATA"},
+                        {"trace_id", TraceId()});
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
                     return;
@@ -650,9 +663,10 @@ private:
         }
 
         if (computeTasks.size() > Request.MaxComputeActors) {
-            STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Too many compute actors",
-                (count, computeTasks.size()),
-                (trace_id, TraceId()));
+            YDB_LOG_NOTICE("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Too many compute actors",
+                {"Marker", "KQPDATA"},
+                {"count", computeTasks.size()},
+                {"trace_id", TraceId()});
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Requested too many execution units: " << computeTasks.size()));
@@ -668,10 +682,11 @@ private:
         const size_t shards = sourceScanPartitionsCount;
 
         if (shardsLimit > 0 && shards > shardsLimit) {
-            STLOG(PRI_WARN, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Too many affected shards",
-                (datashard_tasks, shards),
-                (limit, shardsLimit),
-                (trace_id, TraceId()));
+            YDB_LOG_WARN("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Too many affected shards",
+                {"Marker", "KQPDATA"},
+                {"datashard_tasks", shards},
+                {"limit", shardsLimit},
+                {"trace_id", TraceId()});
             Counters->TxProxyMon->TxResultError->Inc();
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
@@ -802,8 +817,9 @@ private:
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot));
 
-            STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Create temporary mvcc snapshot, become WaitSnapshotState",
-                (trace_id, TraceId()));
+            YDB_LOG_TRACE("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Create temporary mvcc snapshot, become WaitSnapshotState",
+                {"Marker", "KQPDATA"},
+                {"trace_id", TraceId()});
             Become(&TKqpDataExecuter::WaitSnapshotState);
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
 
@@ -832,11 +848,12 @@ private:
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         auto* msg = ev->Get();
 
-        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Read snapshot result",
-            (status, msg->Status),
-            (step, msg->Snapshot.Step),
-            (tx_id, msg->Snapshot.TxId),
-            (trace_id, TraceId()));
+        YDB_LOG_TRACE("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Read snapshot result",
+            {"Marker", "KQPDATA"},
+            {"status", msg->Status},
+            {"step", msg->Snapshot.Step},
+            {"tx_id", msg->Snapshot.TxId},
+            {"trace_id", TraceId()});
 
         if (msg->Status != Ydb::StatusIds::SUCCESS) {
             ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds::StatusCode_Name(msg->Status));
@@ -866,10 +883,11 @@ private:
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "become ExecuteState",
-            (current_state, CurrentStateFuncName()),
-            (immediate, true),
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "become ExecuteState",
+            {"Marker", "KQPDATA"},
+            {"current_state", CurrentStateFuncName()},
+            {"immediate", true},
+            {"trace_id", TraceId()});
         Become(&TKqpDataExecuter::ExecuteState);
     }
 
@@ -889,17 +907,19 @@ private:
         if (!isSubmitSuccessful)
             return;
 
-        STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Total tasks",
-            (total_tasks, TasksGraph.GetTasks().size()),
-            (read_only, ReadOnlyTx),
-            (immediate, ImmediateTx),
-            (pending_compute_tasks, Planner ? Planner->GetPendingComputeTasks().size() : 0),
-            (use_followers, GetUseFollowers()),
-            (trace_id, TraceId()));
+        YDB_LOG_INFO("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Total tasks",
+            {"Marker", "KQPDATA"},
+            {"total_tasks", TasksGraph.GetTasks().size()},
+            {"read_only", ReadOnlyTx},
+            {"immediate", ImmediateTx},
+            {"pending_compute_tasks", Planner ? Planner->GetPendingComputeTasks().size() : 0},
+            {"use_followers", GetUseFollowers()},
+            {"trace_id", TraceId()});
 
         // error
-        STLOG(PRI_TRACE, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Updating channels after the creation of compute actors",
-            (trace_id, TraceId()));
+        YDB_LOG_TRACE("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Updating channels after the creation of compute actors",
+            {"Marker", "KQPDATA"},
+            {"trace_id", TraceId()});
         Y_ENSURE(Planner);
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
@@ -913,15 +933,17 @@ private:
     void Shutdown() override {
         if (Planner) {
             if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
-                STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Shutdown immediately - nothing to wait",
-                    (trace_id, TraceId()));
+                YDB_LOG_INFO("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Shutdown immediately - nothing to wait",
+                    {"Marker", "KQPDATA"},
+                    {"trace_id", TraceId()});
                 PassAway();
             } else {
                 this->Become(&TThis::WaitShutdownState);
-                STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Waiting for shutdown",
-                    (pending_tasks, Planner->GetPendingComputeTasks().size()),
-                    (pending_compute_actors, Planner->GetPendingComputeActors().size()),
-                    (trace_id, TraceId()));
+                YDB_LOG_INFO("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Waiting for shutdown",
+                    {"Marker", "KQPDATA"},
+                    {"pending_tasks", Planner->GetPendingComputeTasks().size()},
+                    {"pending_compute_actors", Planner->GetPendingComputeActors().size()},
+                    {"trace_id", TraceId()});
                 TActivationContext::Schedule(WaitCAStatsTimeout, new IEventHandle(SelfId(), SelfId(), new TEvents::TEvPoison));
             }
         } else {
@@ -964,9 +986,10 @@ private:
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
             default:
-                STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Unexpected event while waiting for shutdown",
-                    (event_type, ev->GetTypeName()), // ignore all other events
-                    (trace_id, TraceId()));
+                YDB_LOG_ERROR("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Unexpected event while waiting for shutdown",
+                    {"Marker", "KQPDATA"},
+                    {"event_type", ev->GetTypeName()},
+                    {"trace_id", TraceId()});
         }
     }
 
@@ -986,9 +1009,10 @@ private:
 
     void HandleShutdown(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const auto nodeId = ev->Get()->NodeId;
-        STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Node has disconnected while shutdown",
-            (node_id, nodeId),
-            (trace_id, TraceId()));
+        YDB_LOG_NOTICE("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Node has disconnected while shutdown",
+            {"Marker", "KQPDATA"},
+            {"node_id", nodeId},
+            {"trace_id", TraceId()});
 
         YQL_ENSURE(Planner);
 
@@ -1011,9 +1035,10 @@ private:
 
     void HandleShutdown(TEvents::TEvPoison::TPtr& ev) {
         // Self-poison means timeout - don't wait anymore.
-        STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Timed out on waiting for Compute Actors to finish - forcing shutdown",
-            (Sender, ev->Sender),
-            (trace_id, TraceId()));
+        YDB_LOG_INFO("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Timed out on waiting for Compute Actors to finish - forcing shutdown",
+            {"Marker", "KQPDATA"},
+            {"Sender", ev->Sender},
+            {"trace_id", TraceId()});
 
         if (ev->Sender == SelfId()) {
             FillLocksFromExtraData();
@@ -1029,16 +1054,18 @@ private:
         // In case of external timeout the response is already sent to the client - no need to wait for stats.
         if (statusCode == Ydb::StatusIds::TIMEOUT) {
             FillLocksFromExtraData();
-            STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "External timeout while waiting for Compute Actors to finish - forcing shutdown",
-                (Sender, ev->Sender),
-                (trace_id, TraceId()));
+            YDB_LOG_INFO("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "External timeout while waiting for Compute Actors to finish - forcing shutdown",
+                {"Marker", "KQPDATA"},
+                {"Sender", ev->Sender},
+                {"trace_id", TraceId()});
             PassAway();
         }
     }
 
     void Handle(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr& ev) {
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Coordinator saved zero checkpoint",
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Coordinator saved zero checkpoint",
+            {"Marker", "KQPDATA"},
+            {"trace_id", TraceId()});
         Send(CheckpointCoordinatorId, new NFq::TEvCheckpointCoordinator::TEvRunGraph());
 
         if (const auto context = GetUserRequestContext()) {
@@ -1047,9 +1074,10 @@ private:
     }
 
     void Handle(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues::TPtr& ev) {
-        STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TEvRaiseTransientIssues from checkpoint coordinator",
-            (TransientIssues, ev->Get()->TransientIssues.ToOneLineString()),
-            (trace_id, TraceId()));
+        YDB_LOG_NOTICE("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TEvRaiseTransientIssues from checkpoint coordinator",
+            {"Marker", "KQPDATA"},
+            {"TransientIssues", ev->Get()->TransientIssues.ToOneLineString()},
+            {"trace_id", TraceId()});
     }
 
     void StartCheckpointCoordinator() {
@@ -1114,16 +1142,17 @@ private:
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());
-        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPDATA, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Created new CheckpointCoordinator",
-            (CheckpointCoordinatorId, CheckpointCoordinatorId),
-            (ExecutionId, context->CurrentExecutionId),
-            (CheckpointId, checkpointId),
-            (Generation, Generation),
-            (StateLoadMode, FederatedQuery::StateLoadMode_Name(stateLoadMode)),
-            (StreamingDisposition, streamingDisposition.ShortDebugString()),
-            (HasQueryPhysicalGraph, Request.QueryPhysicalGraph != nullptr),
-            (EnableWatermarks, Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()),
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG("ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Created new CheckpointCoordinator",
+            {"Marker", "KQPDATA"},
+            {"CheckpointCoordinatorId", CheckpointCoordinatorId},
+            {"ExecutionId", context->CurrentExecutionId},
+            {"CheckpointId", checkpointId},
+            {"Generation", Generation},
+            {"StateLoadMode", FederatedQuery::StateLoadMode_Name(stateLoadMode)},
+            {"StreamingDisposition", streamingDisposition.ShortDebugString()},
+            {"HasQueryPhysicalGraph", Request.QueryPhysicalGraph != nullptr},
+            {"EnableWatermarks", Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()},
+            {"trace_id", TraceId()});
     }
 
 private:

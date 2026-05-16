@@ -8,6 +8,7 @@
 
 #include <cerrno>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
@@ -50,8 +51,11 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD50, "TDDiskActor::Handle(TEvWrite)", (DDiskId, DDiskId),
-            (Sender, ev->Sender), (Cookie, ev->Cookie));
+        YDB_LOG_COMP_TRACE(BS_DDISK, "TDDiskActor::Handle(TEvWrite)",
+            {"Marker", "BSDD50"},
+            {"DDiskId", DDiskId},
+            {"Sender", ev->Sender},
+            {"Cookie", ev->Cookie});
 
         if (!CheckQuery(*ev, &Counters.Interface.Write)) {
             return;

@@ -1,8 +1,6 @@
 #include "dq_compute_actor_watermarks.h"
 
-#include <ydb/library/services/services.pb.h>
-
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <ydb/library/actors/core/log.h>
 
 #define LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)

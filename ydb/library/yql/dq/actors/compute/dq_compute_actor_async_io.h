@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
+#include <ydb/library/yql/dq/actors/compute/events/events.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
@@ -33,35 +34,6 @@ class TProgramBuilder;
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
-
-enum class EResumeSource : ui32 {
-    Default,
-    ChannelsHandleWork,
-    ChannelsHandleUndeliveredData,
-    ChannelsHandleUndeliveredAck,
-    AsyncPopFinished,
-    CheckpointRegister,
-    CheckpointInject,
-    CABootstrap,
-    CABootstrapWakeup,
-    CAPendingInput,
-    CATakeInput,
-    CASinkFinished,
-    CATransformFinished,
-    CAStart,
-    CAPollAsync,
-    CAPollAsyncNoSpace,
-    CANewAsyncInput,
-    CADataSent,
-    CAPendingOutput,
-    CATaskRunnerCreated,
-    CAResumeByWatermark,
-    CAWatermarkIdleness,
-    CAWakeupCallback,
-    CAResumeByCheckpoint,
-
-    Last,
-};
 
 struct IMemoryQuotaManager {
     using TPtr = std::shared_ptr<IMemoryQuotaManager>;

@@ -150,24 +150,6 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
     
     for (const auto& stateId : statesToCleanup) {
         db.Table<Schema::IncrementalRestoreState>().Key(stateId).Delete();
-        
-        auto shardProgressRowset = db.Table<Schema::IncrementalRestoreShardProgress>().Range().Select();
-        if (!shardProgressRowset.IsReady()) {
-            return;
-        }
-        
-        while (!shardProgressRowset.EndOfSet()) {
-            ui64 operationId = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::OperationId>();
-            ui64 shardIdx = shardProgressRowset.GetValue<Schema::IncrementalRestoreShardProgress::ShardIdx>();
-            
-            if (operationId == stateId) {
-                db.Table<Schema::IncrementalRestoreShardProgress>().Key(operationId, shardIdx).Delete();
-            }
-            
-            if (!shardProgressRowset.Next()) {
-                break;
-            }
-        }
     }
     
     for (auto opIt = context.SS->IncrementalRestoreOperationToState.begin(); 

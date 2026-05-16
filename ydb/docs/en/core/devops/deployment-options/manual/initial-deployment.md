@@ -23,8 +23,9 @@ The network configuration must allow TCP connections on the following ports (the
 * 2135, 2136: GRPC for client-cluster interaction.
 * 19001, 19002: Interconnect for intra-cluster node interaction
 * 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* 9092, 9093: ports for Kafka API.
 
-Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
+Distinct ports are necessary for gRPC, Interconnect, HTTP interface and Kafka API of each dynamic node when hosting multiple dynamic nodes on a single server.
 
 Make sure that the system clocks running on all the cluster's servers are synced by `ntpd` or `chrony`. We recommend using the same time source for all servers in the cluster to maintain consistent leap seconds processing.
 
@@ -466,6 +467,7 @@ The command example above uses the following parameters:
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+      --kafka-port 9093 \
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
@@ -501,6 +503,7 @@ The command example above uses the following parameters:
       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+      --kafka-port 9093 \
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
@@ -560,7 +563,6 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
 
 In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node servicing the `/Root/testdb` database is running. When connecting via SSH to a {{ ydb-short-name }} node, it's convenient to use the `grpcs://$(hostname -f):2136` command to use the current server's FQDN.
 
-
 ## Start Using the Created Database {#try-first-db}
 
 1. Install the {{ ydb-short-name }} CLI as described in the [documentation](../../../reference/ydb-cli/install.md).
@@ -586,7 +588,6 @@ In the command examples listed above, `<node.ydb.tech>` is the FQDN of the serve
 {% endlist %}
 
 Here, `<node.ydb.tech>` is the FQDN of the server running the dynamic node that serves the `/Root/testdb` database.
-
 
 ## Checking Access to the Built-in Web Interface
 
@@ -634,8 +635,4 @@ When installing {{ ydb-short-name }} to run in the unprotected mode, follow the 
 1. Database creation command has the following format:
 
   ```bash
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
-  ```
-
-1. When accessing your database from the {{ ydb-short-name }} CLI and applications, use grpc instead of grpcs and skip authentication.
+  export LD_LIBRARY_PATH=/opt/

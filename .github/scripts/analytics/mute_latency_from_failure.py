@@ -434,10 +434,15 @@ def match_muted_to_criteria(
     window = dt.timedelta(days=mute_window_days)
 
     # build pattern list from muted_ya
+    _CHUNK_MARKERS = ('sole chunk', 'chunk+chunk', '[chunk]', ' chunk')
+
     paired: List[Tuple[str, re.Pattern[str], re.Pattern[str]]] = []
     for line in muted_lines:
         parts = line.split(' ', 1)
         if len(parts) != 2:
+            continue
+        tn_part = parts[1]
+        if any(m in tn_part for m in _CHUNK_MARKERS):
             continue
         try:
             ps = re.compile(pattern_to_re(parts[0]))

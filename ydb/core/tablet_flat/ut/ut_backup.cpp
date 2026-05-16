@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
 
         Cerr << "...backup retry should start automatically" << Endl;
-        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        auto retryTimeout = TDuration::Seconds(2 * env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
         env.Env.AdvanceCurrentTime(retryTimeout);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }
@@ -1297,7 +1297,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
 
         Cerr << "...backup retry should start automatically" << Endl;
-        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        auto retryTimeout = TDuration::Seconds(2 * env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
         env.Env.AdvanceCurrentTime(retryTimeout);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }
@@ -2761,7 +2761,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TEnv env;
 
         // Small limit
-        env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(100);
+        env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(10_KB);
 
         Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
@@ -3451,7 +3451,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
 
         Cerr << "...backup retry should start automatically" << Endl;
-        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        auto retryTimeout = TDuration::Seconds(2 * env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
         env.Env.AdvanceCurrentTime(retryTimeout);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }

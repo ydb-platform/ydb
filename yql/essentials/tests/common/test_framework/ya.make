@@ -3,6 +3,7 @@ PY23_LIBRARY()
 PY_SRCS(
     TOP_LEVEL
     solomon_runner.py
+    udf_test_common.py
     yql_utils.py
     yql_ports.py
     yqlrun.py

@@ -20,7 +20,8 @@ namespace NKikimr::NDDisk {
         ui32 FreeBarrierPosition = 0;
 
         bool CanMoveBarrier(ui64 tabletId, ui32 barriersLimit);
-        std::unordered_map<ui64, ui64> GetBarriers();
+        ui64 GetBarrier(ui64 tabletId) const;
+        std::unordered_map<ui64, ui64> GetBarriers() const;
         std::tuple<ui32, ui32, TEraseBarrier&> MoveBarrier(ui64 tabletId, ui64 lsn, const TPersistentBufferSectorInfo& newSector);
         void RestoreBarriers(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator);
         bool AddBarrier(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx);

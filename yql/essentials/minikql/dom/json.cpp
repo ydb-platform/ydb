@@ -71,7 +71,7 @@ public:
         : TJsonCallbacks(throwException)
         , ValueBuilder_(valueBuilder)
     {
-        Result_.push({});
+        Result_.emplace();
     }
 
     bool OnNull() override {

@@ -9616,6 +9616,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 description.UserType = userType;
                 description.TypeConfig = typeConfig;
                 description.LangVer = ctx.Types.LangVer;
+                description.RuntimeSettings = ctx.Types.RuntimeSettings;
                 ctx.Types.Credentials->ForEach([&description](const TString& name, const TCredential& cred) {
                     description.SecureParams[TString("token:") + name] = cred.Content;
                     if (name.StartsWith("default_")) {

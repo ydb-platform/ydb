@@ -524,7 +524,7 @@ Y_UNIT_TEST(DedupEnabledDifferentProcIdDifferentHandles) {
     auto node = MakeAtomNode(ctx, "10");
 
     TRangeFrameCollectorBounds::TRangeBound bound1(MakeOffset(node), EDirection::Preceding);
-    TRangeFrameCollectorBounds::TRangeBound bound2(MakeOffset(node, Nothing(), 42u), EDirection::Preceding);
+    TRangeFrameCollectorBounds::TRangeBound bound2(MakeOffset(node, Nothing(), 42U), EDirection::Preceding);
 
     TRangeFrameCollectorBounds::TRangeFrame frame1(bound1, bound1);
     TRangeFrameCollectorBounds::TRangeFrame frame2(bound2, bound2);

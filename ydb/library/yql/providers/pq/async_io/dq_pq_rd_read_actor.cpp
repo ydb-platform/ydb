@@ -1333,16 +1333,17 @@ TString TDqPqRdReadActor::GetInternalState() {
         for (const auto partitionId : sessionInfo.Partitions) {
             str << " " << partitionId;
         }
-        str << " offsets";
-        for (const auto& [partitionId, offset] : NextOffsetFromRD) {
-            str << " " << partitionId << "=" << offset;
-        }
         str << " has pending data";
         for (const auto partitionId : sessionInfo.HasPendingData) {
             str << " " << partitionId;
         }
         str << "\n";
     }
+    str << " offsets";
+    for (const auto& [partitionId, offset] : NextOffsetFromRD) {
+        str << " " << partitionId << "=" << offset;
+    }
+    str << "\n";
     if (Parent->WatermarkTracker) {
         str << "WatermarksTracker:";
         Parent->WatermarkTracker->Out(str);

@@ -3,7 +3,6 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
-
 namespace NKikimr::NPersQueueTests {
 
 Y_UNIT_TEST_SUITE(TListAllTopicsTests) {

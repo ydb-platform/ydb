@@ -244,6 +244,15 @@ class TPruneColumnsStage : public IRBOStage {
 };
 
 /**
+ * Propagate and assign hash functions on StageGraph connections.
+ */
+class TPropagateHashFuncStage : public IRBOStage {
+  public:
+    TPropagateHashFuncStage();
+    virtual void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+};
+
+/**
  * Propagate aggregate operator.
  */
 class TPropagateAggregateThroughStageRule: public ISimplifiedRule {

@@ -57,11 +57,23 @@ struct TGetOperationRequest {
     TString OperationId;
 };
 
+struct TJobCounters {
+    ui64 Total = 0;
+    ui64 Pending = 0;
+    ui64 Running = 0;
+    ui64 Completed = 0;
+    ui64 Failed = 0;
+    ui64 Lost = 0;
+
+    bool operator==(const TJobCounters&) const = default;
+};
+
 struct TGetOperationResponse {
     EOperationStatus Status;
     std::vector<TFmrError> ErrorMessages = {};
     std::vector<TTableStats> OutputTablesStats = {};
     std::vector<TString> OperationResultsYson = {};
+    TJobCounters JobCounters = {};
 };
 
 struct TDeleteOperationRequest {

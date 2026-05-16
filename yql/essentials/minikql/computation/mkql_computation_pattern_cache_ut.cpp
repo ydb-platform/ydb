@@ -518,7 +518,7 @@ Y_UNIT_TEST_QUAD(NarrowFlatMap, Flow, UseLLVM) {
 }
 
 Y_UNIT_TEST_TWIN(NarrowMultiMap, UseLLVM) {
-    ParallelProgTest(CreateNarrowMultiMap, UseLLVM, 1295145000ull * 2);
+    ParallelProgTest(CreateNarrowMultiMap, UseLLVM, 1295145000ULL * 2);
 }
 
 Y_UNIT_TEST_QUAD(SqueezeToSortedDict, WithPayload, UseLLVM) {
@@ -629,7 +629,7 @@ Y_UNIT_TEST(DoubleNotifyPatternCompiled) {
     TComputationPatternLRUCache cache({cacheSize, cacheSize});
 
     auto entry = std::make_shared<TPatternCacheEntry>();
-    entry->Pattern = MakeIntrusive<TMockComputationPattern>(1u);
+    entry->Pattern = MakeIntrusive<TMockComputationPattern>(1U);
     cache.EmplacePattern(key, entry);
 
     for (ui32 i = 0; i < cacheSize + 1; ++i) {

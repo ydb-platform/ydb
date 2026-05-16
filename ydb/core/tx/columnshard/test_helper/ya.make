@@ -11,6 +11,7 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins
     yql/essentials/core/arrow_kernels/request
     ydb/core/tx/columnshard
+    ydb/core/tx/long_tx_service/public
     ydb/core/wrappers
 )
 

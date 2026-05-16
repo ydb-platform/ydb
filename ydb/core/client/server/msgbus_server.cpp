@@ -23,6 +23,8 @@ public:
     virtual TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const {
         return {};
     }
+
+    virtual void SetFinishAction(std::function<void()>&& cb) = 0;
 };
 
 class TBusMessageContext::TImplMessageBus
@@ -77,118 +79,8 @@ public:
     }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
-};
 
-class TBusMessageContext::TImplGRpc
-    : public TBusMessageContext::TImpl
-{
-    NGRpcProxy::IRequestContext *RequestContext;
-    THolder<NBus::TBusMessage> Message;
-
-public:
-    TImplGRpc(NGRpcProxy::IRequestContext *requestContext, int type)
-        : RequestContext(requestContext)
-    {
-        switch (type) {
-#define MTYPE(TYPE) \
-            case TYPE::MessageType: \
-                Message.Reset(new TYPE()); \
-                try { \
-                    static_cast<TYPE&>(*Message).Record = dynamic_cast<const TYPE::RecordType&>(*RequestContext->GetRequest()); \
-                } catch (const std::bad_cast&) { \
-                    Y_ABORT("incorrect request message type"); \
-                } \
-                return;
-
-            MTYPE(TBusRequest)
-            MTYPE(TBusResponse)
-            MTYPE(TBusFakeConfigDummy)
-            MTYPE(TBusSchemeInitRoot)
-            MTYPE(TBusTypesRequest)
-            MTYPE(TBusTypesResponse)
-            MTYPE(TBusHiveCreateTablet)
-            MTYPE(TBusOldHiveCreateTablet)
-            MTYPE(TBusHiveCreateTabletResult)
-            MTYPE(TBusPersQueue)
-            MTYPE(TBusTabletStateRequest)
-            MTYPE(TBusTabletCountersRequest)
-            MTYPE(TBusSchemeOperation)
-            MTYPE(TBusSchemeOperationStatus)
-            MTYPE(TBusSchemeDescribe)
-            MTYPE(TBusOldFlatDescribeRequest)
-            MTYPE(TBusOldFlatDescribeResponse)
-            MTYPE(TBusBlobStorageConfigRequest)
-            MTYPE(TBusNodeRegistrationRequest)
-            MTYPE(TBusCmsRequest)
-            MTYPE(TBusChooseProxy)
-            MTYPE(TBusStreamRequest)
-            MTYPE(TBusInterconnectDebug)
-            MTYPE(TBusConsoleRequest)
-            MTYPE(TBusResolveNode)
-            MTYPE(TBusFillNode)
-            MTYPE(TBusDrainNode)
-            MTYPE(TBusTestShardControlRequest)
-#undef MTYPE
-        }
-
-        Y_ABORT();
-    }
-
-    ~TImplGRpc() {
-        ForgetRequest();
-    }
-
-    void ForgetRequest() {
-        if (RequestContext) {
-            RequestContext->ReplyError("request wasn't processed properly");
-            RequestContext = nullptr;
-        }
-    }
-
-    NBus::TBusMessage* GetMessage() override {
-        return Message.Get();
-    }
-
-    NBus::TBusMessage* ReleaseMessage() override {
-        return Message.Release();
-    }
-
-    void SendReply(NBus::TBusMessage *resp) {
-        Y_ABORT_UNLESS(RequestContext);
-        switch (const ui32 type = resp->GetHeader()->Type) {
-#define REPLY_OPTION(TYPE) \
-            case TYPE::MessageType: { \
-                auto *msg = dynamic_cast<TYPE *>(resp); \
-                Y_ABORT_UNLESS(msg); \
-                RequestContext->Reply(msg->Record); \
-                break; \
-            }
-
-            REPLY_OPTION(TBusResponse)
-            REPLY_OPTION(TBusNodeRegistrationResponse)
-            REPLY_OPTION(TBusCmsResponse)
-            REPLY_OPTION(TBusSqsResponse)
-            REPLY_OPTION(TBusConsoleResponse)
-#undef REPLY_OPTION
-
-            default:
-                Y_ABORT("unexpected response type %" PRIu32, type);
-        }
-        RequestContext = nullptr;
-    }
-
-    void SendReplyMove(NBus::TBusMessageAutoPtr response) override {
-        SendReply(response.Get());
-    }
-
-    TVector<TStringBuf> FindClientCert() const override {
-        return RequestContext->FindClientCert();
-    };
-
-    THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
-
-    TString GetPeerName() const override {
-        return RequestContext->GetPeer();
+    void SetFinishAction(std::function<void()>&& /*cb*/) override {
     }
 };
 
@@ -247,9 +139,7 @@ public:
         Y_ABORT();
     }
 
-    ~TImplNoOpGrpc() {
-        ForgetRequest();
-    }
+    ~TImplNoOpGrpc() = default;
 
     void ForgetRequest() {
         if (RequestContext) {
@@ -307,6 +197,10 @@ public:
     TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const override {
         return RequestContext->GetInternalToken();
     }
+
+    void SetFinishAction(std::function<void()>&& cb) override {
+        RequestContext->SetFinishAction(std::move(cb));
+    }
 };
 
 TBusMessageContext::TBusMessageContext()
@@ -318,10 +212,6 @@ TBusMessageContext::TBusMessageContext(const TBusMessageContext& other)
 
 TBusMessageContext::TBusMessageContext(NBus::TOnMessageContext &messageContext, IMessageWatcher *messageWatcher)
     : Impl(new TImplMessageBus(messageContext, messageWatcher))
-{}
-
-TBusMessageContext::TBusMessageContext(NGRpcProxy::IRequestContext *requestContext, int type)
-    : Impl(new TImplGRpc(requestContext, type))
 {}
 
 TBusMessageContext::TBusMessageContext(std::unique_ptr<NGRpcService::IRequestNoOpCtx> requestContext, int type)
@@ -376,6 +266,7 @@ public:
     virtual TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const {
         return {};
     }
+    virtual void SetFinishAction(std::function<void()>&& cb) = 0;
 };
 
 class TMessageBusSessionIdentHolder::TImplMessageBus
@@ -419,51 +310,14 @@ public:
     TVector<TStringBuf> FindClientCert() const override {
         return {};
     }
+
+    void SetFinishAction(std::function<void()>&& /*cb*/) override {
+    }
 };
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplMessageBus::CreateSessionIdentHolder() {
     return MakeHolder<TMessageBusSessionIdentHolder::TImplMessageBus>(static_cast<NBus::TOnMessageContext&>(*this));
 }
-
-class TMessageBusSessionIdentHolder::TImplGRpc
-    : public TMessageBusSessionIdentHolder::TImpl
-{
-    TIntrusivePtr<TBusMessageContext::TImplGRpc> Context;
-
-public:
-    TImplGRpc(TIntrusivePtr<TBusMessageContext::TImplGRpc> context)
-        : Context(context)
-    {
-    }
-
-    ~TImplGRpc() {
-        if (Context) {
-            Context->ForgetRequest();
-        }
-    }
-
-    void SendReply(NBus::TBusMessage *resp) override {
-        Y_ABORT_UNLESS(Context);
-        Context->SendReply(resp);
-
-        auto context = std::move(Context);
-    }
-
-    void SendReplyMove(NBus::TBusMessageAutoPtr resp) override {
-        Y_ABORT_UNLESS(Context);
-        Context->SendReplyMove(resp);
-
-        auto context = std::move(Context);
-    }
-
-    TVector<TStringBuf> FindClientCert() const override {
-        return Context->FindClientCert();
-    }
-
-    ui64 GetTotalTimeout() const override {
-        return 90000;
-    }
-};
 
 class TMessageBusSessionIdentHolder::TImplNoOpGrpc
     : public TMessageBusSessionIdentHolder::TImpl
@@ -476,11 +330,7 @@ public:
     {
     }
 
-    ~TImplNoOpGrpc() {
-        if (Context) {
-            Context->ForgetRequest();
-        }
-    }
+    ~TImplNoOpGrpc() = default;
 
     void SendReply(NBus::TBusMessage *resp) override {
         Y_ABORT_UNLESS(Context);
@@ -507,11 +357,11 @@ public:
     TIntrusiveConstPtr<NACLib::TUserToken> GetInternalToken() const override {
         return Context->GetInternalToken();
     }
-};
 
-THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplGRpc::CreateSessionIdentHolder() {
-    return MakeHolder<TMessageBusSessionIdentHolder::TImplGRpc>(this);
-}
+    void SetFinishAction(std::function<void()>&& cb) override {
+        Context->SetFinishAction(std::move(cb));
+    }
+};
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::TImplNoOpGrpc::CreateSessionIdentHolder() {
     return MakeHolder<TMessageBusSessionIdentHolder::TImplNoOpGrpc>(this);
@@ -554,6 +404,10 @@ TVector<TStringBuf> TMessageBusSessionIdentHolder::FindClientCert() const {
 TIntrusiveConstPtr<NACLib::TUserToken> TMessageBusSessionIdentHolder::GetInternalToken() const {
     Y_ABORT_UNLESS(Impl);
     return Impl->GetInternalToken();
+}
+
+void TMessageBusSessionIdentHolder::SetFinishAction(std::function<void()>&& cb) {
+    Impl->SetFinishAction(std::move(cb));
 }
 
 

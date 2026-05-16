@@ -1,130 +1,41 @@
 import os
-import os.path
-import glob
-import codecs
-import shutil
-
-import pytest
 
 import yql_utils
-from yqlrun import YQLRun
 
-import yatest.common
+from udf_test_common import (
+    DATA_PATH,
+    discover_cases,
+    make_test,
+    facade_runner,
+    canonize_results,
+)
 
-project_path = yatest.common.context.project_path
-SOURCE_PATH = yql_utils.yql_source_path((project_path + '/cases').replace('\\', '/'))
-DATA_PATH = yatest.common.output_path('cases')
-ASTDIFF_PATH = yql_utils.yql_binary_path(os.getenv('YQL_ASTDIFF_PATH') or 'yql/essentials/tools/astdiff/astdiff')
+CFG_DIR = os.getenv('YQL_CONFIG_DIR') or 'yql/essentials/cfg/udf_test'
+RUNNER_FACTORY = facade_runner(prov='yt', cfg_dir=CFG_DIR)
 
 
 def pytest_generate_tests(metafunc):
-    if os.path.exists(SOURCE_PATH):
-        shutil.copytree(SOURCE_PATH, DATA_PATH)
-        cases = sorted([os.path.basename(sql_query)[:-4] for sql_query in glob.glob(DATA_PATH + '/*.sql')])
-
-    else:
-        cases = []
-    metafunc.parametrize(['case'], [(case, ) for case in cases])
+    metafunc.parametrize(['case'], [(case,) for case in discover_cases()])
 
 
 def test(case):
-    program_file = os.path.join(DATA_PATH, case + '.sql')
+    spec = make_test(case)
 
-    with codecs.open(program_file, encoding='utf-8') as f:
-        program = f.readlines()
+    program_text = '\n'.join(['use plato;'] + spec.program)
+    in_tables = yql_utils.get_input_tables(None, spec.cfg, DATA_PATH, def_attr=yql_utils.KSV_ATTR)
 
-    header = program[0]
-    canonize_ast = False
-
-    if header.startswith('--ignore'):
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore') and yatest.common.context.sanitize is not None:
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore address') and yatest.common.context.sanitize == 'address':
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore memory') and yatest.common.context.sanitize == 'memory':
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore thread') and yatest.common.context.sanitize == 'thread':
-        pytest.skip(header)
-    elif header.startswith('--sanitizer ignore undefined') and yatest.common.context.sanitize == 'undefined':
-        pytest.skip(header)
-    elif header.startswith('--canonize ast'):
-        canonize_ast = True
-
-    program = '\n'.join(['use plato;'] + program)
-
-    cfg = yql_utils.get_program_cfg(None, case, DATA_PATH)
-    files = {}
-    diff_tool = None
-    scan_udfs = os.getenv('YQL_UDF_NO_SCAN') != 'yes'
-    # check for purecalc-only UDFs (TODO: replace with YQL_UDF_NO_SCAN macro)
-    if project_path.startswith('robot/rthub/yql/udfs') or project_path.startswith('robot/zora'):
-        scan_udfs = False
-
-    for item in cfg:
-        if item[0] == 'file':
-            files[item[1]] = item[2]
-        elif item[0] == 'diff_tool':
-            diff_tool = item[1:]
-        elif item[0] == 'scan_udfs':
-            scan_udfs = True
-        elif item[0] == 'disable_scan_udfs':
-            scan_udfs = False
-
-    in_tables = yql_utils.get_input_tables(None, cfg, DATA_PATH, def_attr=yql_utils.KSV_ATTR)
-
-    udfs_list = [yatest.common.build_path(os.path.join(yatest.common.context.project_path, ".."))]
-    env_udfs_list = yql_utils.get_param("EXTRA_UDF_DIRS")
-    if env_udfs_list:
-        for udf_path in env_udfs_list.strip().split(":"):
-            udfs_list.append(yatest.common.build_path(udf_path))
-    udfs_dir = yql_utils.get_udfs_path(udfs_list)
-
-    xfail = yql_utils.is_xfail(cfg)
-    if yql_utils.get_param('TARGET_PLATFORM') and xfail:
-        pytest.skip('xfail is not supported on non-default target platform')
-    langver = yql_utils.get_langver(cfg)
-    envs = yql_utils.get_envs(cfg)
-    if not langver:
-        langver = "unknown"
-    # no default version, because UDFs may have different release cycles
-
-    extra_env = dict(os.environ)
-    extra_env["YQL_UDF_RESOLVER"] = "1"
-    extra_env["YQL_ARCADIA_BINARY_PATH"] = os.path.expandvars(yatest.common.build_path('.'))
-    extra_env["YQL_ARCADIA_SOURCE_PATH"] = os.path.expandvars(yatest.common.source_path('.'))
-    extra_env["Y_NO_AVX_IN_DOT_PRODUCT"] = "1"
-    extra_env.update(envs)
-
-    # this breaks tests using V0 syntax
-    if "YA_TEST_RUNNER" in extra_env:
-        del extra_env["YA_TEST_RUNNER"]
-
-    yqlrun = YQLRun(udfs_dir=udfs_dir,
-                    prov='yt', use_sql2yql=False,
-                    cfg_dir=os.getenv('YQL_CONFIG_DIR') or 'yql/essentials/cfg/udf_test',
-                    langver=langver)
-    yqlrun_res = yqlrun.yql_exec(
-        program=program,
+    res = RUNNER_FACTORY(spec.langver).yql_exec(
+        program=program_text,
         run_sql=True,
         tables=in_tables,
-        files=files,
-        check_error=not xfail,
-        extra_env=extra_env,
+        files=spec.files,
+        check_error=not spec.xfail,
+        extra_env=spec.extra_env,
         require_udf_resolver=True,
-        scan_udfs=scan_udfs
+        scan_udfs=spec.scan_udfs,
     )
 
-    if xfail:
-        assert yqlrun_res.execution_result.exit_code != 0
+    if spec.xfail:
+        assert res.execution_result.exit_code != 0
 
-    results_path = os.path.join(yql_utils.yql_output_path(), case + '.results.txt')
-    with open(results_path, 'w') as f:
-        f.write(yqlrun_res.results)
-
-    to_canonize = [yqlrun_res.std_err] if xfail else [yatest.common.canonical_file(yqlrun_res.results_file, local=True, diff_tool=diff_tool)]
-
-    if canonize_ast:
-        to_canonize += [yatest.common.canonical_file(yqlrun_res.opt_file, local=True, diff_tool=ASTDIFF_PATH)]
-
-    return to_canonize
+    return canonize_results(case, res, spec.xfail, spec.canonize_ast, spec.diff_tool)

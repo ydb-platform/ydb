@@ -336,10 +336,10 @@ std::expected<std::strong_ordering, TString> ParseCallable(const TExprNode::TPtr
         if (std::isinf(value)) {
             return std::unexpected(TString("Inf is not allowed for RANGE frame bounds"));
         }
-        if (value < 0.0f) {
+        if (value < 0.0F) {
             return std::strong_ordering::less;
         }
-        if (value > 0.0f) {
+        if (value > 0.0F) {
             return std::strong_ordering::greater;
         }
         return std::strong_ordering::equal;

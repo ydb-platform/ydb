@@ -21,12 +21,21 @@ TRequestObservation::TRequestObservation(const std::string& ydbClientType
         )
     ), Metrics_(
         std::make_shared<TRequestMetrics>(operationCollector, operationName, dbDriverState->Log)
-    )
+    ), DbDriverState_(dbDriverState)
 {}
 
 void TRequestObservation::End(EStatus status, const std::string& endpoint) noexcept {
     if (Span_) {
-        Span_->SetPeerEndpoint(endpoint);
+        std::uint64_t nodeId = 0;
+        std::string location;
+        if (!endpoint.empty()) {
+            if (auto state = DbDriverState_.lock()) {
+                const auto record = state->EndpointPool.GetEndpoint(TEndpointKey(endpoint, 0), /*onlyPreferred=*/true);
+                nodeId = record.NodeId;
+                location = record.Location;
+            }
+        }
+        Span_->SetPeerEndpoint(endpoint, nodeId, location);
         Span_->End(status);
     }
     if (Metrics_) {

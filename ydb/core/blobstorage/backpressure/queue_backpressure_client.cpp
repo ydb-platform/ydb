@@ -504,8 +504,8 @@ private:
         TActorId sender;
         ui64 cookie = 0;
         TDuration processingTime;
-        bool isOk = Queue.OnResponse(msgId, sequenceId, ev->Cookie, &sender, &cookie, &processingTime);
-        if (isOk) {
+        bool dsproxyAwaitingResponse = Queue.OnResponse(msgId, sequenceId, ev->Cookie, &sender, &cookie, &processingTime);
+        if (dsproxyAwaitingResponse) {
             NWilson::TTraceId traceId = std::move(ev->TraceId);
             ctx.Send(sender, ev->Release().Release(), 0, cookie, std::move(traceId));
         }
@@ -513,7 +513,7 @@ private:
             << " sequenceId# " << sequenceId << " msgId# " << msgId
             << " status# " << NKikimrProto::EReplyStatus_Name(status)
             << " processingTime# " << processingTime
-            << " isOk# " << isOk);
+            << " dsproxyAwaitingResponse# " << dsproxyAwaitingResponse);
 
         Pump(ctx);
     }

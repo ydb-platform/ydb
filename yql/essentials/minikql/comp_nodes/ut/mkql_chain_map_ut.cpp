@@ -4,6 +4,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -106,25 +107,13 @@ Y_UNIT_TEST_LLVM(TestOverList) {
                                  });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "A");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "D");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BAD");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+
+    using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                                      {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
+                                                                      {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
+                                                                      {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
+                                                                  });
 }
 
 Y_UNIT_TEST_LLVM(Test1OverList) {
@@ -157,30 +146,14 @@ Y_UNIT_TEST_LLVM(Test1OverList) {
                 return {pb.NewTuple({key, val, skey, sval}), pb.NewTuple({skey, sval})}; });
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 3);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "B");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 3);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "B");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "A");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "D");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BAD");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(!item.GetElement(2));
-    UNIT_ASSERT(!item.GetElement(3));
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+
+    using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                                      {TMaybe<i32>{3}, TMaybe<TString>{"B"}, TMaybe<i32>{3}, TMaybe<TString>{"B"}},
+                                                                      {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
+                                                                      {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
+                                                                      {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{}, TMaybe<TString>{}},
+                                                                  });
 }
 
 Y_UNIT_TEST_LLVM(TestOverFlow) {
@@ -211,25 +184,15 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
                                              }));
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "A");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "D");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BAD");
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+
+    using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
+    const TVector<TRow> expected{
+        {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
+        {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
+        {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
+    };
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(Test1OverFlow) {
@@ -262,30 +225,16 @@ Y_UNIT_TEST_LLVM(Test1OverFlow) {
                 return {pb.NewTuple({key, val, skey, sval}), pb.NewTuple({skey, sval})}; }));
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 3);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "B");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 3);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "B");
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "A");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "D");
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BAD");
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(!item.GetElement(2));
-    UNIT_ASSERT(!item.GetElement(3));
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+
+    using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
+    const TVector<TRow> expected{
+        {TMaybe<i32>{3}, TMaybe<TString>{"B"}, TMaybe<i32>{3}, TMaybe<TString>{"B"}},
+        {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
+        {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
+        {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{}, TMaybe<TString>{}},
+    };
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
 }
 
 using TChainMapBuilder = TRuntimeNode (*)(TProgramBuilder&, TRuntimeNode, TRuntimeNode);
@@ -309,19 +258,14 @@ void TestMultiUsage(bool WithCollect, TChainMapBuilder chainMapBuilder) {
     const auto pgmReturn = pb.Zip({fold, fold});
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
 
-    NUdf::TUnboxedValue item;
+    TVector<std::tuple<TString, TString>> expectedItems;
     TString value(prefix);
     for (ui64 i = from; i < to; i++) {
-        const auto expected = NYql::NUdf::TStringRef(value.data(), value.size());
-        UNIT_ASSERT(iterator.Next(item));
-        UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), expected);
-        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), expected);
+        expectedItems.emplace_back(value, value);
         value += ::ToString(i);
     }
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), expectedItems);
 }
 
 template <bool LLVM>
@@ -400,21 +344,18 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
         })));
 
     auto graph = setup.BuildGraph(pgmReturn);
-    auto iterator = graph->GetValue();
 
-    NUdf::TUnboxedValue item;
-    ui32 resultCount = 0;
-    for (;;) {
-        const auto status = iterator.Fetch(item);
-        if (status == NUdf::EFetchStatus::Finish) {
-            break;
-        }
-        if (status == NUdf::EFetchStatus::Yield) {
-            continue;
-        }
-        ++resultCount;
-    }
-    UNIT_ASSERT_VALUES_EQUAL(resultCount, 5u);
+    // Struct fields are sorted alphabetically: Count0 (0), Count1 (1), dt (2)
+    using TRow = std::tuple<ui64, ui64, ui64>;
+    const TVector<TRow> expected{
+        {ui64{1}, ui64{0}, ui64{10}},
+        {ui64{2}, ui64{0}, ui64{20}},
+        {ui64{3}, ui64{0}, ui64{30}},
+        {ui64{4}, ui64{0}, ui64{40}},
+        {ui64{5}, ui64{0}, ui64{50}},
+    };
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLChain1MapThrottleTest)

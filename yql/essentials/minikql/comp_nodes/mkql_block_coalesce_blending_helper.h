@@ -166,7 +166,7 @@ void VectorizedCoalesce(const ui8* __restrict leftBitMask,
     // Calculates the truncated length for working with data blocks.
     auto truncatedLengthInBytes =
         lengthInBytes / sizeInBytes * sizeInBytes;
-    for (size_t bytesProcessed = 0u, elemShift = 0, step = 0;
+    for (size_t bytesProcessed = 0U, elemShift = 0, step = 0;
          bytesProcessed < truncatedLengthInBytes;
          bytesProcessed += sizeInBytes, elemShift += 8, step += 1) {
         auto currentLeftMask = leftBitMask[leftOffset / 8 + step];
@@ -182,7 +182,7 @@ void VectorizedCoalesce(const ui8* __restrict leftBitMask,
         }
         // Expands the current mask to an array of unsigned of type.
         auto expandedMask = NYql::NUdf::BitToByteExpand<std::make_unsigned_t<TType>>(currentLeftMask);
-        for (size_t j = 0u; j < 8; ++j) {
+        for (size_t j = 0U; j < 8; ++j) {
             auto arrayIdx = elemShift + j;
             auto rightArrayIdx = arrayIdx + rightOffset;
             if constexpr (rightIsScalar) {

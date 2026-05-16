@@ -338,6 +338,10 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("host_configs")
 
     @property
+    def udfs_dir(self):
+        return self.__cluster_details.get_service("udfs_dir")
+
+    @property
     def table_service_config(self):
         return self.__cluster_details.get_service("table_service_config")
 
@@ -506,6 +510,9 @@ class StaticConfigGenerator(object):
 
                             drive['pdisk_config'] = self.normalize_dictionary(json_format.MessageToDict(pd))
 
+        if self.udfs_dir:
+            normalized_config["udfs_dir"] = self.udfs_dir
+
         if self.table_service_config:
             normalized_config["table_service_config"] = self.table_service_config
 
@@ -520,6 +527,9 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.client_certificate_authorization is not None:
             normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
+
+        if self.__cluster_details.system_tablet_backup_config is not None:
+            normalized_config["system_tablet_backup_config"] = self.__cluster_details.system_tablet_backup_config
 
         if self.__cluster_details.table_profiles_config is not None:
             normalized_config["table_profiles_config"] = self.__cluster_details.table_profiles_config

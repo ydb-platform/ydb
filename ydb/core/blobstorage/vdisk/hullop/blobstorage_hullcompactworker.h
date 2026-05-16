@@ -232,19 +232,15 @@ namespace NKikimr {
             // time stat
             TInstant CreationTime;
             TInstant StartTime;
-            TInstant FinishTime;
 
             TStatistics(THullCtxPtr hullCtx)
                 : HullCtx(hullCtx)
                 , CreationTime(TAppData::TimeProvider->Now())
-                , StartTime()
-                , FinishTime()
             {}
 
             TString ToString() const {
                 TStringStream str;
                 str << "{WaitTime# " << (StartTime - CreationTime).ToString()
-                    << " GetNextItemTime# " << (FinishTime - StartTime).ToString()
                     << " BytesRead# " << BytesRead << " ReadIOPS# " << ReadIOPS
                     << " BytesWritten# " << BytesWritten << " WriteIOPS# " << WriteIOPS
                     << " ItemsWritten# " << ItemsWritten

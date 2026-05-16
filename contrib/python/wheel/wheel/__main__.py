@@ -9,7 +9,7 @@ from typing import NoReturn
 
 
 def main() -> NoReturn:  # needed for console script
-    if __package__ == "":
+    if __spec__.parent == "":
         # To be able to run 'python wheel-0.9.whl/wheel':
         import os.path
 

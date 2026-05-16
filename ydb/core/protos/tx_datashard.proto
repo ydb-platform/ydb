@@ -1619,6 +1619,8 @@ message TEvSampleKRequest {
     optional uint64 SeqNoRound = 12;
 
     optional Ydb.Table.VectorIndexSettings Settings = 13;
+
+    optional bool SkipEmptyColumns = 14;
 }
 
 message TEvSampleKResponse {

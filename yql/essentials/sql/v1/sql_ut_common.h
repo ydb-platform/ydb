@@ -2981,12 +2981,12 @@ Y_UNIT_TEST(ForStatementLangVerFailure) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "FOR without EVALUATE is not available before language version 2026.01");
+        "FOR without EVALUATE is not available before language version 2026.02");
 }
 
 Y_UNIT_TEST(ForStatementLangVerSuccess) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 1);
+    settings.LangVer = NYql::MakeLangVersion(2026, 2);
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         FOR $i IN AsList(1,2,3) DO BEGIN
@@ -3005,7 +3005,7 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "PARALLEL FOR is not available before language version 2026.01");
+        "PARALLEL FOR is not available before language version 2026.02");
 }
 
 #ifdef YQL_BUILTIN_MIN_MAX_LANGVER
@@ -3138,6 +3138,191 @@ Y_UNIT_TEST(ReduceUsingUdfWithShortcutsWorks) {
           "REDUCE Input ON key using all $func(subkey);\n"
           "REDUCE Input ON key using all $func(UUU::VVV(TableRow()));";
     UNIT_ASSERT(SqlToYql(req).IsOk());
+}
+
+Y_UNIT_TEST(CombineLangverTest) {
+    const auto req = R"sql(COMBINE plato.Input as A PRESORT A.key, A.subkey
+                           WITH plato.Input as B PRESORT B.key, B.subkey
+                           ON A.key = B.key AND A.subkey = B.subkey
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql(req);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "Error: COMBINE is not available before language version 2026.02");
+}
+
+NYql::TAstParseResult SqlToYql202602(const TString& query) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 2);
+    return SqlToYqlWithSettings(query, settings);
+}
+
+Y_UNIT_TEST(CombineSmokeTest) {
+    const auto req = R"sql(COMBINE plato.Input as A PRESORT A.key, A.subkey
+                           WITH plato.Input as B PRESORT B.key, B.subkey
+                           ON A.key = B.key AND A.subkey = B.subkey
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlCombine "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["SqlCombineInput "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Read! "]);
+}
+
+Y_UNIT_TEST(CombineAsSubquery) {
+    const auto req = R"sql(SELECT value, extra FROM (
+                               COMBINE plato.Input as A
+                               WITH plato.Input as B
+                               ON A.key = B.key
+                               USING Foo::DoBar((A.value), (B.value))
+                           ))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlCombine "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["SqlCombineInput "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Read! "]);
+}
+
+Y_UNIT_TEST(CombineSubselectInputs) {
+    const auto req = R"sql(COMBINE (SELECT key, value, extra FROM plato.Input) as A
+                           WITH (SELECT key, value, extra FROM plato.Input) as B
+                           ON A.key = B.key
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlCombine "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["SqlCombineInput "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["Read! "]);
+}
+
+Y_UNIT_TEST(CombineDiscard) {
+    const auto req = R"sql(DISCARD COMBINE plato.Input as A
+                           WITH plato.Input as B
+                           ON A.key = B.key
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "discard"};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlCombine "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["SqlCombineInput "]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["discard"]);
+}
+
+Y_UNIT_TEST(CombineInSubquery) {
+    const auto req = R"sql(DEFINE SUBQUERY $q() as
+                               COMBINE plato.Input as A
+                               WITH plato.Input as B
+                               ON A.key = B.key
+                               USING Foo::Dobar((A.value), (B.value));
+                           END DEFINE;
+                           SELECT * FROM $q())sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "UnorderedSubquery "};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlCombine "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["SqlCombineInput "]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnorderedSubquery "]);
+}
+
+Y_UNIT_TEST(CombineTableRowArgs) {
+    const auto req = R"sql(COMBINE plato.Input as A PRESORT A.key, A.subkey
+                           WITH plato.Input as B PRESORT B.key, B.subkey
+                           ON A.key = B.key AND A.subkey = B.subkey
+                           USING Foo::DoBar(TableRow(), TableRow()))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "RemoveSystemMembers "};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SqlCombine "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["SqlCombineInput "]);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["RemoveSystemMembers "]);
+}
+
+Y_UNIT_TEST(CombineInvalidArgc) {
+    const auto req = R"sql(COMBINE plato.Input as A PRESORT A.key, A.subkey
+                           WITH plato.Input as B PRESORT B.key, B.subkey
+                           ON A.key = B.key AND A.subkey = B.subkey
+                           USING Foo::DoBar(TableRow()))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "Error: COMBINE requires exactly two expressions, specifying argument types");
+}
+
+Y_UNIT_TEST(CombineOnNotEquality) {
+    const auto req = R"sql(COMBINE plato.Input as A
+                           WITH plato.Input as B
+                           ON A.key > B.key
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "Error: COMBINE ON expression must be a conjunction of equality predicates");
+}
+
+Y_UNIT_TEST(CombineOnNonColumnArg) {
+    const auto req = R"sql(COMBINE plato.Input as A
+                           WITH plato.Input as B
+                           ON A.key = 1
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "Error: COMBINE: each equality predicate argument must depend on exactly one COMBINE input");
+}
+
+Y_UNIT_TEST(CombineOnColumnWithoutCorrelation) {
+    const auto req = R"sql(COMBINE plato.Input as A
+                           WITH plato.Input as B
+                           ON key = B.key
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "Error: COMBINE: column requires correlation name");
+}
+
+Y_UNIT_TEST(CombineOnUnknownCorrelation) {
+    const auto req = R"sql(COMBINE plato.Input as A
+                           WITH plato.Input as B
+                           ON A.key = C.key
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "Error: COMBINE: unknown correlation name: C");
+}
+
+Y_UNIT_TEST(CombineOnSameCorrelationBothSides) {
+    const auto req = R"sql(COMBINE plato.Input as A
+                           WITH plato.Input as B
+                           ON A.key = A.subkey
+                           USING Foo::DoBar((A.value), (B.value)))sql";
+    const auto res = SqlToYql202602(req);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "Error: COMBINE: different correlation names are required for combined tables");
 }
 
 Y_UNIT_TEST(YsonDisableStrict) {
@@ -8531,7 +8716,7 @@ Y_UNIT_TEST(MultilineComments) {
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
 #else
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMBINE, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
 #endif
     res = SqlToYqlWithAnsiLexer(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -12284,6 +12469,7 @@ Y_UNIT_TEST(TestTokenMissing) {
 } // Y_UNIT_TEST_SUITE(TestGetQueryPosition)
 
 Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery) {
+
 Y_UNIT_TEST(EmptyTuple) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
             SELECT ();
@@ -12590,6 +12776,123 @@ Y_UNIT_TEST(InsideLambda) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(ReadsFromJoinSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT * FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a;
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionJoinSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionJoinInSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT 1 IN (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionJoinExistsSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT EXISTS (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsNamedNodeJoinExistsSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $x = (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+        SELECT $x;
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionExpresionSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT 1 + (SELECT a FROM plato.x);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+}
+
+Y_UNIT_TEST(ReadsNamedNodeExpresionSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $x = 1 + (SELECT a FROM plato.x);
+        $y = (SELECT a FROM plato.x) + 1;
+        $z = (SELECT a FROM plato.x);
+        $h = ((SELECT a FROM plato.x));
+        SELECT $x, $y, $z, $h;
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 4);
+}
+
+Y_UNIT_TEST(ReadsProjectionFromSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT a FROM plato.x) FROM (SELECT * FROM plato.y);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)
 
 Y_UNIT_TEST_SUITE(YqlSelect) {
@@ -12605,7 +12908,7 @@ Y_UNIT_TEST(LangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "YqlSelect is not available before language version 2026.01");
+        "YqlSelect is not available before language version 2026.02");
 }
 
 Y_UNIT_TEST(AutoTopLevel) {

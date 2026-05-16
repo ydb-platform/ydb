@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 
 #include <util/generic/fwd.h>
 #include <util/stream/output.h>
@@ -22,7 +23,7 @@ public:
         TAiModelConfig::TPtr Profile;
         TString Prompt; // Current interactive CLI prompt
         TString Database;
-        TDriver Driver;
+        TLazyDriver::TPtr LazyDriver;
         TString ConnectionString;
         TClientCommand::TConfig::TUsageInfoGetter UsageInfoGetter;
     };

@@ -2,6 +2,7 @@ RECURSE(
     blobsan
     cfg
     disk_obliterator
+    mnc
     partcheck
     query_replay
     query_replay_yt

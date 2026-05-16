@@ -37,6 +37,7 @@ TStorageConfig::TStorageConfig(
     xxx(VChunkSize,                         ui64,     128_MB                  )\
     xxx(ThreadPoolSize,                     ui32,     2                       )\
     xxx(OracleConfig,                       NProto::TOracleConfig, {}         )\
+    xxx(DirtyMapDebugPrintInterval,         TDuration, TDuration::Seconds(0)  )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on
@@ -59,6 +60,12 @@ template <typename TTarget, typename TSource>
 TTarget ConvertValue(const TSource& value)
 {
     return static_cast<TTarget>(value);
+}
+
+template <>
+TDuration ConvertValue<TDuration, ui32>(const ui32& value)
+{
+    return TDuration::MilliSeconds(value);
 }
 
 template <>

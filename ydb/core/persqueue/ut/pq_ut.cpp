@@ -2167,6 +2167,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
             CmdWrite(0, "sourceid0", data, tc, false, {}, i == 0);
             tc.Runtime->UpdateCurrentTime(tc.Runtime->GetCurrentTime() + TDuration::Minutes(1));
         }
+        tc.Runtime->UpdateCurrentTime(tc.Runtime->GetCurrentTime() + TDuration::Seconds(5));
         const auto ts = tc.Runtime->GetCurrentTime();
 
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0});
@@ -2178,8 +2179,8 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
                 (ts - TDuration::Minutes(3)).MilliSeconds());
         CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, 0,
                 (ts - TDuration::Minutes(3)).MilliSeconds());
-        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 0,
-                (ts - TDuration::Seconds(1)).MilliSeconds());
+        CmdRead(0, 4, 1, Max<i32>(), 0, false, tc, {34}, 0, (ts - TDuration::Seconds(1)).MilliSeconds());
+        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {28}, 0, (ts - TDuration::Seconds(80)).MilliSeconds());
 
         PQTabletPrepare({.readFromTimestampsMs=(ts - TDuration::Seconds(1)).MilliSeconds()},
                         {{"aaa", true}}, tc);

@@ -31,7 +31,7 @@ WHERE
             d_year == 2000
             AND d_moy == 2
     )
-    AND i.i_current_price > 1.2 * (
+    AND i.i_current_price > cast("1.2" as decimal(7,2)) * (
         SELECT
             Avg(j.i_current_price)
         FROM

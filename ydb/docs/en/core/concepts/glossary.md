@@ -203,6 +203,10 @@ The fulltext search capabilities and index parameters are described in [{#T}](..
 
 A **column family** or **column group** is a feature that allows storing a subset of [row-oriented table](#row-oriented-table) columns separately in a distinct family or group. The primary use case is to store some columns on different kinds of disk drives (offload less important columns to HDD) or with various compression settings. If the workload requires many column families, consider using [column-oriented tables](#column-oriented-table) instead.
 
+#### Column encoding {#column-encoding}
+
+**Column encoding** is a mechanism for optimizing data storage in table columns that reduces disk usage and can speed up some operations.
+
 #### Time to live {#ttl}
 
 **Time to live** or **TTL** is a mechanism for automatically removing old rows from a table asynchronously in the background. It is explained in a separate article [{#T}](ttl.md).

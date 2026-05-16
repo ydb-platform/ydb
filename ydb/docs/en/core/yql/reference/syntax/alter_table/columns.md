@@ -7,7 +7,7 @@
 Builds a new column with the specified name, type, and options for the specified table.
 
 ```yql
-ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
 
 ## Request parameters
@@ -46,8 +46,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- alternat
 Modifies properties of an existing column in the specified table. Property changes are applied without recreating the column. Some properties apply only to newly written data or during compaction (see the description of each property for details).
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name SET [FAMILY <family_name>] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
-ALTER TABLE table_name ALTER COLUMN column_name DROP [FAMILY] [NOT NULL] [DEFAULT] [COMPRESSION] [ENCODING];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
 
 ### Request parameters
@@ -97,6 +96,11 @@ ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 
 After the query runs, the column uses the default compression algorithm again (see the `COMPRESSION` option above).
 
+Enable dictionary encoding on a column:
+
+```yql
+ALTER TABLE movies ALTER COLUMN genre SET ENCODING(DICT);
+```
 
 ## DROP COLUMN
 

@@ -16,6 +16,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
   [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
+  [ENCODING([OFF|DICT])]
   [, ...],
     INDEX <index_name>
       [GLOBAL|LOCAL]

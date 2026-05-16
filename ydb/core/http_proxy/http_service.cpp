@@ -112,7 +112,7 @@ namespace NKikimr::NHttpProxy {
         } catch (const NKikimr::NSQS::TSQSException& e) {
             context.DoReply({
                 .HttpCode = HTTP_BAD_REQUEST,
-                .ContentType = AsAwsContentType(contentType),
+                .ContentType = contentType,
                 .Message = "AccessDeniedException",
                 .Body = BuildError(contentType, HTTP_BAD_REQUEST, "AccessDeniedException", e.what())
             });

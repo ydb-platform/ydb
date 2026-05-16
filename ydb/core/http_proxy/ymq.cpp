@@ -156,7 +156,7 @@ namespace NKikimr::NHttpProxy {
 
                 ReplyToHttpContext({
                     .HttpCode = httpCode,
-                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .ContentType = HttpContext.ContentType,
                     .Message = errorText,
                     .Body = NSQS::Serialize(HttpContext.ContentType, {
                         .StatusCode = errorName,
@@ -178,7 +178,7 @@ namespace NKikimr::NHttpProxy {
 
                 ReplyToHttpContext({
                     .HttpCode = httpStatusCode,
-                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .ContentType = HttpContext.ContentType,
                     .Message = errorText,
                     .Body = NSQS::Serialize(HttpContext.ContentType, {
                         .StatusCode = ymqStatusCode,
@@ -249,7 +249,7 @@ namespace NKikimr::NHttpProxy {
 
                     ReplyToHttpContext({
                         .HttpCode = 200,
-                        .ContentType = AsAwsContentType(HttpContext.ContentType),
+                        .ContentType = HttpContext.ContentType,
                         .Message = "",
                         .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
                     },
@@ -502,7 +502,7 @@ namespace NKikimr::NHttpProxy {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
                     .HttpCode = httpCode,
-                    .ContentType = AsAwsContentType(contentType),
+                    .ContentType = contentType,
                     .Message = errorName,
                     .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{
                         .StatusCode = errorName,

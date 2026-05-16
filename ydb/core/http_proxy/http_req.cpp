@@ -45,7 +45,7 @@ namespace NKikimr::NHttpProxy {
 
         context.DoReply(THttpResponseData{
             .HttpCode = 404,
-            .ContentType = "text/plain",
+            .ContentType = MimeTypes::MIME_TEXT,
             .Message = "Not Found",
             .Body = "Not Found"
         });
@@ -120,10 +120,11 @@ namespace NKikimr::NHttpProxy {
         );
         response->Set<&NHttp::THttpResponse::Connection>(Request->GetConnection());
         response->Set(REQUEST_ID_HEADER_EXT, RequestId);
-        if (!data.ContentType.empty() && !data.Body.empty()) {
-            response->Set<&NHttp::THttpResponse::ContentType>(data.ContentType);
+        if (!data.Body.empty()) {
+            const auto contentType = AsAwsContentType(data.ContentType);
+            response->Set<&NHttp::THttpResponse::ContentType>(contentType);
             if (!Request->Endpoint->CompressContentTypes.empty()) {
-                TStringBuf buffer = data.ContentType;
+                TStringBuf buffer = contentType;
                 auto contentType = NHttp::Trim(buffer.Before(';'), ' ');
                 if (Count(Request->Endpoint->CompressContentTypes, contentType) != 0) {
                     response->EnableCompression();

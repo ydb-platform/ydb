@@ -309,7 +309,7 @@ namespace NKikimr::NHttpProxy {
 
                 ReplyToHttpContext({
                     .HttpCode = exception.second,
-                    .ContentType = AsAwsContentType(HttpContext.ContentType),
+                    .ContentType = HttpContext.ContentType,
                     .Message = exception.first,
                     .Body = NDataStreams::Serialize(HttpContext.ContentType, {
                         .Exception = exception,
@@ -419,7 +419,7 @@ namespace NKikimr::NHttpProxy {
                          });
                     ReplyToHttpContext({
                         .HttpCode = 200,
-                        .ContentType = AsAwsContentType(HttpContext.ContentType),
+                        .ContentType = HttpContext.ContentType,
                         .Message = "",
                         .Body = NDataStreams::Serialize(HttpContext.ContentType, *ev->Get()->Message)
                     }, NYdb::EStatus::SUCCESS);
@@ -577,7 +577,7 @@ namespace NKikimr::NHttpProxy {
             const auto exception = MapToException(Status, "", issueCode);
             return {
                 .HttpCode = exception.second,
-                .ContentType = AsAwsContentType(contentType),
+                .ContentType = contentType,
                 .Message = exception.first,
                 .Body = NDataStreams::Serialize(contentType, NDataStreams::TErrorResponse{
                     .Exception = exception,

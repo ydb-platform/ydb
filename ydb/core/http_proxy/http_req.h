@@ -47,7 +47,7 @@ private:
 
 struct THttpResponseData {
     ui32 HttpCode;
-    TString ContentType;
+    MimeTypes ContentType = MimeTypes::MIME_TEXT;
     TString Message;
     TString Body;
 };

@@ -47,4 +47,5 @@ RECURSE_FOR_TESTS(
     statistics
     storage
     reading
+    pushdown
 )

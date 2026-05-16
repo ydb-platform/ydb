@@ -88,6 +88,8 @@ public:
 
     TColumnFilter Cut(const ui32 totalRecordsCount, const ui32 limit, const bool reverse) const;
 
+    [[nodiscard]] TColumnFilter CreateReversed() const;
+
     TSlicesIterator BuildSlicesIterator(const std::optional<ui32> startIndex, const std::optional<ui32> count) const {
         return TSlicesIterator(*this, startIndex, count);
     }

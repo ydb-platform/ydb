@@ -61,6 +61,10 @@ public:
     {
     }
 
+    static std::unique_ptr<TPortionSources> BuildEmpty() {
+        return std::make_unique<TPortionSources>(std::vector<std::shared_ptr<TPortionInfo>>());
+    }
+
     virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
 };
 

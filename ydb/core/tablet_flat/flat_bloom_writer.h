@@ -21,6 +21,7 @@ namespace NBloom {
         virtual void Reset() = 0;
         virtual ui64 EstimateBytesUsed(size_t extraItems) const = 0;
         virtual void Add(TArrayRef<const TCell> row) = 0;
+        virtual void Add(THashRoot root) = 0;
         virtual TSharedData Make() = 0;
     };
 
@@ -105,7 +106,7 @@ namespace NBloom {
             return Raw.size();
         }
 
-        void Add(THashRoot root)
+        void Add(THashRoot root) override
         {
             THash hash(root);
 
@@ -158,10 +159,15 @@ namespace NBloom {
             return sizeof(NPage::TLabel) + sizeof(THeader) + array;
         }
 
+        void Add(THashRoot root) override
+        {
+            Roots.push_back(root);
+        }
+
         void Add(TArrayRef<const TCell> row) override
         {
             const TPrefix prefix(row);
-            Roots.push_back(THash::Root(prefix.Get(row.size())));
+            Add(THash::Root(prefix.Get(row.size())));
         }
 
         TSharedData Make() override

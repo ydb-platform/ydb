@@ -348,7 +348,7 @@ private:
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
                 accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i])
-                    .AssembleToGeneralContainer({}, portion->GetPortionInfo()->GetPathId().DebugString())
+                    .AssembleToGeneralContainer({})
                     .DetachResult();
             result.emplace_back(std::move(*container));
         }

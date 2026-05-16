@@ -55,14 +55,14 @@ std::vector<std::shared_ptr<TPartialReadResult>> TPartialReadResult::SplitResult
 TPartialReadResult::TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
     const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, NArrow::TShardedRecordBatch&& batch,
     std::shared_ptr<IScanCursor>&& scanCursor, const std::shared_ptr<TReadContext>& context,
-    const std::optional<TPartialSourceAddress> notFinishedInterval)
+    const std::optional<TPartialSourceAddress> notFinishedInterval, const ui64 sourceId)
     : ResourceGuards(resourceGuards)
     , GroupGuard(gGuard)
     , ResultBatch(std::move(batch))
     , ScanCursor(std::move(scanCursor))
     , NotFinishedInterval(notFinishedInterval)
-    , Guard(TValidator::CheckNotNull(context)->GetCounters().GetResultsForReplyGuard())
-{
+    , SourceId(sourceId)
+    , Guard(TValidator::CheckNotNull(context)->GetCounters().GetResultsForReplyGuard()) {
     Y_ABORT_UNLESS(ResultBatch.GetRecordsCount());
     Y_ABORT_UNLESS(ScanCursor);
 }

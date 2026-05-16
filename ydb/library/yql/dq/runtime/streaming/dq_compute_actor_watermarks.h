@@ -1,9 +1,8 @@
 #pragma once
 
+#include "dq_watermark_tracker_impl.h"
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/dq/actors/compute/dq_watermark_tracker_impl.h>
 
 namespace NYql::NDq::NDqComputeActorWatermarksImpl {
     struct TInputKey {

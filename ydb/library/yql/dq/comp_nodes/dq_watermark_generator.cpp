@@ -1,6 +1,6 @@
 #include "dq_watermark_generator.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -15,10 +15,58 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TDqWatermarkGenerator : public TMutableComputationNode<TDqWatermarkGenerator> {
-    using TBaseComputation = TMutableComputationNode<TDqWatermarkGenerator>;
+class TDqWatermarkGenerator : public TStatefulSourceComputationNode<TDqWatermarkGenerator/* , true */> {
+    using TSelf = TDqWatermarkGenerator;
+    using TBaseComputation = TStatefulSourceComputationNode<TSelf/* , true */>;
 public:
     using TPartitionKey = ui64;
+
+    class TStreamValue: public TComputationValue<TStreamValue> {
+    public:
+        using TBase = TComputationValue<TStreamValue>;
+
+        TStreamValue(
+            TMemoryUsageInfo* memInfo,
+            NUdf::TUnboxedValue&& stream,
+            const TSelf* self,
+            TComputationContext& ctx
+        )
+            : TBase(memInfo)
+            , Stream_(std::move(stream))
+            , Self_(self)
+            , Ctx_(ctx)
+        {
+        }
+
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            NUdf::TUnboxedValue value;
+            const auto status = Stream_.Fetch(value);
+            if (status != NUdf::EFetchStatus::Ok) {
+                return status;
+            }
+
+            auto newValue = value;
+            Self_->ItemArg_->SetValue(Ctx_, std::move(newValue));
+
+            const auto watermark = TInstant::MicroSeconds(Self_->WatermarkExtractor_->GetValue(Ctx_).Get<ui64>());
+
+            const auto partitionId = Self_->PartitionIdExtractor_->GetValue(Ctx_).Get<ui64>();
+            const auto partitionKey = TPartitionKey{partitionId};
+
+            const auto now = TInstant::Now();
+            if (const auto newWatermark = Self_->WatermarkTracker_.NotifyNewPartitionTime(partitionKey, watermark, now)) {
+                Self_->Watermark_.WatermarkIn = newWatermark;
+            }
+
+            result = value.Release();
+            return NUdf::EFetchStatus::Ok;
+        }
+
+    private:
+        const NUdf::TUnboxedValue Stream_;
+        const TSelf* const Self_;
+        TComputationContext& Ctx_;
+    };
 
     TDqWatermarkGenerator(
         TComputationMutables& mutables,
@@ -52,30 +100,23 @@ public:
         }
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& input, TComputationContext& ctx) {
-        if (input.IsInvalid()) {
-            input = Input_->GetValue(ctx).GetListIterator();
+    NUdf::TUnboxedValue GetValue(TComputationContext& ctx) const override {
+        NUdf::TUnboxedValue& valueRef = ValueRef(ctx);
+        if (valueRef.IsInvalid()) {
+            // Create new.
+            valueRef = ctx.HolderFactory.Create<TStreamValue>(Input_->GetValue(ctx), this, ctx);
+        } else if (valueRef.HasValue()) {
+            MKQL_ENSURE(valueRef.IsBoxed(), "Expected boxed value");
+            bool isStateToLoad = valueRef.HasListItems();
+            if (isStateToLoad) {
+                // Load from saved state.
+                NUdf::TUnboxedValue stream = ctx.HolderFactory.Create<TStreamValue>(Input_->GetValue(ctx), this, ctx);
+                stream.Load2(valueRef);
+                valueRef = stream;
+            }
         }
 
-        NUdf::TUnboxedValue value;
-        if (!input.Next(value)) {
-            return NUdf::TUnboxedValuePod::MakeFinish();
-        }
-
-        auto newValue = value;
-        ItemArg_->SetValue(ctx, std::move(newValue));
-
-        const auto watermark = TInstant::MicroSeconds(WatermarkExtractor_->GetValue(ctx).Get<ui64>());
-
-        const auto partitionId = PartitionIdExtractor_->GetValue(ctx).Get<ui64>();
-        const auto partitionKey = TPartitionKey{partitionId};
-
-        const auto now = TInstant::Now();
-        if (const auto newWatermark = WatermarkTracker_.NotifyNewPartitionTime(partitionKey, watermark, now)) {
-            Watermark_.WatermarkIn = newWatermark;
-        }
-
-        return value.Release();
+        return valueRef;
     }
 
 private:
@@ -92,7 +133,7 @@ private:
     IComputationNode* const WatermarkExtractor_;
     IComputationNode* const PartitionIdExtractor_;
 
-    NYql::NDq::TDqSourceWatermarkTracker<TPartitionKey> WatermarkTracker_;
+    mutable NYql::NDq::TDqSourceWatermarkTracker<TPartitionKey> WatermarkTracker_;
     TWatermark& Watermark_;
 };
 
@@ -103,6 +144,9 @@ IComputationNode* WrapDqWatermarkGenerator(
     const TComputationNodeFactoryContext& ctx,
     TWatermark& watermark
 ) {
+    auto streamType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(streamType->IsStream(), "Expected stream");
+
     auto input = LocateNode(ctx.NodeLocator, callable, 0);
     auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
     auto watermarkExtractor = LocateNode(ctx.NodeLocator, callable, 2);
@@ -131,7 +175,7 @@ IComputationNode* WrapDqWatermarkGenerator(
         itemArg,
         watermarkExtractor,
         partitionIdExtractor,
-        partitions,
+        {0},
         lateArrivalDelay,
         granularity,
         idleTimeout,

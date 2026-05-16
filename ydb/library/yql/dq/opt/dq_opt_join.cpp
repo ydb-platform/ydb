@@ -1568,7 +1568,7 @@ TExprBase DqBuildHashJoin(
     std::transform(leftJoinKeys.cbegin(), leftJoinKeys.cend(), std::back_inserter(leftKeys), [&](const std::string_view& name) { return leftNames[name]; });
     std::transform(rightJoinKeys.cbegin(), rightJoinKeys.cend(), std::back_inserter(rightKeys), [&](const std::string_view& name) { return rightNames[name]; });
 
-    const auto buildShuffle = [&ctx, &join](const TDqOutput& input, const TVector<TCoAtom>& keys) {
+    const auto buildShuffle = [&ctx, &join, useBlockHashJoin](const TDqOutput& input, const TVector<TCoAtom>& keys) {
         return Build<TDqCnHashShuffle>(ctx, join.Pos())
                 .Output(input)
                 .KeyColumns()

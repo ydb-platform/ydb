@@ -356,8 +356,9 @@ private:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
                 auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
                 auto membersCount = structType->GetMembersCount();
-                auto& memberNames = StructMembers[structType];
-                if (memberNames) {
+                auto [it, inserted] = StructMembers.try_emplace(structType);
+                auto& memberNames = it->second;
+                if (!inserted) {
                     Y_ENSURE(membersCount == memberNames.size());
                     break;
                 }
@@ -366,8 +367,8 @@ private:
                     if (!success) {
                         return success;
                     }
-                    auto [_, inserted] = memberNames.emplace(structType->GetMemberName(idx), idx);
-                    Y_ENSURE(inserted);
+                    auto [_, nameInserted] = memberNames.emplace(structType->GetMemberName(idx), idx);
+                    Y_ENSURE(nameInserted);
                 }
                 break;
             }
@@ -379,7 +380,7 @@ private:
                     return TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Dict key type is not DataType");
                 }
                 auto keyTypeSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
-                if (keyTypeSlot != NYql::NUdf::EDataSlot::String && keyTypeSlot != NYql::NUdf::EDataSlot::Utf8) {
+                if (!IsIn(keyTypeSlot, {NYql::NUdf::EDataSlot::String, NYql::NUdf::EDataSlot::Utf8})) {
                     return TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Dict key type is not String or Utf8");
                 }
                 return ParseNestedType(dictType->GetPayloadType());

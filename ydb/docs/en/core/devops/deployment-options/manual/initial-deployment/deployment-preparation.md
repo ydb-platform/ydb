@@ -14,8 +14,9 @@ The network configuration must allow TCP connections on the following ports (the
 * 2135, 2136: GRPC for client-cluster interaction.
 * 19001, 19002: Interconnect for intra-cluster node interaction
 * 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* 9092, 9093: ports for Kafka API.
 
-Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
+Distinct ports are necessary for gRPC, Interconnect, HTTP interface, and Kafka API of each dynamic node when hosting multiple dynamic nodes on a single server.
 
 Make sure that the system clocks running on all the cluster's servers are synced by `ntpd` or `chrony`. We recommend using the same time source for all servers in the cluster to maintain consistent leap seconds processing.
 

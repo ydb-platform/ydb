@@ -1,6 +1,7 @@
 #include "datastreams.h"
 
 #include "auth_factory.h"
+#include "controller_base.h"
 #include "custom_metrics.h"
 #include "datastreams_serialization.h"
 #include "exceptions_mapping.h"
@@ -526,7 +527,7 @@ namespace NKikimr::NHttpProxy {
     };
 
 
-    class TController : public IHttpController {
+    class TController : public TBaseHttpController {
     public:
         TController() {
             #define DECLARE_DATASTREAMS_PROCESSOR(name) Name2Processor[#name] =                 \
@@ -572,21 +573,6 @@ namespace NKikimr::NHttpProxy {
             #undef DECLARE_DATASTREAMS_PROCESSOR
         }
 
-        std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
-            const TString& name,
-            const THttpRequestContext& context
-        ) const override {
-            if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
-                return std::unexpected(IHttpController::EError::ServiceDisabled);
-            }
-
-            if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                return proc->second.get();
-            }
-
-            return std::unexpected(IHttpController::EError::MethodNotFound);
-        }
-
         THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
             const auto exception = MapToException(Status, "", issueCode);
             return {
@@ -600,12 +586,13 @@ namespace NKikimr::NHttpProxy {
             };
         }
 
+        bool IsEnabled(const NKikimrConfig::THttpProxyConfig& config) const override {
+            return config.GetDataStreamsEnabled();
+        }
+
         bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig&) const override {
             return apiVersion == "kinesisApi";
         }
-
-    private:
-        absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
     };
 
     TController ControllerInstance;

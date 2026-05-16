@@ -22,11 +22,11 @@ namespace NKikimr::NHttpProxy {
                 return GetController(config)->IsPossible(apiVersion, config);
             }
 
-            std::expected<IHttpRequestProcessor*, EError> GetProcessor(
-                const TString& name,
-                const THttpRequestContext& context
+            bool Execute(
+                THttpRequestContext&& context,
+                THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
             ) const override {
-                return GetController(context.ServiceConfig)->GetProcessor(name, context);
+                return GetController(context.ServiceConfig)->Execute(std::move(context), std::move(signature));
             }
 
         private:

@@ -1,5 +1,6 @@
 #include "ymq.h"
 
+#include "controller_base.h"
 #include "http_req.h"
 #include "sqs_serialization.h"
 #include "utils.h"
@@ -206,7 +207,7 @@ namespace NKikimr::NHttpProxy {
                     requestAttributes.ResourceId = ResourceId;
                     requestAttributes.Action = ::NKikimr::NSQS::ActionFromString(HttpContext.MethodName);
                     if (queueTags) {
-                        for (const auto& [k, v] : *queueTags) {
+                        for (auto&& [k, v] : *queueTags) {
                             requestAttributes.QueueTags[std::move(k)] = std::move(v);
                         }
                     }
@@ -445,7 +446,7 @@ namespace NKikimr::NHttpProxy {
         std::function<TString(TProtoRequest&)> QueueUrlExtractor;
     };
 
-    class TController: public IHttpController {
+    class TController: public TBaseHttpController {
         public:
             TController() {
 
@@ -497,21 +498,6 @@ namespace NKikimr::NHttpProxy {
 
             }
 
-            std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
-                const TString& name,
-                const THttpRequestContext& context
-            ) const override {
-                if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled()) {
-                    return std::unexpected(IHttpController::EError::ServiceDisabled);
-                }
-
-                if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                    return proc->second.get();
-                }
-
-                return std::unexpected(IHttpController::EError::MethodNotFound);
-            }
-
             THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
@@ -525,12 +511,13 @@ namespace NKikimr::NHttpProxy {
                 };
             }
 
+            bool IsEnabled(const NKikimrConfig::THttpProxyConfig& config) const override {
+                return config.GetYmqEnabled();
+            }
+
             bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig&) const override {
                 return apiVersion == "AmazonSQS";
             }
-
-        private:
-            absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
     };
 
     TController ControllerInstance;

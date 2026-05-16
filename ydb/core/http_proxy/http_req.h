@@ -137,9 +137,9 @@ public:
 
     virtual ~IHttpController() = default;
 
-    virtual std::expected<IHttpRequestProcessor*, EError> GetProcessor(
-        const TString& name,
-        const THttpRequestContext& context
+    virtual bool Execute(
+        THttpRequestContext&& context,
+        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
     ) const = 0;
 
     virtual THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;

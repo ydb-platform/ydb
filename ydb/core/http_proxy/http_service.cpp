@@ -104,6 +104,7 @@ namespace NKikimr::NHttpProxy {
                       " database [" << context.DatabasePath << "]" <<
                       " requestId: " << context.RequestId);
 
+        auto contentType = context.ContentType;
         try {
             auto signature = context.GetSignature();
             auto methodName = context.MethodName;
@@ -111,9 +112,9 @@ namespace NKikimr::NHttpProxy {
         } catch (const NKikimr::NSQS::TSQSException& e) {
             context.DoReply({
                 .HttpCode = HTTP_BAD_REQUEST,
-                .ContentType = AsAwsContentType(context.ContentType),
+                .ContentType = AsAwsContentType(contentType),
                 .Message = "AccessDeniedException",
-                .Body = BuildError(context.ContentType, HTTP_BAD_REQUEST, "AccessDeniedException", e.what())
+                .Body = BuildError(contentType, HTTP_BAD_REQUEST, "AccessDeniedException", e.what())
             });
         }
     }

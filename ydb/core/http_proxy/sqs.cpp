@@ -1,6 +1,7 @@
 #include "sqs.h"
 
 #include "auth_factory.h"
+#include "controller_base.h"
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
@@ -438,7 +439,7 @@ namespace NKikimr::NHttpProxy {
         };
     };
 
-    class TController : public IHttpController {
+    class TController : public TBaseHttpController {
         public:
             TController() {
                 #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2Processor[#name] =          \
@@ -482,21 +483,6 @@ namespace NKikimr::NHttpProxy {
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
             }
 
-            std::expected<IHttpRequestProcessor*, IHttpController::EError> GetProcessor(
-                const TString& name,
-                const THttpRequestContext& context
-            ) const override {
-                if (!context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
-                    return std::unexpected(IHttpController::EError::ServiceDisabled);
-                }
-
-                if (auto proc = Name2Processor.find(name); proc != Name2Processor.end()) {
-                    return proc->second.get();
-                }
-
-                return std::unexpected(IHttpController::EError::MethodNotFound);
-            }
-
             THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
@@ -510,12 +496,13 @@ namespace NKikimr::NHttpProxy {
                 };
             }
 
+            bool IsEnabled(const NKikimrConfig::THttpProxyConfig& config) const override {
+                return config.GetSqsTopicEnabled();
+            }
+
             bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig&) const override {
                 return apiVersion == "AmazonSQS";
             }
-
-        private:
-            absl::flat_hash_map<TString, std::unique_ptr<IHttpRequestProcessor>> Name2Processor;
         };
 
         TController ControllerInstance;

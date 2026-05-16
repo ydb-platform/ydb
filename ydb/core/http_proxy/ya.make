@@ -9,6 +9,8 @@ SRCS(
     auth_factory.h
     auth_actors.cpp
     auth_actors.h
+    controller_base.cpp
+    controller_base.h
     controller_registry.cpp
     custom_metrics.h
     datastreams.cpp

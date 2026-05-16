@@ -34,33 +34,13 @@ namespace NKikimr::NHttpProxy {
     THttpRequestProcessors::THttpRequestProcessors(const NKikimrConfig::TServerlessProxyConfig&) {
     }
 
-    bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context,
+    bool THttpRequestProcessors::Execute(const TString&, THttpRequestContext&& context,
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
-                                         const TActorContext& ctx) {
+                                         const TActorContext&) {
 
         const auto* controller = GetHttpControllerRegistry().GetController(context.ApiVersion, context.ServiceConfig);
         if (controller) {
-            auto proc = controller->GetProcessor(name, context);
-            if (proc.has_value()) {
-                try {
-                    proc.value()->Execute(std::move(context), std::move(signature), ctx);
-                } catch (const NKikimr::NSQS::TSQSException& e) {
-                    context.DoReply(controller->MakeError(context.ContentType, NYdb::EStatus::BAD_REQUEST,
-                        e.what(), static_cast<size_t>(NYds::EErrorCodes::ACCESS_DENIED)));
-                }
-                return true;
-            } else {
-                switch (proc.error()) {
-                    case IHttpController::EError::MethodNotFound:
-                        context.DoReply(controller->MakeError(context.ContentType, NYdb::EStatus::UNSUPPORTED,
-                            TStringBuilder() << "Unknown method name " << name.Quote(), static_cast<size_t>(NYds::EErrorCodes::MISSING_ACTION)));
-                        return false;
-                    case IHttpController::EError::ServiceDisabled:
-                        context.DoReply(controller->MakeError(context.ContentType, NYdb::EStatus::BAD_REQUEST,
-                            TStringBuilder() << context.ApiVersion << " is disabled", static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND)));
-                        return false;
-                }
-            }
+            return controller->Execute(std::move(context), std::move(signature));
         }
 
         context.DoReply(THttpResponseData{
@@ -226,8 +206,6 @@ namespace NKikimr::NHttpProxy {
                 return strByMime(contentType);
         }
     }
-
-
 } // namespace NKikimr::NHttpProxy
 
 

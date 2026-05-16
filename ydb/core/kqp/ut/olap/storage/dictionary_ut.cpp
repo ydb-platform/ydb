@@ -35,8 +35,10 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
         return settings;
     }
+
 
     TString scriptDifferentPages = R"(
         STOP_COMPACTION
@@ -114,6 +116,227 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     )";
     Y_UNIT_TEST_STRING_VARIATOR(EmptyStringVariants, scriptEmptyStringVariants) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute(GetDictionarySettings());
+    }
+
+    TString scriptEmptyStringVsNull = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8 ENCODING(DICT),
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, NULL),
+            (2u, ''),
+            (3u, 'a'),
+            (4u, '');
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (2u, ''),
+            (3u, 'a');
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;#];[2u;[""]];[3u;["a"]];[4u;[""]]]
+        ------
+        READ: SELECT pk FROM `/Root/ColumnTable` WHERE message IS NULL ORDER BY pk;
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT pk FROM `/Root/ColumnTable` WHERE message = '' ORDER BY pk;
+        EXPECTED: [[2u];[4u]]
+        ------
+        READ: SELECT pk FROM `/Root/ColumnTable` WHERE message IN ('', 'a') ORDER BY pk;
+        EXPECTED: [[2u];[3u];[4u]]
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;#];[2u;[""]];[3u;["a"]];[4u;[""]]]
+    )";
+    Y_UNIT_TEST(EmptyStringVsNull) {
+        Variator::ToExecutor(Variator::SingleScript(scriptEmptyStringVsNull)).Execute(GetDictionarySettings());
+    }
+
+    TString scriptWhereFilteringOnDictColumn = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8 ENCODING(DICT),
+            other Uint64 NOT NULL,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message, other) VALUES
+            (1u, 'a', 10u),
+            (2u, 'b', 20u),
+            (3u, 'a', 30u),
+            (4u, 'c', 40u),
+            (5u, NULL, 50u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message, other) VALUES
+            (1u, 'a', 10u),
+            (4u, 'c', 40u);
+        ------
+        READ: SELECT pk, other FROM `/Root/ColumnTable` WHERE message = 'a' ORDER BY pk;
+        EXPECTED: [[1u;10u];[3u;30u]]
+        ------
+        READ: SELECT pk FROM `/Root/ColumnTable` WHERE message IN ('b', 'c') ORDER BY pk;
+        EXPECTED: [[2u];[4u]]
+        ------
+        READ: SELECT pk FROM `/Root/ColumnTable` WHERE message IS NULL ORDER BY pk;
+        EXPECTED: [[5u]]
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT pk, other FROM `/Root/ColumnTable` WHERE message = 'a' ORDER BY pk;
+        EXPECTED: [[1u;10u];[3u;30u]]
+    )";
+    Y_UNIT_TEST(WhereFilteringOnDictColumn) {
+        Variator::ToExecutor(Variator::SingleScript(scriptWhereFilteringOnDictColumn)).Execute(GetDictionarySettings());
+    }
+
+    TString scriptOrderByOnDictColumn = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8 ENCODING(DICT),
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, 'b'),
+            (2u, 'a'),
+            (3u, NULL),
+            (4u, ''),
+            (5u, 'c');
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, 'b'),
+            (4u, '');
+        ------
+        READ: SELECT message FROM `/Root/ColumnTable` ORDER BY message;
+        EXPECTED: [[#];[[""]];[["a"]];[["b"]];[["c"]]]
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT message FROM `/Root/ColumnTable` ORDER BY message;
+        EXPECTED: [[#];[[""]];[["a"]];[["b"]];[["c"]]]
+    )";
+    Y_UNIT_TEST(OrderByOnDictColumn) {
+        Variator::ToExecutor(Variator::SingleScript(scriptOrderByOnDictColumn)).Execute(GetDictionarySettings());
+    }
+
+    TString scriptJoinOnDictColumn = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/LeftTable` (
+            id Uint64 NOT NULL,
+            k Utf8 ENCODING(DICT),
+            lv Uint64 NOT NULL,
+            PRIMARY KEY (id)
+        )
+        PARTITION BY HASH(id)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/RightTable` (
+            id Uint64 NOT NULL,
+            k Utf8 ENCODING(DICT),
+            rv Uint64 NOT NULL,
+            PRIMARY KEY (id)
+        )
+        PARTITION BY HASH(id)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/LeftTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/LeftTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/RightTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/RightTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/LeftTable` (id, k, lv) VALUES
+            (1u, 'a', 10u),
+            (2u, 'b', 20u),
+            (3u, 'c', 30u),
+            (4u, NULL, 40u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/RightTable` (id, k, rv) VALUES
+            (101u, 'a', 100u),
+            (102u, 'b', 200u),
+            (103u, 'd', 400u),
+            (104u, NULL, 500u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/LeftTable` (id, k, lv) VALUES
+            (2u, 'b', 20u);
+        ------
+        DATA:
+        REPLACE INTO `/Root/RightTable` (id, k, rv) VALUES
+            (101u, 'a', 100u);
+        ------
+        READ: SELECT l.id, l.k, l.lv, r.rv
+              FROM `/Root/LeftTable` AS l
+              JOIN `/Root/RightTable` AS r
+              ON l.k = r.k
+              ORDER BY l.id;
+        EXPECTED: [[1u;["a"];10u;100u];[2u;["b"];20u;200u]]
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT l.id, l.k, l.lv, r.rv
+              FROM `/Root/LeftTable` AS l
+              JOIN `/Root/RightTable` AS r
+              ON l.k = r.k
+              ORDER BY l.id;
+        EXPECTED: [[1u;["a"];10u;100u];[2u;["b"];20u;200u]]
+    )";
+    Y_UNIT_TEST(JoinOnDictColumn) {
+        Variator::ToExecutor(Variator::SingleScript(scriptJoinOnDictColumn)).Execute(GetDictionarySettings());
     }
 
     TString scriptSimpleStringVariants = R"(
@@ -1252,6 +1475,67 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     )";
     Y_UNIT_TEST(ChunkDetailsDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsDictionary)).Execute(GetDictionarySettings());
+    }
+
+    TString scriptActualizeDictAfterCompressionChange = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8 ENCODING(DICT) COMPRESSION(algorithm=off),
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, 'a'),
+            (2u, 'b'),
+            (3u, 'a');
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (4u, 'c'),
+            (5u, NULL);
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;["a"]];[2u;["b"]];[3u;["a"]];[4u;["c"]];[5u;#]]
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `message` SET COMPRESSION(algorithm=lz4);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
+        ------
+        ONE_ACTUALIZATION
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;["a"]];[2u;["b"]];[3u;["a"]];[4u;["c"]];[5u;#]]
+        ------
+        READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'message';
+              $Ok = SELECT SUM(CASE
+                    WHEN CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.positions_blob_size") AS Uint64) > 0u
+                     AND CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.dictionary_blob_size") AS Uint64) > 0u
+                     AND CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.positions_blob_size") AS Uint64)
+                       + CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.dictionary_blob_size") AS Uint64)
+                       == CAST(BlobRangeSize AS Uint64)
+                    THEN 1 ELSE 0 END) AS ok
+                  FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'message';
+              SELECT ($All > 0u) AND ($All == $Ok);
+        EXPECTED: [[[%true]]]
+    )";
+    Y_UNIT_TEST(ActualizeDictAfterCompressionOnlyChange) {
+        Variator::ToExecutor(Variator::SingleScript(scriptActualizeDictAfterCompressionChange)).Execute(GetDictionarySettings());
     }
 
     // One table with a column per supported (comparable) type; set DICTIONARY on each, insert one row, read back.

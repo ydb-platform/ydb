@@ -108,11 +108,11 @@ namespace {
 
     IGraphTransformer::TStatus ParseJoins(const TJoinLabels& labels,
         TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
-        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique = nullptr, const TDistinctConstraintNode** distinct = nullptr);
+        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique = nullptr, const TDistinctConstraintNode** distinct = nullptr, const TStreamingConstraintNode** streaming = nullptr);
 
     IGraphTransformer::TStatus ParseJoinScope(const TJoinLabels& labels,
         TExprNode& side, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
-        TGLobalJoinState& globalState, bool strictKeys, const TUniqueConstraintNode*& unique, const TDistinctConstraintNode*& distinct, TExprContext& ctx) {
+        TGLobalJoinState& globalState, bool strictKeys, const TUniqueConstraintNode*& unique, const TDistinctConstraintNode*& distinct, const TStreamingConstraintNode*& streaming, TExprContext& ctx) {
         if (side.IsAtom()) {
             const auto label = side.Content();
             const auto input = labels.FindInput(label);
@@ -142,6 +142,10 @@ namespace {
                 distinct = d->RenameFields(ctx, rename);
             }
 
+            if (const auto s = (*input)->Streaming) {
+                streaming = s;
+            }
+
             return IGraphTransformer::TStatus::Ok;
         }
 
@@ -152,12 +156,12 @@ namespace {
         }
 
         ++globalState.NestedJoins;
-        return ParseJoins(labels, side, joinsStates, scope, globalState, strictKeys, ctx, &unique, &distinct);
+        return ParseJoins(labels, side, joinsStates, scope, globalState, strictKeys, ctx, &unique, &distinct, &streaming);
     }
 
     IGraphTransformer::TStatus ParseJoins(const TJoinLabels& labels,
         TExprNode& joins, TVector<TJoinState>& joinsStates, THashSet<TStringBuf>& scope,
-        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique, const TDistinctConstraintNode** distinct) {
+        TGLobalJoinState& globalState, bool strictKeys, TExprContext& ctx, const TUniqueConstraintNode** unique, const TDistinctConstraintNode** distinct, const TStreamingConstraintNode** streaming) {
         if (!EnsureTupleSize(joins, 6, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -175,14 +179,16 @@ namespace {
         THashSet<TStringBuf> myLeftScope;
         const TUniqueConstraintNode* lUnique = nullptr;
         const TDistinctConstraintNode* lDistinct = nullptr;
-        if (const auto status = ParseJoinScope(labels, *joins.Child(1), joinsStates, myLeftScope, globalState, strictKeys, lUnique, lDistinct, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
+        const TStreamingConstraintNode* lStreaming = nullptr;
+        if (const auto status = ParseJoinScope(labels, *joins.Child(1), joinsStates, myLeftScope, globalState, strictKeys, lUnique, lDistinct, lStreaming, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
         THashSet<TStringBuf> myRightScope;
         const TUniqueConstraintNode* rUnique = nullptr;
         const TDistinctConstraintNode* rDistinct = nullptr;
-        if (const auto status = ParseJoinScope(labels, *joins.Child(2), joinsStates, myRightScope, globalState, strictKeys, rUnique, rDistinct, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
+        const TStreamingConstraintNode* rStreaming = nullptr;
+        if (const auto status = ParseJoinScope(labels, *joins.Child(2), joinsStates, myRightScope, globalState, strictKeys, rUnique, rDistinct, rStreaming, ctx); status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
@@ -464,6 +470,33 @@ namespace {
             }
         }
 
+        if (streaming) {
+            if (lStreaming && (joinType.IsAtom("Right") || joinType.IsAtom("RightOnly"))) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()), TStringBuilder()
+                    << "Streaming left input is not supported for RIGHT " << (joinType.IsAtom("RightOnly") ? "ONLY " : "") << "join"
+                ));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (rStreaming && (joinType.IsAtom("Left") || joinType.IsAtom("LeftOnly"))) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()), TStringBuilder()
+                    << "Streaming right input is not supported for LEFT " << (joinType.IsAtom("LeftOnly") ? "ONLY " : "") << "join"
+                ));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (lStreaming || rStreaming) {
+                if (joinType.IsAtom("Full") || joinType.IsAtom("Exclusion")) {
+                    ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()), TStringBuilder()
+                        << "Streaming inputs are not supported for " << (joinType.IsAtom("Full") ? "FULL OUTER" : "EXCLUSION") << " join"
+                    ));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                *streaming = lStreaming ? lStreaming : rStreaming;
+            }
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -580,11 +613,12 @@ namespace {
 
 } // namespace
 
-TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct) {
+TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct, const TStreamingConstraintNode* streaming) {
     Tables.clear();
     InputType = structType;
     Unique = unique;
     Distinct = distinct;
+    Streaming = streaming;
     if (auto atom = TMaybeNode<TCoAtom>(&node)) {
         if (auto err = ValidateLabel(ctx, atom.Cast())) {
             return err;
@@ -730,11 +764,11 @@ TVector<TString> TJoinLabel::EnumerateAllMembers() const {
     return result;
 }
 
-TMaybe<TIssue> TJoinLabels::Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct) {
+TMaybe<TIssue> TJoinLabels::Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct, const TStreamingConstraintNode* streaming) {
     ui32 index = Inputs.size();
     Inputs.emplace_back();
     TJoinLabel& label = Inputs.back();
-    if (auto err = label.Parse(ctx, node, structType, unique, distinct)) {
+    if (auto err = label.Parse(ctx, node, structType, unique, distinct, streaming)) {
         return err;
     }
 
@@ -1028,6 +1062,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     TPositionHandle positionHandle,
     const TUniqueConstraintNode*& unique,
     const TDistinctConstraintNode*& distinct,
+    const TStreamingConstraintNode*& streaming,
     const TJoinLabels& labels,
     TExprNode& joins,
     TExprContext& ctx
@@ -1038,7 +1073,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     TVector<TJoinState> joinsStates(labels.Inputs.size());
     TGLobalJoinState globalState;
     THashSet<TStringBuf> scope;
-    if (const auto parseStatus = ParseJoins(labels, joins, joinsStates, scope, globalState, false, ctx, &unique, &distinct); parseStatus.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto parseStatus = ParseJoins(labels, joins, joinsStates, scope, globalState, false, ctx, &unique, &distinct, &streaming); parseStatus.Level != IGraphTransformer::TStatus::Ok) {
         return parseStatus;
     }
     return IGraphTransformer::TStatus::Ok;

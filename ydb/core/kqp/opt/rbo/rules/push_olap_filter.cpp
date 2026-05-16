@@ -73,22 +73,6 @@ TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, 
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO OLAP FILTER] After peephole: " << KqpExprToPrettyString(TExprBase(afterPeephole), ctx.ExprCtx);
     return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
 }
-
-void StripAliasesFromInputType(TExprNode::TPtr input, TExprContext& ctx) {
-    const TTypeAnnotationNode* type = input->GetTypeAnn();
-    Y_ENSURE(type && type->GetKind() == ETypeAnnotationKind::Struct);
-    const auto structType = type->Cast<TStructExprType>();
-    TVector<const TItemExprType*> newItemTypes;
-    for (const auto itemType : structType->GetItems()) {
-        auto colName = TString(itemType->GetName());
-        const auto it = colName.find(".");
-        if (it != TString::npos) {
-            colName = colName.substr(it + 1);
-        }
-        newItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, itemType->GetItemType()));
-    }
-    input->SetTypeAnn(ctx.MakeType<TStructExprType>(newItemTypes));
-}
 }
 
 namespace NKikimr {
@@ -145,7 +129,6 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
             auto predicate = lambdaAfterPeephole.Body();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            StripAliasesFromInputType(lArg.Ptr(), ctx.ExprCtx);
             CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");

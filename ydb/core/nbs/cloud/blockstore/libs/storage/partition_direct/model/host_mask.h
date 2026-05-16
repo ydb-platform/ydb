@@ -1,4 +1,5 @@
 #pragma once
+#include "host.h"
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -7,13 +8,6 @@
 #include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-////////////////////////////////////////////////////////////////////////////////
-
-using THostIndex = ui8;
-
-constexpr THostIndex InvalidHostIndex = 0xFF;
-constexpr size_t MaxHostCount = 32;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -48,6 +42,7 @@ public:
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t Count() const;
 
+    [[nodiscard]] THostMask LogicalNot() const;
     [[nodiscard]] THostMask LogicalAnd(THostMask other) const;
     [[nodiscard]] THostMask Include(THostMask other) const;
     [[nodiscard]] THostMask Exclude(THostMask other) const;
@@ -68,17 +63,6 @@ private:
     explicit THostMask(ui32 bits);
 
     ui32 Bits = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct THostRoute
-{
-    THostIndex SourceHostIndex = InvalidHostIndex;
-    THostIndex DestinationHostIndex = InvalidHostIndex;
-
-    bool operator==(const THostRoute& other) const = default;
-    bool operator<(const THostRoute& other) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

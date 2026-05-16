@@ -74,6 +74,7 @@ public:
         longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
         longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
         longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        TestHelper->GetRuntime().GetAppData().FeatureFlags.SetEnableSnapshotsLocking(true);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);

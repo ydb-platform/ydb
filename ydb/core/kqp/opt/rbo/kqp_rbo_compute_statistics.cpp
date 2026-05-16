@@ -350,23 +350,23 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         return;
     }
 
-    Props.Metadata = GetInput()->Props.Metadata;
+    const auto& inputMetadata = *GetInput()->Props.Metadata;
 
+    Props.Metadata = TRBOMetadata();
+
+    Props.Metadata->StorageType = inputMetadata.StorageType;
     // Compute logical cardinality info. Its the same as input cardinality, except in the case
     // where the group-by list is empty, then we always produce a single tuple
-    if (KeyColumns.empty()) {
-        Props.Metadata->LogicalCard = ELogicalCardinality::One;
-    }
-
+    Props.Metadata->LogicalCard = KeyColumns.empty() ? ELogicalCardinality::One : inputMetadata.LogicalCard;
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
     Props.Metadata->ShuffledByColumns = {};
 
-    // Aggregate acts list a source in terms of lineage
-    // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
-    Props.Metadata->ColumnLineage = {};
+    // Aggregate acts like a source in terms of lineage.
+    // FIXME: We currently delete all lineage of columns before Aggregate,
+    // maybe this is suboptimal in some future cases?
     TString alias = "_aggregate";
     int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, alias);
     for (const auto & iu : GetOutputIUs()) {

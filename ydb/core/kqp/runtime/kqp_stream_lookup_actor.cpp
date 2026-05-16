@@ -435,6 +435,19 @@ private:
 
     void PassAway() final {
         Counters->StreamLookupActorsCount->Dec();
+        
+        if (!LockSendTime.empty()) {
+            TInstant now = AppData()->TimeProvider->Now();
+            TDuration maxInFlightTime = TDuration::Zero();
+            for (const auto& [requestId, sendTime] : LockSendTime) {
+                TDuration elapsed = now - sendTime;
+                if (elapsed > maxInFlightTime) {
+                    maxInFlightTime = elapsed;
+                }
+            }
+            Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
+        }
+        
         {
             auto alloc = BindAllocator();
             Input.Clear();
@@ -487,7 +500,7 @@ private:
 
         const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
-        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
+        const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed() && (!StreamLockWorker || StreamLockWorker->AllRowsProcessed()) && UnmodifiedOutputRows.empty();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
         // If we have no new reads and no pending results, we can fetch input rows again.
@@ -914,6 +927,7 @@ private:
 
     void SendLockRequest(ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
         CA_LOG_D("Send lock request to shard: " << shardId);
+        Counters->SentLocks->Inc();
 
         ui64 requestId = request->Record.GetRequestId();
 
@@ -933,13 +947,22 @@ private:
         auto lockState = TLockState(requestId, shardId);
         lockState.State = TLockState::EState::Running;
         Reads.insertLock(requestId, std::move(lockState));
+        
+        LockSendTime[requestId] = AppData()->TimeProvider->Now();
     }
 
     void Handle(NEvents::TDataEvents::TEvLockRowsResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        CA_LOG_D("Received lock result, requestId: " << record.GetRequestId() 
+        CA_LOG_D("Received lock result, requestId: " << record.GetRequestId()
             << ", status: " << record.GetStatus());
+
+        ui64 requestId = record.GetRequestId();
+        
+        if (auto it = LockSendTime.find(requestId); it != LockSendTime.end()) {
+            Counters->LockLatencyHistogram->Collect((AppData()->TimeProvider->Now() - it->second).MilliSeconds());
+            LockSendTime.erase(it);
+        }
 
         auto getIssues = [&record]() {
             NYql::TIssues issues;
@@ -960,8 +983,11 @@ private:
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED: {
                 CA_LOG_D("STATUS_OVERLOADED from shard: " << record.GetTabletId());
                 auto lockIt = Reads.findLock(record.GetRequestId());
-                AFL_ENSURE(lockIt != Reads.endLocks());
-                return RetryLock(lockIt->second, false);
+                if (lockIt != Reads.endLocks()) {
+                    return RetryLock(lockIt->second, false);
+                }
+                // Ignore unknown overloaded
+                return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
                 CA_LOG_D("STATUS_DEADLOCK from shard: " << record.GetTabletId());
@@ -1003,27 +1029,32 @@ private:
             }
         }
 
+        Counters->ModifiedRowsCount->Add(record.ModifiedKeysSize());
+        Counters->LockedRowsCount->Add(record.LockedKeysSize());
+
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken
                     && lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
             Locks.push_back(lock);
         }
 
-        ui64 requestId = record.GetRequestId();
         StreamLockWorker->AddLockResult(requestId, ev->Get());
 
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;
-        StreamLockWorker->ProcessRowsByLockResult(requestId, 
-            [&](NUdf::TUnboxedValue row, bool modified) {
-                if (modified) {
-                    StreamLookupWorker->AddInputRow(std::move(row));
-                    hasModifiedRows = true;
-                } else {
-                    UnmodifiedOutputRows.emplace_back(std::move(row));
-                    hasUnmodifiedRows = true;
-                }
-            });
+        {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard = BindAllocator();
+            StreamLockWorker->ProcessRowsByLockResult(requestId,
+                [&](NUdf::TUnboxedValue row, bool modified) {
+                    if (modified) {
+                        StreamLookupWorker->AddInputRow(std::move(row));
+                        hasModifiedRows = true;
+                    } else {
+                        UnmodifiedOutputRows.emplace_back(std::move(row));
+                        hasUnmodifiedRows = true;
+                    }
+                });
+        }
 
         if (hasModifiedRows) {
             ProcessInputRows();
@@ -1228,10 +1259,7 @@ private:
     }
 
     bool AllReadsFinished() const {
-        if (StreamLockWorker && Reads.InFlightLocks() > 0) {
-            return false;
-        }
-        return Reads.InFlightReads() == 0;
+        return Reads.InFlightReads() == 0 && Reads.InFlightLocks() == 0;
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
@@ -1307,6 +1335,8 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     NWilson::TSpan LookupActorSpan;
     NWilson::TSpan LookupActorStateSpan;
+    
+    THashMap<ui64, TInstant> LockSendTime;
 };
 
 } // namespace

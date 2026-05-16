@@ -122,6 +122,7 @@ SRCS(
     logging/random_access_gzip.cpp
     logging/zstd_log_codec.cpp
 
+    misc/absolute_normalized_path.cpp
     misc/arithmetic_formula.cpp
     misc/backtrace.cpp
     misc/backoff_strategy.cpp

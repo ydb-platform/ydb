@@ -15,6 +15,7 @@
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
+#include <optional>
 
 namespace NYdb::inline Dev {
 
@@ -215,6 +216,11 @@ public:
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
+
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            userResponseCb(nullptr, std::move(*tlsValidationStatus));
+            return;
+        }
 
         if (!TryCreateContext(context)) {
             TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
@@ -447,6 +453,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            responseCb(std::move(*tlsValidationStatus), nullptr);
+            return;
+        }
+
         if (!TryCreateContext(context)) {
             responseCb(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;
@@ -521,6 +532,11 @@ public:
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
+
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            connectedCallback(std::move(*tlsValidationStatus), nullptr);
+            return;
+        }
 
         if (!TryCreateContext(context)) {
             connectedCallback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
@@ -609,6 +625,20 @@ public:
     const TLog& GetLog() const override;
 
 private:
+    static std::optional<TPlainStatus> ValidateClientTlsCredentials(const TDbDriverStatePtr& dbState) {
+        Y_ABORT_UNLESS(dbState);
+        if (dbState->AreClientTlsCredentialsValid()) {
+            return std::nullopt;
+        }
+        std::string msg = "Client TLS credentials validation failed";
+        const auto& detail = dbState->GetClientTlsValidationDetail();
+        if (!detail.empty()) {
+            msg += ": ";
+            msg += detail;
+        }
+        return TPlainStatus(EStatus::TRANSPORT_UNAVAILABLE, msg);
+    }
+
     template <typename TService, typename TCallback>
     void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
         const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)

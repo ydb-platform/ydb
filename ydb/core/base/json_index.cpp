@@ -7,9 +7,9 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/binary_json/format.h>
 
-namespace NKikimr {
+#include <ranges>
 
-namespace NJsonIndex {
+namespace NKikimr::NJsonIndex {
 
 using NYql::TIssue;
 using NYql::TIssues;
@@ -124,9 +124,8 @@ void PruneRedundantTokens(TTokens& tokens, TCollectResult::ETokensMode mode) {
         }
     } else {
         // AND: keep maximal tokens (leaves). Token is redundant if a longer token that starts with it is already kept
-        for (auto it = tokens.rbegin(); it != tokens.rend(); ++it) {
-            const auto& token = *it;
-            if (token.ParamName.empty() && lastKept.has_value() && lastKept->PathToken.StartsWith(token.PathToken)) {
+        for (const auto& token : std::ranges::reverse_view(tokens)) {
+             if (token.ParamName.empty() && lastKept.has_value() && lastKept->PathToken.StartsWith(token.PathToken)) {
                 continue;
             }
 
@@ -388,18 +387,11 @@ TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mo
 TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
     result.StopCollecting();
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
-    }
     return result;
 }
 
 TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
-    auto result = Collect(Reader.ReadInput(item), mode);
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
-    }
-    return result;
+    return Collect(Reader.ReadInput(item), mode);
 }
 
 TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
@@ -526,11 +518,15 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
 }
 
 TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
-    auto result = Collect(Reader.ReadInput(item), mode);
-    result.StopCollecting();
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
+    const auto& input = Reader.ReadInput(item);
+    if (IsSuffixType(input.Type) || EvaluteNumericLiteral(input).has_value()) {
+        TCollectResult result(TTokens{});
+        result.StopCollecting();
+        return result;
     }
+
+    auto result = Collect(input, mode);
+    result.StopCollecting();
     return result;
 }
 
@@ -764,19 +760,19 @@ void TCollectResult::SetTokensMode(ETokensMode mode) {
     TokensMode = mode;
 }
 
-TVector<TString> TokenizeBinaryJson(const TStringBuf binaryJson) {
+TVector<TString> TokenizeBinaryJson(TStringBuf text) {
     TVector<TString> tokens;
-    if (!binaryJson.size()) {
+    if (text.empty()) {
         return tokens;
     }
     tokens.emplace_back();
-    auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(binaryJson);
+    auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(text);
     TokenizeBinaryJson(reader->GetRootCursor(), "", tokens);
     return tokens;
 }
 
-TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
-    auto json = NKikimr::NBinaryJson::SerializeToBinaryJson(jsonStr);
+TVector<TString> TokenizeJson(TStringBuf text, TString& error) {
+    auto json = NKikimr::NBinaryJson::SerializeToBinaryJson(text);
     if (std::holds_alternative<TString>(json)) {
         error = std::get<TString>(json);
         return TVector<TString>();
@@ -786,7 +782,7 @@ TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
     return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
 }
 
-TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType,
+TCollectResult CollectJsonPath(const TJsonPathPtr& path, ECallableType callableType,
     const std::unordered_map<TString, TString>& variables, const std::unordered_map<TString, TString>& paramVariables)
 {
     auto result = TQueryCollector(path, callableType, variables, paramVariables).Collect();
@@ -895,6 +891,4 @@ TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName)
     return ss.Str();
 }
 
-}  // namespace NJsonIndex
-
-}  // namespace NKikimr
+} // namespace NKikimr::NJsonIndex

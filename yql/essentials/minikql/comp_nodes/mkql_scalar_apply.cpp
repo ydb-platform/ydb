@@ -67,9 +67,12 @@ public:
                                                       originalContext.CountersProvider,
                                                       originalContext.LogProvider,
                                                       originalContext.LangVer,
-                                                      originalContext.RuntimeSettings),
+                                                      originalContext.GetRuntimeSettingsSharedPtr()),
 
-                  originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool(), originalContext.NotConsumedLinear, originalContext.RuntimeSettings)
+                  originalContext.Mutables,
+                  *NYql::NUdf::GetYqlMemoryPool(),
+                  originalContext.NotConsumedLinear,
+                  originalContext.GetRuntimeSettingsSharedPtr())
         {
             Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();

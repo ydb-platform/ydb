@@ -1,6 +1,8 @@
 from devtools.yamaker.modules import Linkable, Switch, Words
 from devtools.yamaker.project import CMakeNinjaNixProject
 
+_FAILURE_SIGNAL_RECURSE = "absl/debugging"
+
 
 def post_install(self):
     with self.yamakes["."] as absl:
@@ -24,6 +26,27 @@ def post_install(self):
             ENDIF()
             """,
         )
+
+        dbg_srcs = []
+        stub_srcs = []
+        if _FAILURE_SIGNAL_RECURSE in self.yamakes:
+            for source in self.yamakes[_FAILURE_SIGNAL_RECURSE].SRCS:
+                dbg_srcs.append(f"{_FAILURE_SIGNAL_RECURSE}/{source}")
+                stub_srcs.append(f"stubs/{source}")
+        if dbg_srcs:
+            absl.after(
+                "SRCS",
+                Switch(
+                    OS_FREERTOS=Linkable(SRCS=stub_srcs),
+                    default=Linkable(SRCS=dbg_srcs),
+                ),
+            )
+
+        absl.PEERDIR.discard(f"{self.arcdir}/{_FAILURE_SIGNAL_RECURSE}")
+        absl.RECURSE.discard(_FAILURE_SIGNAL_RECURSE)
+
+    if _FAILURE_SIGNAL_RECURSE in self.yamakes:
+        del self.yamakes[_FAILURE_SIGNAL_RECURSE]
 
 
 abseil_cpp = CMakeNinjaNixProject(
@@ -86,7 +109,8 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_die_if_null",
             "absl_examine_stack",
             "absl_exponential_biased",
-            "absl_failure_signal_handler",
+            # this cmake module will be added by post_install conditionally
+            # "absl_failure_signal_handler",
             "absl_flags_commandlineflag",
             "absl_flags_commandlineflag_internal",
             "absl_flags_config",
@@ -158,5 +182,8 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_vlog_config_internal",
         ],
     },
+    keep_paths=[
+        "stubs",
+    ],
     post_install=post_install,
 )

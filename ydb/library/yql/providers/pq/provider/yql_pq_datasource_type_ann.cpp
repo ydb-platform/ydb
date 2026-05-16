@@ -50,6 +50,7 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::ToBytesFromStringExpressions |
             EFlag::ToStringFromStringExpressions |
             EFlag::FlatMapOverOptionals |
+            EFlag::StructOperators |
             EFlag::NonDeterministic
         );
     }

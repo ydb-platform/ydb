@@ -48,6 +48,7 @@ struct TSettings {
         DecimalCtor = 1 << 29, 
         DateCtor = 1 << 30,
         PredicateAsExpression = ui64{1} << 31, // Predicates can be used in expressions (e.g. (a = b) = (c = d))
+        StructOperators = ui64{1} << 32, // Struct operators can be used
     };
 
     explicit TSettings(NLog::EComponent logComponent)

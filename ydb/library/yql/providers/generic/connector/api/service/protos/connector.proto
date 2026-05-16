@@ -387,6 +387,16 @@ message TExpression {
         repeated TExpression operands = 1;
     }
 
+    message TStructMember {
+        TExpression operand = 1;
+        string field = 2;
+    }
+
+    message TTupleNth {
+        TExpression operand = 1;
+        uint64 field = 2;
+    }
+
     oneof payload {
         // A scalar value
         Ydb.TypedValue typed_value = 1;
@@ -412,6 +422,10 @@ message TExpression {
         TCurrentUtcTimestamp current_utc_timestamp = 11;
 
         TPredicate predicate = 12;
+
+        TStructMember struct_member = 13;
+
+        TTupleNth tuple_nth = 14;
     }
 }
 

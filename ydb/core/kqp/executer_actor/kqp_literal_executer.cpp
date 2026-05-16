@@ -101,7 +101,7 @@ public:
             CancelAt = StartTime + *Request.CancelAfter;
         }
 
-        KQP_STLOG_D(KQPLIT, "Begin literal execution",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Begin literal execution",
             (operation_timeout, Request.Timeout),
             (cancel_after, Request.CancelAfter),
             (trace_id, TraceId()));
@@ -111,18 +111,18 @@ public:
         try {
             ExecuteLiteralImpl();
         } catch (const TMemoryLimitExceededException&) {
-            KQP_STLOG_W(KQPLIT, "TKqpLiteralExecuter, memory limit exceeded.",
+            STLOG(PRI_WARN, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TKqpLiteralExecuter, memory limit exceeded.",
                 (trace_id, TraceId()));
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
         } catch (const NMiniKQL::TKqpEnsureFail& e) {
-            KQP_STLOG_E(KQPLIT, "TKqpLiteralExecuter, TKqpEnsure failed.",
+            STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TKqpLiteralExecuter, TKqpEnsure failed.",
                 (trace_id, TraceId()));
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, EYqlIssueCode(e.GetCode()), e.GetMessage()));
         } catch (...) {
             auto msg = CurrentExceptionMessage();
-            KQP_STLOG_C(KQPLIT, "TKqpLiteralExecuter, unexpected exception caught: " << msg,
+            STLOG(PRI_CRIT, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "TKqpLiteralExecuter, unexpected exception caught: " << msg,
                 (trace_id, TraceId()));
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, msg));
@@ -136,7 +136,7 @@ public:
             Stats->StartTs = TInstant::Now();
         }
 
-        KQP_STLOG_D(KQPLIT, "Begin literal execution",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Begin literal execution",
             (transactions_count, Request.Transactions.size()),
             (trace_id, TraceId()));
 
@@ -280,7 +280,7 @@ public:
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
         LiteralExecuterSpan.EndOk();
         CleanupCtx();
-        KQP_STLOG_D(KQPLIT, "Execution is complete",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Execution is complete",
             (results_size, ResponseEv->ResultsSize()),
             (trace_id, TraceId()));
     }
@@ -306,7 +306,7 @@ private:
         auto now = AppData()->TimeProvider->Now();
 
         if (Deadline && *Deadline <= now) {
-            KQP_STLOG_I(KQPLIT, "Timeout exceeded.",
+            STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "Timeout exceeded.",
                 (trace_id, TraceId()));
 
             CreateErrorResponse(Ydb::StatusIds::TIMEOUT,
@@ -315,7 +315,7 @@ private:
         }
 
         if (CancelAt && *CancelAt <= now) {
-            KQP_STLOG_I(KQPLIT, "CancelAt exceeded.",
+            STLOG(PRI_INFO, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << "CancelAt exceeded.",
                 (trace_id, TraceId()));
 
             CreateErrorResponse(Ydb::StatusIds::CANCELLED,
@@ -332,7 +332,7 @@ private:
     }
 
     void InternalError(const TString& message) {
-        KQP_STLOG_E(KQPLIT, message,
+        STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, KQPLIT, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << message,
             (trace_id, TraceId()));
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         issue.AddSubIssue(MakeIntrusive<TIssue>(message));

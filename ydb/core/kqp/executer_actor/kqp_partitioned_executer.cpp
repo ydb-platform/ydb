@@ -23,13 +23,6 @@ namespace NKqp {
 
 namespace {
 
-#define PE_STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
-#define PE_STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
-#define PE_STLOG_I(MESSAGE, ...) STLOG(PRI_INFO,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
-#define PE_STLOG_N(MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
-#define PE_STLOG_W(MESSAGE, ...) STLOG(PRI_WARN,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
-#define PE_STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
-#define PE_STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT,   NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << MESSAGE << '.', ##__VA_ARGS__)
 
 void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGateway::TExecPhysicalRequest& from) {
     request.AllowTrailingResults = from.AllowTrailingResults;
@@ -135,7 +128,7 @@ public:
     void Bootstrap() {
         Become(&TKqpPartitionedExecuter::PrepareState);
 
-        PE_STLOG_I("Start resolving table partitions");
+        STLOG(PRI_INFO,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Start resolving table partitions" << '.');
         Stats.StartTs = TInstant::Now();
 
         FillTableMetaInfo();
@@ -187,7 +180,7 @@ public:
 
         TablePartitioning = result->Partitioning;
 
-        PE_STLOG_T("Partitions were resolved",
+        STLOG(PRI_TRACE,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Partitions were resolved" << '.',
             (PartitionsCount, result->Partitioning->Size()));
 
         CreateExecutersWithBuffers();
@@ -197,7 +190,7 @@ public:
         const auto& msg = ev->Get()->Record;
         auto issues = ev->Get()->GetIssues();
 
-        PE_STLOG_E("Got abort execution",
+        STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got abort execution" << '.',
             (Sender, ev->Sender),
             (FromSessionActor, ev->Sender == SessionActorId),
             (StatusCode, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
@@ -233,7 +226,7 @@ public:
 
         auto it = ExecuterToPartition.find(ev->Sender);
         if (it == ExecuterToPartition.end()) {
-            PE_STLOG_W("Got tx response from an unknown executer",
+            STLOG(PRI_WARN,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got tx response from an unknown executer" << '.',
                 (Sender, ev->Sender),
                 (Status, response->GetStatus()),
                 (Issues, issues.ToOneLineString()));
@@ -243,7 +236,7 @@ public:
 
         auto [_, partInfo] = *it;
 
-        PE_STLOG_T("Got tx response",
+        STLOG(PRI_TRACE,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got tx response" << '.',
             (Sender, ev->Sender),
             (PartitionIndex, partInfo->PartitionIndex),
             (Status, response->GetStatus()));
@@ -266,7 +259,7 @@ public:
             case Ydb::StatusIds::UNAVAILABLE:
             case Ydb::StatusIds::OVERLOADED:
             case Ydb::StatusIds::UNDETERMINED:
-                PE_STLOG_D("Executer retriable error, will retry",
+                STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Executer retriable error, will retry" << '.',
                     (PartitionIndex, partInfo->PartitionIndex),
                     (Status, response->GetStatus()),
                     (Issues, issues.ToOneLineString()));
@@ -276,7 +269,7 @@ public:
                 break;
         }
 
-        PE_STLOG_E("Executer unretriable error",
+        STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Executer unretriable error" << '.',
             (PartitionIndex, partInfo->PartitionIndex),
             (Status, response->GetStatus()),
             (Issues, issues.ToOneLineString()));
@@ -288,7 +281,7 @@ public:
     void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
         RequestCounters->Counters->BatchOperationRetries->Inc();
 
-        PE_STLOG_D("Delayed execution timer fired",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Delayed execution timer fired" << '.',
             (PartitionIndex, ev->Get()->PartitionIdx));
 
         auto it = StartedPartitions.find(ev->Get()->PartitionIdx);
@@ -302,7 +295,7 @@ public:
 
         auto it = BufferToPartition.find(ev->Sender);
         if (it == BufferToPartition.end()) {
-            PE_STLOG_W("Got error from an unknown buffer",
+            STLOG(PRI_WARN,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got error from an unknown buffer" << '.',
                 (Sender, ev->Sender),
                 (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
                 (Issues, msg.Issues.ToOneLineString()));
@@ -312,7 +305,7 @@ public:
 
         auto [_, partInfo] = *it;
 
-        PE_STLOG_T("Got buffer error",
+        STLOG(PRI_TRACE,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got buffer error" << '.',
             (Sender, ev->Sender),
             (PartitionIndex, partInfo->PartitionIndex),
             (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)));
@@ -330,7 +323,7 @@ public:
             case NYql::NDqProto::StatusIds::UNAVAILABLE:
             case NYql::NDqProto::StatusIds::OVERLOADED:
             case NYql::NDqProto::StatusIds::UNDETERMINED:
-                PE_STLOG_D("Buffer retriable error, will retry",
+                STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Buffer retriable error, will retry" << '.',
                     (PartitionIndex, partInfo->PartitionIndex),
                     (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
                     (Issues, msg.Issues.ToOneLineString()));
@@ -340,7 +333,7 @@ public:
                 break;
         }
 
-        PE_STLOG_E("Buffer unretriable error",
+        STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Buffer unretriable error" << '.',
             (PartitionIndex, partInfo->PartitionIndex),
             (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
             (Issues, msg.Issues.ToOneLineString()));
@@ -357,7 +350,7 @@ public:
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleAbort);
             default:
-                PE_STLOG_W("Got an unknown event",
+                STLOG(PRI_WARN,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got an unknown event" << '.',
                     (Sender, ev->Sender),
                     (EventType, ev->GetTypeRewrite()));
 
@@ -377,7 +370,7 @@ public:
 
         auto it = ExecuterToPartition.find(ev->Sender);
         if (it == ExecuterToPartition.end()) {
-            PE_STLOG_W("Got tx response from an unknown executer",
+            STLOG(PRI_WARN,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got tx response from an unknown executer" << '.',
                 (Sender, ev->Sender),
                 (Status, response->GetStatus()),
                 (Issues, issues.ToOneLineString()));
@@ -387,7 +380,7 @@ public:
 
         auto [_, partInfo] = *it;
 
-        PE_STLOG_T("Got tx response",
+        STLOG(PRI_TRACE,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got tx response" << '.',
             (Sender, ev->Sender),
             (PartitionIndex, partInfo->PartitionIndex),
             (Status, response->GetStatus()),
@@ -405,7 +398,7 @@ public:
 
         auto it = BufferToPartition.find(ev->Sender);
         if (it == BufferToPartition.end()) {
-            PE_STLOG_W("Got error from an unknown buffer",
+            STLOG(PRI_WARN,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got error from an unknown buffer" << '.',
                 (Sender, ev->Sender),
                 (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
                 (Issues, msg.Issues.ToOneLineString()));
@@ -415,7 +408,7 @@ public:
 
         auto [_, partInfo] = *it;
 
-        PE_STLOG_E("Got buffer error",
+        STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Got buffer error" << '.',
             (Sender, ev->Sender),
             (PartitionIndex, partInfo->PartitionIndex),
             (Status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode)),
@@ -509,7 +502,7 @@ private:
             KeyColumnTypes.emplace_back(typeInfoMod.TypeInfo);
         }
 
-        PE_STLOG_D("Filling table meta info",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Filling table meta info" << '.',
             (TableId, TableId),
             (KeyColumnsCount, KeyColumnTypes.size()));
 
@@ -522,7 +515,7 @@ private:
 
         YQL_ENSURE(range.IsFullRange(KeyIds.size()));
 
-        PE_STLOG_D("Resolving table partitioning",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Resolving table partitioning" << '.',
             (TableId, TableId),
             (KeyColumnsCount, KeyIds.size()));
 
@@ -543,7 +536,7 @@ private:
         YQL_ENSURE(TablePartitioning && !TablePartitioning->Empty(), "No partitions to execute");
         auto partCount = std::min(Settings.PartitionExecutionLimit, TablePartitioning->Size());
 
-        PE_STLOG_I("Starting execution, creating executers with buffers",
+        STLOG(PRI_INFO,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Starting execution, creating executers with buffers" << '.',
             (PartitionsCount, TablePartitioning->Size()),
             (InFlightPartitionsCount, partCount));
 
@@ -569,7 +562,7 @@ private:
         partition->LimitSize = Settings.MaxBatchSize;
         partition->RetryDelayMs = Settings.StartRetryDelayMs;
 
-        PE_STLOG_D("Created partition",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Created partition" << '.',
             (PartitionIndex, idx),
             (HasBeginRange, partition->BeginRange.Defined()),
             (HasEndRange, partition->EndRange.Defined()),
@@ -604,7 +597,7 @@ private:
         alloc->SetLimit(WriteBufferInitialMemoryLimit);
         alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc=alloc.get()](ui64 currentLimit, ui64 required) {
             if (required < WriteBufferMemoryLimit) {
-                PE_STLOG_D("Increase memory limit",
+                STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Increase memory limit" << '.',
                     (CurrentLimit, currentLimit),
                     (Required, required));
                 alloc->SetLimit(required);
@@ -646,7 +639,7 @@ private:
         partInfo->BufferId = bufferActorId;
         ExecuterToPartition[exId] = BufferToPartition[bufferActorId] = partInfo;
 
-        PE_STLOG_D("Created executer",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Created executer" << '.',
             (PartitionIndex, partitionIndex),
             (ExecuterId, partInfo->ExecuterId),
             (BufferId, bufferActorId),
@@ -658,7 +651,7 @@ private:
     }
 
     void Abort() {
-        PE_STLOG_I("Entering AbortState, trying to finish execution",
+        STLOG(PRI_INFO,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Entering AbortState, trying to finish execution" << '.',
             (ActivePartitionsCount, StartedPartitions.size()),
             (ReturnStatus, Ydb::StatusIds_StatusCode_Name(ReturnStatus)));
 
@@ -704,7 +697,7 @@ private:
                     << "PartitionIndex = " << partInfo->PartitionIndex)}));
             }
 
-            PE_STLOG_D("Partition has more data, continue processing",
+            STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Partition has more data, continue processing" << '.',
                 (PartitionIndex, partInfo->PartitionIndex),
                 (NextKeyCellsCount, minKey.GetCells().size()));
 
@@ -712,7 +705,7 @@ private:
             return RetryPartExecution(partInfo);
         }
 
-        PE_STLOG_D("Partition finished completely",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Partition finished completely" << '.',
             (PartitionIndex, partInfo->PartitionIndex));
 
         ForgetPartition(partInfo);
@@ -735,7 +728,7 @@ private:
 
     void RetryPartExecution(const TBatchPartitionInfo::TPtr& partInfo) {
         if (CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
-            PE_STLOG_D("Retrying partition",
+            STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Retrying partition" << '.',
                 (PartitionIndex, partInfo->PartitionIndex),
                 (LimitSize, partInfo->LimitSize),
                 (RetryDelayMs, partInfo->RetryDelayMs));
@@ -743,7 +736,7 @@ private:
             return CreateExecuterWithBuffer(partInfo->PartitionIndex, /* isRetry */ true);
         }
 
-        PE_STLOG_D("Partition retry cancelled due to AbortState",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Partition retry cancelled due to AbortState" << '.',
             (PartitionIndex, partInfo->PartitionIndex));
 
         ForgetPartition(partInfo);
@@ -752,7 +745,7 @@ private:
 
     void ScheduleRetryWithNewLimit(TBatchPartitionInfo::TPtr& partInfo) {
         if (partInfo->RetryDelayMs == Settings.MaxRetryDelayMs) {
-            PE_STLOG_E("Partition reached maximum retry delay",
+            STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Partition reached maximum retry delay" << '.',
                 (PartitionIndex, partInfo->PartitionIndex),
                 (MaxRetryDelayMs, Settings.MaxRetryDelayMs));
 
@@ -769,7 +762,7 @@ private:
         partInfo->RetryDelayMs = newDelay;
         partInfo->LimitSize = std::max(partInfo->LimitSize / 2, Settings.MinBatchSize);
 
-        PE_STLOG_D("Scheduling retry for partition",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Scheduling retry for partition" << '.',
             (PartitionIndex, partInfo->PartitionIndex),
             (OldDelay, oldDelay),
             (NewDelay, partInfo->RetryDelayMs),
@@ -796,7 +789,7 @@ private:
             YQL_ENSURE(it != KeyColumnIdToPos.end());
 
             if (it->second != i) {
-                PE_STLOG_D("Key columns need reorder to continue processing",
+                STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Key columns need reorder to continue processing" << '.',
                     (KeyColumnsCount, KeyIds.size()));
 
                 return true;
@@ -853,7 +846,7 @@ private:
 
     void TryFinishExecution() {
         if (CheckExecutersAreFinished()) {
-            PE_STLOG_I("All partitions processed, finish execution",
+            STLOG(PRI_INFO,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "All partitions processed, finish execution" << '.',
                 (Status, Ydb::StatusIds_StatusCode_Name(ReturnStatus)),
                 (Issues, ReturnIssues.ToOneLineString()));
 
@@ -867,21 +860,21 @@ private:
             return ReplySuccessAndDie();
         }
 
-        PE_STLOG_D("Not all partitions have been processed, cannot finish execution",
+        STLOG(PRI_DEBUG,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Not all partitions have been processed, cannot finish execution" << '.',
             (RemainingPartitionsCount, StartedPartitions.size()),
             (TotalPartitions, TablePartitioning ? TablePartitioning->Size() : 0));
     }
 
     void AbortWithError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         if (CurrentStateFunc() == &TKqpPartitionedExecuter::AbortState) {
-            PE_STLOG_N("Ignoring error because already in AbortState",
+            STLOG(PRI_NOTICE,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "Ignoring error because already in AbortState" << '.',
                 (Status, Ydb::StatusIds_StatusCode_Name(code)),
                 (Issues, issues.ToOneLineString()));
 
             return TryFinishExecution();
         }
 
-        PE_STLOG_E("First error occurred",
+        STLOG(PRI_ERROR,  NKikimrServices::KQP_EXECUTER, KQPPEA, LogPrefix() << "First error occurred" << '.',
             (Status, Ydb::StatusIds_StatusCode_Name(code)),
             (Issues, issues.ToOneLineString()));
 

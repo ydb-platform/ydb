@@ -88,6 +88,8 @@ struct Schema: NIceDb::Schema {
         InternalOwnerPathId = 20,
         MaxInternalPathId = 21,   //max internal path id ever known in this tablet
         LastCompletedBackupTransaction = 22,
+        LastCleanupSnapshotStep = 23,
+        LastCleanupSnapshotTxId = 24,
     };
 
     enum class EInsertTableIds: ui8 {

@@ -80,7 +80,7 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvLeaveGroupRequest::TPtr& ev
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
     KAFKA_LOG_D("Handle TEvKafka::TEvFetchRequest");
 
-    if (Context->ReadSession.BalancingMode == EBalancingMode::Server) {
+    if (Context->ReadSession.BalancingMode == EBalancingMode::Server || Context->GroupId.empty()) {
         Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
         return;
     }

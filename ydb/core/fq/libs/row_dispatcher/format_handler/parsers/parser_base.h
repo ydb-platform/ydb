@@ -21,7 +21,6 @@ protected:
     std::unique_ptr<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
     NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
     std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
-    
 };
 
 class TTopicParserBase : public ITopicParser, public TTypeParser {

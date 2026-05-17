@@ -25,19 +25,20 @@ protected:
 };
 
 #define YDB_LOG_CREATE_MESSAGE(...)                                                                \
-    [&]() -> TStructuredMessage {                                                                  \
+    ([&]() -> TStructuredMessage {                                                                 \
         NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
         std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
         Y_UNUSED(ydblogArgs);                                                                      \
         return ydblogGuard.Pop();                                                                  \
-    }()
+    }())
 
 #define YDB_LOG_UPDATE_MESSAGE(M,...)                                                              \
-    do {                                                                                           \
+    do {([&]() {                                                                                   \
         NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
         std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
         Y_UNUSED(ydblogArgs);                                                                      \
         M.AppendMessage(ydblogGuard.Pop());                                                        \
+    }());                                                                                          \
     } while (false)
 
 }  // namespace NActors::NStructuredLog

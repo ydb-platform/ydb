@@ -664,8 +664,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 }
 
 void TKqpPlanner::PrepareCheckpoints() {
-    const auto isStreamingQuery = UserRequestContext && UserRequestContext->IsStreamingQuery;
-    const auto enableCheckpoints = isStreamingQuery && static_cast<bool>(CheckpointCoordinatorId);
+    const auto enableCheckpoints = static_cast<bool>(CheckpointCoordinatorId);
     TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, EnableWatermarks);
 
     if (!enableCheckpoints) {

@@ -411,6 +411,40 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index does not support COVER columns");
         }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            auto desc = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", NYdb::EPrimitiveType::Uint64)
+                .AddNullableColumn("Text", NYdb::EPrimitiveType::Json)
+                .AddNullableColumn("Data", NYdb::EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("Key")
+                .AddSecondaryIndex("json_idx", NYdb::NTable::EIndexType::GlobalJson, {"Text"}, {"Data"})
+                .Build();
+
+            auto result = session.CreateTable("/Root/TestTableSdkCover", std::move(desc)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index does not support COVER columns");
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            NYdb::NTable::TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes(NYdb::NTable::TIndexDescription(
+                "json_idx_sdk",
+                NYdb::NTable::EIndexType::GlobalJson,
+                {"Text"},
+                {"Data"}
+            ));
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index does not support COVER columns");
+        }
     }
 
     Y_UNIT_TEST(UnsupportedType) {

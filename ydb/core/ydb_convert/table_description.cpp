@@ -303,6 +303,20 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
         return false;
     }
 
+    if (desc.type_case() == Ydb::Table::TableIndex::kGlobalJsonIndex) {
+        if (!AppData()->FeatureFlags.GetEnableJsonIndex()) {
+            code = Ydb::StatusIds::PRECONDITION_FAILED;
+            error = "JSON index support is disabled";
+            return false;
+        }
+
+        if (!desc.data_columns().empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "JSON index does not support COVER columns";
+            return false;
+        }
+    }
+
     if (!desc.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
         code = Ydb::StatusIds::UNSUPPORTED;
         error = "Data column feature is not supported yet";
@@ -1856,6 +1870,16 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
         if (index.name().empty()) {
             return returnError(Ydb::StatusIds::BAD_REQUEST, "Index must have a name");
+        }
+
+        if (index.type_case() == Ydb::Table::TableIndex::kGlobalJsonIndex) {
+            if (!AppData()->FeatureFlags.GetEnableJsonIndex()) {
+                return returnError(Ydb::StatusIds::PRECONDITION_FAILED, "JSON index support is disabled");
+            }
+
+            if (!index.data_columns().empty()) {
+                return returnError(Ydb::StatusIds::BAD_REQUEST, "JSON index does not support COVER columns");
+            }
         }
 
         if (!index.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {

@@ -73,6 +73,7 @@ namespace NYql {
             auto tupleNth = proto->mutable_tuple_nth();
             auto index = TryFromString<ui64>(nth.Index().StringValue());
             if (!index) {
+                ctx.Err << "Nth: expected ui64, got " << nth.Index().StringValue();
                 return false;
             }
             tupleNth->set_field(*index);

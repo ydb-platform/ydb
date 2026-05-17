@@ -270,6 +270,7 @@ public:
             HFunc(TEvCms::TEvSetMarkerResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         default:
             Y_ABORT("TCmsRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),

@@ -60,7 +60,11 @@ TFsPath GetStateDir() {
 
 } // anonymous namespace
 
-TFsPath GetAiHistoryFile() {
+std::optional<TString> GetAiHistoryFile() {
+    if (TryGetEnv("YDB_CLI_AI_DISABLE_HISTORY").Defined()) {
+        return std::nullopt;
+    }
+
     TFsPath stateDir = GetStateDir();
     TFsPath target = stateDir.Child("ai_history");
     return target;

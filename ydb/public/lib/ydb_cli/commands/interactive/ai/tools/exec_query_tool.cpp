@@ -119,12 +119,26 @@ IMPORTANT:
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
-- If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks.
+- ALWAYS add `` around table paths inside folders. If path to table contains '/, '@' or '.', also wrap it into back ticks, for example `path/to/table`.
+  - Examples how path should be wrapped into back ticks:
+    - SELECT * FROM `national_league/goals`
+    - SELECT * FROM `ships/crew/legacy`
+    - SELECT * FROM `ships.crew.legacy`
+    - SELECT * FROM `ships@crew@legacy`
+- If in your query should apper not simple string literal (e. g. if it contains ' or "), instead of escaping wrap it into @@:
+  - SELECT * FROM `national_league/goals` WHERE Name = @@John'Doe@@;
+  - SELECT * FROM `national_league/goals` WHERE Name = @@John "Doe" doesn't@@;
+- Some string YQL functions is differ from SQL:
+  - Use String::AsciiToLower instead of LOWER (where is NO such builtin in YQL), right example: SELECT String::AsciiToLower(Name) FROM `mars_rover/photos` WHERE Name LIKE @@%mao'play%@@;
+
+In simple cases you can avoid back ticks and '@', for example (preferred way to write queries if possible):
+
+SELECT * FROM my_table WHERE Data = "simple_data";
 
 Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:
 ```
-$filtered = SELECT * FROM my_table WHERE Data IS NOT NULL;
+$filtered = SELECT * FROM `folder/my_table` WHERE Data = @@Some 'my 'data' of "this" type@@;
 SELECT Data || "-first" FROM $filtered;
 SELECT Data || "-second" FROM $filtered;
 ```

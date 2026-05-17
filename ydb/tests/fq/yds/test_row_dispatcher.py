@@ -316,6 +316,43 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
+    def test_nested_structure_types(self, kikimr, client):
+        self.init(client, "test_nested_types")
+
+        large_string = "abcdefghjkl1234567890+abcdefghjkl1234567890"
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(data))))
+             FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data Struct<key: String, second_key: Tuple<Int64, Bool?>> NOT NULL, event String NOT NULL))
+                WHERE (event = "event1" or event = "event2" or event = "event4" or event = "event5") AND (data.key = "value" OR data.key = "ev2" OR data.key = "{large_string}") AND data.second_key.0 > 0 AND data.second_key.1 IS DISTINCT FROM true;'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": {"key": "value", "second_key":[1, false]}, "event": "event1"}',
+            '{"time": 102, "data": {"second_key":[2], "key":"' + large_string + '"}, "event": "event2"}',
+            '{"time": 103, "data": {"key":"ev2", "second_key":[3]}, "event": "event3"}',
+            '{"time": 104, "data": {"key":"ev2", "second_key":[42, true]}, "event": "event4"}',
+            '{"time": 105, "data": {"key":"ev2", "second_key":[42, false]}, "event": "event5"}',
+        ]
+
+        self.write_stream(data)
+        expected = [
+            '{"key":"value","second_key":[1,false]}',
+            '{"key":"' + large_string + '","second_key":[2,null]}',
+            '{"key":"ev2","second_key":[42,false]}',
+        ]
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        stop_yds_query(client, query_id)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate:" in issues and "second_key" in issues, "Incorrect Issues: " + issues
+
+    @yq_v1
     def test_nested_types_without_predicate(self, kikimr, client):
         self.init(client, "test_nested_types_without_predicate")
 

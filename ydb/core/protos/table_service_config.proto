@@ -508,5 +508,5 @@ message TTableServiceConfig {
 
     optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableScatterConnection = 130 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableScatterConnection = 130 [default = true, (InvalidateCompileCache) = true];
 };

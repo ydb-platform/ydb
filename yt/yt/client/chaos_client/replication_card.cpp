@@ -102,15 +102,18 @@ TReplicationCardFetchOptions::operator size_t() const
     return MultiHash(
         IncludeCoordinators,
         IncludeProgress,
-        IncludeHistory);
+        IncludeHistory,
+        IncludeReplicatedTableOptions);
 }
 
 void FormatValue(TStringBuilderBase* builder, const TReplicationCardFetchOptions& options, TStringBuf /*spec*/)
 {
-    builder->AppendFormat("{IncludeCoordinators: %v, IncludeProgress: %v, IncludeHistory: %v}",
+    builder->AppendFormat(
+        "{IncludeCoordinators: %v, IncludeProgress: %v, IncludeHistory: %v, IncludeReplicatedTableOptions: %v}",
         options.IncludeCoordinators,
         options.IncludeProgress,
-        options.IncludeHistory);
+        options.IncludeHistory,
+        options.IncludeReplicatedTableOptions);
 }
 
 bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& other) const

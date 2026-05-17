@@ -1084,7 +1084,7 @@ public:
                             indexDesc->AddKeyColumnNames(col);
                         }
                         if (index.Type == TIndexDescription::EType::GlobalJson && !index.DataColumns.empty()) {
-                            tablePromise.SetValue(ResultFromError<TGenericResult>("JSON index does not support COVER columns"));
+                            tablePromise.SetValue(ResultFromIssues<TGenericResult>(TIssuesIds::KIKIMR_BAD_REQUEST, "JSON index does not support COVER columns", {}));
                             return;
                         }
                         for (const auto& col : index.DataColumns) {
@@ -1254,10 +1254,7 @@ public:
 
             for (const auto& idx : req.add_indexes()) {
                 if (idx.type_case() == Ydb::Table::TableIndex::kGlobalJsonIndex && !idx.data_columns().empty()) {
-                    IKqpGateway::TGenericResult errResult;
-                    errResult.AddIssue(NYql::TIssue("JSON index does not support COVER columns"));
-                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
-                    tablePromise.SetValue(errResult);
+                    tablePromise.SetValue(ResultFromIssues<TGenericResult>(TIssuesIds::KIKIMR_BAD_REQUEST, "JSON index does not support COVER columns", {}));
                     return tablePromise.GetFuture();
                 }
             }

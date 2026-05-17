@@ -51,7 +51,8 @@ public:
 public:
     bool SupportRtmrMode = false;
     bool UseActorSystemThreadsInTopicClient = true;
-    bool AllowTransparentSystemColumns = true;
+    bool AddTransparentPrefixToTransparentSystemColumns = true;
+    bool EnableUserAttributesInTopicQuery = false;
     bool StreamingTopicsReadByDefault = true;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;

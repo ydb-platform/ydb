@@ -14,8 +14,9 @@ The network configuration must allow TCP connections on the following ports (the
 * 2135, 2136: GRPC for client-cluster interaction.
 * 19001, 19002: Interconnect for intra-cluster node interaction
 * 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* 9092, 9093: ports for Kafka API.
 
-Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
+Distinct ports are necessary for gRPC, Interconnect, Kafka API and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
 
 Make sure that the system clocks running on all the cluster's servers are synced by `ntpd` or `chrony`. We recommend using the same time source for all servers in the cluster to maintain consistent leap seconds processing.
 
@@ -57,7 +58,6 @@ Make sure that the CA certificate is appropriately labeled, with the CA property
 For node certificates, it's key that the actual host name (or names) match the values in the "Subject Alternative Name" field. Enable both the regular usage types ("Digital Signature, Key Encipherment") and advanced usage types ("TLS Web Server Authentication, TLS Web Client Authentication") for the certificates. Node certificates must support both server authentication and client authentication (the `extendedKeyUsage = serverAuth,clientAuth` option in the OpenSSL settings).
 
 For batch generation or update of {{ ydb-short-name }} cluster certificates by OpenSSL, you can use the [sample script](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/tls_cert_gen/) from the {{ ydb-short-name }} GitHub repository. Using the script, you can streamline preparation for installation, automatically generating all the key files and certificate files for all your cluster nodes in a single step.
-
 ## Create a System User and a Group to Run {{ ydb-short-name }} {#create-user}
 
 On each server that will be running {{ ydb-short-name }}, execute the command below:

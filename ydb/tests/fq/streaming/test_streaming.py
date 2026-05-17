@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 import random
@@ -421,6 +422,118 @@ class TestStreamingInYdb(StreamingTestBase):
         result_sets2 = future2.result()
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
         assert result_sets2[0].rows[0]['time'] == b'lunch time'
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_user_attributes_in_topic_query": True},
+            {"enable_user_attributes_in_topic_query": False},
+        ],
+        ids=["ua_on", "ua_off"],
+        indirect=["kikimr"],
+    )
+    def test_read_user_attributes(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
+
+        inp, endpoint = self.get_input_name(
+            kikimr,
+            "ua",
+            True,
+            entity_name,
+            partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    field2,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL, field2 Int32 NOT NULL)
+)
+LIMIT 1"""
+
+        if not enable_message_meta_flag:
+            with pytest.raises(ydb.issues.GenericError) as excinfo:
+                kikimr.ydb_client.query(sql)
+            err = str(excinfo.value)
+            assert "Metadata key user_attributes" in err and "found" in err
+            return
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-a"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"value1"
+        assert row["field2"] == 105
+        assert row["trace_id"] == b"tid-a"
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_user_attributes_in_topic_query": True},
+            {"enable_user_attributes_in_topic_query": False},
+        ],
+        ids=["ua_on", "ua_off"],
+        indirect=["kikimr"],
+    )
+    def test_read_user_attributes_in_streaming_query(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_message_meta_flag = cfg["enable_user_attributes_in_topic_query"]
+
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            "ua_sq",
+            True,
+            entity_name,
+            partitions_count=1,
+        )
+        query_name = "ua_sq"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        field2,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL, field2 Int32 NOT NULL)
+                    )
+                );
+            END DO;'''
+
+        if not enable_message_meta_flag:
+            with pytest.raises(ydb.issues.GenericError) as excinfo:
+                kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+            err = str(excinfo.value)
+            assert "Metadata key user_attributes" in err and "found" in err
+            return
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [('{"field1": "value1", "field2": 105}', {"trace_id": "tid-sq"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {
+            "field1": "value1",
+            "field2": 105,
+            "trace_id": "tid-sq",
+        }
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])

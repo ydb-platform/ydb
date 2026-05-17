@@ -1,4 +1,7 @@
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
+ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorEncryptedChunks
+ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorPlainChunks
+ydb/core/blobstorage/pdisk/ut RDMA.TestRcBuf
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
@@ -42,9 +45,9 @@ ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
-ydb/core/tx/schemeshard/ut_subdomain TSchemeShardSubDomainTest.SimultaneousCreateTenantTable
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
+ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffset
 ydb/services/ydb/backup_ut BackupPathTestFs.ParallelBackupWholeDatabase
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]

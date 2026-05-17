@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.25.0)
+VERSION(0.25.1)
 
 LICENSE(MIT)
 
@@ -40,6 +40,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    typer/.agents/skills/typer/SKILL.md
     typer/py.typed
 )
 

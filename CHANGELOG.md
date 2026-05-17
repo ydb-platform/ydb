@@ -76,6 +76,25 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 40331:Added randomized corpus-based correctness tests for JSON secondary indexes. Each test inserts a deterministic JSON corpus, builds the index mid-load, and compares results between `VIEW PRIMARY KEY` and `VIEW json_idx` across randomly generated predicates.
+
+Three test suites covering `JSON_EXISTS` (`KqpJsonIndexesCorpus_JE`), `JSON_VALUE` (`KqpJsonIndexesCorpus_JV`), and their combination (`KqpJsonIndexesCorpus_JEJV`), each with `Y_UNIT_TEST_TWIN` over `JsonDocument` type for `Lax` / `Strict` modes:
+
+- `Basic`, `Ranges`, `Methods`, `Predicates`, `Methods_Predicates`, `Predicates_Ranges`, `Methods_Predicates_Ranges` — base predicate shapes and JsonPath features.
+- `Between`, `InList`, `Between_InList` — SQL-level `BETWEEN` / `IN`.
+- `Variables_JsonLiteral`, `Variables_YqlParameter`, `Variables_Ranges`, `Variables_Methods`, `Variables_Predicates`, `Variables_Methods_Predicates`, `Variables_Between`, `Variables_InList`, `Variables_Between_InList`, `Variables_Literals` — JsonPath `PASSING` and YQL `$param`.
+- `Literals`, `Literals_Ranges`, `Literals_Ranges_Variables` — root-scalar literal matching.
+- `Arithmetic` — arithmetic inside JsonPath and at SQL level.
+- `SqlNullChecks`, `DistinctFrom`, `DistinctFrom_Variables` — `IS [NOT] NULL` / `IS [NOT] DISTINCT FROM` over `JSON_*` results (expected to be non-extractable).
+- `ComplexFilters`, `ComplexFilters_Methods` — chained `?(...)` and `is unknown` filters.
+- `AndCombinations_*`, `OrCombinations_*`, `AndOrCombinations_*` — boolean composition over indexable / non-indexable atoms with ranges, predicates, variables, literals, arithmetic.
+- `All` — all features simultaneously. [#40331](https://github.com/ydb-platform/ydb/pull/40331) ([Daniil Timižev](https://github.com/dahbka-lis))
+* 40197:- `ydb sql`:  add `--resource-pool` option
+- `ydb` interactive mode add `SET resource_pool` command [#40197](https://github.com/ydb-platform/ydb/pull/40197) ([Slusarenko Igor](https://github.com/buhtr))
+* 40049:Callbacks expect status ok only with non-null connection
+
+... [#40049](https://github.com/ydb-platform/ydb/pull/40049) ([Ermoshkin Artem](https://github.com/Shfdis))
+* 40022:Make DSQueue reply back to DSProxy when it processes a request cancelled externally. Add a counter for the external cancellation logic. [#40022](https://github.com/ydb-platform/ydb/pull/40022) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### Bug fixes
 
@@ -146,12 +165,14 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 40372:Fixed udfs dir passing for v1 config in ydbd slice [#40372](https://github.com/ydb-platform/ydb/pull/40372) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 40067:- Ignore TEvWatchNotifyUnavailable from the SchemeCache by WorkloadManager [#40067](https://github.com/ydb-platform/ydb/pull/40067) ([Slusarenko Igor](https://github.com/buhtr))
+* 40042:Fix stress tool inflight control which caused the crash in tests 
+https://github.com/ydb-platform/ydb/issues/34581
+https://github.com/ydb-platform/ydb/issues/39838
+https://github.com/ydb-platform/ydb/issues/39239 [#40042](https://github.com/ydb-platform/ydb/pull/40042) ([Sergey Belyakov](https://github.com/serbel324))
+* 39892:Disabled RETURNING for ColumnShards and External Tables #39891 [#39892](https://github.com/ydb-platform/ydb/pull/39892) ([Nikita Vasilev](https://github.com/nikvas0))
 
 ### YDB UI
 

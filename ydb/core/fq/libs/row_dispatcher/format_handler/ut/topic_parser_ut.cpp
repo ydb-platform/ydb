@@ -327,6 +327,150 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         });
     }
 
+    Y_UNIT_TEST_F(NestedListTypes, TJsonParserFixture) {
+        ExpectedBatches = 1;
+
+        CheckSuccess(MakeParser({{"nested", "[OptionalType; [ListType; [DataType; String]]]"}, {"a1", "[DataType; String]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(4, numberRows);
+
+            UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+            UNIT_ASSERT(result[0][0]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][0].GetListLength(), 2);
+            {
+                auto val = result[0][0].GetElement(0);
+                UNIT_ASSERT_VALUES_EQUAL("key1", TString(val.AsStringRef()));
+            }
+            {
+                auto val = result[0][0].GetElement(1);
+                UNIT_ASSERT_VALUES_EQUAL("key2", TString(val.AsStringRef()));
+            }
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
+
+            UNIT_ASSERT(result[0][1]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][1].GetListLength(), 0);
+            UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
+
+            UNIT_ASSERT(!result[0][2]);
+            UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1][2].AsStringRef()));
+            UNIT_ASSERT(!result[0][3]);
+            UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
+        }));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", "key2"]})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": []})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        });
+    }
+
+    Y_UNIT_TEST_F(NestedTupleTypes, TJsonParserFixture) {
+        ExpectedBatches = 1;
+
+        CheckSuccess(MakeParser({{"nested", "[OptionalType; [TupleType; [[DataType; String]; [OptionalType; [DataType; Int64]]]]]"}, {"a1", "[DataType; String]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(4, numberRows);
+
+            UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+            UNIT_ASSERT(result[0][0]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][0].GetListLength(), 2);
+            {
+                auto val = result[0][0].GetElement(0);
+                UNIT_ASSERT_VALUES_EQUAL("key1", TString(val.AsStringRef()));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(12, result[0][0].GetElement(1).Get<i64>());
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
+
+            UNIT_ASSERT(result[0][1]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][1].GetListLength(), 2);
+            {
+                auto val = result[0][1].GetElement(0);
+                UNIT_ASSERT_VALUES_EQUAL("key2", TString(val.AsStringRef()));
+            }
+            UNIT_ASSERT(!result[0][1].GetElement(1));
+            UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
+
+            UNIT_ASSERT(!result[0][2]);
+            UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1][2].AsStringRef()));
+            UNIT_ASSERT(!result[0][3]);
+            UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
+        }));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", 12, true]})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key2"]})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        });
+    }
+
+    Y_UNIT_TEST_F(NestedEmptyTupleTypes, TJsonParserFixture) {
+        ExpectedBatches = 1;
+
+        CheckSuccess(MakeParser({{"nested", "[OptionalType; [TupleType; []]]"}, {"a1", "[DataType; String]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(4, numberRows);
+
+            UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+            UNIT_ASSERT(result[0][0]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][0].GetListLength(), 0);
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
+
+            UNIT_ASSERT(result[0][1]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][1].GetListLength(), 0);
+            UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
+
+            UNIT_ASSERT(!result[0][2]);
+            UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1][2].AsStringRef()));
+            UNIT_ASSERT(!result[0][3]);
+            UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
+        }));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": []})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["foobar", 123, true, null]})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        });
+    }
+
+    Y_UNIT_TEST_F(NestedStructTypes, TJsonParserFixture) {
+        ExpectedBatches = 1;
+
+        CheckSuccess(MakeParser({{"nested", "[OptionalType; [StructType; [[a; [DataType; String]]; [b; [OptionalType; [DataType; Int64]]]]]]"}, {"a1", "[DataType; String]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(4, numberRows);
+
+            UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+            UNIT_ASSERT(result[0][0]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][0].GetListLength(), 2);
+            {
+                auto val = result[0][0].GetElement(0);
+                UNIT_ASSERT_VALUES_EQUAL("key1", TString(val.AsStringRef()));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(12, result[0][0].GetElement(1).Get<i64>());
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
+
+            UNIT_ASSERT(result[0][1]);
+            UNIT_ASSERT_VALUES_EQUAL(result[0][1].GetListLength(), 2);
+            {
+                auto val = result[0][1].GetElement(0);
+                UNIT_ASSERT_VALUES_EQUAL("key2", TString(val.AsStringRef()));
+            }
+            UNIT_ASSERT(!result[0][1].GetElement(1));
+            UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
+
+            UNIT_ASSERT(!result[0][2]);
+            UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1][2].AsStringRef()));
+            UNIT_ASSERT(!result[0][3]);
+            UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
+        }));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"a":"key1", "b": 12}})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": {"a":"key2"}})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        });
+    }
+
     Y_UNIT_TEST_F(SimpleBooleans, TJsonParserFixture) {
         ExpectedBatches = 1;
 
@@ -466,6 +610,33 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         });
     }
 
+    Y_UNIT_TEST_F(MissingRepeatedNestedFieldsValidation, TJsonParserFixture) {
+        CheckSuccess(MakeParser({"a1","a2"}, "[OptionalType; [StructType; [[a1; [DataType; Uint64]]; [a2; [DataType; Uint64]]]]]"));
+        ParserHandler->ExpectColumnError(1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field a1");
+        ParserHandler->ExpectColumnError(0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field a2");
+        ExpectedBatches++;
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a1":{"a1": 101, "a1": 102}})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a2": {"a2":103, "a2": 104}})")
+        });
+    }
+
+    Y_UNIT_TEST_F(MissingNestedStructFieldsValidation, TJsonParserFixture) {
+        CheckSuccess(MakeParser({{"a1", "[StructType; [[a; [DataType; String]]]]"}, {"a2", "[StructType; [[a; [DataType; Uint64]]]]"}}));
+        CheckColumnError(R"({"a2": {"a":105}, "event": "event1"})", 0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'a1' with type [StructType; [[a; [DataType; String]]]], buffered offsets: " << FIRST_OFFSET);
+        CheckColumnError(R"({"a1": {"a":"hello1"}, "a2": null, "event": "event1"})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 1 << ", got parsing error for column 'a2' with type [StructType; [[a; [DataType; Uint64]]]] subissue: { <main>: Error: Found unexpected null value, expected non optional type Struct }");
+        CheckColumnError(R"({"a2": {"a":105}, "a1":{}, "event": "event1"})", 0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Error: Failed to parse nested json value (Struct), expected non-optional field a");
+        CheckColumnError(R"({"a1": {"a":"hello1"}, "a2": {"a":null}, "event": "event1"})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 3 << ", got parsing error for column 'a2' with type [StructType; [[a; [DataType; Uint64]]]] subissue: { <main>: Error: Found unexpected null value, expected non optional type Uint64 }");
+    }
+
+    Y_UNIT_TEST_F(MissingNestedTupleFieldsValidation, TJsonParserFixture) {
+        CheckSuccess(MakeParser({{"a1", "[TupleType; [[DataType; String]]]"}, {"a2", "[TupleType; [[DataType; Uint64]]]"}}));
+        CheckColumnError(R"({"a2": [105], "event": "event1"})", 0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'a1' with type [TupleType; [[DataType; String]]], buffered offsets: " << FIRST_OFFSET);
+        CheckColumnError(R"({"a1": ["hello1"], "a2": null, "event": "event1"})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 1 << ", got parsing error for column 'a2' with type [TupleType; [[DataType; Uint64]]] subissue: { <main>: Error: Found unexpected null value, expected non optional type Tuple }");
+        CheckColumnError(R"({"a2": [105], "a1":[], "event": "event1"})", 0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Error: Failed to parse nested json value (Tuple), short json array at index 0, expected non optional type String");
+        CheckColumnError(R"({"a1": ["hello1"], "a2": [null], "event": "event1"})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Error: Found unexpected null value, expected non optional type Uint6");
+    }
+
     Y_UNIT_TEST_F(TypeKindsValidation, TJsonParserFixture) {
         CheckError(
             MakeParser({{"a1", "[[BAD TYPE]]"}}),
@@ -476,6 +647,16 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             MakeParser({{"a2", "[OptionalType; [DataType; String]]"}, {"a1", "[DictType; [DataType; String]; [DataType; Uint8]]"}}),
             EStatusId::UNSUPPORTED,
             "Failed to create parser for column 'a1' with type [DictType; [DataType; String]; [DataType; Uint8]] subissue: { <main>: Error: Unsupported type kind: Dict }"
+        );
+        CheckError(
+            MakeParser({{"a2", "[OptionalType; [OptionalType; [DataType; String]]]"}}),
+            EStatusId::UNSUPPORTED,
+            "Failed to create parser for column 'a2' with type [OptionalType; [OptionalType; [DataType; String]]] subissue: { <main>: Error: Nested optionals is not supported as input type }"
+        );
+        CheckError(
+            MakeParser({{"a2", "[ListType; [OptionalType; [OptionalType; [DataType; String]]]]"}}),
+            EStatusId::UNSUPPORTED,
+            "Failed to create parser for column 'a2' with type [ListType; [OptionalType; [OptionalType; [DataType; String]]]] subissue: { <main>: Error: Nested optionals is not supported as input type }"
         );
     }
 

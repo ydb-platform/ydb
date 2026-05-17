@@ -11,15 +11,16 @@ namespace NFq::NRowDispatcher {
 
 TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
     : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
-    , MemInfo("MemInfo")
-    , HolderFactory(Alloc.Ref(), MemInfo)
     , FunctionRegistry(functionRegistry)
     , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
     , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))
+    , MemInfo("MemInfo")
+    , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry))
 {}
 
 TTypeParser::~TTypeParser() {
     with_lock (Alloc) {
+        HolderFactory.reset();
         TypeEnv.reset();
         ProgramBuilder.reset();
     }
@@ -115,18 +116,12 @@ void TTopicParserBase::ParseBuffer() {
 NYql::NUdf::TUnboxedValue LockObject(NYql::NUdf::TUnboxedValue&& value) {
     // All UnboxedValue's with type Boxed or String should be locked
     // because after parsing they will be used under another MKQL allocator in purecalc filters
-
-    const i32 numberRefs = value.LockRef();
-
-    // -1 - value is embbeded or empty, otherwise value should have exactly one ref
-    Y_ENSURE(numberRefs == -1 || numberRefs == 1);
-
+    NKikimr::NMiniKQL::TlsAllocState->LockObject(value);
     return value;
 }
 
 void ClearObject(NYql::NUdf::TUnboxedValue& value) {
-    // Value should be unlocked with same number of refs
-    value.UnlockRef(1);
+    NKikimr::NMiniKQL::TlsAllocState->UnlockObject(value);
     value.Clear();
 }
 

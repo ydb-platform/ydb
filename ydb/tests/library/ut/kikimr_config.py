@@ -82,6 +82,7 @@ def test_kikimr_config_generator_uses_existing_grpc_tls_data(tmp_path):
     cfg_gen = KikimrConfigGenerator(
         grpc_ssl_enable=True,
         grpc_tls_data_path=str(tls_data_path),
+        use_existing_grpc_tls_data=True,
     )
     cfg_gen.write_tls_data()
 
@@ -104,6 +105,40 @@ def test_kikimr_config_generator_rejects_partial_existing_grpc_tls_data(tmp_path
         KikimrConfigGenerator(
             grpc_ssl_enable=True,
             grpc_tls_data_path=str(tls_data_path),
+            use_existing_grpc_tls_data=True,
         )
 
     assert (tls_data_path / "cert.pem").read_bytes() == cert
+
+
+def test_kikimr_config_generator_generates_grpc_tls_data_without_reuse_flag(tmp_path):
+    tls_data_path = tmp_path / "tls"
+    tls_data_path.mkdir()
+
+    cfg_gen = KikimrConfigGenerator(
+        grpc_ssl_enable=True,
+        grpc_tls_data_path=str(tls_data_path),
+    )
+
+    assert cfg_gen.grpc_tls_ca
+    assert cfg_gen.grpc_tls_cert
+    assert cfg_gen.grpc_tls_key
+    assert (tls_data_path / "ca.pem").read_bytes() == cfg_gen.grpc_tls_ca
+    assert (tls_data_path / "cert.pem").read_bytes() == cfg_gen.grpc_tls_cert
+    assert (tls_data_path / "key.pem").read_bytes() == cfg_gen.grpc_tls_key
+
+
+def test_kikimr_config_generator_rejects_empty_grpc_tls_data_path():
+    with pytest.raises(ValueError, match="grpc_tls_data_path must not be empty"):
+        KikimrConfigGenerator(
+            grpc_ssl_enable=True,
+            grpc_tls_data_path="",
+        )
+
+
+def test_kikimr_config_generator_rejects_existing_grpc_tls_data_without_path():
+    with pytest.raises(RuntimeError, match="requires grpc_tls_data_path"):
+        KikimrConfigGenerator(
+            grpc_ssl_enable=True,
+            use_existing_grpc_tls_data=True,
+        )

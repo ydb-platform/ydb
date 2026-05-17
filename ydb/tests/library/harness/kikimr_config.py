@@ -70,8 +70,11 @@ def _get_grpc_host():
     return "[::]"
 
 
-def _grpc_tls_data_has_any_file(ca_path, cert_path, key_path):
-    return any(os.path.isfile(path) for path in (ca_path, cert_path, key_path))
+def _normalize_grpc_tls_data_path(grpc_tls_data_path):
+    if grpc_tls_data_path is not None and not grpc_tls_data_path.strip():
+        raise ValueError("grpc_tls_data_path must not be empty")
+
+    return grpc_tls_data_path
 
 
 def _read_grpc_tls_data(ca_path, cert_path, key_path):
@@ -174,6 +177,7 @@ class KikimrConfigGenerator(object):
             enable_audit_log=False,
             audit_log_config=None,
             grpc_tls_data_path=None,
+            use_existing_grpc_tls_data=False,
             fq_config_path=None,
             public_http_config_path=None,
             public_http_config=None,
@@ -267,20 +271,14 @@ class KikimrConfigGenerator(object):
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
         self.__grpc_tls_cert = None
-        self.__grpc_tls_write_data = False
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
-            grpc_tls_data_path_is_explicit = grpc_tls_data_path is not None
+            grpc_tls_data_path = _normalize_grpc_tls_data_path(grpc_tls_data_path)
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
-            use_existing_grpc_tls_certs = (
-                grpc_tls_data_path_is_explicit
-                and _grpc_tls_data_has_any_file(
-                    self.grpc_tls_ca_path,
-                    self.grpc_tls_cert_path,
-                    self.grpc_tls_key_path,
-                )
-            )
-            if use_existing_grpc_tls_certs:
+            if use_existing_grpc_tls_data:
+                if grpc_tls_data_path is None:
+                    raise RuntimeError("Existing gRPC TLS data requires grpc_tls_data_path")
+
                 self.__grpc_tls_ca, self.__grpc_tls_cert, self.__grpc_tls_key = _read_grpc_tls_data(
                     self.grpc_tls_ca_path,
                     self.grpc_tls_cert_path,
@@ -291,7 +289,7 @@ class KikimrConfigGenerator(object):
                 self.__grpc_tls_ca = cert_pem
                 self.__grpc_tls_key = key_pem
                 self.__grpc_tls_cert = cert_pem
-                self.__grpc_tls_write_data = True
+                self.write_tls_data()
 
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
@@ -895,11 +893,16 @@ class KikimrConfigGenerator(object):
         self.__binary_paths = binary_paths
 
     def write_tls_data(self):
-        if self.__grpc_ssl_enable and self.__grpc_tls_write_data:
+        if self.__grpc_ssl_enable:
             for fpath, data in (
                 (self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert),
                 (self.grpc_tls_key_path, self.grpc_tls_key)
             ):
+                if os.path.isfile(fpath):
+                    with open(fpath, 'rb') as f:
+                        if f.read() == data:
+                            continue
+
                 with open(fpath, 'wb') as f:
                     f.write(data)
 

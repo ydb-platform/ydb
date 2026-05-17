@@ -14,7 +14,7 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/network.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTests {
 namespace {
 
 using namespace NCrypto;
@@ -765,4 +765,4 @@ TEST_F(TSslTest, BlackHole)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTests

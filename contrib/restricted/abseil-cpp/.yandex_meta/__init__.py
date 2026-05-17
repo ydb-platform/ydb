@@ -3,6 +3,10 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 
 _FAILURE_SIGNAL_RECURSE = "absl/debugging"
 
+_SOURCE_TO_STUB = {
+    "absl/debugging/failure_signal_handler.cc": "failure_signal_handler.cc",
+}
+
 
 def post_install(self):
     with self.yamakes["."] as absl:
@@ -27,26 +31,15 @@ def post_install(self):
             """,
         )
 
-        dbg_srcs = []
-        stub_srcs = []
-        if _FAILURE_SIGNAL_RECURSE in self.yamakes:
-            for source in self.yamakes[_FAILURE_SIGNAL_RECURSE].SRCS:
-                dbg_srcs.append(f"{_FAILURE_SIGNAL_RECURSE}/{source}")
-                stub_srcs.append(f"stubs/{source}")
-        if dbg_srcs:
-            absl.after(
-                "SRCS",
-                Switch(
-                    OS_FREERTOS=Linkable(SRCS=stub_srcs),
-                    default=Linkable(SRCS=dbg_srcs),
-                ),
-            )
-
-        absl.PEERDIR.discard(f"{self.arcdir}/{_FAILURE_SIGNAL_RECURSE}")
-        absl.RECURSE.discard(_FAILURE_SIGNAL_RECURSE)
-
-    if _FAILURE_SIGNAL_RECURSE in self.yamakes:
-        del self.yamakes[_FAILURE_SIGNAL_RECURSE]
+        src_to_stub = {s: f"stubs/{st}" for s, st in _SOURCE_TO_STUB.items() if s in absl.SRCS}
+        absl.SRCS -= src_to_stub.keys()
+        absl.after(
+            "SRCS",
+            Switch(
+                OS_FREERTOS=Linkable(SRCS=list(src_to_stub.values())),
+                default=Linkable(SRCS=list(src_to_stub.keys())),
+            ),
+        )
 
 
 abseil_cpp = CMakeNinjaNixProject(
@@ -109,8 +102,7 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_die_if_null",
             "absl_examine_stack",
             "absl_exponential_biased",
-            # this cmake module will be added by post_install conditionally
-            # "absl_failure_signal_handler",
+            "absl_failure_signal_handler",
             "absl_flags_commandlineflag",
             "absl_flags_commandlineflag_internal",
             "absl_flags_config",

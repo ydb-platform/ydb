@@ -30,9 +30,9 @@ def get_ydb_config(request):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", False)
     enable_watermarks_advanced = param.get("enable_watermarks_advanced", False)
-    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", False)
-    enable_streaming_queries = param.get("enable_streaming_queries", False)
-    enable_streaming_partition_balancing = param.get("use_partition_balancing", False)
+    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
+    enable_streaming_queries = param.get("enable_streaming_queries", True)
+    enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
 
     extra_feature_flags = {
         "enable_external_data_sources",

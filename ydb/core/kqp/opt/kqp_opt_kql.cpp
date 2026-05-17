@@ -1353,8 +1353,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
                             const auto wrSettings = IDqIntegration::TWrapReadSettings {
-                                // disable source watermark generation if DqWatermarkGenerator was enabled
-                                .WatermarksMode = kqpCtx->Config->GetEnableWatermarks() && !kqpCtx->Config->GetEnableWatermarksAdvanced() ? "default" : "",
+                                .WatermarksMode = kqpCtx->Config->GetEnableWatermarks() ? "default" : (kqpCtx->Config->GetEnableWatermarksAdvanced() ? "advanced" : ""),
                                 .EnableStreamingPartitionBalancing = kqpCtx->Config->GetEnableStreamingPartitionBalancing(),
                             };
                             auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, wrSettings);

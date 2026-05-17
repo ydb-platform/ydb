@@ -15,6 +15,8 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
+#include <sstream>
+
 namespace NFq::NRowDispatcher {
 
 namespace {

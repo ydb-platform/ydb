@@ -18,7 +18,7 @@ namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError GetLastSslError(TString message);
+TError GetLastSslError(std::string message);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -49,7 +49,7 @@ struct TCertProfiler
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetFingerprintSHA256(const TX509Ptr& certificate);
+std::string GetFingerprintSHA256(const TX509Ptr& certificate);
 
 //! Reads the first X.509 certificate from a PEM blob config.
 TX509Ptr ReadCertFromPemBlob(const TPemBlobConfigPtr& pem);
@@ -76,17 +76,17 @@ public:
 
     void UseBuiltinOpenSslX509Store();
 
-    void SetCipherList(const TString& list);
+    void SetCipherList(const std::string& list);
 
-    void AddCertificateAuthorityFromFile(const TString& path);
-    void AddCertificateFromFile(const TString& path);
-    void AddCertificateChainFromFile(const TString& path);
-    void AddPrivateKeyFromFile(const TString& path);
+    void AddCertificateAuthorityFromFile(const std::string& path);
+    void AddCertificateFromFile(const std::string& path);
+    void AddCertificateChainFromFile(const std::string& path);
+    void AddPrivateKeyFromFile(const std::string& path);
 
-    void AddCertificateAuthority(const TString& ca);
-    void AddCertificate(const TString& certificate);
-    void AddCertificateChain(const TString& certificateChain);
-    void AddPrivateKey(const TString& privateKey);
+    void AddCertificateAuthority(const std::string& ca);
+    void AddCertificate(const std::string& certificate);
+    void AddCertificateChain(const std::string& certificateChain);
+    void AddPrivateKey(const std::string& privateKey);
 
     void AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);
     void AddCertificate(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);

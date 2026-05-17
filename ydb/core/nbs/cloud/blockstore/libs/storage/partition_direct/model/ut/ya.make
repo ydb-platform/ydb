@@ -2,8 +2,8 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model)
 
 SRCS(
     host_mask_ut.cpp
+    host_roles_ut.cpp
     host_stat_ut.cpp
-    host_status_ut.cpp
     oracle_ut.cpp
     vchunk_config_ut.cpp
 )

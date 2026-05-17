@@ -317,9 +317,9 @@ STFUNC(TGRpcProxyStatusActor::StateFunc) {
 
 ///////////////////////////////////////////
 
-class TChooseProxyActor : public TActorBootstrapped<TChooseProxyActor>, public NMsgBusProxy::TMessageBusSessionIdentHolder {
+class TChooseProxyActor : public NMsgBusProxy::TMessageBusCancellableRequest<TChooseProxyActor> {
 
-    using TBase = TActorBootstrapped<TChooseProxyActor>;
+    using TBase = NMsgBusProxy::TMessageBusCancellableRequest<TChooseProxyActor>;
     THolder<NMsgBusProxy::TBusChooseProxy> Request;
     THashMap<ui32, TString> NodeNames;
     THashMap<ui32, TString> NodeDataCenter;
@@ -333,7 +333,7 @@ public:
 
     //
     TChooseProxyActor(NMsgBusProxy::TBusMessageContext &msg)
-        : TMessageBusSessionIdentHolder(msg)
+        : TBase(msg)
         , Request(static_cast<NMsgBusProxy::TBusChooseProxy*>(msg.ReleaseMessage()))
     {
     }
@@ -351,6 +351,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvGRpcProxyStatus::TEvResponse, HandleResponse);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, Cancel);
         }
     }
 

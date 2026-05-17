@@ -29,9 +29,6 @@ TRegion::TRegion(
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
-    TDuration writeHedgingDelay,
-    TDuration writeRequestTimeout,
-    TDuration traceSamplePeriod,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
 {
@@ -51,9 +48,6 @@ TRegion::TRegion(
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
             vChunkSize,
-            writeHedgingDelay,
-            writeRequestTimeout,
-            traceSamplePeriod,
             vChunkCounters);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));
@@ -76,8 +70,6 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    EWriteMode writeMode,
-    TDuration pbufferReplyTimeout,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
@@ -86,8 +78,6 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        writeMode,
-        pbufferReplyTimeout,
         lsn,
         traceId);
 }

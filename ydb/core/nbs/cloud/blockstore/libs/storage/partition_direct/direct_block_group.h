@@ -6,6 +6,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -122,6 +123,8 @@ public:
     virtual void Register(TVChunkWeakPtr vChunk) = 0;
 
     virtual TExecutorPtr GetExecutor() = 0;
+
+    virtual IOraclePtr GetOracle() = 0;
 
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
 

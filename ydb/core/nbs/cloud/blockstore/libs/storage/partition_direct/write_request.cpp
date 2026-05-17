@@ -1,9 +1,12 @@
 #include "write_request.h"
 
 #include "direct_block_group.h"
+#include "write_with_direct_replication_request.h"
+#include "write_with_pb_replication_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -20,9 +23,7 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
-    NWilson::TTraceId traceId,
-    TDuration hedgingDelay,
-    TDuration timeout)
+    NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
@@ -31,8 +32,8 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(lsn)
-    , HedgingDelay(hedgingDelay)
-    , RequestTimeout(timeout)
+    , HedgingDelay(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay())
+    , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
 {}
 
 TBaseWriteRequestExecutor::~TBaseWriteRequestExecutor()
@@ -169,5 +170,42 @@ TVector<THostIndex> TBaseWriteRequestExecutor::GetAvailableHandOffHosts() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
+    NActors::TActorSystem* actorSystem,
+    const TVChunkConfig& vChunkConfig,
+    IDirectBlockGroupPtr directBlockGroup,
+    TBlockRange64 vChunkRange,
+    TCallContextPtr callContext,
+    std::shared_ptr<TWriteBlocksLocalRequest> request,
+    ui64 lsn,
+    NWilson::TTraceId traceId)
+{
+    EWriteMode writeMode = directBlockGroup->GetOracle()->GetWriteMode();
+    switch (writeMode) {
+        case EWriteMode::PBufferReplication:
+            return std::make_shared<TWriteWithPbReplicationRequestExecutor>(
+                actorSystem,
+                vChunkConfig,
+                std::move(directBlockGroup),
+                vChunkRange,
+                std::move(callContext),
+                std::move(request),
+                lsn,
+                std::move(traceId));
+            break;
+        case EWriteMode::DirectPBuffersFilling:
+            return std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
+                actorSystem,
+                vChunkConfig,
+                std::move(directBlockGroup),
+                vChunkRange,
+                std::move(callContext),
+                std::move(request),
+                lsn,
+                std::move(traceId));
+            break;
+    }
+}
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

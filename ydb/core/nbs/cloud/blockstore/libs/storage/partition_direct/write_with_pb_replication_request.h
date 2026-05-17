@@ -17,10 +17,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout,
-        TDuration pbufferReplyTimeout);
+        NWilson::TTraceId traceId);
 
     ~TWriteWithPbReplicationRequestExecutor() override = default;
 

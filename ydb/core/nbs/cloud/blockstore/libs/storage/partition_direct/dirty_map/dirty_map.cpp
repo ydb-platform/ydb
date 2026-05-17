@@ -2,7 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_algorithms.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -107,9 +107,7 @@ TString TFlushHints::DebugPrint() const
 {
     TStringBuilder builder;
     for (const auto& [route, hint]: Hints) {
-        builder << "H" << ui32(route.SourceHostIndex) << "->H"
-                << ui32(route.DestinationHostIndex) << ":" << hint.DebugPrint()
-                << ";";
+        builder << route.DebugPrint() << ":" << hint.DebugPrint() << ";";
     }
     return builder;
 }
@@ -154,7 +152,7 @@ TString TEraseHints::DebugPrint() const
 {
     TStringBuilder builder;
     for (const auto& [host, hint]: Hints) {
-        builder << "H" << ui32(host) << ":" << hint.DebugPrint() << ";";
+        builder << PrintHostIndex(host) << ":" << hint.DebugPrint() << ";";
     }
     return builder;
 }

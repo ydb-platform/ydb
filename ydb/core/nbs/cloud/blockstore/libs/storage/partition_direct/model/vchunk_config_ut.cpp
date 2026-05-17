@@ -20,18 +20,18 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
     {
         const auto cfg = TVChunkConfig::Make(2, 5, 3);
         // Primary slots: (0+2)%5=2, (1+2)%5=3, (2+2)%5=4.
-        UNIT_ASSERT(cfg.PBufferHosts.Get(2) == EHostStatus::Primary);
-        UNIT_ASSERT(cfg.PBufferHosts.Get(3) == EHostStatus::Primary);
-        UNIT_ASSERT(cfg.PBufferHosts.Get(4) == EHostStatus::Primary);
-        UNIT_ASSERT(cfg.PBufferHosts.Get(0) == EHostStatus::HandOff);
-        UNIT_ASSERT(cfg.PBufferHosts.Get(1) == EHostStatus::HandOff);
+        UNIT_ASSERT(cfg.PBufferHosts.GetRole(2) == EHostRole::Primary);
+        UNIT_ASSERT(cfg.PBufferHosts.GetRole(3) == EHostRole::Primary);
+        UNIT_ASSERT(cfg.PBufferHosts.GetRole(4) == EHostRole::Primary);
+        UNIT_ASSERT(cfg.PBufferHosts.GetRole(0) == EHostRole::HandOff);
+        UNIT_ASSERT(cfg.PBufferHosts.GetRole(1) == EHostRole::HandOff);
     }
 
     Y_UNIT_TEST(ShouldBeInvalidWhenAllDisabledOnOneSide)
     {
         auto cfg = TVChunkConfig::Make(0, 5, 3);
         for (size_t i = 0; i < 5; ++i) {
-            cfg.PBufferHosts.Set(i, EHostStatus::Disabled);
+            cfg.PBufferHosts.SetRole(i, EHostRole::None);
         }
         UNIT_ASSERT(!cfg.IsValid());
     }
@@ -40,8 +40,8 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
     {
         TVChunkConfig cfg{
             .VChunkIndex = 0,
-            .PBufferHosts = THostStatusList::MakeRotating(5, 0, 3),
-            .DDiskHosts = THostStatusList::MakeRotating(4, 0, 3),
+            .PBufferHosts = THostRoles::MakeRotating(5, 0, 3),
+            .DDiskHosts = THostRoles::MakeRotating(4, 0, 3),
         };
         UNIT_ASSERT(!cfg.IsValid());
     }

@@ -104,11 +104,6 @@ TToken::TToken(bool booleanValue)
     , BooleanValue_(booleanValue)
 { }
 
-bool TToken::IsEmpty() const
-{
-    return Type_ == ETokenType::EndOfStream;
-}
-
 TStringBuf TToken::GetStringValue() const
 {
     ExpectType(ETokenType::String);
@@ -236,6 +231,7 @@ void FormatValue(TStringBuilderBase* builder, const TToken& token, TStringBuf sp
 
         default:
             FormatValue(builder, TokenTypeToString(token.GetType()), spec);
+            break;
     }
 }
 

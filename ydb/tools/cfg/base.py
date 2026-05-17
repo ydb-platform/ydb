@@ -310,6 +310,7 @@ class ClusterDetailsProvider(object):
         self.dynamic_cpu_count = self.__cluster_description.get("dynamic_cpu_count", 8)
         self.force_io_pool_threads = self.__cluster_description.get("force_io_pool_threads", None)
         self.client_certificate_authorization = self.__cluster_description.get("client_certificate_authorization")
+        self.system_tablet_backup_config = self.__cluster_description.get("system_tablet_backup_config")
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")

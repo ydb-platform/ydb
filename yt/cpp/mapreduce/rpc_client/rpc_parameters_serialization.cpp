@@ -308,6 +308,29 @@ static void SerializeSuppressableAccessTrackingOptions(
     apiOptions->SuppressModificationTracking = options.SuppressModificationTracking_;
 }
 
+template <typename T>
+static void SerializePrerequisiteOptions(
+    NApi::TPrerequisiteOptions* apiOptions,
+    const TPrerequisiteOptions<T>& options)
+{
+    for (const auto& txId : options.PrerequisiteTransactionIds_) {
+        apiOptions->PrerequisiteTransactionIds.push_back(YtGuidFromUtilGuid(txId));
+    }
+
+    for (const auto& revisionConfig : options.PrerequisiteRevisions_) {
+        if (!revisionConfig.Path_) {
+            ythrow TApiUsageError() << "Path for TPrerequisiteRevisionOptions must be explicitly specified";
+        }
+        if (!revisionConfig.Revision_) {
+            ythrow TApiUsageError() << "Revision for TPrerequisiteRevisionOptions must be explicitly specified";
+        }
+        auto apiConfigPtr = New<NApi::TPrerequisiteRevisionConfig>();
+        apiConfigPtr->Path = *revisionConfig.Path_;
+        apiConfigPtr->Revision = NHydra::TRevision(*revisionConfig.Revision_);
+        apiOptions->PrerequisiteRevisions.push_back(apiConfigPtr);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 NApi::TGetNodeOptions SerializeOptionsForGet(
@@ -317,6 +340,7 @@ NApi::TGetNodeOptions SerializeOptionsForGet(
     NApi::TGetNodeOptions result;
     SetTransactionId(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.AttributeFilter_) {
         result.Attributes = options.AttributeFilter_->Attributes_;
     }

@@ -4646,6 +4646,52 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
 
     */
 
+    // Regression: Aggregate::ComputeMetadata was copying input metadata instead of starting
+    // fresh, leaking its KeyColumns into the input Map. Repros with TPCH Q21 pattern.
+    Y_UNIT_TEST(AggregateKeyColumnsNotLeakedToInputMap) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/items` (
+                order_id Int64 NOT NULL,
+                line_id  Int64 NOT NULL,
+                sup_id   Int64 NOT NULL,
+                late     Int64 NOT NULL,
+                PRIMARY KEY (order_id, line_id)
+            ) WITH (Store = Column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(R"(
+            SELECT i1.sup_id, COUNT(*) AS cnt
+            FROM `/Root/items` AS i1
+            WHERE i1.late = 1
+              AND EXISTS (
+                  SELECT * FROM `/Root/items` AS i2
+                  WHERE i2.order_id = i1.order_id AND i2.sup_id != i1.sup_id
+              )
+              AND NOT EXISTS (
+                  SELECT * FROM `/Root/items` AS i3
+                  WHERE i3.order_id = i1.order_id AND i3.sup_id != i1.sup_id AND i3.late = 1
+              )
+            GROUP BY i1.sup_id
+            ORDER BY cnt DESC, i1.sup_id;
+        )", NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+            .ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

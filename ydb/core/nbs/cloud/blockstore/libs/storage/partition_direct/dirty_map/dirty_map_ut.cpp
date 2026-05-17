@@ -1,7 +1,7 @@
 #include "dirty_map.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_status.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -24,15 +24,25 @@ TVChunkConfig MakeTestVChunkConfig()
         PrimaryCount);
 }
 
-void ApplyStatuses(TBlocksDirtyMap& map, TVector<EHostStatus> statuses)
+void ApplyStatuses(
+    TBlocksDirtyMap& map,
+    TVector<EHostRole> assignments,
+    TVector<EHostState> states)
 {
-    Y_ABORT_UNLESS(statuses.size() == HostCount);
+    Y_ABORT_UNLESS(assignments.size() == HostCount);
+    Y_ABORT_UNLESS(states.size() == HostCount);
+
     THostMask desired;
     THostMask disabled;
-    for (THostIndex i = 0; i < statuses.size(); ++i) {
-        if (statuses[i] == EHostStatus::Primary) {
+    for (THostIndex i = 0; i < assignments.size(); ++i) {
+        if (assignments[i] == EHostRole::Primary &&
+            states[i] == EHostState::Enabled)
+        {
             desired.Set(i);
-        } else if (statuses[i] == EHostStatus::Disabled) {
+        } else if (
+            assignments[i] == EHostRole::None ||
+            states[i] == EHostState::Disabled)
+        {
             disabled.Set(i);
         }
     }
@@ -50,7 +60,8 @@ TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
     return lsns;
 }
 
-using enum EHostStatus;
+using enum EHostRole;
+using enum EHostState;
 
 THostMask MakePrimaryHosts()
 {
@@ -104,7 +115,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // primary.
         ApplyStatuses(
             dirtyMap,
-            {Disabled, Primary, Primary, Primary, Disabled});
+            {HandOff, Primary, Primary, Primary, HandOff},
+            {Disabled, Enabled, Enabled, Enabled, Disabled});
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[H1,H2,H3][10..19][0..9]};",
@@ -179,7 +191,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             readHint.DebugPrint());
 
         // Disable host 0, promote host 3 to primary.
-        ApplyStatuses(dirtyMap, {Disabled, Primary, Primary, Primary, HandOff});
+        ApplyStatuses(
+            dirtyMap,
+            {HandOff, Primary, Primary, Primary, HandOff},
+            {Disabled, Enabled, Enabled, Enabled, Enabled});
 
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         // WriteConfirmed mask is {0,1,2}; host 0 is disabled, so it is
@@ -231,7 +246,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             readHint.DebugPrint());
 
         // Disable host 0, promote host 3 to primary.
-        ApplyStatuses(dirtyMap, {Disabled, Primary, Primary, Primary, HandOff});
+        ApplyStatuses(
+            dirtyMap,
+            {HandOff, Primary, Primary, Primary, HandOff},
+            {Disabled, Enabled, Enabled, Enabled, Enabled});
 
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -404,7 +422,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable additional Hand-off: hosts 0,1,2,3 are primary, host 4 is
         // hand-off.
-        ApplyStatuses(dirtyMap, {Primary, Primary, Primary, Primary, HandOff});
+        ApplyStatuses(
+            dirtyMap,
+            {Primary, Primary, Primary, Primary, HandOff},
+            {Enabled, Enabled, Enabled, Enabled, Enabled});
 
         // Written to 2 primary and 1 hand-off
         const THostMask requested =
@@ -454,7 +475,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable Hand-off-0 instead of DDisk0: host 0 disabled,
         // hosts 1,2,3 primary, host 4 hand-off.
-        ApplyStatuses(dirtyMap, {Disabled, Primary, Primary, Primary, HandOff});
+        ApplyStatuses(
+            dirtyMap,
+            {HandOff, Primary, Primary, Primary, HandOff},
+            {Disabled, Enabled, Enabled, Enabled, Enabled});
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -504,7 +528,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Hosts 0,1 disabled; hosts 2,3,4 are primary.
         ApplyStatuses(
             dirtyMap,
-            {Disabled, Disabled, Primary, Primary, Primary});
+            {HandOff, HandOff, Primary, Primary, Primary},
+            {Disabled, Disabled, Enabled, Enabled, Enabled});
 
         // Written to one primary and two hand-off
         const THostMask requested =
@@ -552,7 +577,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultVChunkSize / DefaultBlockSize);
 
         // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
-        ApplyStatuses(dirtyMap, {Disabled, Primary, Primary, Primary, HandOff});
+        ApplyStatuses(
+            dirtyMap,
+            {HandOff, Primary, Primary, Primary, HandOff},
+            {Disabled, Enabled, Enabled, Enabled, Enabled});
 
         // Written to all 3 primary PBuffers (hosts 0,1,2). Host 0 is
         // disabled, but the data is still on its PBuffer.
@@ -604,7 +632,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Enable 4 DDisks (hosts 0,1,2,3 primary). Available DDisks is
         // enough for a quorum.
-        ApplyStatuses(dirtyMap, {Primary, Primary, Primary, Primary, HandOff});
+        ApplyStatuses(
+            dirtyMap,
+            {Primary, Primary, Primary, Primary, HandOff},
+            {Enabled, Enabled, Enabled, Enabled, Enabled});
 
         dirtyMap.SetFlushWatermark(THostIndex{2}, 100 * DefaultBlockSize);
 

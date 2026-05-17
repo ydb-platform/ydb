@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
@@ -136,6 +137,91 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         )", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
     */
+    Y_UNIT_TEST(OversizedTaskReturnsLimitExceeded) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.SetNodeCount(2);
+        TKikimrRunner kikimr(serverSettings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString tableName = "/Root/TestLimitSize";
+        const int column_count = 49;
+        auto partitions =
+            TExplicitPartitions().AppendSplitPoints(TValueBuilder()
+                                                        .BeginTuple()
+                                                        .AddElement()
+                                                        .BeginOptional()
+                                                        .Uint64(24)
+                                                        .EndOptional()
+                                                        .EndTuple()
+                                                        .Build());
+
+        { /* create table */
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder.AddNonNullableColumn("Key", EPrimitiveType::Uint64);
+            for (int i = 0; i < column_count; i++) {
+                tableBuilder.AddNonNullableColumn(
+                    TStringBuilder() << "Value" << i, EPrimitiveType::Uint64);
+            }
+            tableBuilder.SetPrimaryKeyColumns({"Key"}).SetPartitionAtKeys(
+                partitions);
+            auto result = session.CreateTable(tableName, tableBuilder.Build())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        { /* fill in the table */
+            TValueBuilder rows;
+            rows.BeginList();
+            for (int i = 0; i < 50; ++i) {
+                auto &rbuilder =
+                    rows.AddListItem().BeginStruct().AddMember("Key").Uint64(i);
+                for (int c = 0; c < column_count; c++) {
+                    rbuilder.AddMember(TStringBuilder() << "Value" << c)
+                        .Uint64(i + c);
+                }
+                rbuilder.EndStruct();
+            }
+            rows.EndList();
+
+            auto res = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString();
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+        }
+
+        TStringBuilder query;
+        query << "UPDATE `/Root/TestLimitSize` ON SELECT `Key`, ";
+        for (int i = 0; i < column_count; i++) {
+            if (i)
+                query << ", ";
+            query << "($s)->(CASE\n";
+            for (int j = 0; j < column_count; j++) {
+                query << "\tWHEN $s > " << j * 10 << " THEN " << j + 1 << "\n";
+            }
+            query << "\tELSE " << i << "\n";
+            query << "END)(`Value" << i << "`) as `Value" << i << "`\n";
+        }
+        query << "FROM `/Root/TestLimitSize`;";
+
+        ui64 oldSize = GetMaxTaskSize();
+        SetMaxTaskSize(200_KB);
+        Y_DEFER { SetMaxTaskSize(oldSize); };
+        auto result =
+            session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+
+        UNIT_ASSERT(!result.IsSuccess());
+        // After the fix: NDqProto::LIMIT_EXCEEDED ->
+        // Ydb::PRECONDITION_FAILED. Before the fix this would have been
+        // EStatus::ABORTED.
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                                   EStatus::PRECONDITION_FAILED,
+                                   result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                                    "Datashard program size limit exceeded");
+    }
 }
 
 } // namespace NKikimr::NKqp

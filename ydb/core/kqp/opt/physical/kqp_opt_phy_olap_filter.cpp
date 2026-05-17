@@ -288,6 +288,26 @@ TString GetColName(const TString& colName, bool stripAliasPrefix = false) {
     return colName;
 }
 
+const TTypeAnnotationNode* GetInputType(const TTypeAnnotationNode* inputType, TExprContext& ctx, bool stripAliasPrefix = false) {
+    if (!stripAliasPrefix) {
+        return inputType;
+    }
+
+    Y_ENSURE(inputType && inputType->GetKind() == ETypeAnnotationKind::Struct);
+    const auto structType = inputType->Cast<TStructExprType>();
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto itemType : structType->GetItems()) {
+        auto colName = TString(itemType->GetName());
+        const auto it = colName.find(".");
+        if (it != TString::npos) {
+            colName = colName.substr(it + 1);
+        }
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, itemType->GetItemType()));
+    }
+
+    return ctx.MakeType<TStructExprType>(newItemTypes);
+}
+
 TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node, TExprContext& ctx) {
     // This is a special case - (just (member $input 'colname)).
     if (auto maybeUnaryOp = node.Maybe<TKqpOlapFilterUnaryOp>()) {
@@ -346,9 +366,10 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
 
         if (auto maybeMember = node.Maybe<TCoMember>()) {
             const TString colName = GetColName(maybeMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
+            const TTypeAnnotationNode* inputType = GetInputType(argument.GetTypeAnn(), ctx, pushdownOptions.StripAliasPrefixFromColName);
             // clang-format off
             return Build<TKqpOlapApplyColumnArg>(ctx, pos)
-                .TableRowType(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
+                .TableRowType(ExpandType(argument.Pos(), *inputType, ctx))
                 .ColumnName<TCoAtom>()
                     .Value(colName)
                 .Build()
@@ -676,13 +697,17 @@ TMaybeNode<TCoAtomList> BuildColumnsFromLambda(const TCoLambda& lambda, TExprCon
 #endif
 
 template<bool Empty>
-TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos)
+TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos, const TPushdownOptions& options)
 {
-    const auto columnName = exists.Optional().Cast<TCoMember>().Name();
+    const TString columnName = GetColName(exists.Optional().Cast<TCoMember>().Name().StringValue(), options.StripAliasPrefixFromColName);
     return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
-            .Operator().Value(Empty ? "empty" : "exists", TNodeFlags::Default).Build()
-            .Arg(columnName)
-            .Done();
+            .Operator()
+                .Value(Empty ? "empty" : "exists", TNodeFlags::Default)
+            .Build()
+            .Arg<TCoAtom>()
+                .Value(columnName)
+            .Build()
+        .Done();
 }
 }
 
@@ -711,8 +736,9 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
 
     for (const auto& member : members) {
         const auto columnName = GetColName(TCoMember(member).Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
+        const TTypeAnnotationNode* inputType = GetInputType(argument.GetTypeAnn(), ctx, pushdownOptions.StripAliasPrefixFromColName);
         auto columnArg = Build<TKqpOlapApplyColumnArg>(ctx, member->Pos())
-            .TableRowType(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
+            .TableRowType(ExpandType(argument.Pos(), *inputType, ctx))
             .ColumnName<TCoAtom>()
                 .Value(columnName)
             .Build()
@@ -747,7 +773,7 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
     }
 
     if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
-        auto existsPred = ExistsPushdown<false>(maybeExists.Cast(), ctx, pos);
+        auto existsPred = ExistsPushdown<false>(maybeExists.Cast(), ctx, pos, pushdownOptions);
         return TFilterOpsLevels(existsPred);
     }
 
@@ -768,7 +794,7 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
     if (const auto maybeNot = predicate.Maybe<TCoNot>()) {
         const auto notNode = maybeNot.Cast();
         if (const auto maybeExists = notNode.Value().Maybe<TCoExists>()) {
-            return TFilterOpsLevels(ExistsPushdown<true>(maybeExists.Cast(), ctx, pos));
+            return TFilterOpsLevels(ExistsPushdown<true>(maybeExists.Cast(), ctx, pos, pushdownOptions));
         }
         auto pushedFilters = PredicatePushdown(notNode.Value(), argument, ctx, pos, pushdownOptions);
         pushedFilters.WrapToNotOp(ctx, pos);

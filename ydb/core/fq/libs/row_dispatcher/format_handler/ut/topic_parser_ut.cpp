@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         CheckColumnError(R"({"a2": [105], "event": "event1"})", 0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'a1' with type [TupleType; [[DataType; String]]], buffered offsets: " << FIRST_OFFSET);
         CheckColumnError(R"({"a1": ["hello1"], "a2": null, "event": "event1"})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 1 << ", got parsing error for column 'a2' with type [TupleType; [[DataType; Uint64]]] subissue: { <main>: Error: Found unexpected null value, expected non optional type Tuple }");
         CheckColumnError(R"({"a2": [105], "a1":[], "event": "event1"})", 0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Error: Failed to parse nested json value (Tuple), short json array at index 0, expected non optional type String");
-        CheckColumnError(R"({"a1": ["hello1"], "a2": [null], "event": "event1"})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Error: Found unexpected null value, expected non optional type Uint6");
+        CheckColumnError(R"({"a1": ["hello1"], "a2": [null], "event": "event1"})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Error: Found unexpected null value, expected non optional type Uint64");
     }
 
     Y_UNIT_TEST_F(TypeKindsValidation, TJsonParserFixture) {

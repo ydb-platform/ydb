@@ -16,11 +16,11 @@ public:
 
 protected:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
-    NKikimr::NMiniKQL::THolderFactory HolderFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
     std::unique_ptr<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
+    NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
+    std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
     
 };
 

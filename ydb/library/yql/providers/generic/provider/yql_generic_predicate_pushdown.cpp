@@ -681,7 +681,7 @@ namespace NYql {
     }
 
     TString FormatTupleNth(const TExpression::TTupleNth& tupleNth) {
-        return TStringBuilder() << '(' << FormatExpression(tupleNth.operand()) << ')' << "." << tupleNth.field();
+        return TStringBuilder() << '(' << FormatExpression(tupleNth.operand()) << ')' << ".`" << tupleNth.field() << "`";
     }
 
     TString FormatValue(const Ydb::Value& value) {

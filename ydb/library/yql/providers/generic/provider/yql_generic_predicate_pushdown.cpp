@@ -677,11 +677,11 @@ namespace NYql {
     }
 
     TString FormatStructMember(const TExpression::TStructMember& structMember) {
-        return TStringBuilder() << FormatExpression(structMember.operand()) << "." << NFq::EncloseAndEscapeString(structMember.field(), '`');
+        return TStringBuilder() << '(' << FormatExpression(structMember.operand()) << ')' << "." << NFq::EncloseAndEscapeString(structMember.field(), '`');
     }
 
     TString FormatTupleNth(const TExpression::TTupleNth& tupleNth) {
-        return TStringBuilder() << FormatExpression(tupleNth.operand()) << "." << tupleNth.field();
+        return TStringBuilder() << '(' << FormatExpression(tupleNth.operand()) << ')' << "." << tupleNth.field();
     }
 
     TString FormatValue(const Ydb::Value& value) {

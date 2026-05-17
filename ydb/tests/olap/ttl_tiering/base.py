@@ -64,6 +64,13 @@ class TllTieringTestBase(object):
                     available_external_data_sources=["ObjectStorage"]
                 )
             )
+            # Explicit registry timing for predictable min-read-snapshot progression in
+            # tiering tests. Total delay is 1+1+1+10 = 13s.
+            config.yaml_config["long_tx_service_config"] = {
+                "local_snapshot_promotion_time_seconds": 1,
+                "snapshots_exchange_interval_seconds": 1,
+                "snapshots_registry_update_interval_seconds": 1,
+            }
             cls.cluster = KiKiMR(config)
             cls.cluster.start()
             node = cls.cluster.nodes[1]

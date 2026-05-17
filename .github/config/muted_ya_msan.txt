@@ -79,6 +79,7 @@ ydb/core/transfer/ut/functional Transfer.WriteToNotExists
 ydb/core/transfer/ut/functional Transfer.WriteToNotTable
 ydb/core/tx/columnshard/ut_schema unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
+ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_secret.py */*] chunk

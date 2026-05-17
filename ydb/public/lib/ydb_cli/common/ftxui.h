@@ -46,6 +46,11 @@ std::optional<TString> RunFtxuiPasswordInput(ftxui::Element title);
 
 std::optional<TString> RunFtxuiPasswordInput(const TString& title);
 
+// Helper to apply separator with global color
+ftxui::Element ApplySeparator(std::optional<ftxui::Color> color = std::nullopt);
+
+ftxui::Element CreateFtxuiTitle(const TString& title, ftxui::Color color = ftxui::Color::Cyan);
+
 void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title = "", ftxui::Color color = ftxui::Color::Cyan);
 
 void PrintFtxuiMessage(const TString& body, const TString& title = "", ftxui::Color color = ftxui::Color::Cyan);

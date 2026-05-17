@@ -7,6 +7,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/size_literals.h>
 
+#include <functional>
 #include <thread>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -22,6 +23,8 @@ public:
     TDuration Fail(const TString& message);
 
     TDuration Interrupted();
+
+    static TString FormatDuration(TDuration duration);
 
 protected:
     virtual TString PrintProgress(TDuration elapsed) = 0;
@@ -75,6 +78,9 @@ public:
     TResponse TestConnection();
 
     TResponse Post(TString&& body);
+
+    // Streaming POST. The response body is delivered as Server-Sent Events
+    TResponse Post(TString&& body, std::function<void(TStringBuf)> onSseEvent);
 
     TResponse Get();
 

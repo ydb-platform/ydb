@@ -3,7 +3,6 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/ai_model_handler.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
 #include <ydb/public/lib/ydb_cli/common/local_paths.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
@@ -103,19 +102,7 @@ public:
             return;
         }
 
-        std::shared_ptr<TProgressWaiterBase> spinner;
-        double lastThinkingTime = 0.0;
-        auto onStart = [&spinner]() {
-            spinner = std::make_shared<TStaticProgressWaiter>("Agent is thinking...");
-        };
-        auto onFinish = [&spinner, &lastThinkingTime]() {
-            if (spinner) {
-                lastThinkingTime = spinner->Success().SecondsFloat();
-                spinner.reset();
-            }
-        };
-
-        ModelHandler->HandleLine(line, onStart, onFinish, [&lastThinkingTime](){ return lastThinkingTime; });
+        ModelHandler->HandleLine(line);
     }
 
 private:

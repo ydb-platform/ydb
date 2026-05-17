@@ -43,14 +43,6 @@ ftxui::Element ApplyBorder(ftxui::Element element, std::optional<ftxui::Color> c
     return element | ftxui::borderStyled(color.value_or(GlobalBorderColor));
 }
 
-// Helper to apply separator with global color
-ftxui::Element ApplySeparator(std::optional<ftxui::Color> color = std::nullopt) {
-    if (!color && GlobalBorderColor == ftxui::Color::Default) {
-        return ftxui::separator();
-    }
-    return ftxui::separator() | ftxui::color(color.value_or(GlobalBorderColor));
-}
-
 class TFtxuiMenuRunner {
     static constexpr int MENU_EXTRA_HEIGHT = 8; // Header + footer + border
 
@@ -574,7 +566,14 @@ std::optional<TString> RunFtxuiPasswordInput(const TString& title) {
     return RunFtxuiPasswordInput(ftxui::text(std::string(title)) | ftxui::bold);
 }
 
-void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title, ftxui::Color color) {
+ftxui::Element ApplySeparator(std::optional<ftxui::Color> color) {
+    if (!color && GlobalBorderColor == ftxui::Color::Default) {
+        return ftxui::separator();
+    }
+    return ftxui::separator() | ftxui::color(color.value_or(GlobalBorderColor));
+}
+
+ftxui::Element CreateFtxuiTitle(const TString& title, ftxui::Color color) {
     int titleUtf8Size = 0;
     for (size_t i = 0; i < title.size(); i += UTF8RuneLen(title[i])) {
         titleUtf8Size++;
@@ -587,13 +586,15 @@ void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& tit
         separator += "─";
     }
 
-    std::vector<ftxui::Element> elements = {
-        ftxui::hbox({
-            ftxui::text("──"),
-            ftxui::text(" " + std::string(title) + " ") | ftxui::bold,
-            ftxui::text(separator),
-        }) | ftxui::color(color),
-    };
+    return ftxui::hbox({
+        ftxui::text("──"),
+        ftxui::text(" " + std::string(title) + " ") | ftxui::bold,
+        ftxui::text(separator),
+    }) | ftxui::color(color);
+}
+
+void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title, ftxui::Color color) {
+    std::vector<ftxui::Element> elements = {CreateFtxuiTitle(title, color)};
 
     if (message) {
         elements.push_back(*message);

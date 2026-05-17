@@ -131,8 +131,9 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"shared_reading_insert_to_topic{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_shared_reading_insert_to_topic(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"shared_reading_insert_to_topic{local_topics!s:.1}{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -233,8 +234,9 @@ class TestStreamingInYdb(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, path)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_read_topic_restore_state_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_restore_state(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_read_topic_restore_state_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -326,8 +328,9 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query_by_rescaling{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_restart_query_by_rescaling(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query_by_rescaling{local_topics!s:.1}{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
         name = f"test_restart_query_by_rescaling_{local_topics!s:.1}"
         sql = R'''
@@ -384,8 +387,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_pragma(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name, partitions_count=10)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_pragma(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool, use_partition_balancing) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_pragma_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name, partitions_count=10)
 
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
 

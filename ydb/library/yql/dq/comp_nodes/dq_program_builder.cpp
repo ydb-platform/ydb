@@ -193,8 +193,8 @@ TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     const TUnaryLambda& partitionIdExtractor,
     TArrayRef<std::string_view> watermarkSettings
 ) {
-    auto streamType = AS_TYPE(TStreamType, input);
-    auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
+    auto returnType = AS_TYPE(TStreamType, input);
+    auto itemType = returnType->GetItemType();
 
     const auto itemArg = Arg(itemType);
     const auto watermark = watermarkExtractor(itemArg);
@@ -206,8 +206,7 @@ TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
     }
     const auto watermarkSettingsNode = NewList(NewDataType(NUdf::EDataSlot::String), watermarkSettingItems);
 
-    auto resultType = TStreamType::Create(itemType, Env_);
-    TCallableBuilder callableBuilder(Env_, __func__, resultType);
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(input);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(watermark);

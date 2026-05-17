@@ -48,14 +48,17 @@ public:
             auto newValue = value;
             Self_->ItemArg_->SetValue(Ctx_, std::move(newValue));
 
-            const auto watermark = TInstant::MicroSeconds(Self_->WatermarkExtractor_->GetValue(Ctx_).Get<ui64>());
+            const auto watermarkValue = Self_->WatermarkExtractor_->GetValue(Ctx_);
+            if (watermarkValue) {
+                const auto watermark = TInstant::MicroSeconds(watermarkValue.Get<ui64>());
 
-            const auto partitionId = Self_->PartitionIdExtractor_->GetValue(Ctx_).Get<ui64>();
-            const auto partitionKey = TPartitionKey{partitionId};
+                const auto partitionId = Self_->PartitionIdExtractor_->GetValue(Ctx_).Get<ui64>();
+                const auto partitionKey = TPartitionKey{partitionId};
 
-            const auto now = TInstant::Now();
-            if (const auto newWatermark = Self_->WatermarkTracker_.NotifyNewPartitionTime(partitionKey, watermark, now)) {
-                Self_->Watermark_.WatermarkIn = newWatermark;
+                const auto now = TInstant::Now();
+                if (const auto newWatermark = Self_->WatermarkTracker_.NotifyNewPartitionTime(partitionKey, watermark, now)) {
+                    Self_->Watermark_.WatermarkIn = newWatermark;
+                }
             }
 
             result = value.Release();
@@ -75,7 +78,7 @@ public:
         IComputationNode* watermarkExtractor,
         IComputationNode* partitionIdExtractor,
         std::vector<TPartitionKey> partitions,
-        TDuration lateArrivalDelay,
+        TDuration /* lateArrivalDelay */,
         TDuration granularity,
         TDuration idleTimeout,
         TWatermark& watermark
@@ -88,7 +91,7 @@ public:
         , WatermarkTracker_(
             granularity,
             true,
-            lateArrivalDelay,
+            TDuration::Zero(),
             idleTimeout,
             "TDqWatermarkGenerator"
         )
@@ -151,11 +154,11 @@ IComputationNode* WrapDqWatermarkGenerator(
     auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
     auto watermarkExtractor = LocateNode(ctx.NodeLocator, callable, 2);
     auto partitionIdExtractor = LocateNode(ctx.NodeLocator, callable, 3);
-    auto watermarkSettings = AS_VALUE(TListLiteral, callable.GetInput(4)); // TODO
+    auto watermarkSettings = AS_VALUE(TListLiteral, callable.GetInput(4));
 
-    auto lateArrivalDelay = TDuration::Zero();
+    auto lateArrivalDelay = TDuration::Seconds(5);
     auto granularity = TDuration::Seconds(1);
-    auto idleTimeout = TDuration::Max();
+    auto idleTimeout = TDuration::Seconds(5);
     for (ui32 i = 0; i + 2 <= watermarkSettings->GetItemsCount(); i += 2) {
         const auto  name = AS_VALUE(TDataLiteral, watermarkSettings->GetItems()[i + 0])->AsValue().AsStringRef();
         const auto value = AS_VALUE(TDataLiteral, watermarkSettings->GetItems()[i + 1])->AsValue().AsStringRef();

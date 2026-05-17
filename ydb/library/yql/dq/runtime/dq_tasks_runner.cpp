@@ -1144,11 +1144,18 @@ private:
                 case NUdf::EFetchStatus::Yield: {
                     auto status = ERunStatus::PendingInput;
                     // only for sync ca
-                    if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
-                        const auto watermark = WatermarksTracker->GetPendingWatermark();
-                        WatermarksTracker->PopPendingWatermark();
-
-                        Y_DEBUG_ABORT_UNLESS(watermark.Defined());
+                    const auto watermark = [this]() {
+                        if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                            const auto result = WatermarksTracker->GetPendingWatermark();
+                            WatermarksTracker->PopPendingWatermark();
+                            return result;
+                        } else if (Watermark.WatermarkIn) {
+                            return std::exchange(Watermark.WatermarkIn, Nothing());
+                        } else {
+                            return TMaybe<TInstant>{};
+                        }
+                    }();
+                    if (watermark) {
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
                         AllocatedHolder->Output->Consume(std::move(watermarkRequest));

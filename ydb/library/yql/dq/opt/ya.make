@@ -24,7 +24,6 @@ SRCS(
     dq_opt_hopping.cpp
     dq_opt_log.cpp
     dq_opt_peephole.cpp
-    dq_opt_peephole__.cpp
     dq_opt_phy_finalizing.cpp
     dq_opt_phy.cpp
     dq_opt_stat.cpp

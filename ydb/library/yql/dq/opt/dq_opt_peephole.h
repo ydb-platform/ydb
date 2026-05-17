@@ -19,6 +19,5 @@ NNodes::TExprBase DqPeepholeDropUnusedInputs(const NNodes::TExprBase& node, TExp
 NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
 NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks);
 NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx, const bool useBlocks);
-NNodes::TExprBase DqPeepholeTryRewriteSourceWrapToParsing(const NNodes::TExprBase& node, TExprContext& ctx);
 
 } // namespace NYql::NDq

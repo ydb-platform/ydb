@@ -300,4 +300,5 @@ message TFeatureFlags {
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
     optional bool DisableOnlineRO = 263 [default = false];
+    optional bool EnableUserAttributesInTopicQuery = 264 [default = false];
 }

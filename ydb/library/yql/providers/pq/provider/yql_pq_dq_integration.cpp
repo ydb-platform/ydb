@@ -483,8 +483,21 @@ private:
     //   WATERMARK = SystemMetadata('write_time') - Interval('PT5S')
     // Only used (and useful) for non-shared-reading pq source
     // (in this case, flexible watermark expression is not implemented)
-    static TMaybe<ui64> ExtractWatermarkDelay(const TCoLambda& watermark) {
+    static TMaybe<ui64> ExtractWatermarkDelay(
+        const TPosition pos,
+        TExprContext& ctx,
+        const TCoLambda& watermark,
+        const IDqIntegration::TWrapReadSettings& wrSettings
+    ) {
+        const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
+        if ("disable" == watermarksMode) {
+            ctx.AddError(TIssue(pos, "Watermarks are disabled"));
+            return Nothing();
+        }
+
+        static constexpr std::string_view message = "Incorrect watermark expression";
         if (watermark.Args().Size() != 1) {
+            ctx.AddError(TIssue(pos, message));
             return Nothing();
         }
         const auto arg = watermark.Args().Arg(0);
@@ -494,24 +507,29 @@ private:
             return Nothing();
         }
         const auto sub = maybeSub.Cast();
-        {
+        if ("default" == watermarksMode) {
+            static constexpr std::string_view defaultMessage = "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
             const auto maybeMember = sub.Left().Maybe<TCoMember>();
             if (!maybeMember) {
+                ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
             const auto member = maybeMember.Cast();
             if (const auto& maybeArg = member.Struct().Maybe<TCoArgument>()) {
                 if (maybeArg.Cast().Name() != arg.Name()) {
+                    ctx.AddError(TIssue(pos, defaultMessage));
                     return Nothing();
                 }
             }
             if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time"}, member.Name())) {
+                ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
         }
         {
             auto maybeInterval = sub.Right().Maybe<TCoInterval>();
             if (!maybeInterval) {
+                ctx.AddError(TIssue(pos, message));
                 return Nothing();
             }
             auto interval = maybeInterval.Cast();
@@ -560,9 +578,8 @@ public:
         TMaybe<ui64> watermarksIdleTimeoutUs;
         TMaybe<ui64> watermarksLateArrivalDelayUs;
         if (!useSharedReading && maybeWatermark) {
-            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
+            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(ctx.GetPosition(pqReadTopic.Pos()), ctx, maybeWatermark.Cast(), wrSettings);
             if (!watermarksLateArrivalDelayUs) {
-                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')"));
                 return {};
             }
         }
@@ -710,7 +727,7 @@ public:
             Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
-        if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {
+        if (wrSettings.WatermarksMode.GetOrElse("disable") != "disable" && maybeWatermark) {
             Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
                 ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);

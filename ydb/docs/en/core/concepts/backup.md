@@ -78,7 +78,7 @@ For details on backup collections, see [Backup collections](datamodel/backup-col
 ## See Also
 
 - [Backup collections](datamodel/backup-collection.md) — architecture and limitations
-- [Backup and Recovery](../devops/backup-and-recovery.md) — practical operations guide
+- [Backup and Recovery](../devops/backup-and-recovery/index.md) — practical operations guide
 - [Export/import reference](../reference/ydb-cli/export-import/index.md) — CLI commands
 - YQL reference:
   - [`CREATE BACKUP COLLECTION`](../yql/reference/syntax/create-backup-collection.md)

@@ -206,3 +206,64 @@ def test_positional_only_arguments(works_ge_py38, param_code):
 )
 def test_decorator_expression(works_ge_py39, expression):
     works_ge_py39.parse("@%s\ndef x(): pass" % expression)
+
+
+@pytest.mark.parametrize(
+    'code', [
+        'class Foo[T]: pass',
+        'class Foo[T: str]: pass',
+        'class Foo[T, U]: pass',
+        'class Foo[T: str, U: int]: pass',
+        'class Foo[T](Base): pass',
+        'class Foo[T: str](Base, Mixin): pass',
+        'class Foo[*Ts]: pass',
+        'class Foo[**P]: pass',
+    ]
+)
+def test_pep695_generic_class(works_ge_py312, code):
+    works_ge_py312.parse(code)
+
+
+@pytest.mark.parametrize(
+    'code', [
+        'def foo[T](x: T) -> T: pass',
+        'def foo[T: int](x: T) -> T: pass',
+        'def foo[T, U](x: T, y: U): pass',
+        'def foo[*Ts](*args): pass',
+        'def foo[**P](*args): pass',
+    ]
+)
+def test_pep695_generic_function(works_ge_py312, code):
+    works_ge_py312.parse(code)
+
+
+def test_pep695_class_get_super_arglist(works_ge_py312):
+    module = works_ge_py312.parse('class Foo[T](Bar, Baz): pass')
+    if module is None:
+        return
+    classdef = module.children[0]
+    arglist = classdef.get_super_arglist()
+    assert arglist is not None
+    assert 'Bar' in arglist.get_code()
+    assert 'Baz' in arglist.get_code()
+
+
+def test_pep695_class_no_bases(works_ge_py312):
+    module = works_ge_py312.parse('class Foo[T]: pass')
+    if module is None:
+        return
+    classdef = module.children[0]
+    assert classdef.get_super_arglist() is None
+
+
+@pytest.mark.parametrize(
+    'code', [
+        'class Foo[T = int]: pass',
+        'class Foo[T: str = "default"]: pass',
+        'class Foo[*Ts = tuple[int, ...]]: pass',
+        'class Foo[**P = None]: pass',
+        'def foo[T = int](x: T) -> T: pass',
+    ]
+)
+def test_pep696_type_param_defaults(works_ge_py313, code):
+    works_ge_py313.parse(code)

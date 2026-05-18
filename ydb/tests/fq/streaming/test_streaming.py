@@ -598,8 +598,11 @@ class TestStreamingInYdb(StreamingTestBase):
                 self.create_source(kikimr, source_name, shared=True)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"enable_streaming_queries": False}], indirect=["kikimr"])
-    @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_in_streaming_queries": False}], indirect=["kikimr"])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_streaming_queries": False, "enable_shared_reading_in_streaming_queries": False}],
+        indirect=["kikimr"],
+    )
     def test_table_mode(self, kikimr, entity_name, local_topics):
         input_name, endpoint = self.get_input_name(kikimr, f"test_table_mode{local_topics!s:.1}", local_topics, entity_name)
 

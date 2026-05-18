@@ -1,4 +1,4 @@
-# Fulltext workload
+# Fulltext load
 
 Allows you to test {{ ydb-short-name }} [fulltext search](../../concepts/query_execution/fulltext_search.md) performance using a document dataset. Supports both real datasets (e.g., MS MARCO) and synthetically generated text based on a Markov chain model.
 
@@ -33,7 +33,7 @@ All commands support the following option:
 
 ## Initializing the workload {#init}
 
-Create the table for the workload:
+Create the tables for the workload:
 
 ```bash
 {{ ydb-cli }} workload fulltext --path fulltext init
@@ -167,7 +167,7 @@ The command has no additional parameters.
 
 ### Example with a generated dataset
 
-1a. Download a Markov chain model from s3:
+1a. Download a Markov chain model from S3:
 
     ```bash
     wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
@@ -221,7 +221,7 @@ The command has no additional parameters.
 
 ### Example with the MS MARCO dataset
 
-1. Download the quality bundle (contains `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz`, and 'query_relevances.tsv.gz'):
+1. Download the quality bundle (contains `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz`, and `query_relevances.tsv.gz`):
 
     ```bash
     wget https://storage.yandexcloud.net/ydb-public/quality-bundle.tar

@@ -1,4 +1,4 @@
-# Нагрузка Fulltext
+# Fulltext нагрузка
 
 Позволяет тестировать производительность [полнотекстового поиска](../../concepts/query_execution/fulltext_search.md) {{ ydb-short-name }} на документных наборах данных. Поддерживает как реальные датасеты (например, MS MARCO), так и синтетически сгенерированный текст при помощи цепи Маркова.
 
@@ -97,7 +97,7 @@ fulltext            YDB fulltext workload
 
 ### Нагрузочное тестирование поисковых запросов {#run-select}
 
-Выполняет полнотекстовые поисковые запросы к индексированной таблице. Запросы могут генерироваться на при помощи цепи Маркова или считываться из заранее загруженной таблицы запросов.
+Выполняет полнотекстовые поисковые запросы к индексированной таблице. Запросы могут генерироваться при помощи цепи Маркова или считываться из заранее загруженной таблицы запросов.
 
 ```bash
 {{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
@@ -219,7 +219,7 @@ fulltext            YDB fulltext workload
 
 ### Пример с датасетом MS MARCO
 
-1. Скачайте пакет данных (содержит `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz` и 'query_relevances.tsv.gz'):
+1. Скачайте пакет данных (содержит `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz` и `query_relevances.tsv.gz`):
 
     ```bash
     wget https://storage.yandexcloud.net/ydb-public/quality-bundle.tar

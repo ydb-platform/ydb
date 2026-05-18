@@ -243,9 +243,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(CreateMessageIterable) {
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c"}}), "value=[a b c]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c", "d"}}), "value=[a b c d]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c", "d", "e"}}), "value=[a b c d e]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c"}}), "value=[a, b, c]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c", "d"}}), "value=[a, b, c, d]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c", "d", "e"}}), "value=[a, b, c, d, e]");
     }
 
     Y_UNIT_TEST(CreateMessageIterableKV) {

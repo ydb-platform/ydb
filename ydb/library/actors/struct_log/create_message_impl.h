@@ -7,6 +7,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/maybe.h>
+#include <util/string/join.h>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/generated_enum_reflection.h>
@@ -74,10 +75,10 @@ public:
         if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
             const google::protobuf::EnumDescriptor* e = google::protobuf::GetEnumDescriptor<Tx>();
             OutputProtobufEnum(s, static_cast<int>(value), e);
-        } else if constexpr (std::is_same_v<Tx, bool>) {
-            s << (value ? "true" : "false");
         } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
             OutputProtobufMessage(s, value);
+        } else if constexpr (std::is_same_v<Tx, bool>) {
+            s << (value ? "true" : "false");
         } else if constexpr (THasToStringMethod<Tx>::value) {
             s << value.ToString();
         } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
@@ -87,19 +88,7 @@ public:
                 s << "<null>";
             }
         } else if constexpr (TIsIterable<Tx>::value) {
-            auto begin = std::begin(value);
-            auto end = std::end(value);
-            bool first = true;
-            s << "[";
-            for (; begin != end; ++begin) {
-                if (first) {
-                    first = false;
-                } else {
-                    s << " ";
-                }
-                OutputParam(s, *begin);
-            }
-            s << "]";
+            s << "[" << JoinSeq(", ", value) << "]";
         } else if constexpr (TIsIterableKV<Tx>::value) {
             s << '{';
             for (bool first = true; const auto& [k, v] : value) {
@@ -117,18 +106,11 @@ public:
             std::visit([&](auto& x) { OutputParam(s, x); }, value);
         } else if constexpr (TIsTuple<Tx>::value) {
             s << '[';
-            std::apply([&](const auto&... args) { OutputParam(s, args...); }, value);
+            std::apply([&](const auto&... args) { s << Join(":", args...); }, value);
             s << ']';
         } else {
             s << value;
         }
-    }
-
-    template <typename TValue, typename... TRest>
-    static void OutputParam(IOutputStream& s, const TValue& first, const TRest&... rest) {
-        OutputParam(s, first);
-        s << ':';
-        OutputParam(s, rest...);
     }
 
     // Native types support

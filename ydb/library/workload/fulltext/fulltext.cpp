@@ -13,57 +13,26 @@ namespace NYdb::NConsoleClient {
     void TFulltextRunTree::Config(TConfig& config) {
         TClientCommandTree::Config(config);
 
-        config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
-            .DefaultValue(TotalSec).StoreResult(&TotalSec);
-        config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload.")
-            .DefaultValue(Threads).StoreResult(&Threads);
-        config.Opts->AddLongOption("quiet", "Quiet mode. Doesn't print statistics each second.")
-            .StoreTrue(&Quiet);
-        config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
-            .StoreTrue(&PrintTimestamp);
-        config.Opts->AddLongOption("client-timeout", "Client timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
-            .DefaultValue(ClientTimeoutStr).StoreResult(&ClientTimeoutStr);
-        config.Opts->AddLongOption("operation-timeout", "Operation timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
-            .DefaultValue(OperationTimeoutStr).StoreResult(&OperationTimeoutStr);
-        config.Opts->AddLongOption("cancel-after", "Cancel after timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
-            .DefaultValue(CancelAfterTimeoutStr).StoreResult(&CancelAfterTimeoutStr);
-        config.Opts->AddLongOption("window", "Window duration in seconds.")
-            .DefaultValue(WindowSec).StoreResult(&WindowSec);
-        config.Opts->AddLongOption("executer", "Query executer type (data or generic).")
-            .DefaultValue("generic").StoreResult(&QueryExecuterType)
-            .ChoicesWithCompletion({{"data", "Data queries"}, {"generic", "Generic queries"}});
         Params.ConfigureOpts(config.Opts->GetOpts(), NYdbWorkload::TWorkloadParams::ECommandType::Run, -1);
     }
 
     TFulltextRunCommand::TFulltextRunCommand(
         NYdbWorkload::TFulltextWorkloadParams& params,
-        const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload,
-        const TFulltextRunTree& tree)
+        const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)
         : TWorkloadCommand(workload.CommandName, std::initializer_list<TString>(), workload.Description)
         , Params(params)
         , Type(workload.Type)
-        , Tree(tree)
     {
         Aliases = workload.Aliases;
     }
 
     void TFulltextRunCommand::Config(TConfig& config) {
-        TYdbCommand::Config(config);
+        TWorkloadCommand::Config(config);
         config.Opts->SetFreeArgsNum(0);
         Params.ConfigureOpts(config.Opts->GetOpts(), NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
     }
 
     int TFulltextRunCommand::Run(TConfig& config) {
-        TotalSec = Tree.TotalSec;
-        Threads = Tree.Threads;
-        WindowSec = Tree.WindowSec;
-        Quiet = Tree.Quiet;
-        PrintTimestamp = Tree.PrintTimestamp;
-        ClientTimeoutStr = Tree.ClientTimeoutStr;
-        OperationTimeoutStr = Tree.OperationTimeoutStr;
-        CancelAfterTimeoutStr = Tree.CancelAfterTimeoutStr;
-        QueryExecuterType = Tree.QueryExecuterType;
-
         PrepareForRun(config);
         Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
         Params.DbPath = config.Database;
@@ -95,7 +64,7 @@ namespace NYdb::NConsoleClient {
             default: {
                 auto run = std::make_unique<TFulltextRunTree>(*Params);
                 for (const auto& type : supportedWorkloads) {
-                    run->AddCommand(std::make_unique<TFulltextRunCommand>(*Params, type, *run));
+                    run->AddCommand(std::make_unique<TFulltextRunCommand>(*Params, type));
                 }
                 AddCommand(std::move(run));
                 break;

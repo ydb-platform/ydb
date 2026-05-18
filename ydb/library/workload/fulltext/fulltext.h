@@ -13,16 +13,6 @@ namespace NYdb::NConsoleClient {
         TFulltextRunTree(NYdbWorkload::TFulltextWorkloadParams& params);
         virtual void Config(TConfig& config) override;
 
-        size_t TotalSec = 10;
-        size_t Threads = 10;
-        unsigned int WindowSec = 1;
-        bool Quiet = false;
-        bool PrintTimestamp = false;
-        TString ClientTimeoutStr = "1000";
-        TString OperationTimeoutStr = "800";
-        TString CancelAfterTimeoutStr = "800";
-        TString QueryExecuterType = "generic";
-
     private:
         NYdbWorkload::TFulltextWorkloadParams& Params;
     };
@@ -31,15 +21,13 @@ namespace NYdb::NConsoleClient {
     public:
         TFulltextRunCommand(
             NYdbWorkload::TFulltextWorkloadParams& params,
-            const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload,
-            const TFulltextRunTree& tree);
+            const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
         virtual void Config(TConfig& config) override;
         virtual int Run(TConfig& config) override;
 
     private:
         NYdbWorkload::TFulltextWorkloadParams& Params;
         int Type = 0;
-        const TFulltextRunTree& Tree;
     };
 
     class TCommandFulltext: public TClientCommandTree {

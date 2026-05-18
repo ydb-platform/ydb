@@ -85,17 +85,16 @@ class NodeCountByKind:
         self.static_node_count = 0
         self.dynamic_node_count = 0
         self.nbs_node_count = 0
-        self.freehost = config.get('freehost', None)
         self.nodes_per_host = config['nodes_per_host']
         self.hosts = []
         self.databases = config['domain']['databases'] if config.get('domain') is not None else []
         self.with_nbs = config['with_nbs']
-        self.next_dynamic_nodes = itertools.cycle([host for host in hosts if host != self.freehost])
+        self.next_dynamic_nodes = itertools.cycle(hosts)
         self.count(hosts)
 
     def count(self, hosts: list[str]):
         self.hosts = hosts
-        self.static_node_count = common.calculate_node_count(hosts, self.nodes_per_host, self.freehost)
+        self.static_node_count = common.calculate_node_count(hosts, self.nodes_per_host)
         for db in self.databases:
             if db['name'] == 'NBS' and self.with_nbs:
                 self.nbs_node_count = db.get('compute_unit_count', 0)
@@ -184,7 +183,6 @@ async def gen_yaml(
     npm = config['nodes_per_host']
     disk_size = config['disk_size']
     sector_map = config['sector_map']
-    freehost = config.get('freehost', None)
     logger.debug('start to generate yaml')
 
     base_config = ydb_config.YdbBaseConfig(
@@ -249,8 +247,6 @@ async def gen_yaml(
 
     added_nodes = 0
     for fqdn, devices in hosts.items():
-        if fqdn == freehost:
-            continue
         part_paths = await get_parts(fqdn, devices, npm, sector_map['use'], disk_size, sector_map['profile'])
         drives_per_node = len(part_paths) // npm
 
@@ -271,19 +267,8 @@ async def gen_yaml(
 
             added_nodes += 1
 
-    if freehost:
-        devices = hosts.get(freehost, [])
-        part_paths = await get_parts(freehost, devices, 1, sector_map['use'], disk_size, sector_map['profile'])
-        rack = dc.add_rack()
-        ic_ports = get_port_factory(config, 'ic')()
-        ic_port = next(ic_ports)
-        host = rack.add_host(fqdn=freehost, port=ic_port)
-        for path in part_paths:
-            host.add_device(path)
-        builder.system_tablets_node_ids = [node_count]
-    else:
-        if node_count > 20:
-            builder.system_tablets_node_ids = [1 + nodes_per_rack * idx for idx in range(min(8, len(rack_list)))]
+    if node_count > 20:
+        builder.system_tablets_node_ids = [1 + nodes_per_rack * idx for idx in range(min(8, len(rack_list)))]
 
     if config.get('overridden_configs'):
         for field_name, config_value in config.get('overridden_configs').items():
@@ -498,8 +483,7 @@ async def act_generate(
     ]
 
     tenants_tasks = []
-    dynamic_hosts = [host for host in hosts if host != config.get('freehost')]
-    next_host_for_dynnodes = itertools.cycle(dynamic_hosts)
+    next_host_for_dynnodes = itertools.cycle(hosts)
     pile_count = config['pile_count']
     if config['domain'] is not None:
         tenants = []

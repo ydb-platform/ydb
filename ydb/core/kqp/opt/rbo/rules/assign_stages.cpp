@@ -46,7 +46,7 @@ namespace NKqp {
  * Assign stages and build stage graph in the process
  */
 bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    auto nodeName = input->ToString(ctx.ExprCtx);
+    const auto nodeName = input->ToString(ctx.ExprCtx);
     YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
 
     if (input->Props.StageId.has_value()) {
@@ -65,7 +65,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         auto opRead = CastOperator<TOpRead>(input);
         TString readName;
         if (input->Kind == EOperator::Source) {
-            auto opRead = CastOperator<TOpRead>(input);
+            const auto opRead = CastOperator<TOpRead>(input);
             const auto newStageId = props.StageGraph.AddSourceStage(opRead->StorageType);
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
@@ -162,16 +162,16 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(prevStageId)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages sort";
     } else if (input->Kind == EOperator::Limit) {
-        auto limit = CastOperator<TOpLimit>(input);
-        const auto newStageId = props.StageGraph.AddStage();
-        input->Props.StageId = newStageId;
-        const auto input = limit->GetInput();
-        const auto prevStageId = *input->Props.StageId;
-        const auto outputIndex = props.StageGraph.GetOutputIndex(prevStageId);
-        if (input->GetKind() == EOperator::Sort) {
-            const auto sort = CastOperator<TOpSort>(input);
-            props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TMergeConnection>(sort->GetSortElements(), outputIndex));
+        const auto limit = CastOperator<TOpLimit>(input);
+        const auto limitInput = limit->GetInput();
+        const auto prevStageId = *limitInput->Props.StageId;
+        if (limitInput->GetKind() == EOperator::Sort) {
+            // Put limit to sort stage.
+            limit->Props.StageId = prevStageId;
         } else {
+            const auto newStageId = props.StageGraph.AddStage();
+            const auto outputIndex = props.StageGraph.GetOutputIndex(prevStageId);
+            input->Props.StageId = newStageId;
             props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages limit";

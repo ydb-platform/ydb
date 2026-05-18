@@ -2,6 +2,7 @@
 
 #include "schemeshard_info_types.h"
 
+#include <ydb/core/protos/backup.pb.h>
 #include <ydb/public/api/protos/draft/ydb_backup.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -24,6 +25,9 @@ inline void FillRestoreProgress(
             if (restoreInfo.FinalStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
                 restore.SetStatus(static_cast<Ydb::StatusIds::StatusCode>(restoreInfo.FinalStatus));
             }
+            if (!restoreInfo.FinalIssues.empty()) {
+                restore.AddIssues()->set_message(restoreInfo.FinalIssues);
+            }
             break;
         case TIncrementalRestoreState::EState::Failed:
             restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
@@ -31,6 +35,9 @@ inline void FillRestoreProgress(
             restore.SetStatus(restoreInfo.FinalStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
                 ? static_cast<Ydb::StatusIds::StatusCode>(restoreInfo.FinalStatus)
                 : Ydb::StatusIds::GENERIC_ERROR);
+            if (!restoreInfo.FinalIssues.empty()) {
+                restore.AddIssues()->set_message(restoreInfo.FinalIssues);
+            }
             break;
         case TIncrementalRestoreState::EState::Finalizing:
             restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);

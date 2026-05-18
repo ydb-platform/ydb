@@ -2713,4 +2713,57 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                            {NLs::CheckPathState(NKikimrSchemeOp::EPathState::EPathStateNoChanges)});
     }
 
+    // GC2: A failed restore must surface its FinalIssues in the API response Issues field.
+    Y_UNIT_TEST(FailedRestoreExposesIssuesInApiResponse) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetRestoreDeadlines(runtime, /*overallSec=*/-1, /*stageSec=*/-1);
+
+        SetupBackupCollectionWithNTables(runtime, env, txId, /*numTables=*/1);
+
+        const TString uniqueError = "GC2-test-injected-fatal-" + ToString(TInstant::Now().MicroSeconds());
+
+        std::atomic<int> failuresInjected{0};
+        auto observerHolder = InjectScanFailures(runtime, failuresInjected, /*maxFailures=*/1,
+            NKikimrTxDataShard::TEvIncrementalRestoreShardProgress::END_FATAL_FAILURE,
+            uniqueError);
+
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::StatusIds::StatusCode finalStatus = WaitForRestoreDone(runtime, &env, "/MyRoot", true,
+            TDuration::Seconds(1), TDuration::Seconds(60));
+
+        UNIT_ASSERT_C(finalStatus != Ydb::StatusIds::SUCCESS,
+            "Restore was expected to fail but returned SUCCESS");
+
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List returned no entries after failed restore");
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::GENERIC_ERROR);
+        const auto& restore = getResp.GetBackupCollectionRestore();
+
+        // The orchestrator persists a generic failure description in FinalIssues
+        // ("Non-retriable failure during incremental restore"), not the DS error text;
+        // verify that whatever is in FinalIssues is now surfaced via the API.
+        UNIT_ASSERT_C(restore.IssuesSize() > 0,
+            "Failed restore returned no Issues — FinalIssues was not copied into the response");
+
+        bool nonEmpty = false;
+        for (size_t i = 0; i < static_cast<size_t>(restore.IssuesSize()); ++i) {
+            if (!restore.GetIssues(i).message().empty()) {
+                nonEmpty = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(nonEmpty,
+            "Issues field present but all entries had empty message");
+        Y_UNUSED(uniqueError);
+    }
+
 }

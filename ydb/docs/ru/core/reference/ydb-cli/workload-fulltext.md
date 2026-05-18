@@ -1,6 +1,6 @@
 # Нагрузка Fulltext
 
-Позволяет тестировать производительность [полнотекстового индекса](../../concepts/secondary_indexes.md) {{ ydb-short-name }} на документных наборах данных. Поддерживает как реальные датасеты (например, MS MARCO), так и синтетически сгенерированный текст на основе модели цепи Маркова.
+Позволяет тестировать производительность [полнотекстового поиска](../../concepts/query_execution/fulltext_search.md) {{ ydb-short-name }} на документных наборах данных. Поддерживает как реальные датасеты (например, MS MARCO), так и синтетически сгенерированный текст при помощи цепи Маркова.
 
 ## Структура команды {#structure}
 
@@ -33,16 +33,10 @@ fulltext            YDB fulltext workload
 
 ## Инициализация нагрузки {#init}
 
-Создайте таблицу для нагрузки:
+Создайте таблицы для нагрузочного тестирования:
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext init
-```
-
-Посмотрите описание команды:
-
-```bash
-{{ ydb-cli }} workload fulltext init --help
+{{ ydb-cli }} workload fulltext init
 ```
 
 ### Доступные параметры {#init-options}
@@ -56,7 +50,7 @@ fulltext            YDB fulltext workload
 
 ## Загрузка данных {#load}
 
-После инициализации загрузите данные в таблицу и постройте полнотекстовый индекс. Доступны две подкоманды: `files` — для импорта из готового датасета, и `generator` — для генерации синтетических данных.
+После инициализации загрузите данные в таблицы и постройте полнотекстовый индекс. Доступны две подкоманды: `files` — для импорта из готового датасета, и `generator` — для генерации синтетических данных.
 
 После завершения импорта автоматически строится полнотекстовый индекс по столбцу `text`.
 
@@ -64,16 +58,10 @@ fulltext            YDB fulltext workload
 
 Импорт документов из файлов (CSV, TSV или Parquet, возможно в сжатом формате gzip). Датасет должен содержать столбцы `id` и `text`.
 
-Пример с пакетом данных [MS MARCO](https://microsoft.github.io/msmarco/):
+Пример запуска:
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext import files --input documents.tsv.gz
-```
-
-Посмотрите описание команды:
-
-```bash
-{{ ydb-cli }} workload fulltext import files --help
+{{ ydb-cli }} workload fulltext import files
 ```
 
 #### Доступные параметры {#load-files-options}
@@ -89,13 +77,7 @@ fulltext            YDB fulltext workload
 Генерация случайного текста с помощью модели цепи Маркова и загрузка его в таблицу. Перед использованием необходимо [построить модель](#model) или загрузить готовую.
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext import generator --model markov_dict.tsv.gz --rows 100000
-```
-
-Посмотрите описание команды:
-
-```bash
-{{ ydb-cli }} workload fulltext import generator --help
+{{ ydb-cli }} workload fulltext import generator
 ```
 
 #### Доступные параметры {#load-generator-options}
@@ -113,18 +95,12 @@ fulltext            YDB fulltext workload
 
 Запустите нагрузочное тестирование в одном из двух режимов: `select` (полнотекстовый поиск) или `upsert` (вставка новых документов).
 
-### Нагрузка на поиск {#run-select}
+### Нагрузочное тестирование поисковых запросов {#run-select}
 
-Выполняет полнотекстовые поисковые запросы к индексированной таблице. Запросы могут генерироваться на основе модели цепи Маркова или считываться из заранее загруженной таблицы запросов.
-
-```bash
-{{ ydb-cli }} workload fulltext --path fulltext run select --model markov_dict.tsv.gz --threads 10 --seconds 30
-```
-
-Посмотрите описание команды:
+Выполняет полнотекстовые поисковые запросы к индексированной таблице. Запросы могут генерироваться на при помощи цепи Маркова или считываться из заранее загруженной таблицы запросов.
 
 ```bash
-{{ ydb-cli }} workload fulltext run select --help
+{{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
 ```
 
 #### Доступные параметры {#run-select-options}
@@ -141,18 +117,12 @@ fulltext            YDB fulltext workload
 
 {% include [run_options](./_includes/workload/run_options.md) %}
 
-### Нагрузка на запись {#run-upsert}
+### Нагрузочное тестирование на запись {#run-upsert}
 
 Непрерывно вставляет новые документы в таблицу, генерируя текст с помощью модели цепи Маркова.
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext run upsert --model markov_dict.tsv.gz --threads 10 --seconds 30
-```
-
-Посмотрите описание команды:
-
-```bash
-{{ ydb-cli }} workload fulltext run upsert --help
+{{ ydb-cli }} workload fulltext run upsert --model markov_dict.tsv.gz
 ```
 
 #### Доступные параметры {#run-upsert-options}
@@ -175,12 +145,6 @@ fulltext            YDB fulltext workload
 {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
 ```
 
-Посмотрите описание команды:
-
-```bash
-{{ ydb-cli }} workload fulltext model --help
-```
-
 ### Доступные параметры {#model-options}
 
 | Имя | Описание | Значение по умолчанию |
@@ -191,83 +155,97 @@ fulltext            YDB fulltext workload
 
 ## Очистка данных {#cleanup}
 
-Удалите все таблицы, созданные в процессе инициализации:
+Удаление всех таблиц, созданных в процессе инициализации:
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext clean
+{{ ydb-cli }} workload fulltext clean
 ```
-
-Команда не имеет дополнительных параметров.
 
 ## Примеры использования {#examples}
 
 ### Пример с генерируемым датасетом
 
-1. Постройте модель цепи Маркова из образца Wikipedia:
+1a. Скачать модель цепи Маркова из S3:
+
+    ```bash
+    wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
+    ```
+
+1b. Обучение модели цепи Маркова из данных с Wikipedia:
+    ```python
+    from datasets import load_dataset
+
+    ds = load_dataset(
+       "rumbleFTW/wikipedia-20220301-en-raw",
+       split="train[:1000000]",
+       streaming=False,
+       )
+    ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
+    ```
 
     ```bash
     {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
     ```
 
-2. Инициализируйте таблицу нагрузки:
+2. Инициализируйте таблицы для нагрузочного тестирования:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext init
+    {{ ydb-cli }} workload fulltext init
     ```
 
-3. Сгенерируйте и загрузите 100 000 синтетических документов:
+3. Генерация и загрузка в БД синтетических документов:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext import generator --model markov_dict.tsv.gz --rows 100000
+    {{ ydb-cli }} workload fulltext import generator
     ```
 
-4. Запустите нагрузку на поиск на 60 секунд в 10 потоков:
+4. Запуск нагрузки на поиск:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext run select --model markov_dict.tsv.gz --threads 10 --seconds 60
+    {{ ydb-cli }} workload fulltext run select
     ```
 
-5. Запустите нагрузку на запись на 60 секунд в 10 потоков:
+5. Запуск нагрузки на запись:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext run upsert --model markov_dict.tsv.gz --threads 10 --seconds 60
+    {{ ydb-cli }} workload fulltext run upsert
     ```
 
-6. Выполните очистку:
+6. Удаление таблиц:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext clean
+    {{ ydb-cli }} workload fulltext clean
     ```
 
 ### Пример с датасетом MS MARCO
 
-1. Скачайте пакет данных (содержит `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz` и файлы релевантности):
+1. Скачайте пакет данных (содержит `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz` и 'query_relevances.tsv.gz'):
 
     ```bash
-    aws s3 cp s3://vector-index/quality-bundle.tar.gz .
-    tar -xzf quality-bundle.tar.gz
+    wget https://storage.yandexcloud.net/ydb-public/quality-bundle.tar
+    tar -xf quality-bundle.tar
     ```
 
-2. Инициализируйте таблицу нагрузки:
+2. Инициализируйте таблицы для нагрузочного тестирования:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext init
+    {{ ydb-cli }} workload fulltext init
     ```
 
 3. Импортируйте документы из датасета:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext import files --input documents.tsv.gz
+    {{ ydb-cli }} workload fulltext import files
     ```
 
-4. Запустите нагрузку на поиск на 60 секунд в 10 потоков, используя предварительно построенную модель запросов:
+4. Запуск нагрузки на поиск:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext run select --model markov_dict.tsv.gz --threads 10 --seconds 60
+    {{ ydb-cli }} workload fulltext run select
     ```
 
-5. Выполните очистку:
+5. Удаление таблиц, созданных для нагрузочного тестирования:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext clean
+    {{ ydb-cli }} workload fulltext clean
     ```

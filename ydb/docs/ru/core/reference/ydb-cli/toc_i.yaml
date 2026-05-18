@@ -144,6 +144,8 @@ items:
       href: workload-tpcds.md
     - name: Пользовательская нагрузка
       href: workload-query.md
+    - name: Fulltext нагрузка
+      href: workload-fulltext.md
   - name: Работа с конфигурацией
     href: configs.md
     include:

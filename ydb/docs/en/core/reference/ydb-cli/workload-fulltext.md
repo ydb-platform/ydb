@@ -1,6 +1,6 @@
 # Fulltext workload
 
-Allows you to test {{ ydb-short-name }} [fulltext index](../../concepts/secondary_indexes.md) performance using a document dataset. Supports both real datasets (e.g., MS MARCO) and synthetically generated text based on a Markov chain model.
+Allows you to test {{ ydb-short-name }} [fulltext search](../../concepts/query_execution/fulltext_search.md) performance using a document dataset. Supports both real datasets (e.g., MS MARCO) and synthetically generated text based on a Markov chain model.
 
 ## Command structure {#structure}
 
@@ -39,12 +39,6 @@ Create the table for the workload:
 {{ ydb-cli }} workload fulltext --path fulltext init
 ```
 
-View the command description:
-
-```bash
-{{ ydb-cli }} workload fulltext init --help
-```
-
 ### Available options {#init-options}
 
 | Name | Description | Default value |
@@ -64,16 +58,10 @@ After import is complete, a fulltext index is automatically built on the `text` 
 
 Import documents from files (CSV, TSV, or Parquet, optionally gzip-compressed). The dataset must contain `id` and `text` columns.
 
-Example with a [MS MARCO](https://microsoft.github.io/msmarco/) dataset bundle:
+Example:
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext import files --input documents.tsv.gz
-```
-
-View the command description:
-
-```bash
-{{ ydb-cli }} workload fulltext import files --help
+{{ ydb-cli }} workload fulltext import files
 ```
 
 #### Available options {#load-files-options}
@@ -89,13 +77,7 @@ View the command description:
 Generate random text data using a Markov chain model and load it into the table. You must first [build the model](#model) or download a pre-built one.
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext import generator --model markov_dict.tsv.gz --rows 100000
-```
-
-View the command description:
-
-```bash
-{{ ydb-cli }} workload fulltext import generator --help
+{{ ydb-cli }} workload fulltext import generator
 ```
 
 #### Available options {#load-generator-options}
@@ -118,13 +100,7 @@ Run load testing using one of two modes: `select` (fulltext search queries) or `
 Executes fulltext search queries against the indexed table. Queries can be generated from a Markov chain model or read from a pre-loaded query table.
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext run select --model markov_dict.tsv.gz --threads 10 --seconds 30
-```
-
-View the command description:
-
-```bash
-{{ ydb-cli }} workload fulltext run select --help
+{{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
 ```
 
 #### Available options {#run-select-options}
@@ -146,13 +122,7 @@ View the command description:
 Continuously inserts new documents into the table using a Markov chain model to generate text.
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext run upsert --model markov_dict.tsv.gz --threads 10 --seconds 30
-```
-
-View the command description:
-
-```bash
-{{ ydb-cli }} workload fulltext run upsert --help
+{{ ydb-cli }} workload fulltext run upsert --model markov_dict.tsv.gz
 ```
 
 #### Available options {#run-upsert-options}
@@ -175,12 +145,6 @@ Before using the generator or the `run upsert` / `run select` modes with generat
 {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
 ```
 
-View the command description:
-
-```bash
-{{ ydb-cli }} workload fulltext model --help
-```
-
 ### Available options {#model-options}
 
 | Name | Description | Default value |
@@ -194,7 +158,7 @@ View the command description:
 Drop all tables created during initialization:
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext clean
+{{ ydb-cli }} workload fulltext clean
 ```
 
 The command has no additional parameters.
@@ -203,7 +167,23 @@ The command has no additional parameters.
 
 ### Example with a generated dataset
 
-1. Build a Markov chain model from a Wikipedia sample:
+1a. Download a Markov chain model from s3:
+
+    ```bash
+    wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
+    ```
+
+1b. Build a Markov chain model from a Wikipedia sample:
+    ```python
+    from datasets import load_dataset
+
+    ds = load_dataset(
+       "rumbleFTW/wikipedia-20220301-en-raw",
+       split="train[:1000000]",
+       streaming=False,
+       )
+    ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
+    ```
 
     ```bash
     {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
@@ -212,62 +192,62 @@ The command has no additional parameters.
 2. Initialize the workload table:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext init
+    {{ ydb-cli }} workload fulltext init
     ```
 
-3. Generate and load 100,000 synthetic documents:
+3. Generate and load synthetic documents:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext import generator --model markov_dict.tsv.gz --rows 100000
+    {{ ydb-cli }} workload fulltext import generator
     ```
 
-4. Run the search workload for 60 seconds with 10 threads:
+4. Run the search workload:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext run select --model markov_dict.tsv.gz --threads 10 --seconds 60
+    {{ ydb-cli }} workload fulltext run select
     ```
 
-5. Run the upsert workload for 60 seconds with 10 threads:
+5. Run the upsert workload:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext run upsert --model markov_dict.tsv.gz --threads 10 --seconds 60
+    {{ ydb-cli }} workload fulltext run upsert
     ```
 
 6. Clean up:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext clean
+    {{ ydb-cli }} workload fulltext clean
     ```
 
 ### Example with the MS MARCO dataset
 
-1. Download the quality bundle (contains `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz`, and relevance files):
+1. Download the quality bundle (contains `documents.tsv.gz`, `queries.tsv.gz`, `markov_dict.tsv.gz`, and 'query_relevances.tsv.gz'):
 
     ```bash
-    aws s3 cp s3://vector-index/quality-bundle.tar.gz .
-    tar -xzf quality-bundle.tar.gz
+    wget https://storage.yandexcloud.net/ydb-public/quality-bundle.tar
+    tar -xf quality-bundle.tar
     ```
 
 2. Initialize the workload table:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext init
+    {{ ydb-cli }} workload fulltext init
     ```
 
 3. Import documents from the dataset:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext import files --input documents.tsv.gz
+    {{ ydb-cli }} workload fulltext import files
     ```
 
-4. Run the search workload for 60 seconds with 10 threads using the pre-built query model:
+4. Run the search workload using the pre-built queries:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext run select --model markov_dict.tsv.gz --threads 10 --seconds 60
+    {{ ydb-cli }} workload fulltext run select
     ```
 
 5. Clean up:
 
     ```bash
-    {{ ydb-cli }} workload fulltext --path fulltext clean
+    {{ ydb-cli }} workload fulltext clean
     ```

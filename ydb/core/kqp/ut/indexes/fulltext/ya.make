@@ -7,7 +7,9 @@ REQUIREMENTS(cpu:2)
 SIZE(MEDIUM)
 
 SRCS(
-    kqp_indexes_fulltext_ut.cpp
+    kqp_fulltext_build_ut.cpp
+    kqp_fulltext_search_ut.cpp
+    kqp_fulltext_ut_common.cpp
 )
 
 PEERDIR(

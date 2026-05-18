@@ -1452,8 +1452,8 @@ TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext&
         }
     }();
 
-    bool isUniversal1;
-    bool isUniversal2;
+    bool isUniversal1 = false;
+    bool isUniversal2 = false;
     auto status = ConvertToLambda(watermarkExtractor, ctx, isUniversal1, 1);
     status = status.Combine(ConvertToLambda(partitionIdExtractor, ctx, isUniversal2, 1));
     if (status.Level != TStatus::Ok) {

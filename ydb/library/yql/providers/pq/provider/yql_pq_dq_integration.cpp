@@ -124,8 +124,10 @@ public:
             }
             const auto settings = maybeSettings.Cast();
 
+            const auto maybeWatermark = pqReadTopic.Watermark();
+
             TMaybeNode<TCoAtom> watermarkSerialized;
-            if (const auto maybeWatermark = pqReadTopic.Watermark()) {
+            if (maybeWatermark) {
                 const auto watermark = maybeWatermark.Cast();
 
                 TStringBuilder err;
@@ -155,7 +157,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .WatermarkExpr(pqReadTopic.Watermark())
+                    .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))

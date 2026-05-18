@@ -183,6 +183,8 @@ public:
     bool HasPendingWrite() const { return AsyncWriteOperation_.has_value(); }
     bool IsWriteReady() const { return AsyncWriteOperation_.has_value() && AsyncWriteOperation_->HasValue(); }
 
+    using Ptr = std::shared_ptr<TBucket>;
+
 private:
     std::unique_ptr<TWideUnboxedValuesSpillerAdapter> Adapter_;
     size_t RowCount_ = 0;
@@ -195,29 +197,31 @@ private:
 class TSpilledUnboxedValuesIterator {
 private:
     TStorage Data;
-    TBucket* Bucket_;
+    TBucket::Ptr Bucket_;
     std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
     ui32 Width_;
-    const TComputationContext& Ctx;
+    const TComputationContext* Ctx_ = nullptr;
     bool HasValue = false;
 
 public:
     TSpilledUnboxedValuesIterator(
         const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>& lessFunc,
-        TBucket& bucket,
+        TBucket::Ptr bucket,
         size_t dataWidth,
-        const TComputationContext& ctx)
-        : Bucket_(&bucket)
+        const TComputationContext* ctx)
+        : Bucket_(std::move(bucket))
         , LessFunc(lessFunc)
         , Width_(dataWidth)
-        , Ctx(ctx)
+        , Ctx_(ctx)
     {
         Data.resize(Width_);
     }
 
     EFetchResult Read() {
         if (!HasValue) {
-            if (Bucket_->Read(Data, Ctx)) {
+            MKQL_ENSURE(Bucket_, "Spilled iterator bucket is null");
+            MKQL_ENSURE(Ctx_, "Spilled iterator context is null");
+            if (Bucket_->Read(Data, *Ctx_)) {
                 return EFetchResult::Yield;
             }
             if (Bucket_->IsReadFinished()) {
@@ -750,6 +754,9 @@ public:
         , Logger(std::move(logger))
         , LogComponent(logComponent)
     {
+        for (auto& bucketPtr : Buckets) {
+            bucketPtr = std::make_shared<TBucket>();
+        }
         if (AllowSpilling && Ctx.SpillerFactory) {
             Spiller = Ctx.SpillerFactory->CreateSpiller();
         }
@@ -958,7 +965,7 @@ private:
                 break;
             case EOperatingMode::Spilling: {
                 CurrentSpillBucket = AcquireFreeBucket();
-                Buckets[CurrentSpillBucket].Open(Spiller, TupleMultiType, PackSize);
+                Buckets[CurrentSpillBucket]->Open(Spiller, TupleMultiType, PackSize);
                 break;
             }
             case EOperatingMode::MergeSpilled: {
@@ -968,8 +975,8 @@ private:
             case EOperatingMode::ProcessSpilled: {
                 SpilledUnboxedValuesIterators.clear();
                 for (size_t i = 0; i < MaxBuckets; ++i) {
-                    if (Buckets[i].IsSealed()) {
-                        SpilledUnboxedValuesIterators.emplace_back(LessFunc, Buckets[i], Indexes.size(), Ctx);
+                    if (Buckets[i]->IsSealed()) {
+                        SpilledUnboxedValuesIterators.emplace_back(LessFunc, Buckets[i], Indexes.size(), &Ctx);
                     }
                 }
                 break;
@@ -980,7 +987,7 @@ private:
 
     bool SpillState() {
         MKQL_ENSURE(CurrentSpillBucket != NoIndex, "No active spill bucket");
-        auto& bucket = Buckets[CurrentSpillBucket];
+        auto& bucket = *Buckets[CurrentSpillBucket];
         if (bucket.HasPendingWrite()) {
             if (!bucket.IsWriteReady()) {
                 return false;
@@ -1044,7 +1051,7 @@ private:
 
     size_t AcquireFreeBucket() const {
         for (size_t i = 0; i < MaxBuckets; ++i) {
-            if (Buckets[i].IsEmpty()) {
+            if (Buckets[i]->IsEmpty()) {
                 return i;
             }
         }
@@ -1055,7 +1062,7 @@ private:
     size_t SealedBucketCount() const {
         size_t count = 0;
         for (size_t i = 0; i < MaxBuckets; ++i) {
-            if (Buckets[i].IsSealed()) {
+            if (Buckets[i]->IsSealed()) {
                 ++count;
             }
         }
@@ -1066,17 +1073,17 @@ private:
     std::pair<size_t, size_t> FindTwoSmallestBuckets() const {
         size_t min1 = NoIndex, min2 = NoIndex;
         for (size_t i = 0; i < MaxBuckets; ++i) {
-            if (!Buckets[i].IsSealed()) continue;
+            if (!Buckets[i]->IsSealed()) continue;
             if (min1 == NoIndex) {
                 min1 = i;
             } else if (min2 == NoIndex) {
                 min2 = i;
-                if (Buckets[min2].GetRowCount() < Buckets[min1].GetRowCount()) {
+                if (Buckets[min2]->GetRowCount() < Buckets[min1]->GetRowCount()) {
                     std::swap(min1, min2);
                 }
-            } else if (Buckets[i].GetRowCount() < Buckets[min2].GetRowCount()) {
+            } else if (Buckets[i]->GetRowCount() < Buckets[min2]->GetRowCount()) {
                 min2 = i;
-                if (Buckets[min2].GetRowCount() < Buckets[min1].GetRowCount()) {
+                if (Buckets[min2]->GetRowCount() < Buckets[min1]->GetRowCount()) {
                     std::swap(min1, min2);
                 }
             }
@@ -1095,19 +1102,19 @@ private:
         // Acquire a free bucket for the merge target
         // We need to temporarily mark sources as non-empty so AcquireFreeBucket skips them
         MergeTargetBucket = AcquireFreeBucket();
-        Buckets[MergeTargetBucket].Open(Spiller, TupleMultiType, PackSize);
+        Buckets[MergeTargetBucket]->Open(Spiller, TupleMultiType, PackSize);
 
         MergeIterators.clear();
         MergeIterators.reserve(MergeSourceCount);
         for (size_t i = 0; i < MergeSourceCount; ++i) {
-            MergeIterators.emplace_back(LessFunc, Buckets[MergeSourceBuckets[i]], Indexes.size(), Ctx);
+            MergeIterators.emplace_back(LessFunc, Buckets[MergeSourceBuckets[i]], Indexes.size(), &Ctx);
         }
         MergeHeapBuilt = false;
         MergeFinishWriteInProgress = false;
     }
 
     bool MergeStep() {
-        auto& target = Buckets[MergeTargetBucket];
+        auto& target = *Buckets[MergeTargetBucket];
         if (target.HasPendingWrite()) {
             if (!target.IsWriteReady()) {
                 return false;
@@ -1180,10 +1187,10 @@ private:
     void FinishMerge() {
         // Reset source buckets — they are now free for reuse
         for (size_t i = 0; i < MergeSourceCount; ++i) {
-            Buckets[MergeSourceBuckets[i]].Reset();
+            Buckets[MergeSourceBuckets[i]]->Reset();
         }
         // Seal the target bucket
-        Buckets[MergeTargetBucket].Seal();
+        Buckets[MergeTargetBucket]->Seal();
         MergeIterators.clear();
         MergeSourceCount = 0;
         MergeTargetBucket = NoIndex;
@@ -1267,7 +1274,7 @@ private:
     static constexpr size_t PackSize = 5_MB;
     static constexpr size_t NoIndex = std::numeric_limits<size_t>::max();
     static constexpr size_t MinSpillBatchRows = 2;
-    std::array<TBucket, MaxBuckets> Buckets;
+    std::array<TBucket::Ptr, MaxBuckets> Buckets;
     size_t CurrentSpillBucket = NoIndex;
     EOperatingMode Mode = EOperatingMode::InMemory;
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;

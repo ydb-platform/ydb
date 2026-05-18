@@ -172,8 +172,8 @@ def classify_muted_ya_lines(
         if any(m in tn for m in _CHUNK_MARKERS):
             continue
 
-        sf_wild = '*' in sf or '?' in sf
-        tn_wild = '*' in tn or '?' in tn
+        sf_wild = '*' in sf
+        tn_wild = '*' in tn
 
         if sf_wild:
             # can't filter by this suite_folder in SQL; skip

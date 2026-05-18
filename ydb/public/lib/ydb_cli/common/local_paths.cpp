@@ -67,7 +67,7 @@ std::optional<TString> GetAiHistoryFile() {
 
     TFsPath stateDir = GetStateDir();
     TFsPath target = stateDir.Child("ai_history");
-    return target;
+    return target.GetPath();
 }
 
 } // namespace NYdb::NConsoleClient::NLocalPaths

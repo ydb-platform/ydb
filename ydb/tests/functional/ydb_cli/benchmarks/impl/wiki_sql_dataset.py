@@ -259,7 +259,9 @@ class WikiSqlSample(BenchmarkSample):
                                 f"{int(time.time() * 1000)}_{self._build_table_path(self.target.get('table') or {})}",
                             )
                             log_path = debug_dir / f"{stem}.log"
-                            log_path.write_text(getattr(child, "pty_log", "") or "")
+                            log_path.write_text(
+                                str(getattr(child, "pty_log", "") or ""), encoding="utf-8", errors="replace"
+                            )
                             self.logger.warning(f"Wrote PTY output to {log_path}")
                         except OSError as exc:
                             self.logger.warning(f"Failed to write PTY debug log: {exc}")
@@ -314,7 +316,7 @@ class WikiSqlSample(BenchmarkSample):
             "timed_out": timed_out,
             "elapsed_seconds": finished_at - started_at,
             "evaluation_elapsed_seconds": (
-                finished_at - evaluation_started_at if evaluation_started_at is not None else 0
+                finished_at - evaluation_started_at if evaluation_started_at is not None else None
             ),
         }
 

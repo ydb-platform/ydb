@@ -27,7 +27,7 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
 matplotlib.use("Agg")
@@ -194,7 +194,7 @@ def build_model_comparison_csv(chosen: List[StatEntry]) -> str:
             f"{entry.model},"
             f"{m['total']},"
             f"{m['matched']},"
-            f"{fmt_pct(m['accuracy']).replace(r'\%', '%')},"
+            f"{fmt_pct(m['accuracy']).replace('\\%', '%')},"
             f"{fmt_num(m['tool_calls_avg'])},"
             f"{fmt_num(m['failed_avg'])} / {m['failed_max']},"
             f"{m['runs_without_list_directory']} / {m['runs_without_describe']},"
@@ -276,7 +276,7 @@ def build_tables_impact_csv(entries: List[StatEntry]) -> Optional[str]:
                 f"{entry.model},"
                 f"{entry.tables},"
                 f"{m['total']},"
-                f"{fmt_pct(m['accuracy']).replace(r'\%', '%')},"
+                f"{fmt_pct(m['accuracy']).replace('\\%', '%')},"
                 f"{fmt_num(m['tool_calls_avg'])},"
                 f"{fmt_num(m['failed_avg'])},"
                 f"{fmt_num(m['latency_avg'])}"
@@ -314,7 +314,7 @@ def plot_model_accuracy(chosen_tables: List[StatEntry], out_path: Path) -> None:
     bars = ax.bar(labels, values, color="#4472C4")
     ax.set_ylabel("Accuracy, %")
     ax.set_xlabel("Model")
-    ax.set_title(f"Model response accuracy")
+    ax.set_title("Model response accuracy")
     ax.set_ylim(0, max(100, max(values) * 1.15))
     for bar, value in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
@@ -338,7 +338,7 @@ def plot_model_latency(chosen_tables: List[StatEntry], out_path: Path) -> None:
     ax.bar(x + width / 2, p95, width, label="p95", color="#ED7D31")
     ax.set_ylabel("Time, s")
     ax.set_xlabel("Model")
-    ax.set_title(f"Processing time per sample")
+    ax.set_title("Processing time per sample")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.legend()
@@ -360,7 +360,7 @@ def plot_model_tools(chosen_tables: List[StatEntry], out_path: Path) -> None:
     ax.bar(x + width / 2, failed, width, label="Failed", color="#C00000")
     ax.set_ylabel("Calls per run (average)")
     ax.set_xlabel("Model")
-    ax.set_title(f"Tool calls")
+    ax.set_title("Tool calls")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.legend()
@@ -472,7 +472,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         sorted({e.tables for e in entries}),
         key=lambda c: sum(1 for e in entries if e.tables == c),
     )
-    chosen_tables = [e for e in entries if e.tables == target_count]
+    chosen_tables = [e for e in entries if e.tables == target_tables]
     chosen_tables.sort(key=lambda e: e.model.lower())
 
     # --- subsubsection 1: model comparison ---

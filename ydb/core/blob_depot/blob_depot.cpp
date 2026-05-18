@@ -139,6 +139,7 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvUploadResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvScanFound, S3Manager->Handle);
+                fFunc(TEvPrivate::EvDeleteThrottleWakeup, S3Manager->Handle);
 
                 default:
                     if (!HandleDefaultEvents(ev, SelfId())) {

@@ -59,7 +59,6 @@ def update_handler_console() -> None:
     entered or exited. Rich's Progress.console already handles interleaving
     correctly, so routing logs through it prevents display corruption.
     """
-    global _rich_handler
     if _rich_handler is None:
         return
 

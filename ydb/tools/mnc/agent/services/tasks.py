@@ -127,6 +127,7 @@ class TaskService:
     async def add_task(self, task: TaskBasic, delay: Optional[float] = None) -> asyncio.Future:
         task.delay = delay
         future = asyncio.get_running_loop().create_future()
+
         def _consume_future_exception(done):
             if not done.cancelled():
                 done.exception()

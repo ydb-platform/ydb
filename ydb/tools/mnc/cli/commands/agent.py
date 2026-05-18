@@ -283,7 +283,6 @@ def add_arguments(parser):
     install_parser.add_argument("--do-not-start", action="store_const", const=True, default=False)
     install_parser.add_argument("--waiting", dest="waiting", type=int, default=2)
 
-
     uninstall_parser = subparsers.add_parser("uninstall")
     common.add_common_options(uninstall_parser)
 

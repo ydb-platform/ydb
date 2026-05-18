@@ -35,6 +35,12 @@ void TLongTxServiceActor::Bootstrap() {
 
     Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
 
+    if (NActors::TMon* mon = AppData()->Mon) {
+        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+        mon->RegisterActorPage(actorsMonPage, "long_tx_service", "Long Tx Service",
+            false, TActivationContext::ActorSystem(), SelfId());
+    }
+
     TXLOG_NOTICE("Started, SelfId: " << SelfId());
     Become(&TThis::StateWork);
 }
@@ -1788,6 +1794,79 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     TXLOG_DEBUG("Updated immutable snapshots registry. "
         << "Local snapshots count: " << localSnapshotsCount
         << ", Remote snapshots count: " << remoteSnapshotsCount);
+}
+
+void TLongTxServiceActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
+    auto now = AppData()->TimeProvider->Now();
+    TStringStream str;
+    HTML(str) {
+        PRE() {
+            str << "Local locks: " << Locks.size() << Endl;
+            for (const auto& [id, lock] : Locks) {
+                str << "    Id: " << id
+                    << " Local subscribers: " << lock.LocalSubscribers.size()
+                    << " Remote subscribers: " << lock.RemoteSubscribers.size()
+                    << " Timestamp: " << lock.Timestamp
+                    << " (Age: " << (now - lock.Timestamp).MilliSeconds() << "ms)"
+                    << Endl;
+            }
+        }
+        PRE() {
+            str << "Proxy nodes: " << ProxyNodes.size() << Endl;
+            for (const auto& [nodeId, node] : ProxyNodes) {
+                str << "    NodeId: " << nodeId
+                    << " State: " << static_cast<int>(node.State)
+                    << " Locks: " << node.Locks.size()
+                    << Endl;
+                for (const auto& [lockId, lock] : node.Locks) {
+                    str << "        LockId: " << lockId
+                        << " State: " << static_cast<int>(lock.State)
+                        << " Timestamp: ";
+                    if (lock.TimestampReady) {
+                        str << lock.Timestamp
+                            << " (Age: " << (now - lock.Timestamp).MilliSeconds() << "ms)";
+                    } else {
+                        str << "(not ready)";
+                    }
+                    str << Endl;
+                }
+            }
+        }
+        PRE() {
+            str << "Wait edges: " << WaitEdges.size() << Endl;
+            str << "Lock islands: " << LockIslands.size() << Endl;
+            TVector<const TWaitEdge*> islandEdges;
+            for (const auto& [id, island] : LockIslands) {
+                str << "Island " << id << ": " << island.LocksCount << " locks" << Endl;
+                islandEdges.clear();
+                for (const auto& lock : island.Locks) {
+                    for (const auto& blocker : lock.Blockers) {
+                        islandEdges.push_back(&blocker);
+                    }
+                }
+                auto sortingTuple = [&](const TWaitEdge* edge) {
+                    return std::tuple(
+                        edge->Awaiter.LockNodeId(SelfId()), edge->Awaiter.LockId(),
+                        edge->Blocker.LockNodeId(SelfId()), edge->Blocker.LockId());
+                };
+                std::sort(
+                    islandEdges.begin(), islandEdges.end(),
+                    [&](const TWaitEdge* left, const TWaitEdge* right) {
+                        return sortingTuple(left) < sortingTuple(right);
+                    });
+                for (const auto* edge : islandEdges) {
+                    str << "    (" << edge->Awaiter.LockNodeId(SelfId())
+                        << ", " << edge->Awaiter.LockId() <<  ") -> ("
+                        << edge->Blocker.LockNodeId(SelfId())
+                        << ", " << edge->Blocker.LockId() << ") "
+                        << (edge->Broken ? "(broken) " : "")
+                        << "Id: " << edge->Id
+                        << Endl;
+                }
+            }
+        }
+    }
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
 }
 
 } // namespace NLongTxService

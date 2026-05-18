@@ -554,6 +554,7 @@ private:
         UpdateNodes(ev->Get()->InfoEntries);
 
         if (CurrentStateFunc() == &TThis::StatePrepare) {
+            Cerr << "TEST >> " << PublisherIdToExchangeActorId.size() << Endl;
             if (!PublisherIdToExchangeActorId.empty()) {
                 StartPrefill();
             } else {
@@ -568,6 +569,7 @@ private:
             return;
         }
         UpdateNodes(ev->Get()->Updates);
+        Cerr << "UPDATED >> " << PublisherIdToExchangeActorId.size() << Endl;
     }
 
     void UpdateNodes(const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infos) {

@@ -597,6 +597,64 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         }
     }
 
+    Y_UNIT_TEST(SnapshotsLockingOverflow) {
+        const ui32 nodesCount = 2;
+        const ::NKikimr::TTableId table(0, 1);
+        const ::NKikimr::TTableId otherTable(0, 2);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetMaxRemoteSnapshots(3);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(1);
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        auto sender1 = runtime.AllocateEdgeActor(0);
+        auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        std::vector<NKqp::TSnapshotHandle> handles;
+        std::vector<TRowVersion> snapshots;
+        
+        for (size_t i = 0; i < 5; ++i) {
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+
+            UNIT_ASSERT(snapshots.empty() || msg->Snapshot != snapshots.back());
+
+            handles.emplace_back(std::move(msg->SnapshotHandle));
+            snapshots.emplace_back(msg->Snapshot);
+
+            SimulateSleep(runtime, TDuration::Seconds(1));
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(3));
+
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            for (size_t index = 0; index < snapshots.size(); ++index) {
+                const auto& snapshot = snapshots[index];
+                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == (index < 7));
+
+                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(table).size() == 3);
+            }
+        }
+
+        UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() = snapshots[6]);
+    }
+
 } // Y_UNIT_TEST_SUITE(LongTxService)
 
 Y_UNIT_TEST_SUITE(LockWaitGraph) {

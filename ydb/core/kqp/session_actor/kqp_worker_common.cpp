@@ -1,5 +1,7 @@
 #include "kqp_worker_common.h"
 
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -131,6 +133,74 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             << ", text: \"" << EscapeC(queryText) << '"'
             << ", parameters: " << paramsText);
     }
+}
+
+void LogQueryEvent(const TActorContext &ctx, const TKqpRequestInfo& requestInfo,
+    const TDuration& duration, Ydb::StatusIds::StatusCode status,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TString& database, const TString& databaseId,
+    NKikimrKqp::EQueryAction queryAction, NKikimrKqp::EQueryType queryType,
+    NKikimrKqp::TEvQueryResponse* record,
+    const std::function<TString()>& extractQueryText, ui64 parametersSize)
+{
+    auto logSettings = ctx.LoggerSettings();
+    if (!logSettings) {
+        return;
+    }
+
+    const bool isError = (status != Ydb::StatusIds::SUCCESS);
+    const auto priority = isError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
+    if (!logSettings->Satisfies(priority, NKikimrServices::KQP_SESSION)) {
+        return;
+    }
+
+    auto username = userToken ? userToken->GetUserSID() : TString();
+    if (username.empty()) {
+        username = "UNAUTHENTICATED";
+    }
+
+    ui64 resultsSize = 0;
+    if (record) {
+        for (const auto& result : record->GetResponse().GetYdbResults()) {
+            resultsSize += result.ByteSize();
+        }
+    }
+
+    constexpr size_t MaxQueryTextLen = 10_KB;
+    TString queryText = extractQueryText ? extractQueryText() : TString();
+    const size_t origQueryLen = queryText.size();
+    if (queryText.size() > MaxQueryTextLen) {
+        queryText.resize(MaxQueryTextLen);
+    }
+
+    TStringBuilder line;
+    line << "Query event"
+        << ", database: " << database
+        << ", databaseId: " << databaseId
+        << ", user: " << username
+        << ", action: " << NKikimrKqp::EQueryAction_Name(queryAction)
+        << ", type: " << NKikimrKqp::EQueryType_Name(queryType)
+        << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
+        << ", duration: " << duration.ToString()
+        << ", results: " << resultsSize << 'b'
+        << ", parameters: " << parametersSize << 'b'
+        << ", queryLen: " << origQueryLen
+        << ", query: \"" << EscapeC(queryText) << '"';
+
+    if (isError && record) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record->GetResponse().GetQueryIssues(), issues);
+        if (!issues.Empty()) {
+            constexpr size_t MaxIssuesLen = 1024;
+            TString issuesStr = issues.ToString(true);
+            if (issuesStr.size() > MaxIssuesLen) {
+                issuesStr.resize(MaxIssuesLen);
+            }
+            line << ", issues: \"" << EscapeC(issuesStr) << '"';
+        }
+    }
+
+    LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SESSION, requestInfo << line);
 }
 
 bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType& expected) {

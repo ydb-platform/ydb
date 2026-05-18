@@ -2731,6 +2731,21 @@ public:
         }
     }
 
+
+    void LogQueryFinalState(NKikimrKqp::TEvQueryResponse* record) {
+        if (!QueryState || !IsExecuteAction(QueryState->GetAction())) {
+            return;
+        }
+        auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
+        auto queryDuration = TDuration::MicroSeconds(QueryState->QueryStats.DurationUs);
+        LogQueryEvent(TlsActivationContext->AsActorContext(), requestInfo, queryDuration,
+            record->GetYdbStatus(), QueryState->UserToken,
+            QueryState->GetDatabase(), QueryState->UserRequestContext->DatabaseId,
+            QueryState->GetAction(), QueryState->GetType(), record,
+            [this]() { return this->QueryState->ExtractQueryText(); },
+            QueryState->ParametersSize);
+    }
+
     template<class TEvRecord>
     void AddTrailingInfo(TEvRecord& record) {
         if (ShutdownState) {
@@ -2928,6 +2943,8 @@ public:
             (action, QueryState->GetAction()),
             (trace_id, TraceId()));
 
+        LogQueryFinalState(&resEv->Record);
+
         QueryResponse = std::move(resEv);
 
 
@@ -2977,6 +2994,8 @@ public:
         FillPoolId(response);
         record->SetConsumedRu(1);
 
+        LogQueryFinalState(record);
+
         Cleanup(IsFatalError(record->GetYdbStatus()));
     }
 
@@ -2996,6 +3015,8 @@ public:
 
         FillTxInfo(&response);
         FillPoolId(&response);
+
+        LogQueryFinalState(&record);
 
         Cleanup(false);
     }
@@ -3483,6 +3504,8 @@ public:
 
         FillTxInfo(response);
         FillPoolId(response);
+
+        LogQueryFinalState(&QueryResponse->Record);
 
         ExecuterId = TActorId{};
         Cleanup(IsFatalError(ydbStatus));

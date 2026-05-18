@@ -568,6 +568,23 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
         }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            NYdb::NTable::TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes(NYdb::NTable::TIndexDescription(
+                "json_idx_sdk",
+                NYdb::NTable::EIndexType::GlobalJson,
+                {"Text"},
+                {"Data"}
+            ));
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index support is disabled");
+        }
     }
 
     Y_UNIT_TEST(DisabledFlagRejectCreate) {
@@ -586,6 +603,23 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            auto desc = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", NYdb::EPrimitiveType::Uint64)
+                .AddNullableColumn("Text", NYdb::EPrimitiveType::Json)
+                .AddNullableColumn("Data", NYdb::EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("Key")
+                .AddSecondaryIndex("json_idx", NYdb::NTable::EIndexType::GlobalJson, {"Text"}, {"Data"})
+                .Build();
+
+            auto result = session.CreateTable("/Root/TestTable", std::move(desc)).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index support is disabled");
         }
     }
 

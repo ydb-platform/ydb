@@ -210,6 +210,8 @@ private:
 
     bool RequestApiToken();
 
+    friend class TInteractiveConfigurationManager;
+
     const TYamlConfigBase::TPtr BaseConfig;
     const TString Id;
     YAML::Node Config;
@@ -279,6 +281,10 @@ private:
     void ChangeActiveAiProfile(const TString& id);
 
     TAiModelConfig::TPtr CreateAiProfile(const TString& presetId = ""); // Empty for empty preset
+
+    // Build a profile in memory directly from a preset, without persisting it to YAML.
+    // The returned profile has an empty Id, which is used as a marker of an unsaved profile.
+    TAiModelConfig::TPtr CreateInMemoryProfileFromPreset(const TString& presetId);
 
     void LoadProfile();
 

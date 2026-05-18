@@ -1,8 +1,10 @@
 #pragma once
 
+#include "public.h"
+
 #include <yt/yt/core/bus/private.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -12,5 +14,5 @@ constexpr ui32 HandshakeMessageSignature = 0x68737562;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 

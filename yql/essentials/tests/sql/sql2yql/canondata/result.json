@@ -972,6 +972,27 @@
             "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_agg_phases-max_opt_/sql.yql"
         }
     ],
+    "test_sql2yql.test[agg_phases-median]": [
+        {
+            "checksum": "e3e6f7bc1342cbdbac17f1af4ccc27ec",
+            "size": 13626,
+            "uri": "https://{canondata_backend}/1784117/83e7d4c0f4de503082d65f1530a0ced1d2238c8c/resource.tar.gz#test_sql2yql.test_agg_phases-median_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-median_null]": [
+        {
+            "checksum": "e3e6f7bc1342cbdbac17f1af4ccc27ec",
+            "size": 13626,
+            "uri": "https://{canondata_backend}/1784117/83e7d4c0f4de503082d65f1530a0ced1d2238c8c/resource.tar.gz#test_sql2yql.test_agg_phases-median_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-median_opt]": [
+        {
+            "checksum": "e3e6f7bc1342cbdbac17f1af4ccc27ec",
+            "size": 13626,
+            "uri": "https://{canondata_backend}/1784117/83e7d4c0f4de503082d65f1530a0ced1d2238c8c/resource.tar.gz#test_sql2yql.test_agg_phases-median_opt_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[agg_phases-min]": [
         {
             "checksum": "7406b3edbc0deb87cd053cce69785c44",
@@ -1014,25 +1035,88 @@
             "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_agg_phases-min_opt_/sql.yql"
         }
     ],
-    "test_sql2yql.test[agg_phases-percentile]": [
+    "test_sql2yql.test[agg_phases-percentile_list]": [
         {
-            "checksum": "32de8da7c9f3f930f05bc25599191c76",
-            "size": 13322,
-            "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_/sql.yql"
+            "checksum": "8096a0ffbd074ac18b305cea2cbb62b3",
+            "size": 13765,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_list_/sql.yql"
         }
     ],
-    "test_sql2yql.test[agg_phases-percentile_null]": [
+    "test_sql2yql.test[agg_phases-percentile_list_null]": [
         {
-            "checksum": "0dac1ef9537c479b7e6ff648b304a8af",
-            "size": 13310,
-            "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_null_/sql.yql"
+            "checksum": "6ea810542d0ece7b269a737ccf3ed998",
+            "size": 13753,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_list_null_/sql.yql"
         }
     ],
-    "test_sql2yql.test[agg_phases-percentile_opt]": [
+    "test_sql2yql.test[agg_phases-percentile_list_opt]": [
         {
-            "checksum": "c8fd3c7942b5488d78cfd9b99f4955f5",
-            "size": 13336,
-            "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_opt_/sql.yql"
+            "checksum": "37ec381600cf5f472d0561dca3725884",
+            "size": 13779,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_list_opt_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_scalar]": [
+        {
+            "checksum": "4fdf78892492d723ba83d329e6204fb4",
+            "size": 13612,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_scalar_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_scalar_null]": [
+        {
+            "checksum": "c9c17f359bc489646419a322411b7774",
+            "size": 13600,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_scalar_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_scalar_opt]": [
+        {
+            "checksum": "f854f4b8ad863f721be9b9300a584eb9",
+            "size": 13626,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_scalar_opt_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_struct]": [
+        {
+            "checksum": "11df77915ca71b60d612387833917045",
+            "size": 13873,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_struct_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_struct_null]": [
+        {
+            "checksum": "542b455b81310bff6171f0e71e521e2e",
+            "size": 13861,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_struct_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_struct_opt]": [
+        {
+            "checksum": "45b3b78e15054cd52b1a33eb08ef4715",
+            "size": 13887,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_struct_opt_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_tuple]": [
+        {
+            "checksum": "f10332263338abbbcd140455f40443bf",
+            "size": 13723,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_tuple_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_tuple_null]": [
+        {
+            "checksum": "3f466b5adf98cd93a3835a439efd8824",
+            "size": 13711,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_tuple_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-percentile_tuple_opt]": [
+        {
+            "checksum": "1289ef1389a68a557b2857f9b1bd42b6",
+            "size": 13737,
+            "uri": "https://{canondata_backend}/1689644/ff01aeeda97261e416c7058c04957aa1fa0c9b3e/resource.tar.gz#test_sql2yql.test_agg_phases-percentile_tuple_opt_/sql.yql"
         }
     ],
     "test_sql2yql.test[agg_phases-random_sample]": [
@@ -12615,6 +12699,21 @@
             "uri": "file://test_sql_format.test_agg_phases-max_opt_/formatted.sql"
         }
     ],
+    "test_sql_format.test[agg_phases-median]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-median_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-median_null]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-median_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-median_opt]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-median_opt_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[agg_phases-min]": [
         {
             "uri": "file://test_sql_format.test_agg_phases-min_/formatted.sql"
@@ -12645,19 +12744,64 @@
             "uri": "file://test_sql_format.test_agg_phases-min_opt_/formatted.sql"
         }
     ],
-    "test_sql_format.test[agg_phases-percentile]": [
+    "test_sql_format.test[agg_phases-percentile_list]": [
         {
-            "uri": "file://test_sql_format.test_agg_phases-percentile_/formatted.sql"
+            "uri": "file://test_sql_format.test_agg_phases-percentile_list_/formatted.sql"
         }
     ],
-    "test_sql_format.test[agg_phases-percentile_null]": [
+    "test_sql_format.test[agg_phases-percentile_list_null]": [
         {
-            "uri": "file://test_sql_format.test_agg_phases-percentile_null_/formatted.sql"
+            "uri": "file://test_sql_format.test_agg_phases-percentile_list_null_/formatted.sql"
         }
     ],
-    "test_sql_format.test[agg_phases-percentile_opt]": [
+    "test_sql_format.test[agg_phases-percentile_list_opt]": [
         {
-            "uri": "file://test_sql_format.test_agg_phases-percentile_opt_/formatted.sql"
+            "uri": "file://test_sql_format.test_agg_phases-percentile_list_opt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_scalar]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_scalar_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_scalar_null]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_scalar_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_scalar_opt]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_scalar_opt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_struct]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_struct_null]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_struct_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_struct_opt]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_struct_opt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_tuple]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_tuple_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_tuple_null]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_tuple_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-percentile_tuple_opt]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-percentile_tuple_opt_/formatted.sql"
         }
     ],
     "test_sql_format.test[agg_phases-random_sample]": [

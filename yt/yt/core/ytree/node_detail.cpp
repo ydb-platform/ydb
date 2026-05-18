@@ -406,7 +406,7 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
 
             auto newChild = lastStep
                 ? Visit(childOrChildValue,
-                    [] (INodePtr child) {
+                    [] (const INodePtr& child) {
                         return child;
                     },
                     [&] (const TYsonString& childValue) {

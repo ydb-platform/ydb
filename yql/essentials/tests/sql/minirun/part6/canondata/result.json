@@ -251,6 +251,34 @@
             "uri": "https://{canondata_backend}/212715/3b8bb7fa27460bee4cc403208280fda1cfce3844/resource.tar.gz#test.test_agg_phases-count_if_null-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-percentile_scalar_null-default.txt-Debug]": [
+        {
+            "checksum": "84aba9c04747c8ef792601a19818a79b",
+            "size": 1906,
+            "uri": "https://{canondata_backend}/1689644/ef0bb26f0f3a11d845794943f10edcaab8ec7681/resource.tar.gz#test.test_agg_phases-percentile_scalar_null-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-percentile_scalar_null-default.txt-Results]": [
+        {
+            "checksum": "200ff2930124c82a55e22120feee5388",
+            "size": 5576,
+            "uri": "https://{canondata_backend}/1689644/ef0bb26f0f3a11d845794943f10edcaab8ec7681/resource.tar.gz#test.test_agg_phases-percentile_scalar_null-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[agg_phases-percentile_struct_opt-default.txt-Debug]": [
+        {
+            "checksum": "b21b6b164d150d765f801d1cad83bffe",
+            "size": 4839,
+            "uri": "https://{canondata_backend}/1942525/e214c6781f4a4ec195ac3c847cdf85ec71189556/resource.tar.gz#test.test_agg_phases-percentile_struct_opt-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-percentile_struct_opt-default.txt-Results]": [
+        {
+            "checksum": "b0e6ec9a2a9445583f269e535d52b164",
+            "size": 11339,
+            "uri": "https://{canondata_backend}/1689644/ef0bb26f0f3a11d845794943f10edcaab8ec7681/resource.tar.gz#test.test_agg_phases-percentile_struct_opt-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-stddev_null-default.txt-Debug]": [
         {
             "checksum": "47110da2854756b287861ad7c98c87cc",

@@ -404,6 +404,8 @@ TEncryptedFileSerializer::TEncryptedFileSerializer(TString algorithm, TEncryptio
 {
 }
 
+TEncryptedFileSerializer::TEncryptedFileSerializer(TEncryptedFileSerializer&&) noexcept = default;
+TEncryptedFileSerializer& TEncryptedFileSerializer::operator=(TEncryptedFileSerializer&&) noexcept = default;
 TEncryptedFileSerializer::~TEncryptedFileSerializer() = default;
 
 TBuffer TEncryptedFileSerializer::AddBlock(TStringBuf data, bool last) {

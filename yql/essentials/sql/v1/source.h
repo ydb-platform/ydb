@@ -313,6 +313,7 @@ TSourcePtr BuildSelectCore(
     TColumnsSets&& distinctSets);
 TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
 TSourcePtr BuildAnyColumnSource(TPosition pos);
+TSourcePtr BuildWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda);
 
 enum class EReduceMode {
     ByPartition,

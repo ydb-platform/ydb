@@ -44,13 +44,18 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+
+    disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
+    else:
+        disabled_feature_flags.append("enable_user_attributes_in_topic_query")
 
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
+        disabled_feature_flags=disabled_feature_flags,
         query_service_config={
             "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
             "enable_match_recognize": True,

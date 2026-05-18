@@ -1124,47 +1124,9 @@
 
           print(f"Table index {index_name} created.")
       ```
-
-- C++
-
-    ```cpp
-    void AddIndex(
-        NYdb::TDriver& driver,
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& database,
-        const std::string& tableName,
-        const std::string& indexName,
-        const std::string& strategy)
-    {
-        std::string query = std::format(R"(
-            ALTER TABLE `{0}`
-            ADD INDEX {1}__temp
-            GLOBAL USING vector_kmeans_tree
-            ON (embedding)
-            WITH (
-                {2}
-            );
-        )", tableName, indexName, strategy);
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        }));
-
-        NYdb::NTable::TTableClient tableClient(driver);
-        NYdb::NStatusHelpers::ThrowOnError(tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
-            return session.AlterTable(database + "/" + tableName, NYdb::NTable::TAlterTableSettings()
-                .AppendRenameIndexes(NYdb::NTable::TRenameIndex{
-                    .SourceName_ = indexName + "__temp",
-                    .DestinationName_ = indexName,
-                    .ReplaceDestination_ = true
-                })
-            ).ExtractValueSync();
-        }));
-
-        std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
-    }
-    ```
     
+{% endlist %}
+
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

@@ -272,7 +272,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // JSON index does not support COVER columns
             if (!indexKeys.DataColumns.empty()) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                error = TStringBuilder() << "JSON index does not support COVER columns, but";
+                error = TStringBuilder() << "JSON index does not support COVER columns";
                 return false;
             }
 

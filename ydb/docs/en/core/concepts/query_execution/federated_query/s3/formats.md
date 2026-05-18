@@ -241,7 +241,7 @@ Query result:
 
 ### Format raw {#raw}
 
-This format allows reading the contents of files as is, in raw form. The data read in this way can be processed using [YQL](../../../yql/reference/udf/list/string) tools, splitting into rows and columns.
+This format allows reading the contents of files as is, in raw form. The data read in this way can be processed using [YQL](../../../../yql/reference/udf/list/string) tools, splitting into rows and columns.
 
 This format should be used if the built-in parsing capabilities in {{ ydb-full-name }} are insufficient.
 

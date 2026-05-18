@@ -1,6 +1,8 @@
 # Functions for code generation
 
-When running calculations, you can generate the code including [S-expressions](/docs/s_expressions) nodes. This uses a mechanism for packing the code in the [resource](../types/special.md). After building the code, you can insert it into the main program using the [EvaluateCode](#evaluatecode) function. For debugging purposes, you can convert the code to a string using the [FormatCode](#formatcode) function.
+When running calculations, you can generate the code including [S-expressions](#s-expressions) nodes. This uses a mechanism for packing the code in the [resource](../types/special.md). After building the code, you can insert it into the main program using the [EvaluateCode](#evaluatecode) function. For debugging purposes, you can convert the code to a string using the [FormatCode](#formatcode) function.
+
+## S-expressions {#s-expressions}
 
 Possible node types in S-expressions that can be used for code generation:
 
@@ -22,9 +24,9 @@ In the text representation, S-expressions have the following format:
 * The lambda function argument is `x`. Unlike an atom, a string without an apostrophe character (') references a name in the current scope. When declaring a lambda function, the names of arguments are added to the body's visibility scope, and, if needed, the name is hidden from the global scope.
 * The `world`.
 
-## FormatCode
+## FormatCode {#formatcode}
 
-Serializing the code as [S-expressions](/docs/s_expressions). The code must not contain free arguments of functions, hence, to serialize the lambda function code, you must pass it completely, avoiding passing individual expressions that might contain lambda function arguments.
+Serializing the code as [S-expressions](#s-expressions). The code must not contain free arguments of functions, hence, to serialize the lambda function code, you must pass it completely, avoiding passing individual expressions that might contain lambda function arguments.
 
 ### Examples
 
@@ -35,7 +37,7 @@ SELECT FormatCode(AtomCode("foo"));
 -- )
 ```
 
-## WorldCode
+## WorldCode {#worldcode}
 
 Build a code node with the `world` type.
 
@@ -48,7 +50,7 @@ SELECT FormatCode(WorldCode());
 -- )
 ```
 
-## AtomCode
+## AtomCode {#atomcode}
 
 Build a code node with the `atom` type from a string passed to the argument.
 
@@ -61,7 +63,7 @@ SELECT FormatCode(AtomCode("foo"));
 -- )
 ```
 
-## ListCode
+## ListCode {#listcode}
 
 Build a code node with the `list` type from a set of nodes or lists of code nodes passed to arguments. In this case, lists of arguments are built in as separately listed code nodes.
 
@@ -83,7 +85,7 @@ SELECT FormatCode(ListCode(AsList(
 -- )
 ```
 
-## FuncCode
+## FuncCode {#funccode}
 
 Build a code node with the `built-in function call` from a string with the function name and a set of nodes or lists of code nodes passed to arguments. In this case, lists of arguments are built in as separately listed code nodes.
 
@@ -108,7 +110,7 @@ SELECT FormatCode(FuncCode(
 -- )
 ```
 
-## LambdaCode
+## LambdaCode {#lambdacode}
 
 You can build a code node with the `lambda function declaration` type from:
 
@@ -133,7 +135,7 @@ SELECT FormatCode(LambdaCode(2, ($args) -> {
 -- )
 ```
 
-## EvaluateCode
+## EvaluateCode {#evaluatecode}
 
 Substituting the code node passed in the argument, into the main program code.
 
@@ -148,7 +150,7 @@ $lambda = EvaluateCode(LambdaCode(($x, $y) -> {
 SELECT $lambda(1, 2); -- 3
 ```
 
-## ReprCode
+## ReprCode {#reprcode}
 
 Substituting the code node representing the result of evaluating an expression passed in the argument, into the main program.
 
@@ -161,7 +163,7 @@ $add3 = EvaluateCode(LambdaCode(($x) -> {
 SELECT $add3(1); -- 4
 ```
 
-## QuoteCode
+## QuoteCode {#quotecode}
 
 Substituting into the main program the code node that represents an expression or a [lambda function](../syntax/expressions.md#lambda) passed in the argument. If free arguments of lambda functions were found during the substitution, they are calculated and substituted into the code as in the [ReprCode](#reprcode) function.
 

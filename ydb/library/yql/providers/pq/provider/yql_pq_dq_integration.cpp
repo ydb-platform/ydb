@@ -796,7 +796,10 @@ public:
             .Done());
 
         TExprNode::TListType metadataFieldsList;
-        for (const auto& sysColumn : AllowedPqMetaSysColumns(State_->AllowTransparentSystemColumns)) {
+        for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
+                 State_->AddTransparentPrefixToTransparentSystemColumns,
+                 State_->EnableUserAttributesInTopicQuery))
+        {
             metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
         }
 

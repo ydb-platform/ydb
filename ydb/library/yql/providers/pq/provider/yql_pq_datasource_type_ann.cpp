@@ -1,6 +1,7 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
 
+#include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
@@ -21,6 +22,21 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
+const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& descriptor, TExprContext& ctx) {
+    switch (descriptor.Type) {
+        case EMetaFieldType::Uint64:
+            return ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        case EMetaFieldType::Timestamp:
+            return ctx.MakeType<TDataExprType>(EDataSlot::Timestamp);
+        case EMetaFieldType::String:
+            return ctx.MakeType<TDataExprType>(EDataSlot::String);
+        case EMetaFieldType::DictStringString: {
+            const auto* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+            return ctx.MakeType<TDictExprType>(stringType, stringType);
+        }
+    }
+}
 
 struct TWatermarkPushdownSettings: public NPushdown::TSettings {
     TWatermarkPushdownSettings()
@@ -222,7 +238,12 @@ public:
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)).has_value(); },
+            [this](TStringBuf fieldName) {
+                return GetPqMetaFieldDescriptorBySysColumn(
+                    TString(fieldName), 
+                    State_->EnableUserAttributesInTopicQuery
+                ).has_value();
+            },
             ctx)) {
             return TStatus::Error;
         }
@@ -441,13 +462,15 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
-            const auto descriptor = FindPqMetaFieldDescriptorBySysColumn(metadataSysColumnName);
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
+                metadataSysColumnName,
+                State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            items.emplace_back(ctx.MakeType<TDataExprType>(descriptor->Type));
+            items.emplace_back(BuildPqMetaFieldExprType(*descriptor, ctx));
         }
 
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TTupleExprType>(items)));
@@ -480,13 +503,15 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
-            const auto descriptor = FindPqMetaFieldDescriptorBySysColumn(metadataSysColumnName);
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
+                metadataSysColumnName,
+                State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            items.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, ctx.MakeType<TDataExprType>(descriptor->Type)));
+            items.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, BuildPqMetaFieldExprType(*descriptor, ctx)));
         }
 
         input->SetTypeAnn(ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(items)));
@@ -500,7 +525,10 @@ public:
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey, State_->AllowTransparentSystemColumns);
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(
+            metadataKey,
+            State_->AddTransparentPrefixToTransparentSystemColumns,
+            State_->EnableUserAttributesInTopicQuery);
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));
@@ -532,14 +560,47 @@ public:
                 return TStatus::Error;
             }
 
-            bool isOptional = false;
-            const TDataExprType* dataType = nullptr;
-            if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
-                return TStatus::Error;
-            }
+            if (descriptor->Type == EMetaFieldType::DictStringString) {
+                const auto* itemType = structType->GetItems()[*pos]->GetItemType();
+                const TTypeAnnotationNode* dictType = itemType;
+                if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+                    dictType = itemType->Cast<TOptionalExprType>()->GetItemType();
+                }
+                if (!EnsureDictType(row->Pos(), *dictType, ctx)) {
+                    return TStatus::Error;
+                }
+                const auto* dict = dictType->Cast<TDictExprType>();
+                if (!EnsureSpecificDataType(row->Pos(), *dict->GetKeyType(), EDataSlot::String, ctx)) {
+                    return TStatus::Error;
+                }
+                if (!EnsureSpecificDataType(row->Pos(), *dict->GetPayloadType(), EDataSlot::String, ctx)) {
+                    return TStatus::Error;
+                }
+            } else {
+                bool isOptional = false;
+                const TDataExprType* dataType = nullptr;
+                if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
+                    return TStatus::Error;
+                }
 
-            if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
-                return TStatus::Error;
+                EDataSlot expectedSlot = EDataSlot::String;
+                switch (descriptor->Type) {
+                    case EMetaFieldType::Uint64:
+                        expectedSlot = EDataSlot::Uint64;
+                        break;
+                    case EMetaFieldType::Timestamp:
+                        expectedSlot = EDataSlot::Timestamp;
+                        break;
+                    case EMetaFieldType::String:
+                        expectedSlot = EDataSlot::String;
+                        break;
+                    case EMetaFieldType::DictStringString:
+                        YQL_ENSURE(false, "unexpected DictStringString in scalar branch");
+                        break;
+                }
+                if (!EnsureSpecificDataType(row->Pos(), *dataType, expectedSlot, ctx)) {
+                    return TStatus::Error;
+                }
             }
 
             output = ctx.Builder(input->Pos())
@@ -552,7 +613,7 @@ public:
             return TStatus::Repeat;
         }
 
-        input->SetTypeAnn(ctx.MakeType<TDataExprType>(descriptor->Type));
+        input->SetTypeAnn(BuildPqMetaFieldExprType(*descriptor, ctx));
         return TStatus::Ok;
     }
 

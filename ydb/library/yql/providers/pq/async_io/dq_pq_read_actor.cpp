@@ -255,6 +255,7 @@ public:
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
+        const TTypeEnvironment& typeEnv,
         std::shared_ptr<TScopedAlloc> alloc,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
@@ -291,9 +292,8 @@ public:
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName());
 
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
-        TPqMetaExtractor fieldsExtractor;
         for (const auto& fieldName : SourceParams.GetMetadataFields()) {
-            MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
+            MetadataFields.emplace_back(fieldName, CreatePqMetaExtractorLambda(fieldName, HolderFactory, typeEnv));
         }
 
         InitWatermarkTracker(); // non-virtual!
@@ -1182,7 +1182,7 @@ private:
     std::vector<TClusterState> Clusters;
     std::queue<std::pair<ui64, NYdb::NTopic::TDeferredCommit>> DeferredCommits;
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
-    std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
+    std::vector<std::tuple<TString, TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
     IPqStaticGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
@@ -1238,6 +1238,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TActorId& computeActorId,
     const THolderFactory& holderFactory,
+    const TTypeEnvironment& typeEnv,
     std::shared_ptr<TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqStaticGateway::TPtr pqGateway,
@@ -1261,6 +1262,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         txId,
         taskId,
         holderFactory,
+        typeEnv,
         std::move(alloc),
         std::move(settings),
         std::move(readTaskParamsMsg),
@@ -1328,6 +1330,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
+                args.TypeEnv,
                 std::move(args.Alloc),
                 counters ? counters : args.TaskCounters,
                 pqGateway,

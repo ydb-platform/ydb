@@ -28,8 +28,8 @@ public:
     TMD5Hasher& Append(TRef data);
 
     TMD5Hash GetDigest() const;
-    TString GetHexDigestLowerCase() const;
-    TString GetHexDigestUpperCase() const;
+    std::string GetHexDigestLowerCase() const;
+    std::string GetHexDigestUpperCase() const;
 
     const TMD5State& GetState() const;
 
@@ -42,8 +42,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetMD5HexDigestUpperCase(TStringBuf data);
-TString GetMD5HexDigestLowerCase(TStringBuf data);
+std::string GetMD5HexDigestUpperCase(TStringBuf data);
+std::string GetMD5HexDigestLowerCase(TStringBuf data);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,8 +59,8 @@ public:
     TSha1Hasher& Append(TStringBuf data);
 
     TSha1Hash GetDigest() const;
-    TString GetHexDigestLowerCase() const;
-    TString GetHexDigestUpperCase() const;
+    std::string GetHexDigestLowerCase() const;
+    std::string GetHexDigestUpperCase() const;
 
 private:
     std::array<char, 96> CtxStorage_;
@@ -78,8 +78,8 @@ public:
     using TDigest = std::array<char, 32>;
 
     TDigest GetDigest() const;
-    TString GetHexDigestLowerCase() const;
-    TString GetHexDigestUpperCase() const;
+    std::string GetHexDigestLowerCase() const;
+    std::string GetHexDigestUpperCase() const;
 
 private:
     static constexpr int CtxSize = 112;
@@ -88,13 +88,13 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetSha256HexDigestUpperCase(TStringBuf data);
-TString GetSha256HexDigestLowerCase(TStringBuf data);
+std::string GetSha256HexDigestUpperCase(TStringBuf data);
+std::string GetSha256HexDigestLowerCase(TStringBuf data);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString CreateSha256Hmac(TStringBuf key, TStringBuf message);
-TString CreateSha256HmacRaw(TStringBuf key, TStringBuf message);
+std::string CreateSha256Hmac(TStringBuf key, TStringBuf message);
+std::string CreateSha256HmacRaw(TStringBuf key, TStringBuf message);
 
 bool ConstantTimeCompare(TStringBuf trusted, TStringBuf untrusted);
 
@@ -102,17 +102,17 @@ bool ConstantTimeCompare(TStringBuf trusted, TStringBuf untrusted);
 
 //! Hashes password with given (random) salt.
 // BEWARE: Think twice before changing this function's semantics!
-TString HashPassword(const TString& password, const TString& salt);
+std::string HashPassword(const std::string& password, const std::string& salt);
 
 //! Hashes SHA256-hashed password with given (random) salt.
-TString HashPasswordSha256(const TString& passwordSha256, const TString& salt);
+std::string HashPasswordSha256(const std::string& passwordSha256, const std::string& salt);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Returns string of given length filled with random bytes fetched
 //! from cryptographically strong generator.
 // NB: May throw on RNG failure.
-TString GenerateCryptoStrongRandomString(int length);
+std::string GenerateCryptoStrongRandomString(int length);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1083,10 +1083,6 @@ public:
                         for (const auto& col : index.KeyColumns) {
                             indexDesc->AddKeyColumnNames(col);
                         }
-                        if (index.Type == TIndexDescription::EType::GlobalJson && !index.DataColumns.empty()) {
-                            tablePromise.SetValue(ResultFromIssues<TGenericResult>(TIssuesIds::KIKIMR_BAD_REQUEST, "JSON index does not support COVER columns", {}));
-                            return;
-                        }
                         for (const auto& col : index.DataColumns) {
                             indexDesc->AddDataColumnNames(col);
                         }
@@ -1250,13 +1246,6 @@ public:
                 result.SetSuccess();
                 tablePromise.SetValue(result);
                 return tablePromise.GetFuture();
-            }
-
-            for (const auto& idx : req.add_indexes()) {
-                if (idx.type_case() == Ydb::Table::TableIndex::kGlobalJsonIndex && !idx.data_columns().empty()) {
-                    tablePromise.SetValue(ResultFromIssues<TGenericResult>(TIssuesIds::KIKIMR_BAD_REQUEST, "JSON index does not support COVER columns", {}));
-                    return tablePromise.GetFuture();
-                }
             }
 
             auto buildOp = phyTx.MutableSchemeOperation()->MutableBuildOperation();

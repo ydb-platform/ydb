@@ -27,8 +27,6 @@ items:
   href: vector-indexes.md
 - name: Векторный индекс вида vector_kmeans_tree
   href: vector-indexes-kmeans-tree-type.md
-- name: Полнотекстовые индексы
-  href: fulltext-indexes.md
 - name: Оптимизация выполнения запросов
   href: query-execution-optimization/index.md
   include:

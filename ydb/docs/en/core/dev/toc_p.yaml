@@ -27,15 +27,11 @@ items:
   href: vector-indexes.md
 - name: Vector index type vector_kmeans_tree
   href: vector-indexes-kmeans-tree-type.md
-- name: Fulltext indexes
-  href: fulltext-indexes.md
 - name: Query execution optimization
   href: query-execution-optimization/index.md
   include:
     mode: link
     path: query-execution-optimization/toc_p.yaml
-- name: Resource consumption management
-  href: resource-consumption-management.md
 - name: Batch upload
   href: batch-upload.md
 - name: Paging

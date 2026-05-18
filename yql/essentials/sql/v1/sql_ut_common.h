@@ -7115,6 +7115,38 @@ Y_UNIT_TEST(WarnOnRankExprWithUnorderedWindow) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: Rank(<expression>) is used with unordered window - the result is likely to be undefined, code: 4521\n");
 }
 
+Y_UNIT_TEST(AnsiCurrentRow) {
+    const auto check = [](TString spec, TString expected, TMaybe<TString> flag) {
+        TString query = R"sql(
+            $events = (SELECT * FROM (VALUES
+                (1, 10,  5),
+                (2, 10,  5),
+                (3, 20, 10)
+            ) AS events (event_id, ts, val));
+            SELECT ts, val, SUM(val) OVER (SPEC) AS run_sum FROM $events ORDER BY ts, event_id;
+        )sql";
+        SubstGlobal(query, "SPEC", spec);
+
+        NSQLTranslation::TTranslationSettings settings;
+        if (flag) {
+            settings.Flags.emplace(*flag);
+        }
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat({"WinOnRows", "WinOnRange"});
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["WinOnRows"], expected == "WinOnRows" ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(stat["WinOnRange"], expected == "WinOnRange" ? 1 : 0);
+    };
+
+    check("ORDER BY ts", "WinOnRows", Nothing());
+    check("", "WinOnRows", Nothing());
+    check("ORDER BY ts", "WinOnRange", "AnsiCurrentRow");
+    check("", "WinOnRows", "AnsiCurrentRow");
+}
+
 Y_UNIT_TEST(AnyAsTableName) {
     NYql::TAstParseResult res = SqlToYql("use plato; select * from any;");
     UNIT_ASSERT(!res.IsOk());

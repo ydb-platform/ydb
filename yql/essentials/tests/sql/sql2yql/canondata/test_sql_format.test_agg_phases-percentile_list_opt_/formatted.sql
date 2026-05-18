@@ -4,13 +4,13 @@ $t = (
     SELECT
         *
     FROM
-        AS_TABLE([<|key: 1, value: 2|>, <|key: 1, value: 3|>])
+        AS_TABLE([<|key: 1, value: just(2)|>, <|key: 1, value: just(3)|>])
 );
 
 $p = (
     SELECT
         key,
-        percentile(value, 0.1) AS a
+        percentile(value) AS a
     FROM
         $t
     GROUP BY
@@ -32,7 +32,7 @@ FROM
 $p = (
     SELECT
         key,
-        percentile(a, 0.1) AS a
+        percentile(a) AS a
     FROM
         $p
     GROUP BY
@@ -54,7 +54,7 @@ FROM
 $p = (
     SELECT
         key,
-        percentile(a, 0.1) AS a
+        percentile(a) AS a
     FROM
         $p
     GROUP BY
@@ -76,7 +76,7 @@ FROM
 $p1 = (
     SELECT
         key,
-        percentile(a, 0.1) AS a
+        percentile(a, ListFromRange(0.00, 1.05, 0.05)) AS a
     FROM
         $p
     GROUP BY
@@ -98,7 +98,7 @@ FROM
 $p2 = (
     SELECT
         key,
-        percentile(a, 0.1) AS a
+        percentile(a, ListFromRange(0.00, 1.05, 0.05)) AS a
     FROM (
         SELECT
             key,
@@ -125,7 +125,7 @@ FROM
 $p3 = (
     SELECT
         key,
-        percentile(value, 0.1) AS a
+        percentile(value, ListFromRange(0.00, 1.05, 0.05)) AS a
     FROM
         $t
     GROUP BY

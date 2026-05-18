@@ -391,10 +391,15 @@ class TSnapshotsExchangerActor : public TActorBootstrapped<TSnapshotsExchangerAc
     struct TEvPrivate {
         enum EEv {
             EvRemoteSnapshotsUpdate = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvPrefillTimeout,
         };
 
         struct TEvRemoteSnapshotsUpdate : public TEventLocal<TEvRemoteSnapshotsUpdate, EvRemoteSnapshotsUpdate> {
             TEvRemoteSnapshotsUpdate() = default;
+        };
+
+        struct TEvPrefillTimeout : public TEventLocal<TEvPrefillTimeout, EvPrefillTimeout> {
+            TEvPrefillTimeout() = default;
         };
     };
 
@@ -447,8 +452,9 @@ public:
             hFunc(TEvLongTxService::TEvRemoteSnapshotsPrefillResult, Handle);
 
             // Failed to prefill
-            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandlePrefill);
+            hFunc(TEvents::TEvUndelivered, HandlePrefill);
+            hFunc(TEvPrivate::TEvPrefillTimeout, HandlePrefill);
         }
     }
 
@@ -470,6 +476,7 @@ public:
             IgnoreFunc(TEvLongTxService::TEvRemoteSnapshotsPrefillResult);
             IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
             IgnoreFunc(TEvents::TEvUndelivered);
+            IgnoreFunc(TEvPrivate::TEvPrefillTimeout);
         }
     }
 
@@ -764,6 +771,10 @@ private:
 
         auto event = std::make_unique<TEvLongTxService::TEvRemoteSnapshotsPrefill>();
         Send(PrefillTargetActor, event.release(), IEventHandle::FlagTrackDelivery);
+
+        Schedule(
+            TDuration::Seconds(AppData()->LongTxServiceConfig.GetPrefillTimeoutSeconds()),
+            new TEvPrivate::TEvPrefillTimeout());
         TBase::Become(&TThis::StatePrefill);
     }
 
@@ -799,17 +810,22 @@ private:
         ProceedToPublish();
     }
 
-    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+    void HandlePrefill(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TXLOG_DEBUG("Handling TEvNodeDisconnected for NodeId: " << ev->Get()->NodeId);
         AFL_ENSURE(ev->Get()->NodeId == PrefillTargetActor.NodeId());
         TXLOG_DEBUG("Prefill target disconnected, proceeding without prefill");
         ProceedToPublish();
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+    void HandlePrefill(TEvents::TEvUndelivered::TPtr& ev) {
         TXLOG_DEBUG("Handling TEvents::TEvUndelivered from " << ev->Sender);
         AFL_ENSURE(ev->Sender.NodeId() == PrefillTargetActor.NodeId());
         TXLOG_DEBUG("Prefill request undelivered, proceeding without prefill");
+        ProceedToPublish();
+    }
+
+    void HandlePrefill(TEvPrivate::TEvPrefillTimeout::TPtr&) {
+        TXLOG_DEBUG("Prefill timed out, proceeding without prefill");
         ProceedToPublish();
     }
 

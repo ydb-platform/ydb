@@ -7,6 +7,8 @@
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 
+#include <functional>
+
 #include "dq_async_stats.h"
 
 namespace NYql {
@@ -41,17 +43,31 @@ struct TDqFillAggregator {
     std::atomic<ui64> EarlyFinishedCount;
     std::atomic<ui64> FinishedCount;
 
+    // Per-output levels for scatter routing. Null for non-scatter consumers.
+    std::shared_ptr<std::atomic<EDqFillLevel>[]> OutputLevels;
+
+    void InitScatterOutputs(ui32 count) {
+        OutputLevels = std::shared_ptr<std::atomic<EDqFillLevel>[]>(
+            new std::atomic<EDqFillLevel>[count]);
+        for (ui32 i = 0; i < count; ++i) {
+            OutputLevels[i].store(NoLimit, std::memory_order_relaxed);
+        }
+    }
+
     ui64 GetCount(EDqFillLevel level) {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         return Counts[index].load();
     }
 
-    void AddCount(EDqFillLevel level) {
+    void AddCount(EDqFillLevel level, ui32 outputIdx) {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         Counts[index]++;
         TotalCount++;
+        if (OutputLevels) {
+            OutputLevels[outputIdx].store(level, std::memory_order_relaxed);
+        }
     }
 
     void SubCount(EDqFillLevel level) { // deprecated
@@ -61,7 +77,7 @@ struct TDqFillAggregator {
         TotalCount--;
     }
 
-    void UpdateCount(EDqFillLevel prevLevel, EDqFillLevel level) {
+    void UpdateCount(EDqFillLevel prevLevel, EDqFillLevel level, ui32 outputIdx) {
         ui32 index1 = static_cast<ui32>(prevLevel);
         ui32 index2 = static_cast<ui32>(level);
         YQL_ENSURE(index1 < FILL_COUNTERS_SIZE && index2 < FILL_COUNTERS_SIZE);
@@ -69,8 +85,12 @@ struct TDqFillAggregator {
             Counts[index2]++;
             Counts[index1]--;
         }
+        if (OutputLevels) {
+            OutputLevels[outputIdx].store(level, std::memory_order_release);
+        }
     }
 
+    // MAX semantics: block if ANY channel is full (used by Map, Broadcast, HashPartition).
     EDqFillLevel GetFillLevel() const {
         if (Counts[static_cast<ui32>(HardLimit)].load()) {
             return HardLimit;
@@ -110,7 +130,7 @@ public:
     // <| producer methods
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual EDqFillLevel UpdateFillLevel() = 0;
-    virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
+    virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) = 0;
     // can throw TDqChannelStorageException
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 count) = 0;

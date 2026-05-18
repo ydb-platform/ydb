@@ -166,6 +166,11 @@ message TTaskOutputSink {
     google.protobuf.Any Settings = 2;
 }
 
+message TTaskOutputScatter {
+    // Primary output is derived from TaskId at runtime (taskId % outputs) so
+    // primaries are spread evenly across receivers without a serialized field.
+}
+
 message TTaskOutput {
     repeated TChannel Channels = 1;
     oneof Type {
@@ -175,6 +180,7 @@ message TTaskOutput {
         TTaskOutputBroadcast Broadcast = 13;
         TTaskOutputEffects Effects = 14;
         TTaskOutputSink Sink = 15;
+        TTaskOutputScatter Scatter = 16;
     }
     TDqTransform Transform = 30;
 }

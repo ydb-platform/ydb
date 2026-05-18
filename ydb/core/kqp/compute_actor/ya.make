@@ -27,6 +27,7 @@ PEERDIR(
     ydb/library/formats/arrow/protos
     ydb/library/formats/arrow/common
     ydb/library/yql/dq/actors/compute
+    ydb/library/yql/utils/actor_log
     ydb/library/yql/dq/actors/input_transforms
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/providers/generic/actors

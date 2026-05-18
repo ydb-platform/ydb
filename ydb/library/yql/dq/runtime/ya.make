@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yverify_stream
     yql/essentials/minikql
     yql/essentials/minikql/arrow
+    yql/essentials/utils/log
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation
     yql/essentials/parser/pg_wrapper/interface

@@ -83,16 +83,17 @@ public:
         auto result = EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
         if (FillLevel != result) {
             if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, result);
+                Aggregator->UpdateCount(FillLevel, result, OutputIdx_);
             }
             FillLevel = result;
         }
         return result;
     }
 
-    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator, ui32 outputIdx) override {
         Aggregator = aggregator;
-        Aggregator->AddCount(FillLevel);
+        OutputIdx_ = outputIdx;
+        Aggregator->AddCount(FillLevel, outputIdx);
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -346,6 +347,7 @@ private:
     ui64 EstimatedRowBytes = 0;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
+    ui32 OutputIdx_ = 0;
 };
 
 } // namespace

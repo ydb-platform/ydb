@@ -1171,7 +1171,10 @@ private:
                     auto status = ERunStatus::PendingInput;
                     // only for sync ca
                     const auto watermark = [this]() {
-                        if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                        if (!WatermarksTracker) {
+                            return TMaybe<TInstant>{};
+                        }
+                        if (WatermarksTracker->HasPendingWatermark()) {
                             const auto result = WatermarksTracker->GetPendingWatermark();
                             WatermarksTracker->PopPendingWatermark();
                             return result;

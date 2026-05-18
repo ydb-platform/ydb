@@ -16,6 +16,8 @@ class TestWatermarksInYdb(StreamingTestBase):
     def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
         if local_topics and shared_reading:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+        if tasks == 2 and not shared_reading:
+            pytest.skip("idleness is not supported for no_shared: YQ-5322")
 
         endpoint = self.get_endpoint(kikimr, local_topics)
         query_name = f"test_watermarks_{shared_reading}{tasks}{local_topics}"

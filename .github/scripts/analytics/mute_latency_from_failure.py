@@ -160,8 +160,6 @@ def classify_muted_ya_lines(
     seen_exact: set = set()
     seen_sf: set = set()
 
-    _CHUNK_MARKERS = ('sole chunk', 'chunk+chunk', '[chunk]', ' chunk')
-
     for line in all_lines:
         parts = line.split(' ', 1)
         if len(parts) != 2:
@@ -209,6 +207,8 @@ class _TestRuns:
         self.pr_pulls = pr_pulls  # corresponding PR numbers (parallel to pr_ts)
 
 _SF_BATCH_SIZE = 30  # suite_folders per YDB query
+
+_CHUNK_MARKERS = ('sole chunk', 'chunk+chunk', '[chunk]', ' chunk')
 
 
 def _ts_literal(t: dt.datetime) -> str:
@@ -398,18 +398,43 @@ def read_muted_ya(repo: str, sha: str, rel_path: str) -> List[str]:
     ]
 
 
-def added_muted_ya_lines(repo: str, sha: str, rel_path: str) -> List[str]:
-    """Return only lines added to rel_path by this commit (git diff additions)."""
+def _diff_lines(repo: str, sha: str, rel_path: str, prefix: str) -> List[str]:
+    """Return lines starting with `prefix` (+/-) from the diff of sha for rel_path."""
     try:
         diff = _git(repo, 'show', '--format=', '--unified=0', sha, '--', rel_path)
     except RuntimeError:
         return []
+    other = '++' if prefix == '+' else '--'
     return [
         line[1:].strip()
         for line in diff.splitlines()
-        if line.startswith('+') and not line.startswith('+++') and line[1:].strip()
+        if line.startswith(prefix) and not line.startswith(other) and line[1:].strip()
         and not line[1:].strip().startswith('#')
     ]
+
+
+def added_muted_ya_lines(repo: str, sha: str, rel_path: str) -> List[str]:
+    """Return lines added to rel_path by this commit."""
+    return _diff_lines(repo, sha, rel_path, '+')
+
+
+def removed_muted_ya_lines(repo: str, sha: str, rel_path: str) -> List[str]:
+    """Return lines removed from rel_path by this commit."""
+    return _diff_lines(repo, sha, rel_path, '-')
+
+
+def _parse_muted_ya_lines(lines: Sequence[str]) -> List[Tuple[str, str]]:
+    """Parse muted_ya lines into (suite_folder, test_name) pairs, skipping chunks."""
+    result = []
+    for line in lines:
+        parts = line.split(' ', 1)
+        if len(parts) != 2:
+            continue
+        sf, tn = parts
+        if any(m in tn for m in _CHUNK_MARKERS):
+            continue
+        result.append((sf, tn))
+    return result
 
 
 def match_muted_to_criteria(
@@ -434,8 +459,6 @@ def match_muted_to_criteria(
     window = dt.timedelta(days=mute_window_days)
 
     # build pattern list from muted_ya
-    _CHUNK_MARKERS = ('sole chunk', 'chunk+chunk', '[chunk]', ' chunk')
-
     paired: List[Tuple[str, re.Pattern[str], re.Pattern[str]]] = []
     for line in muted_lines:
         parts = line.split(' ', 1)
@@ -582,6 +605,26 @@ def create_mute_latency_affected_prs_table(ydb_wrapper: YDBWrapper, table_path: 
     ydb_wrapper.create_table(table_path, create_sql)
 
 
+def create_mute_events_table(ydb_wrapper: YDBWrapper, table_path: str) -> None:
+    print(f"> Creating table: '{table_path}'")
+    create_sql = f"""
+        CREATE TABLE IF NOT EXISTS `{table_path}` (
+            `branch`      Utf8 NOT NULL,
+            `build_type`  Utf8 NOT NULL,
+            `commit_time` Timestamp NOT NULL,
+            `commit_sha`  Utf8 NOT NULL,
+            `event`       Utf8 NOT NULL,
+            `full_name`   Utf8 NOT NULL,
+            `suite_folder` Utf8,
+            `test_name`   Utf8,
+            PRIMARY KEY (`branch`, `build_type`, `commit_time`, `commit_sha`, `event`, `full_name`)
+        )
+        PARTITION BY HASH(`branch`, `build_type`)
+        WITH (STORE = COLUMN)
+    """
+    ydb_wrapper.create_table(table_path, create_sql)
+
+
 def _datetime_to_us(ts: dt.datetime) -> int:
     """Convert datetime to microseconds since epoch (YDB Timestamp wire format)."""
     if ts.tzinfo is None:
@@ -683,37 +726,56 @@ def main() -> int:
     print(f'{len(commits)} new commits touching {rel_path} since {since_date}', file=sys.stderr)
 
     # Pre-collect git data for all commits so Phase 3 has no subprocess calls.
-    CommitGitData = List[Tuple[str, dt.datetime, List[str], List[Tuple[str, str]], List[str]]]
+    CommitGitData = List[Tuple[str, dt.datetime, List[str], List[str], List[Tuple[str, str]], List[str]]]
     commit_git_data: CommitGitData = []
     for i, (sha, ct) in enumerate(commits, 1):
-        added_lines = added_muted_ya_lines(repo, sha, rel_path)
-        if not added_lines:
-            print(f'  [{i}/{len(commits)}] {sha[:12]} {ct.date()} — no additions, skip', file=sys.stderr)
+        added_lines   = added_muted_ya_lines(repo, sha, rel_path)
+        removed_lines = removed_muted_ya_lines(repo, sha, rel_path)
+        if not added_lines and not removed_lines:
+            print(f'  [{i}/{len(commits)}] {sha[:12]} {ct.date()} — no changes, skip', file=sys.stderr)
             continue
         exact_pairs, wildcard_sfs = classify_muted_ya_lines(added_lines)
-        if not exact_pairs and not wildcard_sfs:
-            continue
         print(
             f'  [{i}/{len(commits)}] {sha[:12]} {ct.date()} '
-            f'+{len(added_lines)} lines '
+            f'+{len(added_lines)} -{len(removed_lines)} lines '
             f'({len(exact_pairs)} exact, {len(wildcard_sfs)} wc_sfs)',
             file=sys.stderr,
         )
-        commit_git_data.append((sha, ct, added_lines, exact_pairs, wildcard_sfs))
+        commit_git_data.append((sha, ct, added_lines, removed_lines, exact_pairs, wildcard_sfs))
 
     if not commit_git_data:
-        print('No commits with mute additions — nothing to upload.', file=sys.stderr)
+        print('No commits with mute changes — nothing to upload.', file=sys.stderr)
         return 0
 
     # ── Phase 3: YDB queries + upload (no subprocess calls) ──────────────────
     all_rows: List[Dict[str, Any]] = []
-    all_pr_rows: List[Dict[str, Any]] = []  # per-(commit, pull) rows for affected_prs table
+    all_pr_rows: List[Dict[str, Any]] = []
+    all_event_rows: List[Dict[str, Any]] = []
 
     with YDBWrapper() as w:
         affected_prs_table = w.get_table_path('mute_latency_affected_prs')
         create_mute_latency_affected_prs_table(w, affected_prs_table)
+        mute_events_table = w.get_table_path('mute_events')
+        create_mute_events_table(w, mute_events_table)
 
-        for sha, ct, added_lines, exact_pairs, wildcard_sfs in commit_git_data:
+        for sha, ct, added_lines, removed_lines, exact_pairs, wildcard_sfs in commit_git_data:
+            # mute_events: record added and removed tests
+            for event, lines in (('added', added_lines), ('removed', removed_lines)):
+                for sf, tn in _parse_muted_ya_lines(lines):
+                    all_event_rows.append({
+                        'branch':       args.branch,
+                        'build_type':   args.build_type,
+                        'commit_time':  ct,
+                        'commit_sha':   sha,
+                        'event':        event,
+                        'full_name':    f'{sf}/{tn}',
+                        'suite_folder': sf,
+                        'test_name':    tn,
+                    })
+
+            # mute_latency: only for commits with additions
+            if not exact_pairs and not wildcard_sfs:
+                continue
             window_start = ct - mute_delta
             test_runs = fetch_test_runs_for_window(
                 w, args.branch, args.build_type,
@@ -777,6 +839,28 @@ def main() -> int:
                 query_name='mute_latency_affected_prs_upload',
             )
             print(f'Uploaded {len(pr_records)} rows → YDB {affected_prs_table}', file=sys.stderr)
+
+        if all_event_rows:
+            event_records = [
+                {**r, 'commit_time': _datetime_to_us(r['commit_time'])}
+                for r in all_event_rows
+            ]
+            event_column_types = (
+                ydb.BulkUpsertColumns()
+                .add_column('branch',       ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column('build_type',   ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column('commit_time',  ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column('commit_sha',   ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column('event',        ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column('full_name',    ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column('suite_folder', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column('test_name',    ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            )
+            w.bulk_upsert_batches(
+                mute_events_table, event_records, event_column_types,
+                query_name='mute_events_upload',
+            )
+            print(f'Uploaded {len(event_records)} rows → YDB {mute_events_table}', file=sys.stderr)
 
     return 0
 

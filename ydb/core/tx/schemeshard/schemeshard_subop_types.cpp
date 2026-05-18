@@ -581,6 +581,13 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery: return TxAlterStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpTruncateTable: return TxTruncateTable;
+<<<<<<< HEAD
+=======
+        case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation: return TxPrepareIndexValidation;
+        // Fan out to TxChangePathState sub-ops; the wrapper type is never persisted.
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets: return TxChangePathState;
+        case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets: return TxChangePathState;
+>>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:

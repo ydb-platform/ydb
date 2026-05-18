@@ -297,7 +297,6 @@ class TDataShard
     friend class TS3DownloadsManager;
     template <typename TSettings> friend class TS3Downloader;
     template <typename T> friend class TBackupRestoreUnitBase;
-    friend class TCreateIncrementalRestoreSrcUnit;
     friend struct TSetupSysLocks;
     friend class TDataShardLocksDb;
 
@@ -1332,6 +1331,11 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+<<<<<<< HEAD
+=======
+    void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev, const TActorContext& ctx);
+>>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
     void Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
@@ -1417,8 +1421,6 @@ class TDataShard
     void Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
 
@@ -2040,6 +2042,14 @@ public:
 
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
+
+    // Sends the incremental-restore shard progress event via the SchemeShard pipe.
+    void SendIncrementalRestoreShardProgress(
+        const TActorContext& ctx, ui64 tabletId,
+        THolder<TEvDataShard::TEvIncrementalRestoreShardProgress> event)
+    {
+        SendViaSchemeshardPipe(ctx, tabletId, SchemeShardPipe, std::move(event));
+    }
 
     TThrRefBase* GetDataShardSysTables() { return DataShardSysTables.Get(); }
 
@@ -3296,6 +3306,11 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+<<<<<<< HEAD
+=======
+            HFunc(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
+            HFuncTraced(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest, Handle);
+>>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
             HFuncTraced(TEvDataShard::TEvValidateUniqueIndexRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
@@ -3345,7 +3360,6 @@ protected:
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
-            HFunc(TEvIncrementalRestoreScan::TEvFinished, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

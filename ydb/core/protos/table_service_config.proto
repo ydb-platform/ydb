@@ -503,6 +503,6 @@ message TTableServiceConfig {
     optional uint64 DqChannelReconciliationCount = 127 [default = 3];
 
     optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
-
-    optional bool EnableCompileCacheWarmup = 130 [default = false, (InvalidateCompileCache) = false];
+    
+    optional bool EnableCompileCacheWarmup = 131 [default = false, (InvalidateCompileCache) = false];
 };

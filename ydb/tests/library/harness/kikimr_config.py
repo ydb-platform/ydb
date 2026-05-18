@@ -323,8 +323,6 @@ class KikimrConfigGenerator(object):
         if table_service_config:
             self.yaml_config["table_service_config"].update(table_service_config)
 
-        self.yaml_config["table_service_config"].setdefault("enable_compile_cache_warmup", False)
-
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
 

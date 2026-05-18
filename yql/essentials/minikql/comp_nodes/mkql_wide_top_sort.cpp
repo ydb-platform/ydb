@@ -15,6 +15,7 @@
 #include <yql/essentials/utils/sort.h>
 
 #include <deque>
+#include <memory>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -194,7 +195,7 @@ private:
 class TSpilledUnboxedValuesIterator {
 private:
     TStorage Data;
-    TBucket& Bucket_;
+    TBucket* Bucket_;
     std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
     ui32 Width_;
     const TComputationContext& Ctx;
@@ -206,7 +207,7 @@ public:
         TBucket& bucket,
         size_t dataWidth,
         const TComputationContext& ctx)
-        : Bucket_(bucket)
+        : Bucket_(&bucket)
         , LessFunc(lessFunc)
         , Width_(dataWidth)
         , Ctx(ctx)
@@ -216,10 +217,10 @@ public:
 
     EFetchResult Read() {
         if (!HasValue) {
-            if (Bucket_.Read(Data, Ctx)) {
+            if (Bucket_->Read(Data, Ctx)) {
                 return EFetchResult::Yield;
             }
-            if (Bucket_.IsReadFinished()) {
+            if (Bucket_->IsReadFinished()) {
                 return EFetchResult::Finish;
             }
             HasValue = true;
@@ -237,7 +238,7 @@ public:
     }
 
     bool IsFinished() const {
-        return Bucket_.IsReadFinished();
+        return Bucket_->IsReadFinished();
     }
 
     bool operator<(const TSpilledUnboxedValuesIterator& item) const {

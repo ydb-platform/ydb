@@ -378,16 +378,10 @@ namespace TEvDataShard {
         EvBuildFulltextDictRequest,
         EvBuildFulltextDictResponse,
 
-<<<<<<< HEAD
-=======
-        EvValidateRowConditionRequest,
-        EvValidateRowConditionResponse,
-
         EvIncrementalRestoreShardProgress,
 
         EvIncrementalRestoreSrcCreateRequest,
 
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
         EvEnd
     };
 

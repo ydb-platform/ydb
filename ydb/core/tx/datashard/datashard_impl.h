@@ -1331,11 +1331,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
-<<<<<<< HEAD
-=======
-    void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev, const TActorContext& ctx);
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
     void Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
@@ -3306,11 +3302,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
-<<<<<<< HEAD
-=======
-            HFunc(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
             HFuncTraced(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest, Handle);
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
             HFuncTraced(TEvDataShard::TEvValidateUniqueIndexRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
@@ -3403,15 +3395,20 @@ protected:
 
     void Die(const TActorContext &ctx) override;
 
-    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
+    template <class TEvent>
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, TActorId& pipe, THolder<TEvent> event) {
         Y_ENSURE(tabletId);
         Y_ENSURE(CurrentSchemeShardId == tabletId);
 
-        if (!SchemeShardPipe) {
+        if (!pipe) {
             NTabletPipe::TClientConfig clientConfig;
-            SchemeShardPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+            pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         }
-        NTabletPipe::SendData(ctx, SchemeShardPipe, event.Release());
+        NTabletPipe::SendData(ctx, pipe, event.Release());
+    }
+
+    void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
+        SendViaSchemeshardPipe(ctx, tabletId, SchemeShardPipe, std::move(event));
     }
 
     void ReportState(const TActorContext &ctx, ui32 state) {

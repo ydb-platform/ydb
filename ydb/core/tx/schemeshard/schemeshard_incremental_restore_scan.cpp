@@ -714,49 +714,11 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
             continue;
         }
 
-<<<<<<< HEAD
-            auto& tableRestore = *tableTx.MutableRestoreMultipleIncrementalBackups();
-            
-            tableRestore.AddSrcTablePaths(incrBackupPathStr);
-            
-            tableRestore.SetDstTablePath(item.GetPath());
-            
-            TOperationId tableRestoreOpId(tableTxId, 0);
-            IncrementalRestoreOperationToState[tableRestoreOpId] = operationId;
-            TxIdToIncrementalRestore[tableTxId] = operationId;
-            
-            auto stateIt = IncrementalRestoreStates.find(operationId);
-            if (stateIt != IncrementalRestoreStates.end()) {
-                stateIt->second.InProgressOperations.insert(tableRestoreOpId);
-                
-                auto& tableOpState = stateIt->second.TableOperations[tableRestoreOpId];
-                tableOpState.OperationId = tableRestoreOpId;
-                
-                TPath itemPath = TPath::Resolve(item.GetPath(), this);
-                if (itemPath.IsResolved() && itemPath.Base()->IsTable()) {
-                    auto tableInfo = Tables.FindPtr(itemPath.Base()->PathId);
-                    if (tableInfo) {
-                        for (const auto& [shardIdx, partitionIdx] : (*tableInfo)->GetShard2PartitionIdx()) {
-                            tableOpState.ExpectedShards.insert(shardIdx);
-                            stateIt->second.InvolvedShards.insert(shardIdx);
-                        }
-                        LOG_I("Table operation " << tableRestoreOpId << " expects " << tableOpState.ExpectedShards.size() << " shards");
-                    }
-                }
-                
-                LOG_I("Tracking operation " << tableRestoreOpId << " for incremental restore " << operationId);
-            }
-            
-            LOG_I("Sending MultiIncrementalRestore operation for table: " << item.GetPath());
-            Send(SelfId(), tableRequest.Release());
-        } else {
-=======
         auto& relativeItemPath = paths.second;
         TString incrBackupPathStr = JoinPath({bcPath.PathString(), NBackup::IncrementalBackupDirName(backupName), relativeItemPath});
         const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, this);
 
         if (!incrBackupPath.IsResolved()) {
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
             LOG_W("Incremental backup path not found: " << incrBackupPathStr);
             continue;
         }
@@ -846,8 +808,8 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
 
     auto tableInfoPtr = Tables.FindPtr(tablePathId);
     if (tableInfoPtr) {
-        for (const auto& [shardIdx, _] : (*tableInfoPtr)->GetPartitionStore()) {
-            tableOpState.ExpectedShards.insert(shardIdx);
+        for (const auto& partition : (*tableInfoPtr)->GetPartitions()) {
+            tableOpState.ExpectedShards.insert(partition.ShardIdx);
         }
     }
 }
@@ -882,12 +844,13 @@ void TSchemeShard::DispatchIncrementalRestoreShardRequests(
     auto opIt = state.TableOperations.find(subOpId);
     if (opIt != state.TableOperations.end()) {
         opIt->second.ExpectedShards.clear();
-        for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
-            opIt->second.ExpectedShards.insert(shardIdx);
+        for (const auto& partition : (*srcTableInfoPtr)->GetPartitions()) {
+            opIt->second.ExpectedShards.insert(partition.ShardIdx);
         }
     }
 
-    for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
+    for (const auto& partition : (*srcTableInfoPtr)->GetPartitions()) {
+        const auto& shardIdx = partition.ShardIdx;
         auto shardInfoIt = ShardInfos.find(shardIdx);
         if (shardInfoIt == ShardInfos.end()) {
             LOG_W("DispatchIncrementalRestoreShardRequests: ShardInfo missing for shardIdx=" << shardIdx);
@@ -1332,32 +1295,6 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
         ? srcBackupPath.Base()->PathId
         : TPathId{};
 
-<<<<<<< HEAD
-    auto stateIt = IncrementalRestoreStates.find(operationId);
-    if (stateIt != IncrementalRestoreStates.end()) {
-        // Add to in-progress operations (will be tracked alongside table operations)
-        stateIt->second.InProgressOperations.insert(indexRestoreOpId);
-
-        // Track expected shards for this index impl table
-        auto& indexOpState = stateIt->second.TableOperations[indexRestoreOpId];
-        indexOpState.OperationId = indexRestoreOpId;
-
-        if (Tables.contains(indexImplTablePathId)) {
-            auto indexImplTable = Tables.at(indexImplTablePathId);
-            for (const auto& [shardIdx, partitionIdx] : indexImplTable->GetShard2PartitionIdx()) {
-                indexOpState.ExpectedShards.insert(shardIdx);
-                stateIt->second.InvolvedShards.insert(shardIdx);
-            }
-            LOG_I("Index operation " << indexRestoreOpId << " expects " << indexOpState.ExpectedShards.size() << " shards");
-        }
-
-        LOG_I("Tracking index operation " << indexRestoreOpId << " for incremental restore " << operationId);
-    }
-
-    // Send the request (parallel with table operations)
-    LOG_I("Sending index restore operation for: " << dstIndexImplPath);
-    Send(SelfId(), indexRequest.Release());
-=======
     EnqueueIncrementalRestoreItem(
         operationId, state,
         TIncrementalRestoreState::TItem::EKind::Index,
@@ -1365,7 +1302,6 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
         std::move(indexRequest),
         db, ctx,
         srcIndexPathId);
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
 }
 
 void TSchemeShard::NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx) {

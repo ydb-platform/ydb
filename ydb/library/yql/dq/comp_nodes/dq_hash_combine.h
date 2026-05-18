@@ -1,10 +1,9 @@
 #pragma once
 
-namespace NKikimr::NMiniKQL {
+#include <ydb/library/yql/dq/runtime/dq_compute.h>
 
-class IComputationNode;
-class TCallable;
-struct TComputationNodeFactoryContext;
+namespace NKikimr {
+namespace NMiniKQL {
 
 class TDqHashCombineTestPoints {
 public:
@@ -14,4 +13,5 @@ public:
 IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -2,9 +2,8 @@
 #include "dq_tasks_counters.h"
 #include "dq_tasks_runner.h"
 
-#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
-#include <ydb/library/yql/dq/comp_nodes/dq_watermark_generator.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -352,10 +351,9 @@ public:
             auto& computationFactory = Context.ComputationFactory;
             if (auto res = computationFactory(callable, ctx)) {
                 return res;
-            } else if (callable.GetType()->GetName() == "MultiHoppingCore") {
+            }
+            if (callable.GetType()->GetName() == "MultiHoppingCore") {
                 return WrapMultiHoppingCore(callable, ctx, Watermark);
-            } else if (callable.GetType()->GetName() == "DqWatermarkGenerator") {
-                return WrapDqWatermarkGenerator(callable, ctx, Watermark);
             }
             return nullptr;
         };
@@ -1170,21 +1168,11 @@ private:
                 case NUdf::EFetchStatus::Yield: {
                     auto status = ERunStatus::PendingInput;
                     // only for sync ca
-                    const auto watermark = [this]() {
-                        if (!WatermarksTracker) {
-                            return TMaybe<TInstant>{};
-                        }
-                        if (WatermarksTracker->HasPendingWatermark()) {
-                            const auto result = WatermarksTracker->GetPendingWatermark();
-                            WatermarksTracker->PopPendingWatermark();
-                            return result;
-                        } else if (Watermark.WatermarkIn) {
-                            return std::exchange(Watermark.WatermarkIn, Nothing());
-                        } else {
-                            return TMaybe<TInstant>{};
-                        }
-                    }();
-                    if (watermark) {
+                    if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                        const auto watermark = WatermarksTracker->GetPendingWatermark();
+                        WatermarksTracker->PopPendingWatermark();
+
+                        Y_DEBUG_ABORT_UNLESS(watermark.Defined());
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
                         AllocatedHolder->Output->Consume(std::move(watermarkRequest));

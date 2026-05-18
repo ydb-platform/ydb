@@ -121,11 +121,10 @@ public:
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
-            const auto maybeSettings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
-            if (!maybeSettings) {
+            auto settings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
+            if (!settings) {
                 return {};
             }
-            const auto settings = maybeSettings.Cast();
 
             const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
@@ -151,12 +150,12 @@ public:
 
             const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
 
-            TExprBase result = Build<TDqSourceWrap>(ctx, pos)
+            return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
-                    .Settings(settings)
+                    .Settings(std::move(settings))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -168,39 +167,7 @@ public:
                 .RowType(expandedRowType)
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
-                .Done();
-
-            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable")) {
-                const auto watermark = maybeWatermark.Cast();
-
-                auto watermarkSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
-                for (const auto& nameValue : settings) {
-                    if (const auto name = nameValue.Name().Value();
-                        WatermarksLateArrivalDelayUsSetting == name) {
-                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
-                    } else if (WatermarksGranularityUsSetting == name) {
-                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
-                    } else if (WatermarksIdleTimeoutUsSetting == name) {
-                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
-                    }
-                }
-                const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
-
-                result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
-                    .Input(result)
-                    .WatermarkExtractor(watermark)
-                    .PartitionIdExtractor<TCoLambda>()
-                        .Args({"arg"})
-                        .Body<TCoMember>()
-                            .Struct("arg")
-                            .Name().Build("_yql_sys_partition_id")
-                            .Build()
-                        .Build()
-                    .WatermarkSettings(watermarkSettings.Ptr())
-                    .Done();
-            }
-
-            return result.Ptr();
+                .Done().Ptr();
         }
         return read;
     }
@@ -342,7 +309,7 @@ public:
                     } else if (name == AddBearerToTokenSetting) {
                         srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
                     } else if (name == WatermarksEnableSetting) {
-                        srcDesc.MutableWatermarks()->SetEnabled(FromString<bool>(Value(setting)));
+                        srcDesc.MutableWatermarks()->SetEnabled(true);
                     } else if (name == WatermarksGranularityUsSetting) {
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
@@ -536,21 +503,8 @@ private:
     //   WATERMARK = SystemMetadata('write_time') - Interval('PT5S')
     // Only used (and useful) for non-shared-reading pq source
     // (in this case, flexible watermark expression is not implemented)
-    static TMaybe<ui64> ExtractWatermarkDelay(
-        const TPosition pos,
-        TExprContext& ctx,
-        const TCoLambda& watermark,
-        const IDqIntegration::TWrapReadSettings& wrSettings
-    ) {
-        const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
-        if ("disable" == watermarksMode) {
-            ctx.AddError(TIssue(pos, "Watermarks are disabled"));
-            return Nothing();
-        }
-
-        static constexpr std::string_view message = "Incorrect watermark expression";
+    static TMaybe<ui64> ExtractWatermarkDelay(const TCoLambda& watermark) {
         if (watermark.Args().Size() != 1) {
-            ctx.AddError(TIssue(pos, message));
             return Nothing();
         }
         const auto arg = watermark.Args().Arg(0);
@@ -560,29 +514,24 @@ private:
             return Nothing();
         }
         const auto sub = maybeSub.Cast();
-        if ("default" == watermarksMode) {
-            static constexpr std::string_view defaultMessage = "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
+        {
             const auto maybeMember = sub.Left().Maybe<TCoMember>();
             if (!maybeMember) {
-                ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
             const auto member = maybeMember.Cast();
             if (const auto& maybeArg = member.Struct().Maybe<TCoArgument>()) {
                 if (maybeArg.Cast().Name() != arg.Name()) {
-                    ctx.AddError(TIssue(pos, defaultMessage));
                     return Nothing();
                 }
             }
             if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time"}, member.Name())) {
-                ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
         }
         {
             auto maybeInterval = sub.Right().Maybe<TCoInterval>();
             if (!maybeInterval) {
-                ctx.AddError(TIssue(pos, message));
                 return Nothing();
             }
             auto interval = maybeInterval.Cast();
@@ -595,7 +544,7 @@ private:
     }
 
 public:
-    TMaybeNode<TCoNameValueTupleList> BuildTopicReadSettings(
+    TExprNode::TPtr BuildTopicReadSettings(
         const TPqReadTopic& pqReadTopic,
         TExprContext& ctx,
         const IDqIntegration::TWrapReadSettings& wrSettings
@@ -635,8 +584,9 @@ public:
         TMaybe<ui64> watermarksIdleTimeoutUs;
         TMaybe<ui64> watermarksLateArrivalDelayUs;
         if (!useSharedReading && maybeWatermark) {
-            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(ctx.GetPosition(pqReadTopic.Pos()), ctx, maybeWatermark.Cast(), wrSettings);
+            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
             if (!watermarksLateArrivalDelayUs) {
+                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')"));
                 return {};
             }
         }
@@ -784,9 +734,8 @@ public:
             Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
-        if (const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
-            watermarksMode != "disable" && maybeWatermark) {
-            Add(props, WatermarksEnableSetting, ToString("default" == watermarksMode), pos, ctx);
+        if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {
+            Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
                 ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);
             Add(props, WatermarksLateArrivalDelayUsSetting,
@@ -836,7 +785,7 @@ public:
 
         return Build<TCoNameValueTupleList>(ctx, pos)
             .Add(props)
-            .Done();
+            .Done().Ptr();
     }
 
     NNodes::TCoNameValueTupleList BuildDqSourceWrapSettings(const TPqReadTopic& pqReadTopic, TPositionHandle pos, TExprContext& ctx) const {

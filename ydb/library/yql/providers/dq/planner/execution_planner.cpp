@@ -266,7 +266,7 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("disable") != "disable");
+        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }

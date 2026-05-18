@@ -64,6 +64,8 @@
 
 Для проведения хаос-тестирования {{ ydb-short-name }} используется инструмент **Nemesis** — приложение для внесения сбоев, расположенное в [репозитории YDB на GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stability/nemesis). Он разворачивается непосредственно на узлах тестируемого кластера и управляет внесением сбоев по заданному расписанию.
 
+> **Важно:** Nemesis работает только с кластерами {{ ydb-short-name }}, которые были развёрнуты с помощью утилиты [`ydbd_slice`](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/ydbd_slice).
+
 ### Установка
 
 Разверните Nemesis на кластере:

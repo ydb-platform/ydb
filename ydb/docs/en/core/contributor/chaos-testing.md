@@ -64,6 +64,8 @@ Failures are injected automatically on a schedule, and check results are aggrega
 
 {{ ydb-short-name }} uses the **Nemesis** tool for chaos testing — a fault injection application located in the [YDB repository on GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stability/nemesis). It is deployed directly on the nodes of the cluster under test and manages fault injection according to a configured schedule.
 
+> **Important:** Nemesis only works with {{ ydb-short-name }} clusters that were deployed using the [`ydbd_slice`](https://github.com/ydb-platform/ydb/tree/main/ydb/tools/ydbd_slice) utility.
+
 ### Installation
 
 Deploy Nemesis to your cluster:

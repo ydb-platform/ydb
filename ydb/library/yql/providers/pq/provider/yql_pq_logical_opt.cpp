@@ -430,15 +430,27 @@ public:
             auto splitedPredicate = SplitPredicateByMember(flatmap.Lambda(), {"_yql_sys_partition_id"}, ctx, false);
 
             if (splitedPredicate) {
-                auto lambdaArg = flatmap.Lambda().Args().Arg(0).Ptr();
-                auto newFilterLambda = Build<TCoLambda>(ctx, node.Pos())
-                    .Args({"_yql_sys_partition_id"})
-                    .Body<TExprApplier>()
-                        .Apply(splitedPredicate.Cast())
-                        .With(TExprBase(lambdaArg), "_yql_sys_partition_id")
-                        .Build()
-                    .Done();
+                auto newFilterArg = ctx.NewArgument(node.Pos(), "_yql_sys_partition_id");
+                auto predicateBody = splitedPredicate.Cast().Ptr();
 
+                auto lambdaArg = flatmap.Lambda().Args().Arg(0).Raw();
+                TNodeOnNodeOwnedMap replaces;
+                VisitExpr(predicateBody, [&](const TExprNode::TPtr& exprNode) {
+                    if (TCoMember::Match(exprNode.Get())) {
+                        auto member = TCoMember(exprNode.Get());
+                        if (member.Struct().Raw() == lambdaArg
+                            && member.Name().StringValue() == "_yql_sys_partition_id") {
+                            replaces[exprNode.Get()] = newFilterArg;
+                        }
+                        return false;
+                    }
+                    return true;
+                });
+                auto replacedBody = ctx.ReplaceNodes(std::move(predicateBody), replaces);
+
+                auto newFilterLambda = ctx.NewLambda(node.Pos(),
+                    ctx.NewArguments(node.Pos(), {newFilterArg}),
+                    std::move(replacedBody));
 
                 const auto& federatedTopics = *(topicMeta->FederatedTopic);
                 size_t topicPartitionsCount = 0;
@@ -451,36 +463,16 @@ public:
                 isPartitionListUpdated = true;
                 partitionList = ctx.Builder(node.Pos())
                     .Callable("EvaluateExpr")
-                        .Callable(0, "Map")
-                            .Callable(0, "Filter")
-                                .Callable(0, "Map")
-                                    .Callable(0, "ListFromRange")
-                                        .Callable(0, "Uint64")
-                                            .Atom(0, 0)
-                                        .Seal()
-                                        .Callable(1, "Uint64")
-                                            .Atom(0, topicPartitionsCount)
-                                        .Seal()
-                                    .Seal()
-                                    .Lambda(1)
-                                        .Param("item")
-                                        .Callable("AsStruct")
-                                            .List(0)
-                                                .Atom(0, "_yql_sys_partition_id")
-                                                .Arg(1, "item")
-                                            .Seal()
-                                        .Seal()
-                                    .Seal()
+                        .Callable(0, "Filter")
+                            .Callable(0, "ListFromRange")
+                                .Callable(0, "Uint64")
+                                    .Atom(0, 0)
                                 .Seal()
-                                .Add(1, newFilterLambda.Ptr())
-                            .Seal()
-                            .Lambda(1)
-                                .Param("item")
-                                .Callable("Member")
-                                    .Arg(0, "item")
-                                    .Atom(1, "_yql_sys_partition_id", TNodeFlags::Default)
+                                .Callable(1, "Uint64")
+                                    .Atom(0, topicPartitionsCount)
                                 .Seal()
                             .Seal()
+                            .Add(1, newFilterLambda)
                         .Seal()
                     .Seal()
                     .Build();

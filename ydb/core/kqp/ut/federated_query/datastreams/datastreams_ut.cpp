@@ -1305,7 +1305,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         Sleep(TDuration::Seconds(5));
         WriteTopicMessage(topic, "data3", 0, /* local */ true);                  // wrong schema
 
-        auto received = ReadTopicMessagesWithWriteTime(topic, 4, TInstant{}, true);
+        auto received = ReadTopicMessages(topic, {"1", "2", "3", "4"}, TInstant{}, false, true, false);
         UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
 
         auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {

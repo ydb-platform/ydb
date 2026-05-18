@@ -81,12 +81,13 @@ public:
             const size_t tasks = Min(maxPartitions, predicatePartitions.size());
             auto predicatePartitionIt = predicatePartitions.begin();
             partitions.reserve(tasks);
-            size_t partitionsPerTask = predicatePartitions.size() / tasks;
+            size_t allocatedPartitions = 0;
 
             for (size_t i = 0; i < tasks; ++i) {
                 NPq::NProto::TDqReadTaskParams params;
+                size_t partitionsPerTask = (predicatePartitions.size() - allocatedPartitions) / (tasks - i);
                 if (i == tasks - 1) { // last task
-                    partitionsPerTask = predicatePartitions.size() - i * partitionsPerTask;
+                    partitionsPerTask = predicatePartitions.size() - allocatedPartitions;
                 }
                 for (size_t k = 0; k < partitionsPerTask; ++k) {
                     auto* partitioningParams = params.AddPartitioningParams();
@@ -97,6 +98,7 @@ public:
                     YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
                     predicatePartitionIt++;
                 }
+                allocatedPartitions += partitionsPerTask;
                 TString serializedParams;
                 YQL_ENSURE(params.SerializeToString(&serializedParams));
                 partitions.emplace_back(std::move(serializedParams));

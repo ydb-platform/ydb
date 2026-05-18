@@ -127,7 +127,7 @@ bool ConvertComparePredicate(
         return value != Max<i64>() ? value + 1 : value;
     };
     if (compare.Maybe<TCoCmpEqual>()) {
-        InsertInterval(tree, value, value + 1);
+        InsertInterval(tree, value, inc(value));
         return true;
     } else if (compare.Maybe<TCoCmpNotEqual>()) {
         InsertInterval(tree, Min<i64>(), value);
@@ -257,13 +257,17 @@ bool ConvertPredicate(
 ) {
     if (auto compare = predicate.Maybe<TCoCompare>()) {
         return ConvertComparePredicate(compare.Cast(), tree, ctx);
-    } else if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
+    }
+    if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
         return ConvertCoalescePredicate(coalesce.Cast(), tree, ctx);
-    } else if (auto andExpr = predicate.Maybe<TCoAnd>()) {
+    }
+    if (auto andExpr = predicate.Maybe<TCoAnd>()) {
         return ConvertAndPredicate(andExpr.Cast(), tree, ctx);
-    } else if(auto orExpr = predicate.Maybe<TCoOr>()) {
+    }
+    if(auto orExpr = predicate.Maybe<TCoOr>()) {
         return ConvertOrPredicate(orExpr.Cast(), tree, ctx);
-    } else if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
+    }
+    if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
         return ConvertInPredicate(sqlIn.Cast(), tree, ctx);
     }
     ctx.Err << "unknown predicate: " << predicate.Raw()->Content() << ";";

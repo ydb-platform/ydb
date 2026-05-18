@@ -377,6 +377,9 @@ public:
         const auto topic = input->Child(TDqPqTopicSource::idx_Topic);
         const auto settings = input->Child(TDqPqTopicSource::idx_Settings);
         const auto rowType = input->Child(TDqPqTopicSource::idx_RowType);
+        const auto partitions = input->Child(TDqPqTopicSource::idx_Partitions);
+        const auto offsetPredicate = input->Child(TDqPqTopicSource::idx_OffsetPredicate);
+        const auto writeTimePredicate = input->Child(TDqPqTopicSource::idx_WriteTimePredicate);
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -490,6 +493,20 @@ public:
                 return TStatus::Error;
             }
             items.emplace_back(BuildPqMetaFieldExprType(*descriptor, ctx));
+        }
+
+        if (!partitions->IsCallable(TCoVoid::CallableName())) {
+            if (!EnsureListType(*partitions, ctx)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (!EnsureAtom(*offsetPredicate, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*writeTimePredicate, ctx)) {
+            return TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TTupleExprType>(items)));

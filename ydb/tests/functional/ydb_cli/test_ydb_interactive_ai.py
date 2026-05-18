@@ -224,8 +224,10 @@ class BaseAiInteractiveTest(BaseInteractiveTest):
     def _create_minimal_ai_config(self):
         """Write a config that only sets ``interactive_mode: 1``.
 
-        The CLI will auto-create a profile from the default preset
-        (``sample_openai_model``) that is registered in the test binary.
+        The CLI will use the default preset (``sample_openai_model``) from the
+        test binary as an in-memory profile. Nothing is persisted to YAML until
+        the user makes an explicit choice via ``/model`` or edits and confirms
+        the profile via ``/config`` -> "Change current AI model settings".
         """
         path = str(self.tmp_path / "ai_profile.yaml")
         with open(path, "w") as f:
@@ -1086,9 +1088,10 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         with open(path) as f:
             return yaml.safe_load(f)
 
-    def test_preset_creates_correct_profile_file(self):
-        """After the CLI auto-creates a profile from the default preset the
-        YAML file contains all expected keys with correct values."""
+    def test_default_preset_profile_is_in_memory_only(self):
+        """A profile built from the default preset on the fly must not be
+        persisted to YAML. The CLI must work for queries, but afterwards the
+        profile file must stay minimal (only ``interactive_mode``)."""
         self.mock_server.set_openai_response("ok")
         profile_path = self._create_minimal_ai_config()
         child = self.spawn_interactive(timeout=15, profile_path=profile_path)
@@ -1107,17 +1110,10 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
         cfg = self._read_profile_yaml()
         assert cfg["interactive_mode"] == 1
-        assert cfg.get("current_profile"), "current_profile must be set"
-
-        profiles = cfg.get("ai_profiles", {})
-        assert len(profiles) >= 1, "at least one profile must exist"
-        profile_id = cfg["current_profile"]
-        assert profile_id in profiles, "current_profile must reference an existing entry"
-
-        p = profiles[profile_id]
-        assert p["name"], "profile name must be non-empty"
-        assert p["preset_id"] == "sample_openai_model"
-        assert len(p.keys()) == 2, "only name and preset_id are expected"
+        assert not cfg.get("current_profile"), \
+            "in-memory default preset must not set current_profile in YAML"
+        assert not cfg.get("ai_profiles"), \
+            "in-memory default preset must not be persisted to ai_profiles"
 
     def test_model_switch_updates_profile_file(self):
         """Switching model via ``/model`` persists the new profile and
@@ -1206,9 +1202,10 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
     # -- RemoveAiProfile (via /config) ---------------------------------------
 
-    def test_config_remove_profile_creates_new_from_preset(self):
-        """``/config`` -> "Remove current AI model" deletes the profile and
-        auto-creates a new one from the default preset."""
+    def test_config_remove_falls_back_to_in_memory_default(self):
+        """``/config`` -> "Remove current AI model" deletes the profile from
+        YAML, clears ``current_profile`` and falls back to an in-memory
+        default-preset profile. No replacement is written to disk."""
         child = self.spawn_ai_interactive("openai")
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
@@ -1234,29 +1231,57 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             child.close()
 
         cfg = self._read_profile_yaml()
-        profiles = cfg.get("ai_profiles", {})
+        profiles = cfg.get("ai_profiles") or {}
         assert "test_openai" not in profiles, "removed profile must be gone"
-        assert len(profiles) >= 1, "a replacement profile must have been created"
-        assert cfg["current_profile"] in profiles
+        assert not profiles, \
+            "no replacement profile must be persisted (default is in-memory)"
+        assert not cfg.get("current_profile"), \
+            "current_profile must be cleared after removing the active profile"
 
-    def test_config_remove_and_verify_new_profile_structure(self):
-        """After removing the profile and auto-creating a replacement, the
-        new profile in the YAML has the expected structure from the preset."""
-        child = self.spawn_ai_interactive("openai")
+    def test_config_edit_promotes_in_memory_profile_to_disk(self):
+        """Editing the in-memory default-preset profile via ``/config`` ->
+        "Change current AI model settings" -> any change -> "Finish editing"
+        must persist the profile to disk: ``ai_profiles`` gets a new entry
+        and ``current_profile`` references it."""
+        self.mock_server.set_openai_response("ok")
+        profile_path = self._create_minimal_ai_config()
+        child = self.spawn_interactive(timeout=15, profile_path=profile_path)
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_ai_prompt(child)
+
+            # Warm up — make sure the model handler is functional.
             self._send_query(child, "init")
-            child.expect("Mock OpenAI response", timeout=15)
+            child.expect("ok", timeout=15)
             self._wait_for_ai_prompt(child)
 
             self._send_query(child, "/config")
-            child.expect("Remove current AI model", timeout=10)
+            child.expect("choose setting to change", timeout=10)
+            # /config menu for an in-memory profile has 3 items (no "Remove"):
+            # Clear / Switch / Change settings. Pick the third (2 downs).
+            for _ in range(2):
+                self._send_down(child)
+            self._send_enter(child)
+
+            # Edit menu — pick "Token" (3 downs from "API endpoint").
+            child.expect("choose setting to change.*API endpoint", timeout=10)
             for _ in range(3):
                 self._send_down(child)
             self._send_enter(child)
 
-            child.expect("profile is changed|Switching AI profile", timeout=15)
+            # Token menu — pick the first provider ("Test token"). This sets
+            # ``token_provider`` and marks the profile as changed.
+            child.expect("Please choose API token", timeout=10)
+            self._send_enter(child)
+
+            # Back in the Edit menu — pick "Finish editing" (5 downs from top).
+            child.expect("choose setting to change.*API endpoint", timeout=10)
+            for _ in range(5):
+                self._send_down(child)
+            self._send_enter(child)
+
+            # Promotion + ChangeAiProfile prints "profile is changed".
+            child.expect("profile is changed|Switching AI profile", timeout=10)
             self._send_escape(child)
             self._wait_for_ai_prompt(child)
 
@@ -1267,11 +1292,17 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             child.close()
 
         cfg = self._read_profile_yaml()
-        profile_id = cfg["current_profile"]
-        p = cfg["ai_profiles"][profile_id]
-        assert p.get("name"), "replacement profile must have a name"
-        assert p.get("preset_id"), "replacement profile must reference a preset"
-        assert len(p.keys()) == 2, "only name and preset_id are expected"
+        profile_id = cfg.get("current_profile")
+        assert profile_id, "promoted profile must set current_profile"
+        profiles = cfg.get("ai_profiles") or {}
+        assert profile_id in profiles, \
+            "current_profile must reference an entry in ai_profiles"
+
+        p = profiles[profile_id]
+        assert p.get("preset_id") == "sample_openai_model"
+        assert p.get("name"), "promoted profile must have a non-empty name"
+        # The edit step explicitly picked the "test_token" provider.
+        assert p.get("token_provider") == "test_token"
 
     # -- /model menu (presets from test binary) ------------------------------
 
@@ -1455,7 +1486,9 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
     def test_token_provider_resolves_correctly(self):
         """The ``test_token`` provider registered in the test binary resolves
-        to ``"test_token"`` and is sent as the Bearer token."""
+        to ``"test_token"`` and is sent as the Bearer token. The token must
+        be obtained via the preset's token provider and NOT written into
+        the in-memory default-preset profile."""
         self.mock_server.set_openai_response("token check ok")
         profile_path = self._create_minimal_ai_config()
         child = self.spawn_interactive(timeout=15, profile_path=profile_path)
@@ -1477,10 +1510,13 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self.mock_server.clear()
             child.close()
 
+        # The in-memory default-preset profile must not have been persisted —
+        # using the preset's token provider must not promote the profile to disk.
         cfg = self._read_profile_yaml()
-        profile_id = cfg["current_profile"]
-        p = cfg["ai_profiles"][profile_id]
-        assert p["name"] == "Sample Open AI model"
+        assert not cfg.get("current_profile"), \
+            "in-memory default preset must not set current_profile in YAML"
+        assert not cfg.get("ai_profiles"), \
+            "in-memory default preset must not be persisted to ai_profiles"
 
     # -- /config menu --------------------------------------------------------
 

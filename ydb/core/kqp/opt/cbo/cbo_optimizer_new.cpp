@@ -329,7 +329,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     } else if (rightKeyColumns) {
         keyColumns = rightStats.KeyColumns;
     } else {
-        if (leftStats.KeyColumns->Data.size() && rightStats.KeyColumns->Data.size()) {
+        if (leftStats.KeyColumns && leftStats.KeyColumns->Data.size() && rightStats.KeyColumns && rightStats.KeyColumns->Data.size()) {
             TVector<TString> cols = leftStats.KeyColumns->Data;
             cols.insert(cols.begin(), rightStats.KeyColumns->Data.begin(), rightStats.KeyColumns->Data.end());
             keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(cols));

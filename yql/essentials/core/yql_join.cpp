@@ -260,7 +260,7 @@ namespace {
                             }
                             continue;
                         }
-                        if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                        if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows", "FullscanLimit"})) {
                             ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
                                         "streamlookup(): Unsupported option: " << name.Content()));
                             return IGraphTransformer::TStatus::Error;

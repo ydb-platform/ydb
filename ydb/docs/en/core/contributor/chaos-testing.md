@@ -32,6 +32,10 @@ Tablets are the primary computational units of {{ ydb-short-name }}. Resilience 
 
 Tablet rebalancing between nodes via Hive is also tested.
 
+### Integration with Stress Testing
+
+Chaos testing is typically run in conjunction with stress testing workloads from the [ydb/tests/stress](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stress) directory. This combination ensures that the cluster is tested under load conditions while experiencing various failure scenarios.
+
 ### Disk Failures
 
 - Safely taking a disk out of service on a node

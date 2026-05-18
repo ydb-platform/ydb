@@ -4,10 +4,11 @@ import pytest
 import random
 import string
 import time
+from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,9 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool, use_partition_balancing) -> None:
+        input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
@@ -38,12 +40,13 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]['time'] == b'lunch time'
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_csv(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """FORMAT csv: one topic message = one CSV row (ClickHouseClient.ParseFormat, no row dispatcher).
 
         S3 batch analogs: `test_formats.TestS3Formats.test_csv_format_no_header`, etc.
         """
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_csv", local_topics, entity_name)
+        input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic_csv{enable_watermarks_advanced!s:.1}", local_topics, entity_name)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
@@ -61,13 +64,14 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["time"] == b"lunch time"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_with_names(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_csv_with_names(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """FORMAT csv_with_names: header + data line per message (same CH parser as S3; no row dispatcher).
 
         S3 analog: `test_formats.TestS3Formats.test_format` / `test_custom_csv_delimiter_csv_with_names` (csv_with_names).
         """
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_with_names", local_topics, entity_name
+            kikimr, f"test_read_topic_csv_with_names{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT time FROM {input_name}
@@ -86,13 +90,14 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["time"] == b"lunch time"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_projection_column_order(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_projection_column_order(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Headerless CSV: file fields follow SCHEMA order; SELECT only reorders output columns.
 
         S3 analog: `test_formats.TestS3Formats.test_csv_projection_column_order`.
         """
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_projection_column_order", local_topics, entity_name
+            kikimr, f"test_csv_projection_column_order{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT b, a FROM {input_name}
@@ -114,13 +119,14 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["a"] == b"aa"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_with_names_projection_column_order(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_with_names_projection_column_order(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """csv_with_names: header names map fields; SCHEMA order vs header row; SELECT only reorders output.
 
         S3 analog: `test_formats.TestS3Formats.test_csv_with_names_projection_column_order`.
         """
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_with_names_projection_column_order", local_topics, entity_name
+            kikimr, f"test_csv_with_names_projection_column_order{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT b, a FROM {input_name}
@@ -142,10 +148,11 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["a"] == b"aa"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_custom_csv_delimiter_csv_with_names(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_custom_csv_delimiter_csv_with_names(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv_with_names` (semicolon + header per message)."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_custom_csv_delimiter_csv_with_names", local_topics, entity_name
+            kikimr, f"test_custom_csv_delimiter_csv_with_names{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -177,10 +184,11 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_custom_csv_delimiter_csv(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_custom_csv_delimiter_csv(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv` / `test_csv_format_custom_delimiter`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_custom_csv_delimiter_csv", local_topics, entity_name
+            kikimr, f"test_custom_csv_delimiter_csv{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -208,9 +216,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_delimiter_invalid_format_rejected(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_delimiter_invalid_format_rejected(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         input_name, _ = self.get_input_name(
-            kikimr, "test_csv_delimiter_invalid_format_rejected", local_topics, entity_name
+            kikimr, f"test_csv_delimiter_invalid_format_rejected{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -227,9 +236,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert "csv_delimiter can only be used with csv or csv_with_names format" in str(exc_info.value)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_delimiter_must_be_single_character_rejected(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         input_name, _ = self.get_input_name(
-            kikimr, "test_csv_delimiter_must_be_single_character_rejected", local_topics, entity_name
+            kikimr, f"test_csv_delimiter_must_be_single_character_rejected{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -246,10 +256,11 @@ class TestStreamingInYdb(StreamingTestBase):
         assert "csv_delimiter must be single character" in str(exc_info.value)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_empty_schema_rejected(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_empty_schema_rejected(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Analog of `TestS3Formats.test_csv_empty_schema_rejected`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_empty_schema_rejected", local_topics, entity_name
+            kikimr, f"test_csv_empty_schema_rejected{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -268,10 +279,11 @@ class TestStreamingInYdb(StreamingTestBase):
         )
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_projection_single_column(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_projection_single_column(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Analog of `TestS3Formats.test_csv_projection_single_column`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_projection_single_column", local_topics, entity_name
+            kikimr, f"test_csv_projection_single_column{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT b FROM {input_name}
@@ -290,10 +302,17 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["b"] == b"bb"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_projection_column_order_non_alphabetical_schema(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        enable_watermarks_advanced: bool,
+    ) -> None:
         """Analog of `TestS3Formats.test_csv_projection_column_order_non_alphabetical_schema`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_projection_nonalpha_schema", local_topics, entity_name
+            kikimr, f"test_csv_projection_nonalpha_schema{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT a, b FROM {input_name}
@@ -313,10 +332,11 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["b"] == b"bb"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_no_header_three_rows(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_no_header_three_rows(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Analog of `TestS3Formats.test_csv_format_no_header` (same data as test_format_data/test_no_header.csv)."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_no_header_three_rows", local_topics, entity_name
+            kikimr, f"test_csv_no_header_three_rows{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -343,10 +363,11 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_no_header_select_price(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_no_header_select_price(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Analog of `TestS3Formats.test_csv_format_no_header_project_non_first_alphabetic_column`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_no_header_select_price", local_topics, entity_name
+            kikimr, f"test_csv_no_header_select_price{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT Price FROM {input_name}
@@ -373,10 +394,11 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Price"] == 15
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_csv_physical_column_order(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_csv_physical_column_order(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
         """Analog of `TestS3Formats.test_csv_format_schema_order_differs_from_alphabet`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_csv_physical_column_order", local_topics, entity_name
+            kikimr, f"test_csv_physical_column_order{enable_watermarks_advanced!s:.1}", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -401,8 +423,9 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["Fruit"] == b"Banana"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_shared_reading_limit(self, kikimr, entity_name, local_topics):
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_shared_reading_limit(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic_shared_reading_limit{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
@@ -537,10 +560,11 @@ LIMIT 1"""
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_restart_query(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool, use_partition_balancing) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10)
 
-        name = f"test_restart_query_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        name = f"test_restart_query_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}"
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -577,8 +601,16 @@ LIMIT 1"""
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"shared_reading_insert_to_topic{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_shared_reading_insert_to_topic(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"shared_reading_insert_to_topic{local_topics!s:.1}{enable_watermarks_advanced!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=10,
+            shared=True,
+        )
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -591,8 +623,8 @@ LIMIT 1"""
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
 
-        query_name1 = f"test_read_topic_shared_reading_insert_to_topic1_{local_topics!s:.1}"
-        query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}"
+        query_name1 = f"test_read_topic_shared_reading_insert_to_topic1_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}"
+        query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
         path1 = f"/Root/{query_name1}"
@@ -629,8 +661,9 @@ LIMIT 1"""
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_shared_reading_restart_nodes(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"reading_restart_nodes_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_shared_reading_restart_nodes(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"reading_restart_nodes_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -643,7 +676,7 @@ LIMIT 1"""
                 INSERT INTO {out} SELECT value FROM $in;
             END DO;'''
 
-        query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}"
+        query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
@@ -680,8 +713,16 @@ LIMIT 1"""
         self.wait_completed_checkpoints(kikimr, path)
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_read_topic_restore_state_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_read_topic_restore_state(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_read_topic_restore_state_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -710,7 +751,7 @@ LIMIT 1"""
                     SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $mr;
             END DO;'''
 
-        query_name = f"test_read_topic_restore_state_{local_topics!s:.1}"
+        query_name = f"test_read_topic_restore_state_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
@@ -743,10 +784,11 @@ LIMIT 1"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_json_errors(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_json_errors_{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_json_errors(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_json_errors_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
 
-        name = f"test_json_errors_{local_topics!s:.1}"
+        name = f"test_json_errors_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -773,10 +815,18 @@ LIMIT 1"""
         assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query_by_rescaling{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_restart_query_by_rescaling(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_restart_query_by_rescaling{local_topics!s:.1}{enable_watermarks_advanced!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=10,
+            shared=True,
+        )
 
-        name = f"test_restart_query_by_rescaling_{local_topics!s:.1}"
+        name = f"test_restart_query_by_rescaling_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -831,12 +881,19 @@ LIMIT 1"""
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_pragma(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name, partitions_count=10)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_pragma(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool, use_partition_balancing) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_pragma_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=10,
+        )
 
         create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
 
-        query_name = f"test_pragma1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        query_name = f"test_pragma1_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}"
         pragma_balancing = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -859,10 +916,11 @@ LIMIT 1"""
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_types(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_types", local_topics, entity_name, partitions_count=1)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_types(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool, use_partition_balancing) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_types{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=1)
 
-        query_name = f"test_types1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        query_name = f"test_types1_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}"
 
         def test_type(self, kikimr, type, input, expected_output, use_partition_balancing=False):
             pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
@@ -896,12 +954,13 @@ LIMIT 1"""
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_raw_format(self, kikimr, entity_name, local_topics, use_partition_balancing):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_raw_format", local_topics, entity_name, partitions_count=10)
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_raw_format(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool, use_partition_balancing) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_raw_format{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10)
 
         pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
 
-        query_name = f"test_raw_format_string_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        query_name = f"test_raw_format_string_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -923,7 +982,7 @@ LIMIT 1"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-        query_name = f"test_raw_format_default_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        query_name = f"test_raw_format_default_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -942,7 +1001,7 @@ LIMIT 1"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
-        query_name = f"test_raw_format_json_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        query_name = f"test_raw_format_json_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}{use_partition_balancing!s:.1}"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -966,8 +1025,9 @@ LIMIT 1"""
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
     @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "20000"}], indirect=["kikimr"])
-    @pytest.mark.parametrize("local_topics", [False, True])
-    def test_deduplication(self, kikimr, entity_name, local_topics):
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_deduplication(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -978,8 +1038,8 @@ LIMIT 1"""
 
         # Disable deduplication
 
-        inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10)
-        name = f"test_deduplication_{local_topics!s:.1}"
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_deduplication_disabled{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10)
+        name = f"test_deduplication_{local_topics!s:.1}{enable_watermarks_advanced!s:.1}"
         path = f"/Root/{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
         self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
@@ -1006,7 +1066,7 @@ LIMIT 1"""
 
         # Enable deduplication
 
-        inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_enabled", local_topics, entity_name, partitions_count=10)
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_deduplication_enabled{enable_watermarks_advanced!s:.1}", local_topics, entity_name, partitions_count=10)
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
         self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
 
@@ -1032,7 +1092,7 @@ LIMIT 1"""
         ],
         indirect=["kikimr"],
     )
-    def test_check_shared_reading_disabled(self, kikimr, entity_name, request):
+    def test_check_shared_reading_disabled(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], request) -> None:
         cfg = request.node.callspec.params["kikimr"]
         enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
         source_name = entity_name("MyEDS")
@@ -1048,9 +1108,10 @@ LIMIT 1"""
                 self.create_source(kikimr, source_name, shared=True)
 
     @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
     @pytest.mark.parametrize("kikimr", [{"enable_streaming_queries": False}], indirect=["kikimr"])
-    def test_table_mode(self, kikimr, entity_name, local_topics):
-        input_name, endpoint = self.get_input_name(kikimr, f"test_table_mode{local_topics!s:.1}", local_topics, entity_name)
+    def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, enable_watermarks_advanced: bool) -> None:
+        input_name, endpoint = self.get_input_name(kikimr, f"test_table_mode{local_topics!s:.1}{enable_watermarks_advanced!s:.1}", local_topics, entity_name)
 
         message = b'{"time": "lunch time"}'
         self.write_stream([message], endpoint=endpoint)

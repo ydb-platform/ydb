@@ -93,7 +93,6 @@ private:
 
   TTagToIndex Indices;
   NBackup::IChecksum::TPtr Checksum;
-  // TMaybe<NBackup::TEncryptedFileSerializer> Encryption;
   std::shared_ptr<parquet::WriterProperties> WriteProperties;
 
   TString ErrorString;

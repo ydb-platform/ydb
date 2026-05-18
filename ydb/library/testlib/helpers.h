@@ -18,7 +18,7 @@
             TCurrentTest::AddTest(TTestCase##N<false>::CreateOff);                                                 \
         }                                                                                                          \
     };                                                                                                             \
-    static TTestRegistration##N testRegistration##N;                                                               \
+    static const TTestRegistration##N testRegistration##N;                                                         \
     template <bool OPT>                                                                                            \
     void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 

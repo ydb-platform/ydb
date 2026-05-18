@@ -370,7 +370,7 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TString alias = "_aggregate";
     int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, alias);
     for (const auto & iu : GetOutputIUs()) {
-        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, alias, iu.GetColumnName(), duplicateId));
+        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, "", iu.GetColumnName(), duplicateId));
     }
 }
 

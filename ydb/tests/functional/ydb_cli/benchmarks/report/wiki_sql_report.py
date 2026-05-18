@@ -13,7 +13,7 @@ The script scans a ``statistics`` directory for JSON files produced by
 
 Run with::
 
-    python generate_report.py validation0.01
+    python wiki_sql_report.py validation0.01
 
 By default reads from ``../statistics`` and writes to ``./report_output/<split>``.
 """
@@ -104,11 +104,9 @@ def fmt_pct(value: float) -> str:
     return f"{value * 100:.1f}\\%"
 
 
-def fmt_num(value: float, digits: int = 2) -> str:
+def fmt_num(value: Optional[float], digits: int = 2) -> str:
     if value is None:
         return "--"
-    if digits == 0:
-        return f"{value:.0f}"
     return f"{value:.{digits}f}"
 
 
@@ -184,16 +182,9 @@ def per_operator_accuracy(entry: StatEntry) -> Dict[str, Tuple[int, int]]:
 # ---------------------------------------------------------------------------
 
 
-def build_model_comparison_csv(entries: List[StatEntry], split: str) -> str:
-    if not entries:
+def build_model_comparison_csv(chosen: List[StatEntry]) -> str:
+    if not chosen:
         return ""
-    table_counts = sorted({e.tables for e in entries})
-    target_count = max(
-        table_counts,
-        key=lambda c: sum(1 for e in entries if e.tables == c),
-    )
-    chosen = [e for e in entries if e.tables == target_count]
-    chosen.sort(key=lambda e: e.model.lower())
 
     lines: List[str] = []
     lines.append("Model,Total,Correct,Accuracy,N_instr.,N_err. (avg/max),Without list_dir/describe,t_lat. s")
@@ -212,16 +203,9 @@ def build_model_comparison_csv(entries: List[StatEntry], split: str) -> str:
     return "\n".join(lines)
 
 
-def build_token_usage_csv(entries: List[StatEntry], split: str) -> str:
-    if not entries:
+def build_token_usage_csv(chosen: List[StatEntry]) -> str:
+    if not chosen:
         return ""
-    table_counts = sorted({e.tables for e in entries})
-    target_count = max(
-        table_counts,
-        key=lambda c: sum(1 for e in entries if e.tables == c),
-    )
-    chosen = [e for e in entries if e.tables == target_count]
-    chosen.sort(key=lambda e: e.model.lower())
 
     lines: List[str] = []
     lines.append("Model,N_model calls,N_in tokens,N_out tokens,N_cached tokens")
@@ -237,16 +221,9 @@ def build_token_usage_csv(entries: List[StatEntry], split: str) -> str:
     return "\n".join(lines)
 
 
-def build_operator_accuracy_csv(entries: List[StatEntry], split: str) -> str:
-    if not entries:
+def build_operator_accuracy_csv(chosen: List[StatEntry]) -> str:
+    if not chosen:
         return ""
-    table_counts = sorted({e.tables for e in entries})
-    target_count = max(
-        table_counts,
-        key=lambda c: sum(1 for e in entries if e.tables == c),
-    )
-    chosen = [e for e in entries if e.tables == target_count]
-    chosen.sort(key=lambda e: e.model.lower())
 
     operators_order = ["", "MAX", "MIN", "COUNT", "SUM", "AVG"]
     discovered: List[str] = []
@@ -280,7 +257,7 @@ def build_operator_accuracy_csv(entries: List[StatEntry], split: str) -> str:
     return "\n".join(lines)
 
 
-def build_tables_impact_csv(entries: List[StatEntry], split: str) -> Optional[str]:
+def build_tables_impact_csv(entries: List[StatEntry]) -> Optional[str]:
     by_model: Dict[str, List[StatEntry]] = defaultdict(list)
     for e in entries:
         by_model[e.model].append(e)
@@ -326,9 +303,8 @@ def _save_fig(fig, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_model_accuracy(entries: List[StatEntry], target_tables: int, out_path: Path) -> None:
-    chosen = [e for e in entries if e.tables == target_tables]
-    chosen.sort(key=lambda e: entry_metrics(e)["accuracy"], reverse=True)
+def plot_model_accuracy(chosen_tables: List[StatEntry], out_path: Path) -> None:
+    chosen = sorted(chosen_tables, key=lambda e: entry_metrics(e)["accuracy"], reverse=True)
     if not chosen:
         return
     labels = [e.model for e in chosen]
@@ -338,7 +314,7 @@ def plot_model_accuracy(entries: List[StatEntry], target_tables: int, out_path: 
     bars = ax.bar(labels, values, color="#4472C4")
     ax.set_ylabel("Accuracy, %")
     ax.set_xlabel("Model")
-    ax.set_title(f"Model response accuracy (tables = {target_tables})")
+    ax.set_title(f"Model response accuracy")
     ax.set_ylim(0, max(100, max(values) * 1.15))
     for bar, value in zip(bars, values):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
@@ -347,18 +323,11 @@ def plot_model_accuracy(entries: List[StatEntry], target_tables: int, out_path: 
     _save_fig(fig, out_path)
 
 
-def plot_model_latency(entries: List[StatEntry], target_tables: int, out_path: Path) -> None:
-    chosen = [e for e in entries if e.tables == target_tables]
-    chosen.sort(key=lambda e: entry_metrics(e)["latency_avg"])
+def plot_model_latency(chosen_tables: List[StatEntry], out_path: Path) -> None:
+    chosen = sorted(chosen_tables, key=lambda e: entry_metrics(e)["latency_avg"])
     if not chosen:
         return
-    labels = [{
-        "glm-4.7": "GLM 4.7",
-        "qwen3_5": "Qwen3.5",
-        "minimax_m2.1": "MiniMax M2.1",
-        "qwen3_coder": "Qwen3 Coder",
-        "gpt_oss": "GPT OSS",
-    }[e.model] for e in chosen]
+    labels = [e.model for e in chosen]
     avg = [entry_metrics(e)["latency_avg"] for e in chosen]
     p95 = [entry_metrics(e)["latency_p95"] for e in chosen]
 
@@ -376,9 +345,8 @@ def plot_model_latency(entries: List[StatEntry], target_tables: int, out_path: P
     _save_fig(fig, out_path)
 
 
-def plot_model_tools(entries: List[StatEntry], target_tables: int, out_path: Path) -> None:
-    chosen = [e for e in entries if e.tables == target_tables]
-    chosen.sort(key=lambda e: entry_metrics(e)["tool_calls_avg"], reverse=True)
+def plot_model_tools(chosen_tables: List[StatEntry], out_path: Path) -> None:
+    chosen = sorted(chosen_tables, key=lambda e: entry_metrics(e)["tool_calls_avg"], reverse=True)
     if not chosen:
         return
     labels = [e.model for e in chosen]
@@ -392,7 +360,7 @@ def plot_model_tools(entries: List[StatEntry], target_tables: int, out_path: Pat
     ax.bar(x + width / 2, failed, width, label="Failed", color="#C00000")
     ax.set_ylabel("Calls per run (average)")
     ax.set_xlabel("Model")
-    ax.set_title(f"Tool calls (tables = {target_tables})")
+    ax.set_title(f"Tool calls")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=20, ha="right")
     ax.legend()
@@ -504,14 +472,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         sorted({e.tables for e in entries}),
         key=lambda c: sum(1 for e in entries if e.tables == c),
     )
+    chosen_tables = [e for e in entries if e.tables == target_count]
+    chosen_tables.sort(key=lambda e: e.model.lower())
 
     # --- subsubsection 1: model comparison ---
     acc_fig = figures_dir / f"accuracy-{args.split}.pdf"
     lat_fig = figures_dir / f"latency-{args.split}.pdf"
     tools_fig = figures_dir / f"tool-calls-{args.split}.pdf"
-    plot_model_accuracy(entries, target_tables, acc_fig)
-    plot_model_latency(entries, target_tables, lat_fig)
-    plot_model_tools(entries, target_tables, tools_fig)
+    plot_model_accuracy(chosen_tables, acc_fig)
+    plot_model_latency(chosen_tables, lat_fig)
+    plot_model_tools(chosen_tables, tools_fig)
 
     # --- subsubsection 2: tables impact ---
     impact_acc_fig = figures_dir / f"tables-impact-accuracy-{args.split}.pdf"
@@ -523,19 +493,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     tables_dir = output_dir / "tables"
     tables_dir.mkdir(parents=True, exist_ok=True)
 
-    model_csv = build_model_comparison_csv(entries, args.split)
+    model_csv = build_model_comparison_csv(chosen_tables)
     if model_csv:
         (tables_dir / "model_comparison.csv").write_text(model_csv, encoding="utf-8")
 
-    token_csv = build_token_usage_csv(entries, args.split)
+    token_csv = build_token_usage_csv(chosen_tables)
     if token_csv:
         (tables_dir / "token_usage.csv").write_text(token_csv, encoding="utf-8")
 
-    op_csv = build_operator_accuracy_csv(entries, args.split)
+    op_csv = build_operator_accuracy_csv(chosen_tables)
     if op_csv:
         (tables_dir / "operator_accuracy.csv").write_text(op_csv, encoding="utf-8")
 
-    impact_csv = build_tables_impact_csv(entries, args.split)
+    impact_csv = build_tables_impact_csv(entries)
     if impact_csv:
         (tables_dir / "tables_impact.csv").write_text(impact_csv, encoding="utf-8")
 

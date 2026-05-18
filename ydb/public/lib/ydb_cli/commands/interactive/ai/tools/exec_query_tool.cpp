@@ -119,19 +119,19 @@ IMPORTANT:
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
-- ALWAYS add `` around table paths inside folders. If path to table contains '/, '@' or '.', also wrap it into back ticks, for example `path/to/table`.
-  - Examples how path should be wrapped into back ticks:
+- ALWAYS wrap table paths inside folders in backticks. If a table path contains '/', '@', or '.', also wrap it in backticks, for example: `path/to/table`.
+  - Examples of table paths correctly wrapped in backticks:
     - SELECT * FROM `national_league/goals`
     - SELECT * FROM `ships/crew/legacy`
     - SELECT * FROM `ships.crew.legacy`
     - SELECT * FROM `ships@crew@legacy`
-- If in your query should apper not simple string literal (e. g. if it contains ' or "), instead of escaping wrap it into @@:
+- If your query contains a non-simple string literal (e.g. if it contains ' or "), wrap it in @@ instead of escaping it:
   - SELECT * FROM `national_league/goals` WHERE Name = @@John'Doe@@;
   - SELECT * FROM `national_league/goals` WHERE Name = @@John "Doe" doesn't@@;
-- Some string YQL functions is differ from SQL:
-  - Use String::AsciiToLower instead of LOWER (where is NO such builtin in YQL), right example: SELECT String::AsciiToLower(Name) FROM `mars_rover/photos` WHERE Name LIKE @@%mao'play%@@;
+- Some YQL string functions differ from SQL:
+  - Use String::AsciiToLower instead of LOWER (there is no such built-in function in YQL), for example: SELECT String::AsciiToLower(Name) FROM `mars_rover/photos` WHERE Name LIKE @@%mao'play%@@;
 
-In simple cases you can avoid back ticks and '@', for example (preferred way to write queries if possible):
+In simple cases, you can avoid backticks and '@', for example (this is the preferred way to write queries when possible):
 
 SELECT * FROM my_table WHERE Data = "simple_data";
 

@@ -130,7 +130,7 @@ class WikiSqlSample(BenchmarkSample):
     RESULT_INSTRUCTION = (
         "Solve question without plan confirmation. When you have the final answer, output it on a single line wrapped between "
         f"`{RESULT_START_MARKER}` and `{RESULT_END_MARKER}` markers, then stop responding. "
-        f"If where is not sufficient answer, leave empty string between markers. Use the markers exactly once. Example: {RESULT_START_MARKER}your answer{RESULT_END_MARKER}"
+        f"If there is no sufficient answer, leave an empty string between the markers. Use the markers exactly once. Example: {RESULT_START_MARKER}your answer{RESULT_END_MARKER}"
     )
     DRY_RUN_INSTRUCTION = (
         "All tools are disabled for this run. Provide your best instant answer based solely on the "
@@ -313,7 +313,9 @@ class WikiSqlSample(BenchmarkSample):
             "matched": answers_match(expected_answer, extracted),
             "timed_out": timed_out,
             "elapsed_seconds": finished_at - started_at,
-            "evaluation_elapsed_seconds": finished_at - evaluation_started_at if evaluation_started_at is not None else 0,
+            "evaluation_elapsed_seconds": (
+                finished_at - evaluation_started_at if evaluation_started_at is not None else 0
+            ),
         }
 
 
@@ -511,7 +513,9 @@ class WikiSqlBenchmark(BenchmarkAbstract):
 
     @classmethod
     def _aggregate_latency_stats(cls, samples: List[Dict[str, Any]]) -> Dict[str, Any]:
-        evaluation = [float(s["evaluation_elapsed_seconds"]) for s in samples if s.get("evaluation_elapsed_seconds") is not None]
+        evaluation = [
+            float(s["evaluation_elapsed_seconds"]) for s in samples if s.get("evaluation_elapsed_seconds") is not None
+        ]
         total = [float(s["elapsed_seconds"]) for s in samples if s.get("elapsed_seconds") is not None]
 
         def _summary(values: List[float]) -> Dict[str, float]:
@@ -591,12 +595,9 @@ class WikiSqlBenchmark(BenchmarkAbstract):
 
     def _build_statistics_filename(self, statistics_path: str) -> str:
         filename_prefix = f"{self.statistics_prefix}-" if self.statistics_prefix else ""
-        if len(self.models) == 1:
-            filename_prefix += f"{self.models[0]}-"
-        filename_prefix += f"tables{self.tables_count}-"
-        if len(self.splits) == 1:
-            filename_prefix += self.splits[0]
-        filename_prefix += f"{self.sample_rate}-run"
+        filename_prefix += (
+            f"{'+'.join(self.models)}-tables{self.tables_count}-{'+'.join(self.splits)}{self.sample_rate}-run"
+        )
 
         run_id = 0
         while (Path(statistics_path) / f"{filename_prefix}{run_id}wiki-sql.json").exists():

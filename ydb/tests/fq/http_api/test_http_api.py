@@ -6,6 +6,7 @@ import logging
 import os
 import pytest
 import re
+import time
 import yaml
 from yaml.loader import SafeLoader
 
@@ -103,7 +104,17 @@ class TestHttpApi(TestBase):
 
             assert client.get_query_status(query_id) in ["STARTING", "RUNNING", "COMPLETED", "COMPLETING"]
 
-            response = client.stop_query(query_id)
+            # `select 1` after restart may be in the transient COMPLETING state, which
+            # rejects stop_query until the query reaches a terminal status.
+            for _ in range(10):
+                try:
+                    response = client.stop_query(query_id)
+                    break
+                except YQHttpClientException as e:
+                    if e.details and "COMPLETING" in str(e.details):
+                        time.sleep(0.1)
+                        continue
+                    raise
             assert response.status_code == 204
 
     def test_empty_query(self):

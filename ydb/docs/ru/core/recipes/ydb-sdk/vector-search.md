@@ -1144,7 +1144,7 @@
             WITH (
                 {2}
             );
-        )", tableName, indexName, strategy, dim, levels, clusters);
+        )", tableName, indexName, strategy);
 
         NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
             return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -1200,7 +1200,7 @@
                 WITH (
                     %s
                 );
-                """, tableName, tempIndexName, strategy, dimension, levels, clusters);
+                """, tableName, tempIndexName, strategy);
 
         queryRetry.supplyResult(session -> QueryReader.readFrom(
                 session.createQuery(query, TxMode.NONE, Params.empty())

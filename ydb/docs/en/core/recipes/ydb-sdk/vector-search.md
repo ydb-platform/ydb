@@ -935,10 +935,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           driver: ydb.Driver,
           table_name: str,
           index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
+          strategy: str
       ):
           temp_index_name = f"{index_name}__temp"
           query = f"""
@@ -947,8 +944,7 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
           GLOBAL USING vector_kmeans_tree
           ON (embedding)
           WITH (
-              {strategy},
-              vector_type="Float"
+              {strategy}
           );
           """
 

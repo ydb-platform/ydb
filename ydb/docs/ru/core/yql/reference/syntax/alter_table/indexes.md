@@ -22,6 +22,13 @@ ALTER TABLE `<table_name>`
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
+{% note info %}
+
+Для векторных индексов можно не указывать параметры vector_type и vector_dimension, если таблица не пустая. Они будут автоматически определены из содержимого строк таблицы. Параметры levels и clusters тоже умеют определяться автоматически, но это не требует того чтобы таблица была не пустая.
+
+{% endnote %}
+
+
 Параметры, специфичные для полнотекстовых индексов:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
@@ -51,7 +58,7 @@ ALTER TABLE `series`
   ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
-    distance="cosine"
+    distance="cosine", vector_type="float", vector_dimension=768
   );
 ```
 

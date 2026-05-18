@@ -22,6 +22,12 @@ Parameters specific to vector indexes:
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
+{% note info %}
+
+For vector indexes we can omit vector_type and vector_dimension parameters if table is not empty. They will be autodetected from the row contents. Parameters levels and clusters are also can be autodetected, but it doesn't requires non empty table.
+
+{% endnote %}
+
 Parameters specific to fulltext indexes:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
@@ -51,7 +57,7 @@ ALTER TABLE `series`
   ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
-    distance="cosine"
+    distance="cosine", vector_type="float", vector_dimension=768
   );
 ```
 

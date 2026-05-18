@@ -239,13 +239,12 @@ protected:
     std::vector<TSessionHolder::TPtr> Sessions;
 };
 
-} // anonymous namespace
 
-namespace {
-    NYdb::NTopic::TReadSessionGetEventSettings DefaultGetEventSettings() {
-        return NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096);
-    }
+NYdb::NTopic::TReadSessionGetEventSettings DefaultGetEventSettings() {
+    return NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096);
 }
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
     Y_UNIT_TEST_F(SessionCreationAndGetSessionId, TCompositeClientTestFixture) {

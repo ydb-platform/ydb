@@ -15,6 +15,7 @@ Y_UNIT_TEST_SUITE(OutOfSpace) {
         env.Sim(TDuration::Seconds(30));
 
         const ui32 groupId = env.GetGroups().front();
+        auto info = env.GetGroupInfo(groupId);
 
         const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
         size_t size = 65536;
@@ -37,16 +38,29 @@ Y_UNIT_TEST_SUITE(OutOfSpace) {
             size = size * 9 / 8;
             ++index;
         }
-        for (const TLogoBlobID& id : success) {
-            runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
-            });
-            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
-            UNIT_ASSERT_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), FastGenDataForLZ4(id.BlobSize()));
-        }
+
+        auto checkReadable = [&] {
+            for (const TLogoBlobID& id : success) {
+                runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+                });
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
+                UNIT_ASSERT_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), FastGenDataForLZ4(id.BlobSize()));
+            }
+        };
+
+        checkReadable();
+
+        const TActorId vdiskActorId = info->GetActorId(0);
+        runtime->Send(new IEventHandle(vdiskActorId, edge, new TEvBlobStorage::TEvVCompact(info->GetVDiskId(0),
+            NKikimrBlobStorage::TEvVCompact::ASYNC)), edge.NodeId());
+        env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVCompactResult>(edge, false);
+        env.Sim(TDuration::MilliSeconds(1));
+
+        checkReadable();
     }
 
 }

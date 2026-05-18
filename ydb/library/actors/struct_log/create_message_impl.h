@@ -12,36 +12,10 @@
 #include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/generated_enum_util.h>
 #include <google/protobuf/repeated_ptr_field.h>
+
 #include <utility>
 
 namespace NActors::NStructuredLog {
-
-template <typename>
-static constexpr bool IsMaybeImpl = false;
-template <typename T>
-static constexpr bool IsMaybeImpl<TMaybe<T>> = true;
-template <typename T>
-static constexpr bool IsMaybe = IsMaybeImpl<std::decay_t<T>>;
-
-template <typename>
-static constexpr bool IsOptionalImpl = false;
-template <typename T>
-static constexpr bool IsOptionalImpl<std::optional<T>> = true;
-template <typename T>
-static constexpr bool IsOptional = IsOptionalImpl<std::decay_t<T>>;
-
-template <typename>
-static constexpr bool IsPointerImpl = false;
-template <>
-static constexpr bool IsPointerImpl<char*> = false;
-template <>
-static constexpr bool IsPointerImpl<const char*> = false;
-template <typename T>
-static constexpr bool IsPointerImpl<std::shared_ptr<T>> = true;
-template <typename T>
-static constexpr bool IsPointerImpl<std::unique_ptr<T>> = true;
-template <typename T>
-static constexpr bool IsPointerImpl<T*> = true;
 
 class TCreateMessageArg {
 public:
@@ -59,6 +33,15 @@ public:
     public:
         static constexpr bool value = decltype(check<T>(0))::value;
     };
+
+    template<typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
+    template<> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
+    template<> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
+    template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
+    template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
+    template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
+    template<typename... Ts> struct TOptionalTraits<std::unique_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
+    template<typename... Ts> struct TOptionalTraits<std::shared_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
 
     template<typename T> struct TIsIterable { static constexpr bool value = false; };
     template<typename T, size_t S> struct TIsIterable<std::span<T, S>> { static constexpr bool value = true; };
@@ -78,29 +61,47 @@ public:
     template<typename... Ts> struct TIsIterableKV<std::map<Ts...>> { static constexpr bool value = true; };
     template<typename... Ts> struct TIsIterableKV<std::unordered_map<Ts...>> { static constexpr bool value = true; };
 
-    template<typename T> struct TIsIdWrapper { static constexpr bool value = false; };
-    template<typename TType, typename TTag> struct TIsIdWrapper<TIdWrapper<TType, TTag>> { static constexpr bool value = true; };
-
     template<typename T> struct TIsVariant { static constexpr bool value = false; };
     template<typename... Ts> struct TIsVariant<std::variant<Ts...>> { static constexpr bool value = true; };
 
     template<typename T> struct TIsTuple { static constexpr bool value = false; };
     template<typename... Ts> struct TIsTuple<std::tuple<Ts...>> { static constexpr bool value = true; };
 
+    // TCreateMessageArg doesn't use Out<T> and uses own mechanics to convert various value types into string representation, but
+    // it is uses Out<T> to convert simple standard types ultimately.
+    // See details follow.
     template<typename TValue>
     static void OutputParam(IOutputStream& s, const TValue& value) {
         using Tx = std::decay_t<TValue>;
 
+        // Firstly, it is necc to cnverty protobuf enums and messages into string
         if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
             const google::protobuf::EnumDescriptor* e = google::protobuf::GetEnumDescriptor<Tx>();
             OutputProtobufEnum(s, static_cast<int>(value), e);
-        } else if constexpr (std::is_same_v<Tx, bool>) {
-            s << (value ? "true" : "false");
         } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
             OutputProtobufMessage(s, value);
+        } else if constexpr (std::is_same_v<Tx, bool>) {
+            // It is better to write "true/false" strings into log (instead of "1/0")
+
+            s << (value ? "true" : "false");
         } else if constexpr (THasToStringMethod<Tx>::value) {
+            // By default, Out<T> can't write classes with ToString() method. (see TStateStorageInfo as example)
+            // Bease of this, Output param must be able to process various standard containers, veariants, tuples, etc...
+
             s << value.ToString();
+        } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
+            // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
+            // So, it is neccesary to process optional data using this OutputParam<TValue> (instead of Out<T>).
+
+            if (value) {
+                OutputParam(s, *value);
+            } else {
+                s << "<null>";
+            }
         } else if constexpr (TIsIterable<Tx>::value) {
+            // It is unable to use JoinSeq(value) because of container item must be processed by OutputParam<TValue> (instead of Out<T>).
+            // As example - std::vector<NKikimr::NBlobDepot::TS3Locator>, where TS3Locator has ToString
+
             auto begin = std::begin(value);
             auto end = std::end(value);
             bool first = true;
@@ -109,18 +110,21 @@ public:
                 if (first) {
                     first = false;
                 } else {
-                    s << " ";
+                    s << ", ";
                 }
                 OutputParam(s, *begin);
             }
             s << "]";
         } else if constexpr (TIsIterableKV<Tx>::value) {
+            // It is necc to use self-made code because of container item must be processed by OutputParam<TValue> (instead of Out<T>).
+            // As example - std::vector<NKikimr::NBlobDepot::TS3Locator>, where TS3Locator has ToString()
+
             s << '{';
             for (bool first = true; const auto& [k, v] : value) {
                 if (first) {
                     first = false;
                 } else {
-                    s << ' ';
+                    s << ", ";
                 }
                 OutputParam(s, k);
                 s << ':';
@@ -128,12 +132,20 @@ public:
             }
             s << '}';
         } else if constexpr (TIsVariant<Tx>::value) {
+            // It is necc to use self-made code because of variant item must be processed by OutputParam<TValue> (instead of Out<T>).
+            // as example - NKikimr::NStorage::TDistributedConfigKeeper::TBinding is used in as variant item in distconf_scatter_gather.cpp
+
             std::visit([&](auto& x) { OutputParam(s, x); }, value);
         } else if constexpr (TIsTuple<Tx>::value) {
+            // It is necc to use self-made code because of tuple items must be processed by OutputParam<TValue> (instead of Out<T>).
+            // See  distconf_binding.cpp as example. Is uses TNodeLocation inside tuple, and TNodeLocation has ToString method
+
             s << '[';
             std::apply([&](const auto&... args) { OutputParam(s, args...); }, value);
             s << ']';
         } else {
+            // Finally, OutputParam<T> uses Out<T> to process simple standard types
+
             s << value;
         }
     }
@@ -156,30 +168,6 @@ public:
             }
         } else if constexpr (TNativeTypeSupport<T>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, value);
-        } else if constexpr (IsPointerImpl<T>) {
-            TStringStream stream;
-            if (value != nullptr) {
-                OutputParam(stream, *value);
-            } else {
-                stream << "<null>";
-            }
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
-        } else if constexpr (IsMaybe<T>) {
-            TStringStream stream;
-            if (value.Defined()) {
-                OutputParam(stream, value.GetRef());
-            } else {
-                stream << "<null>";
-            }
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
-        } else if constexpr (IsOptional<T>) {
-            TStringStream stream;
-            if (value.has_value()) {
-                OutputParam(stream, value.value());
-            } else {
-                stream << "<null>";
-            }
-            TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
         } else {
             TStringStream stream;
             OutputParam(stream, value);

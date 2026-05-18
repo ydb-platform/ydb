@@ -2750,7 +2750,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TCo
     visitCtx.AllowFreeArgs = settings.AllowFreeArgs;
     visitCtx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
     visitCtx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
-    visitCtx.Frames.push_back(TFrameContext(settings.Allocator));
+    visitCtx.Frames.emplace_back(settings.Allocator);
     visitCtx.CurrentFrame = &visitCtx.Frames.front();
     VisitNode(root, 0ULL, visitCtx, 0);
     ui32 uniqueNum = 0;
@@ -3090,6 +3090,7 @@ TConstraintSet TExprContext::MakeConstraintSet(const NYT::TNode& serializedConst
         {TUniqueConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TUniqueConstraintNode, const NYT::TNode&>)},
         {TDistinctConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TDistinctConstraintNode, const NYT::TNode&>)},
         {TEmptyConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TEmptyConstraintNode, const NYT::TNode&>)},
+        {TStreamingConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TStreamingConstraintNode, const NYT::TNode&>)},
         {TVarIndexConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TVarIndexConstraintNode, const NYT::TNode&>)},
         {TMultiConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TMultiConstraintNode, const NYT::TNode&>)},
     };

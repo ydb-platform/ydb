@@ -2,10 +2,10 @@
 #include "schema_operation.h"
 #include "schema_propose.h"
 
+#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
 namespace NKikimr::NPQ::NSchema {

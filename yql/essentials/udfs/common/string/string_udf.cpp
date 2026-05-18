@@ -521,7 +521,7 @@ struct TContainsKernelExec: public TBinaryKernelExec<TContainsKernelExec> {
 
 END_SIMPLE_ARROW_UDF(TContains, TContainsKernelExec::Do);
 
-static bool IgnoreCaseComparator(char a, char b) {
+bool IgnoreCaseComparator(char a, char b) {
     return AsciiToUpper(a) == AsciiToUpper(b);
 }
 
@@ -810,7 +810,7 @@ SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(TSubstring, char*(TAutoMap<char*>, TOptiona
 using TTmpVector = TSmallVec<TUnboxedValue, TUnboxedValue::TAllocator>;
 
 template <typename TIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const std::string_view::const_iterator from,
@@ -821,7 +821,7 @@ static void SplitToListImpl(
     }
 }
 template <typename TIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const std::string_view::const_iterator from,
@@ -1038,7 +1038,7 @@ STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_TWO_ARGS_UDF_DEPRECATED_2025_0
 STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_ASCII_CMP_IGNORE_CASE_UDF)
 IS_ASCII_UDF_MAP(IS_ASCII_UDF)
 
-static constexpr ui64 padLim = 1000000;
+constexpr ui64 padLim = 1000000;
 STRING_STREAM_PAD_FORMATTER_UDF_MAP(STRING_STREAM_PAD_FORMATTER_UDF)
 STRING_STREAM_NUM_FORMATTER_UDF_MAP(STRING_STREAM_NUM_FORMATTER_UDF)
 STRING_STREAM_TEXT_FORMATTER_UDF_MAP(STRING_STREAM_TEXT_FORMATTER_UDF)

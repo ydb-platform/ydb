@@ -35,123 +35,146 @@ TString TLocalProxyActor::MakeLocalPath(TString path) const {
     return path;
 }
 
+class TCaptureContext {
+    const TActorSystem* ActorSystem;
+    const TActorId Sender;
+    const ui64 Cookie;
+
+public:
+    explicit TCaptureContext(const TActorId& sender, ui64 cookie = 0)
+        : ActorSystem(TlsActivationContext->ActorSystem())
+        , Sender(sender)
+        , Cookie(cookie)
+    {}
+
+    virtual ~TCaptureContext() = default;
+
+    virtual void OnResponse(Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* message) = 0;
+
+protected:
+    void Send(IEventBase* ev) {
+        ActorSystem->Send(Sender, ev, 0, Cookie);
+    }
+};
+
+template <typename T>
+auto CreateCallback(std::shared_ptr<T>&& ctx) {
+    return [ctx = std::move(ctx)](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* message) {
+        ctx->OnResponse(statusCode, message);
+    };
+}
+
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
-    auto args = std::move(ev->Get()->GetArgs());
-    const auto localPath = MakeLocalPath(std::get<TString>(args));
-    auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(args);
+    auto [path, settings] = std::move(ev->Get()->GetArgs());
+    path = MakeLocalPath(path);
 
     auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
-    request.get()->set_path(TStringBuilder() << Database << "/" << localPath);
+    request->set_path(TStringBuilder() << Database << "/" << path);
 
-    for (auto& c : settings.AddConsumers_) {
-        auto* consumer = request.get()->add_add_consumers();
-        consumer->set_name(c.ConsumerName_);
-    }
-    for (auto& c : settings.DropConsumers_) {
-        auto* consumer = request.get()->add_drop_consumers();
-        *consumer = c;
+    for (const auto& consumer : settings.AddConsumers_) {
+        request->add_add_consumers()->set_name(consumer.ConsumerName_);
     }
 
-    auto callback = [
-        actorSystem = TActivationContext::ActorSystem(),
-        replyTo = ev->Sender,
-        cookie = ev->Cookie,
-        path = localPath
-    ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
-        NYdb::NIssue::TIssues issues;
-        NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+    for (const auto& consumerName : settings.DropConsumers_) {
+        request->add_drop_consumers(consumerName);
+    }
 
-        actorSystem->Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
+    class TAlterTopicContext: public TCaptureContext {
+    public:
+        using TCaptureContext::TCaptureContext;
+
+        void OnResponse(Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) override {
+            NYdb::NIssue::TIssues issues;
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            Send(new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)));
+        }
     };
 
-    NGRpcService::DoAlterTopicRequest(std::make_unique<TLocalProxyRequest>(localPath, Database, std::move(request), callback), *this);
+    auto cb = CreateCallback(std::make_shared<TAlterTopicContext>(ev->Sender, ev->Cookie));
+    NGRpcService::DoAlterTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), cb), *this);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
-    auto args = std::move(ev->Get()->GetArgs());
-    const auto localPath = MakeLocalPath(std::get<TString>(args));
-    auto& settings = std::get<NYdb::NTopic::TDescribeTopicSettings>(args);
-    Y_UNUSED(settings);
+    auto [path, _] = std::move(ev->Get()->GetArgs());
+    path = MakeLocalPath(path);
 
     auto request = std::make_unique<Ydb::Topic::DescribeTopicRequest>();
-    request.get()->set_path(TStringBuilder() << Database << "/" << localPath);
+    request->set_path(TStringBuilder() << Database << "/" << path);
 
-    auto callback = [
-        actorSystem = TActivationContext::ActorSystem(),
-        replyTo = ev->Sender,
-        cookie = ev->Cookie,
-        path = localPath
-    ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
-        NYdb::NIssue::TIssues issues;
-        Ydb::Topic::DescribeTopicResult describe;
-        if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
-            const auto* v = dynamic_cast<const Ydb::Topic::DescribeTopicResult*>(result);
-            if (v) {
-                describe = *v;
-            } else {
-                statusCode = Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
-                issues.AddIssue(TStringBuilder() << "Unexpected result type " << result->GetTypeName());
+    class TDescribeTopicContext: public TCaptureContext {
+    public:
+        using TCaptureContext::TCaptureContext;
+
+        void OnResponse(Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* message) override {
+            NYdb::NIssue::TIssues issues;
+            Ydb::Topic::DescribeTopicResult describe;
+            if (statusCode == Ydb::StatusIds::SUCCESS) {
+                const auto* v = dynamic_cast<const Ydb::Topic::DescribeTopicResult*>(message);
+                if (v) {
+                    describe = *v;
+                } else {
+                    statusCode = Ydb::StatusIds::INTERNAL_ERROR;
+                    issues.AddIssue(TStringBuilder() << "Unexpected result type " << message->GetTypeName());
+                }
             }
+
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            NYdb::NTopic::TDescribeTopicResult result(std::move(status), std::move(describe));
+            Send(new TEvYdbProxy::TEvDescribeTopicResponse(std::move(result)));
         }
-
-        NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
-        NYdb::NTopic::TDescribeTopicResult r(std::move(status), std::move(describe));
-
-        actorSystem->Send(replyTo, new TEvYdbProxy::TEvDescribeTopicResponse(r), 0, cookie);
     };
 
-    NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(localPath, Database, std::move(request), callback), *this);
+    auto cb = CreateCallback(std::make_shared<TDescribeTopicContext>(ev->Sender, ev->Cookie));
+    NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), cb), *this);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
-    auto args = std::move(ev->Get()->GetArgs());
-    const auto localPath = MakeLocalPath(std::get<TString>(args));
-    auto& settings = std::get<NYdb::NScheme::TDescribePathSettings>(args);
-    Y_UNUSED(settings);
+    auto [path, _] = std::move(ev->Get()->GetArgs());
+    path = MakeLocalPath(path);
 
     auto request = std::make_unique<Ydb::Scheme::DescribePathRequest>();
-    request.get()->set_path(TStringBuilder() << Database << "/" << localPath);
+    request->set_path(TStringBuilder() << Database << "/" << path);
 
-    auto callback = [
-        actorSystem = TActivationContext::ActorSystem(),
-        replyTo = ev->Sender,
-        cookie = ev->Cookie,
-        path = localPath
-    ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
-        NYdb::NIssue::TIssues issues;
-        NYdb::NScheme::TSchemeEntry entry;
-        if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
-            const auto* v = dynamic_cast<const Ydb::Scheme::DescribePathResult*>(result);
-            if (v) {
-                entry = v->self();
-            } else {
-                statusCode = Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
-                issues.AddIssue(TStringBuilder() << "Unexpected result type " << result->GetTypeName());
+    class TDescribePathContext: public TCaptureContext {
+    public:
+        using TCaptureContext::TCaptureContext;
+
+        void OnResponse(Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* message) override {
+            NYdb::NIssue::TIssues issues;
+            NYdb::NScheme::TSchemeEntry entry;
+            if (statusCode == Ydb::StatusIds::SUCCESS) {
+                const auto* v = dynamic_cast<const Ydb::Scheme::DescribePathResult*>(message);
+                if (v) {
+                    entry = v->self();
+                } else {
+                    statusCode = Ydb::StatusIds::INTERNAL_ERROR;
+                    issues.AddIssue(TStringBuilder() << "Unexpected result type " << message->GetTypeName());
+                }
             }
+
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            NYdb::NScheme::TDescribePathResult result(std::move(status), std::move(entry));
+            Send(new TEvYdbProxy::TEvDescribePathResponse(std::move(result)));
         }
-
-        NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
-        NYdb::NScheme::TDescribePathResult r(std::move(status), std::move(entry));
-
-        actorSystem->Send(replyTo, new TEvYdbProxy::TEvDescribePathResponse(r), 0, cookie);
     };
 
-    NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(localPath, Database, std::move(request), callback), *this);
+    auto cb = CreateCallback(std::make_shared<TDescribePathContext>(ev->Sender, ev->Cookie));
+    NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), cb), *this);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
     LOG_E("Handle " << ev->Get()->ToString());
 
-    auto [table, settings] = std::move(ev->Get()->GetArgs());
+    auto [path, settings] = std::move(ev->Get()->GetArgs());
 
     NYdb::NIssue::TIssues issues;
-    issues.AddIssue(TStringBuilder() << "Table '" << table << "' not found");
+    issues.AddIssue(TStringBuilder() << "Table '" << path << "' not found");
     NYdb::TStatus status(NYdb::EStatus::NOT_FOUND, std::move(issues));
     Ydb::Table::DescribeTableResult desc;
 

@@ -21,6 +21,8 @@ TToken Beginning(const TRule_select_kind& rule) {
             return block.GetAlt2().GetRule_reduce_core1().GetToken1();
         case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt3:
             return block.GetAlt3().GetRule_select_core1().GetToken2();
+        case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt4:
+            return block.GetAlt4().GetRule_combine_core1().GetToken1();
         case NSQLv1Generated::TRule_select_kind_TBlock2::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }

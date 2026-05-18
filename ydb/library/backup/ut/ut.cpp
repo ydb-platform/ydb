@@ -609,6 +609,15 @@ Y_UNIT_TEST(PathParseTest) {
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/ru/my_db", ""), yexception);
 }
 
+Y_UNIT_TEST(UnknownFieldsHidden) {
+    Ydb::Table::CreateTableRequest proto;
+    proto.set_path("/my_db/my_table");
+    auto* unknownFields = proto.GetReflection()->MutableUnknownFields(&proto);
+    unknownFields->AddVarint(99, 100);
+
+    UNIT_ASSERT_NO_DIFF(NBackup::ProtoToString(proto), "path: \"/my_db/my_table\"\n");
+}
+
 }
 
 } // NYdb

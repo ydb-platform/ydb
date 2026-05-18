@@ -26,6 +26,7 @@ SRCS(
     counters.cpp
     defs.cpp
     inflight_request_tracker.cpp
+    scan_snapshot_guard.cpp
     tables_manager.cpp
     write_actor.cpp
 )

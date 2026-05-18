@@ -116,12 +116,11 @@ public:
 
     TIntrusivePtr<ISource> CloneSource() const;
     TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
+    void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortDirection, TNodePtr& sortKeySelector);
 
 protected:
     explicit ISource(TPosition pos);
     TAstNode* Translate(TContext& ctx) const override;
-
-    void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortDirection, TNodePtr& sortKeySelector);
 
     TVector<TNodePtr>& Expressions(EExprSeat exprSeat);
     TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);
@@ -191,6 +190,24 @@ public:
 protected:
     explicit IJoin(TPosition pos);
 };
+
+template <typename Init>
+bool ProcessJoinExpr(TContext& ctx, TNodePtr joinExpr, Init keyInitializer) {
+    TDeque<TNodePtr> conjQueue;
+    conjQueue.push_back(joinExpr);
+    while (!conjQueue.empty()) {
+        TNodePtr cur = conjQueue.front();
+        conjQueue.pop_front();
+        if (cur->GetOpName() == "And") {
+            auto conj = cur->GetCallNode();
+            YQL_ENSURE(conj, "Invalid And operation node");
+            conjQueue.insert(conjQueue.begin(), conj->GetArgs().begin(), conj->GetArgs().end());
+        } else if (!keyInitializer(ctx, cur)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 class TSessionWindow final: public INode {
 public:
@@ -307,6 +324,9 @@ TSourcePtr BuildReduce(TPosition pos, EReduceMode mode, TSourcePtr source, TVect
                        const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
 TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
                         bool processStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
+TSourcePtr BuildCombine(TPosition pos, TSourcePtr leftSource, TVector<TSortSpecificationPtr>&& leftPresort,
+                        TSourcePtr rightSource, TVector<TSortSpecificationPtr>&& rightPresort,
+                        TNodePtr&& combineKeyExpr, TNodePtr udf, TVector<TNodePtr>&& args, const TWriteSettings& settings);
 
 TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery, TScopedStatePtr scoped);
 

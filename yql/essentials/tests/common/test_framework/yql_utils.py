@@ -559,6 +559,10 @@ def get_envs(cfg):
     return envs
 
 
+def is_forceblocks(cfg):
+    return any(item[0] == 'forceblocks' for item in cfg)
+
+
 def is_skip_forceblocks(cfg):
     for item in cfg:
         if item[0] == 'skip_forceblocks':

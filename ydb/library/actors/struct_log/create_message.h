@@ -1,6 +1,7 @@
 #pragma once
 
 #include "structured_message.h"
+
 #include <initializer_list>
 
 namespace NActors::NStructuredLog {
@@ -23,21 +24,27 @@ protected:
     bool Popped{false};
 };
 
-#define YDB_LOG_CREATE_MESSAGE(...)                                                                 \
-    [&]() -> TStructuredMessage {                                                                  \
+// YDB_LOG_CREATE_MESSAGE and YDB_LOG_UPDATE_MESSAGE use lamdba because of followin reasons:
+// 1. YDB_LOG_CREATE_MESSAGE must return created structured message.
+// 2. Lambda is rounded in ( ) - it is necc for working inside another macros. As example,
+//    s3_scan.cpp output log messages inside STRICT_STFUNC_BODY macro parameters.
+// 3. YDB_LOG_UPDATE_MESSAGE must not return message, but it should be usable inside another macro parameters too.
+
+#define YDB_LOG_CREATE_MESSAGE(...)                                                                \
+    ([&]() -> TStructuredMessage {                                                                 \
         NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
         std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
         Y_UNUSED(ydblogArgs);                                                                      \
         return ydblogGuard.Pop();                                                                  \
-    }()
+    }())
 
-#define YDB_LOG_UPDATE_MESSAGE(M, ...)                                                              \
-    {                                                                                              \
+#define YDB_LOG_UPDATE_MESSAGE(M,...)                                                              \
+    do {([&]() {                                                                                   \
         NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
         std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
         Y_UNUSED(ydblogArgs);                                                                      \
         M.AppendMessage(ydblogGuard.Pop());                                                        \
-    }                                                                                              \
-    Y_SEMICOLON_GUARD
+    }());                                                                                          \
+    } while (false)
 
 }  // namespace NActors::NStructuredLog

@@ -61,4 +61,4 @@ NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
 Ydb::StatusIds::StatusCode Convert(const EStatus status);
 TString Description(const TString& topicPath, const EStatus status);
 
-}
+} // namespace NKikimr::NPQ::NDescriber

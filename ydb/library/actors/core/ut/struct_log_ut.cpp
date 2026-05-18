@@ -10,6 +10,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/overloaded.h>
+
 namespace NActors::NStructuredLog {
 
 template <typename T>
@@ -146,9 +148,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(ScanValues) {
         auto message = YDB_LOG_CREATE_MESSAGE({"string", static_cast<TString>("abc")});
 
-        message.ForEachTyped(MakeOverloaded([](const std::vector<TKeyName>& name, const TString& value) {
+        message.ForEachTyped(TOverloaded{[](const std::vector<TKeyName>& name, const TString& value) {
             UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc");
-        }));
+        }});
     }
 
     TString GetMessageString(const TStructuredMessage& message) {
@@ -170,9 +172,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
             result += TTypesMapping::ToString(value);
         };
 
-        message.ForEachTyped(MakeOverloaded([&](const std::vector<TKeyName>& name, const TString& value) {
+        message.ForEachTyped(TOverloaded{[&](const std::vector<TKeyName>& name, const TString& value) {
             append(name, value);
-        }));
+        }});
         return result;
     }
 
@@ -186,16 +188,15 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(CreateMessageVaryValuesCount) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE(), "");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}), "v1=1");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), "v1=1");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}, {}), "v1=1");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}, {}, {}), "v1=1");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), "v1=1, v2=2");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), "v1=1, v2=2, v3=3");
     }
 
-    Y_UNIT_TEST(CreateMessageVaryTypes) {
-        // Empty pairs
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), "v1=1");
-
-        // Support types
-
+    Y_UNIT_TEST(CreateMessageNativeTypes) {
+        // Native type values
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), "value=a");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), "value=a");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "value=3");
@@ -210,15 +211,62 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
+    }
 
-        // optional values
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), "value=<null>");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), "value=1");
+    Y_UNIT_TEST(CreateMessageOptionalTypes) {
+        // TMaybe values
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui32>{}}), "value=<null>");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui32>{1}}), "value=1");
 
-        // Actor id
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", NActors::TActorId{}}), "value=[0:0:0]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", NActors::TActorId{1, 2}}), "value=[0:1:2]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", NActors::TActorId{1, 2, 3, 4}}), "value=[1:3:4]");
+        // std::optional values
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::optional<ui32>{}}), "value=<null>");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::optional<ui32>{1}}), "value=1");
+    }
+
+    Y_UNIT_TEST(CreateMessagePointerTypes) {
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", nullptr}), "value=nullptr");
+
+        ui64 value = 1;
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", &value}), "value=1");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::make_shared<ui64>(1)}), "value=1");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::make_unique<ui64>(1)}), "value=1");
+    }
+
+    struct TTestType {
+        TString ToString() const {
+            return "some value";
+        }
+    };
+
+    Y_UNIT_TEST(CreateMessageToString) {
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestType{}}), "value=some value");
+    }
+
+    Y_UNIT_TEST(CreateMessageIterable) {
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c"}}), "value=[a, b, c]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c", "d"}}), "value=[a, b, c, d]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::vector<TString>{"a", "b", "c", "d", "e"}}), "value=[a, b, c, d, e]");
+    }
+
+    Y_UNIT_TEST(CreateMessageIterableKV) {
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}}}), "value={1:a}");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}, {2, "b"}}}), "value={1:a, 2:b}");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}, {2, "b"}, {3, "c"}}}), "value={1:a, 2:b, 3:c}");
+
+        /* @todo IterableKV*/
+    }
+
+    Y_UNIT_TEST(CreateMessageVariant) {
+        using TTestType = std::variant<ui64, bool, TString>;
+
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestType{TString{"abcde"}}}), "value=abcde");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestType{true}}), "value=true");
+    }
+
+    Y_UNIT_TEST(CreateMessageTuple) {
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1}}), "value=[1]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2}}), "value=[1:2]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2,3}}), "value=[1:2:3]");
     }
 
     Y_UNIT_TEST(CreateMessageWithReusage) {

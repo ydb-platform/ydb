@@ -669,7 +669,7 @@ private:
 
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {
-                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *State_->Configuration));
+                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
                     if (State_->Types->OrderedColumns) {
                         YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
                         nextRowSpec->SetColumnOrder(contentColumnOrder);
@@ -929,8 +929,6 @@ private:
 
         auto sort = TYtSort(input);
 
-        const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(sort.DataSink().Cluster().StringValue(), *State_->Configuration);
-
         TYtOutTableInfo outTableInfo(sort.Output().Item(0));
         if (!outTableInfo.RowSpec) {
             ctx.AddError(TIssue(ctx.GetPosition(sort.Output().Item(0).Pos()),
@@ -954,12 +952,6 @@ private:
             }
         }
 
-        ui64 auxColumnsNativeTypeFlags = 0ul;
-        for (auto& [_, type]: outTableInfo.RowSpec->GetAuxColumns()) {
-            auxColumnsNativeTypeFlags |= GetItemNativeYtTypeFlags(*type);
-        }
-        auxColumnsNativeTypeFlags &= nativeTypeCompatibility;
-
         if (!ValidateSettings(sort.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::NoDq, ctx)) {
             return TStatus::Error;
         }
@@ -972,9 +964,7 @@ private:
                         << " cannot be applied to tables with QB2 premapper, inferred, yamred_dsv, or non-strict schemas"));
                     return TStatus::Error;
                 }
-
-                // Handle possible nativeness of aux columns introduced by sort keys extractor
-                if (pathInfo.Table->RowSpec && pathInfo.GetNativeYtTypeFlags() != (outTableInfo.RowSpec->GetNativeYtTypeFlags() | auxColumnsNativeTypeFlags)) {
+                if (pathInfo.Table->RowSpec && pathInfo.GetNativeYtTypeFlags() != outTableInfo.RowSpec->GetNativeYtTypeFlags()) {
                     ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtSort::CallableName()
                         << " has different input/output native YT types"));
                     return TStatus::Error;
@@ -1913,7 +1903,7 @@ private:
                 next.RowType = rowType;
                 next.IsReplaced = true;
 
-                const TYtOutTableInfo outTable(rowType, GetNativeYtTypeCompatibility(create.DataSink().Cluster().StringValue(), *State_->Configuration), columnOrder);
+                const TYtOutTableInfo outTable(rowType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, columnOrder);
 
                 const auto orderBySize = create.OrderBy().Size();
                 outTable.RowSpec->SortedBy.reserve(orderBySize);

@@ -12,6 +12,7 @@
 #include <expected>
 #include <map>
 #include <optional>
+#include <string_view>
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -146,4 +147,4 @@ TResult ProcessConsumerType(
     return {};
 }
 
-}
+} // namespace NKikimr::NPQ::NSchema

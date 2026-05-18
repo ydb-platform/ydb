@@ -789,6 +789,7 @@ namespace NTable {
             wrap->LockRowTx(mode, key, txId);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
+            Stats.MemTableOps += 1;
         }
 
         void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch)

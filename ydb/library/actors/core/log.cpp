@@ -81,8 +81,22 @@ namespace {
     };
 
     static const NActors::NStructuredLog::TJsonKeyValueWriter::TNameSet ReservedJsonKeyNames{
-        "@timestamp", "@log_type", "microseconds", "host", "cluster", "database", "node_id",
-        "priority", "npriority", "component", "tag", "revision", "levelStr", "location", "message"};
+        "@timestamp",
+        "@log_type",
+        "microseconds",
+        "host",
+        "cluster",
+        "database",
+        "node_id",
+        "priority",
+        "npriority",
+        "component",
+        "tag",
+        "revision",
+        "levelStr",
+        "location",
+        "message",
+    };
 }
 
 namespace NActors {
@@ -223,7 +237,6 @@ namespace NActors {
     }
 
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
-
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
         if (Settings->AllowDrop) {

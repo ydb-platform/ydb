@@ -90,6 +90,8 @@ public:
 
     virtual ~TOutputSerializer() {};
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
+    virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
+    virtual void Push(NDqProto::TWatermark&& watermark) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) = 0;
     virtual void Flush(bool finished) = 0;
 
@@ -787,12 +789,16 @@ public:
         }
     }
 
-    void Push(NDqProto::TWatermark&&) override {
-        Y_ENSURE(false);
+    void Push(NDqProto::TWatermark&& watermark) override {
+        if (!Serializer->Buffer->IsFinished()) {
+            Serializer->Push(std::move(watermark));
+        }
     }
 
-    void Push(NDqProto::TCheckpoint&&) override {
-        Y_ENSURE(false);
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        if (!Serializer->Buffer->IsFinished()) {
+            Serializer->Push(std::move(checkpoint));
+        }
     }
 
     void Finish() override {
@@ -903,13 +909,16 @@ public:
     }
 
     bool Empty() const override {
+        if (PausedByCheckpoint) {
+            return true;
+        }
         return Buffer->IsEmpty();
     }
 
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 
     bool IsFinished() const override {
-        return Buffer->IsFinished();
+        return Buffer->IsFinished() && !PausedByCheckpoint;
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
@@ -927,15 +936,17 @@ public:
     }
 
     void PauseByCheckpoint() override {
-        Y_ENSURE(false);
+        Y_ENSURE(!PausedByCheckpoint);
+        PausedByCheckpoint = true;
     }
 
     void ResumeByCheckpoint() override {
-        Y_ENSURE(false);
+        Y_ENSURE(PausedByCheckpoint);
+        PausedByCheckpoint = false;
     }
 
     bool IsPausedByCheckpoint() const override {
-        Y_ENSURE(false);
+        return PausedByCheckpoint;
     }
 
     void AddWatermark(TInstant) override {
@@ -983,11 +994,17 @@ public:
         return IsLocalChannel;
     }
 
+    void SetCallback(IDqInputChannelCallbacks* callback) override {
+        Callback = callback;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    IDqInputChannelCallbacks* Callback = nullptr;
+    bool PausedByCheckpoint = false;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

@@ -10,6 +10,7 @@
 #include <library/cpp/getopt/small/completer.h>
 #include <library/cpp/resource/resource.h>
 #include <util/string/strip.h>
+#include <util/system/env.h>
 
 #include <filesystem>
 
@@ -127,6 +128,10 @@ int NewYdbClient(int argc, char** argv) {
         }
         return {"ydb-cli", version};
     };
+
+    if (TryGetEnv("YDB_CLI_AI_ENABLE").Defined()) {
+        settings.EnableAiInteractive = true;
+    }
 
     auto commandsRoot = MakeHolder<TYdbClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");

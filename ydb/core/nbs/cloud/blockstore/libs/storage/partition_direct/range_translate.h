@@ -1,9 +1,8 @@
 #pragma once
 
-#include "vchunk_config.h"
-
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/volume_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

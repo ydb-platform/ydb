@@ -216,7 +216,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     YQL_ENSURE(pattern);
 
     const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
-        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer, *RuntimeSettings);
+        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer, RuntimeSettings);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }

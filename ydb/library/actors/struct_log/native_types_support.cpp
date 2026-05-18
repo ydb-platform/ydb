@@ -22,7 +22,7 @@ bool TNativeTypeSupport<TString>::Deserialize(TString& value, const void* data, 
     }
 
     TLength stringLength;
-    memcpy(&stringLength, data,sizeof(TLength));
+    memcpy(&stringLength, data, sizeof(TLength));
     if (sizeof(TLength) + stringLength != length) {
         return false;
     }

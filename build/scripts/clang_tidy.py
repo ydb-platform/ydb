@@ -125,6 +125,8 @@ def find_header(p, h):
 
 def main():
     args, clang_cmd = parse_args()
+    if '-gz=zstd' in clang_cmd:
+        clang_cmd.remove('-gz=zstd')
     if '/retry_cc.py' in str(clang_cmd):
         clang_cmd = list(filter_cmd(clang_cmd))
     setup_script(args)

@@ -1044,6 +1044,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto builder = CreateImmutableSnapshotRegistryBuilder();
             auto holder = CreateImmutableSnapshotRegistryHolder();
             holder->Set(std::move(*builder).Build());
+            appData.FeatureFlags.SetEnableSnapshotsLocking(true);
             appData.SnapshotRegistryHolder = holder;
             appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
             appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from asyncio import CancelledError, Queue, QueueEmpty, Task, create_task
+from asyncio import CancelledError, QueueEmpty, Task, create_task
 from contextlib import contextmanager
 from functools import partial
 from time import perf_counter
@@ -31,6 +31,7 @@ from weakref import WeakSet
 
 from textual import Logger, events, log, messages
 from textual._callback import invoke
+from textual._compat import cached_property
 from textual._context import NoActiveAppError, active_app, active_message_pump
 from textual._context import message_hook as message_hook_context_var
 from textual._context import prevent_message_types_stack
@@ -114,7 +115,6 @@ class MessagePump(metaclass=_MessagePumpMeta):
     """Base class which supplies a message pump."""
 
     def __init__(self, parent: MessagePump | None = None) -> None:
-        self._message_queue: Queue[Message | None] = Queue()
         self._parent = parent
         self._running: bool = False
         self._closing: bool = False
@@ -125,7 +125,6 @@ class MessagePump(metaclass=_MessagePumpMeta):
         self._timers: WeakSet[Timer] = WeakSet()
         self._last_idle: float = time()
         self._max_idle: float | None = None
-        self._mounted_event = asyncio.Event()
         self._is_mounted = False
         """Having this explicit Boolean is an optimization.
 
@@ -143,6 +142,14 @@ class MessagePump(metaclass=_MessagePumpMeta):
         
         """
 
+    @cached_property
+    def _message_queue(self) -> asyncio.Queue[Message | None]:
+        return asyncio.Queue()
+
+    @cached_property
+    def _mounted_event(self) -> asyncio.Event:
+        return asyncio.Event()
+
     @property
     def _prevent_message_types_stack(self) -> list[set[type[Message]]]:
         """The stack that manages prevented messages."""
@@ -152,6 +159,15 @@ class MessagePump(metaclass=_MessagePumpMeta):
             stack = [set()]
             prevent_message_types_stack.set(stack)
         return stack
+
+    def _thread_init(self):
+        """Initialize threading primitives for the current thread.
+
+        Require for Python3.8 https://github.com/Textualize/textual/issues/5845
+
+        """
+        self._message_queue
+        self._mounted_event
 
     def _get_prevented_messages(self) -> set[type[Message]]:
         """A set of all the prevented message types."""
@@ -496,6 +512,8 @@ class MessagePump(metaclass=_MessagePumpMeta):
 
     def _start_messages(self) -> None:
         """Start messages task."""
+        self._thread_init()
+
         if self.app._running:
             self._task = create_task(
                 self._process_messages(), name=f"message pump {self}"

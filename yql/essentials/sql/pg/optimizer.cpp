@@ -258,8 +258,8 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
                 right = (Var*)a2;
             }
 
-            node.LeftVars.emplace_back(std::make_tuple(left->varno, left->varattno));
-            node.RightVars.emplace_back(std::make_tuple(right->varno, right->varattno));
+            node.LeftVars.emplace_back(left->varno, left->varattno);
+            node.RightVars.emplace_back(right->varno, right->varattno);
 
             if (!bms_is_member(left->varno, jpath->outerjoinpath->parent->relids)) {
                 std::swap(node.LeftVars.back(), node.RightVars.back());
@@ -453,9 +453,9 @@ struct TPgOptimizerImpl {
         Rels.emplace_back(IOptimizer::TRel{});
         Var2TableCol.emplace_back();
         // rel -> varIds
-        VarIds.emplace_back(THashMap<TStringBuf, int>{});
+        VarIds.emplace_back();
         // rel -> tables
-        RelTables.emplace_back(std::vector<TStringBuf>{});
+        RelTables.emplace_back();
         for (const auto& table : leaf->Labels()) {
             RelTables.back().emplace_back(table);
             Table2RelIds[table].emplace_back(relId);
@@ -505,12 +505,12 @@ struct TPgOptimizerImpl {
             for (int relId : lrelIds) {
                 int varId = GetVarId(relId, lcol);
 
-                leftVars.emplace_back(std::make_tuple(relId, varId, ltable, lcol));
+                leftVars.emplace_back(relId, varId, ltable, lcol);
             }
             for (int relId : rrelIds) {
                 int varId = GetVarId(relId, rcol);
 
-                rightVars.emplace_back(std::make_tuple(relId, varId, rtable, rcol));
+                rightVars.emplace_back(relId, varId, rtable, rcol);
             }
         }
     }

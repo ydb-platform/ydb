@@ -16,6 +16,8 @@ void SetEnableMoveIndex(TTestActorRuntime &runtime, TTestEnv&, ui64 schemeShard,
 
     NKikimrConfig::TFeatureFlags features;
     features.SetEnableMoveIndex(value);
+    features.SetEnableAddUniqueIndex(true);
+    features.SetEnableOnlineAddUniqueIndex(true);
     *request->Record.MutableConfig()->MutableFeatureFlags() = features;
     SetConfig(runtime, schemeShard, std::move(request));
 }
@@ -26,7 +28,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestEnv env(runtime);
     }
 
-    Y_UNIT_TEST(Reject) {
+    Y_UNIT_TEST(RejectsAndBasic) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -40,6 +42,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Utf8" }
               Columns { Name: "value1" Type: "Utf8" }
+              Columns { Name: "value2" Type: "Utf8" }
               KeyColumnNames: ["key"]
             }
             IndexDescription {
@@ -54,7 +57,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        expectedDomainPaths += 5;
+        TestBuildUniqIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Uniq", {"value2"});
+        env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths += 7;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -62,6 +68,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Utf8" }
               Columns { Name: "value1" Type: "Utf8" }
+              Columns { Name: "value2" Type: "Utf8" }
               KeyColumnNames: ["key"]
             }
             IndexDescription {
@@ -73,27 +80,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
               KeyColumnNames: ["value1"]
               Type: EIndexTypeGlobalAsync
             }
+            IndexDescription {
+              Name: "Uniq"
+              KeyColumnNames: ["value2"]
+              Type: EIndexTypeGlobalUnique
+            }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        expectedDomainPaths += 5;
+        expectedDomainPaths += 7;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::ChildrenCount(3),
                             NLs::PathsInsideDomain(expectedDomainPaths),
-                            NLs::ShardsInsideDomain(6)});
+                            NLs::ShardsInsideDomain(8)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(3),
-                            NLs::CheckColumns("Table1", {"key", "value0", "value1"}, {}, {"key"}),
-                            NLs::IndexesCount(2)});
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("Table1", {"key", "value0", "value1", "value2"}, {}, {"key"}),
+                            NLs::IndexesCount(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"),
                            {NLs::IsTable,
                             NLs::PathVersionEqual(3),
-                            NLs::CheckColumns("Table2", {"key", "value0", "value1"}, {}, {"key"}),
-                            NLs::IndexesCount(2)});
+                            NLs::CheckColumns("Table2", {"key", "value0", "value1", "value2"}, {}, {"key"}),
+                            NLs::IndexesCount(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Moved1"),
                            {NLs::PathNotExist});
@@ -173,19 +185,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::ChildrenCount(3),
                             NLs::PathsInsideDomain(expectedDomainPaths),
-                            NLs::ShardsInsideDomain(6)});
+                            NLs::ShardsInsideDomain(8)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                            {NLs::IsTable,
-                            NLs::PathVersionEqual(3),
-                            NLs::CheckColumns("Table1", {"key", "value0", "value1"}, {}, {"key"}),
-                            NLs::IndexesCount(2)});
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("Table1", {"key", "value0", "value1", "value2"}, {}, {"key"}),
+                            NLs::IndexesCount(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"),
                            {NLs::IsTable,
                             NLs::PathVersionEqual(3),
-                            NLs::CheckColumns("Table2", {"key", "value0", "value1"}, {}, {"key"}),
-                            NLs::IndexesCount(2)});
+                            NLs::CheckColumns("Table2", {"key", "value0", "value1", "value2"}, {}, {"key"}),
+                            NLs::IndexesCount(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Moved1"),
                            {NLs::PathNotExist});
@@ -208,18 +220,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"),
                                {NLs::IsTable,
-                                NLs::PathVersionEqual(5),
-                                NLs::CheckColumns("Table2", {"key", "value0", "value1"}, {}, {"key"})});
+                                NLs::PathVersionEqual(7),
+                                NLs::CheckColumns("Table2", {"key", "value0", "value1", "value2"}, {}, {"key"})});
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Moved2"),
                                {NLs::IsTable,
                                 NLs::PathVersionEqual(5),
-                                NLs::CheckColumns("Moved2", {"key", "value0", "value1"}, {}, {"key"})});
+                                NLs::CheckColumns("Moved2", {"key", "value0", "value1", "value2"}, {}, {"key"})});
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::ChildrenCount(3),
                                 NLs::PathsInsideDomain(expectedDomainPaths),
-                                NLs::ShardsInsideDomain(6)});
+                                NLs::ShardsInsideDomain(8)});
         }
     }
 

@@ -71,8 +71,9 @@ public:
             }
         }
 
-        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, false));
-        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
+        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+        mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, nativeTypeCompat, false));
+        mapJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
         if (!groups.empty() && groups.back() != 0) {
             mapJob->SetInputGroups(groups);
         }

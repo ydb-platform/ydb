@@ -403,7 +403,7 @@ select_kind_partial: select_kind
   (LIMIT expr ((OFFSET | COMMA) expr)?)?
   ;
 
-select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?;
+select_kind: (DISCARD)? (process_core | reduce_core | select_core | combine_core) (INTO RESULT pure_column_or_named)?;
 
 process_core:
   PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
@@ -425,6 +425,12 @@ opt_set_quantifier: (ALL | DISTINCT)?;
 select_core:
   (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT (IF EXISTS)? without_column_list)? (FROM join_source)? (WHERE expr)?
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
+;
+
+combine_core:
+  COMBINE named_single_source (PRESORT sort_specification_list)?
+  WITH named_single_source (PRESORT sort_specification_list)?
+  ON expr USING using_call_expr
 ;
 
 // ISO/IEC 9075-2:2016(E) 7.7 <row pattern recognition clause>
@@ -1458,6 +1464,7 @@ keyword_as_compat:
   | CLASSIFIER
   // | COLLATE
   | COLLECTION
+  | COMBINE
   | COMMIT
   | COMPRESSION
   | CONDITIONAL
@@ -1695,6 +1702,7 @@ keyword_compat: (
   | CLASSIFIER
   | COLLATE
   | COLLECTION
+  | COMBINE
   | COMMIT
   | COMPRESSION
   | CONDITIONAL
@@ -2041,6 +2049,7 @@ CLASSIFIER: C L A S S I F I E R;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;
+COMBINE: C O M B I N E;
 COMMIT: C O M M I T;
 COMPACT: C O M P A C T;
 COMPRESSION: C O M P R E S S I O N;

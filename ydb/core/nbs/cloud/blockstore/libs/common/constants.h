@@ -13,6 +13,10 @@ constexpr size_t DirectBlockGroupHostCount = 5;
 // Quorum host count in DirectBlockGroup.
 constexpr size_t QuorumDirectBlockGroupHostCount = 3;
 
+// Default number of Primary hosts at config init time. Not a hard cap —
+// the runtime may grow this by promoting HandOff hosts to Primary.
+constexpr size_t DefaultPrimaryCount = 3;
+
 // Default BlockSize.
 constexpr ui32 DefaultBlockSize = 4_KB;
 

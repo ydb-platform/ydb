@@ -265,7 +265,7 @@ TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionI
 
 template<bool UseMigrationProtocol>
 TStringBuilder TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetLogPrefix() const {
-    return TStringBuilder() << GetDatabaseLogPrefix(Database) << "[" << SessionId << "] [" << ClusterName << "] ";
+    return TStringBuilder() << GetDatabaseLogPrefix(Database) << "[" << SessionId << "] [" << ClusterName << "] [" << Settings.TraceId_ << "] ";
 }
 
 template<bool UseMigrationProtocol>

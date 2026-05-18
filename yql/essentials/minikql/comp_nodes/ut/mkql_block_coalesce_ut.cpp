@@ -81,7 +81,7 @@ namespace {
     void TestName##Execute(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 template <typename T>
-arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::vector<TMaybe<T>>& array, size_t offset) {
+arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, TVector<TMaybe<T>>& array, size_t offset) {
     auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, nullptr);
     for (size_t i = 0; i < offset; i++) {
         if (array[0]) {
@@ -123,10 +123,10 @@ enum class ERightOperandType {
 
 template <typename T>
 using InputOptionalVector =
-    std::vector<TMaybe<typename NUdf::TDataType<T>::TLayout>>;
+    TVector<TMaybe<typename NUdf::TDataType<T>::TLayout>>;
 
 std::unique_ptr<IArrowKernelComputationNode> GetArrowKernel(IComputationGraph* graph) {
-    std::vector<std::unique_ptr<IArrowKernelComputationNode>> allKernels;
+    TVector<std::unique_ptr<IArrowKernelComputationNode>> allKernels;
     for (auto node : graph->GetNodes()) {
         auto kernelNode = node->PrepareArrowKernelComputationNode(graph->GetContext());
         if (!kernelNode) {
@@ -281,78 +281,78 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
 Y_UNIT_TEST(TestStringType) {
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
-        std::vector<TString>{"default1", "default2", "default3"},
-        std::vector<TString>{"default1", "hello", "world"});
+        TVector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
+        TVector<TString>{"default1", "default2", "default3"},
+        TVector<TString>{"default1", "hello", "world"});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        std::vector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
+        TVector<TMaybe<TString>>{Nothing(), TString("hello"), TString("world")},
         TString("default"),
-        std::vector<TString>{"default", "hello", "world"});
+        TVector<TString>{"default", "hello", "world"});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TString>>{TString("a"), TString("b"), TString("c")},
-        std::vector<TString>{"default1", "default2", "default3"},
-        std::vector<TString>{"a", "b", "c"});
+        TVector<TMaybe<TString>>{TString("a"), TString("b"), TString("c")},
+        TVector<TString>{"default1", "default2", "default3"},
+        TVector<TString>{"a", "b", "c"});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TString>>{Nothing(), Nothing(), Nothing()},
-        std::vector<TString>{"default1", "default2", "default3"},
-        std::vector<TString>{"default1", "default2", "default3"});
+        TVector<TMaybe<TString>>{Nothing(), Nothing(), Nothing()},
+        TVector<TString>{"default1", "default2", "default3"},
+        TVector<TString>{"default1", "default2", "default3"});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        std::vector<TMaybe<TString>>{Nothing(), TString("hello"), Nothing()},
-        std::vector<TMaybe<TString>>{TString("default1"), Nothing(), Nothing()},
-        std::vector<TMaybe<TString>>{TString("default1"), TString("hello"), Nothing()});
+        TVector<TMaybe<TString>>{Nothing(), TString("hello"), Nothing()},
+        TVector<TMaybe<TString>>{TString("default1"), Nothing(), Nothing()},
+        TVector<TMaybe<TString>>{TString("default1"), TString("hello"), Nothing()});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
         TMaybe<TString>{TString("constant")},
-        std::vector<TString>{"a", "b", "c"},
-        std::vector<TString>{"constant", "constant", "constant"});
+        TVector<TString>{"a", "b", "c"},
+        TVector<TString>{"constant", "constant", "constant"});
 }
 
 // Test for Boolean type
 Y_UNIT_TEST(TestBooleanType) {
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<bool>>{Nothing(), true, false},
-        std::vector<bool>{false, false, false},
-        std::vector<bool>{false, true, false});
+        TVector<TMaybe<bool>>{Nothing(), true, false},
+        TVector<bool>{false, false, false},
+        TVector<bool>{false, true, false});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        std::vector<TMaybe<bool>>{Nothing(), true, false},
+        TVector<TMaybe<bool>>{Nothing(), true, false},
         true,
-        std::vector<bool>{true, true, false});
+        TVector<bool>{true, true, false});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<bool>>{true, false, true},
-        std::vector<bool>{false, true, false},
-        std::vector<bool>{true, false, true});
+        TVector<TMaybe<bool>>{true, false, true},
+        TVector<bool>{false, true, false},
+        TVector<bool>{true, false, true});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<bool>>{Nothing(), Nothing(), Nothing()},
-        std::vector<bool>{false, true, false},
-        std::vector<bool>{false, true, false});
+        TVector<TMaybe<bool>>{Nothing(), Nothing(), Nothing()},
+        TVector<bool>{false, true, false},
+        TVector<bool>{false, true, false});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        std::vector<TMaybe<bool>>{Nothing(), true, Nothing()},
-        std::vector<TMaybe<bool>>{true, Nothing(), false},
-        std::vector<TMaybe<bool>>{true, true, false});
+        TVector<TMaybe<bool>>{Nothing(), true, Nothing()},
+        TVector<TMaybe<bool>>{true, Nothing(), false},
+        TVector<TMaybe<bool>>{true, true, false});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
         TMaybe<bool>{true},
-        std::vector<bool>{false, false, false},
-        std::vector<bool>{true, true, true});
+        TVector<bool>{false, false, false},
+        TVector<bool>{true, true, true});
 }
 
 // Test for Tagged types
@@ -361,96 +361,96 @@ Y_UNIT_TEST(TestTaggedType) {
 
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{1}, TaggedIntType{2}},
-        std::vector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
-        std::vector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{1}, TaggedIntType{2}});
+        TVector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{1}, TaggedIntType{2}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{1}, TaggedIntType{2}});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        std::vector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{1}, TaggedIntType{2}},
+        TVector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{1}, TaggedIntType{2}},
         TaggedIntType{99},
-        std::vector<TaggedIntType>{TaggedIntType{99}, TaggedIntType{1}, TaggedIntType{2}});
+        TVector<TaggedIntType>{TaggedIntType{99}, TaggedIntType{1}, TaggedIntType{2}});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TaggedIntType>>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}},
-        std::vector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
-        std::vector<TaggedIntType>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}});
+        TVector<TMaybe<TaggedIntType>>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
+        TVector<TaggedIntType>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TaggedIntType>>{Nothing(), Nothing(), Nothing()},
-        std::vector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
-        std::vector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}});
+        TVector<TMaybe<TaggedIntType>>{Nothing(), Nothing(), Nothing()},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}});
 
     // Test with optional tagged types - mixed null/non-null
     using OptTaggedIntType = TMaybe<TaggedIntType>;
     TestCoalesceKernel(
-        std::vector<TMaybe<OptTaggedIntType>>{Nothing(), OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}},
-        std::vector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
-        std::vector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}});
+        TVector<TMaybe<OptTaggedIntType>>{Nothing(), OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}});
 
     // Test with optional tagged types - all non-null
     TestCoalesceKernel(
-        std::vector<TMaybe<OptTaggedIntType>>{OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}, OptTaggedIntType{TaggedIntType{3}}},
-        std::vector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
-        std::vector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}, OptTaggedIntType{TaggedIntType{3}}});
+        TVector<TMaybe<OptTaggedIntType>>{OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}, OptTaggedIntType{TaggedIntType{3}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}, OptTaggedIntType{TaggedIntType{3}}});
 
     // Test with optional tagged types - all null
     TestCoalesceKernel(
-        std::vector<TMaybe<OptTaggedIntType>>{Nothing(), Nothing(), Nothing()},
-        std::vector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
-        std::vector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}});
+        TVector<TMaybe<OptTaggedIntType>>{Nothing(), Nothing(), Nothing()},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        std::vector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{5}, Nothing()},
-        std::vector<TMaybe<TaggedIntType>>{TaggedIntType{50}, Nothing(), Nothing()},
-        std::vector<TMaybe<TaggedIntType>>{TaggedIntType{50}, TaggedIntType{5}, Nothing()});
+        TVector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{5}, Nothing()},
+        TVector<TMaybe<TaggedIntType>>{TaggedIntType{50}, Nothing(), Nothing()},
+        TVector<TMaybe<TaggedIntType>>{TaggedIntType{50}, TaggedIntType{5}, Nothing()});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
         TMaybe<TaggedIntType>{TaggedIntType{42}},
-        std::vector<TaggedIntType>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}},
-        std::vector<TaggedIntType>{TaggedIntType{42}, TaggedIntType{42}, TaggedIntType{42}});
+        TVector<TaggedIntType>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}},
+        TVector<TaggedIntType>{TaggedIntType{42}, TaggedIntType{42}, TaggedIntType{42}});
 }
 
 Y_UNIT_TEST(TestSingularNullType) {
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, TSingularNull{}},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+        TVector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        std::vector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, TSingularNull{}},
+        TVector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, TSingularNull{}},
         TSingularNull{},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TSingularNull>>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+        TVector<TMaybe<TSingularNull>>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TSingularNull>>{Nothing(), Nothing(), Nothing()},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+        TVector<TMaybe<TSingularNull>>{Nothing(), Nothing(), Nothing()},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        std::vector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, Nothing()},
-        std::vector<TMaybe<TSingularNull>>{TSingularNull{}, Nothing(), Nothing()},
-        std::vector<TMaybe<TSingularNull>>{TSingularNull{}, TSingularNull{}, Nothing()});
+        TVector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, Nothing()},
+        TVector<TMaybe<TSingularNull>>{TSingularNull{}, Nothing(), Nothing()},
+        TVector<TMaybe<TSingularNull>>{TSingularNull{}, TSingularNull{}, Nothing()});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
         TMaybe<TSingularNull>{TSingularNull{}},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
-        std::vector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
 }
 
 // Test for PgInt type
@@ -458,44 +458,44 @@ Y_UNIT_TEST(TestPgIntType) {
     // Test with mixed null/non-null left operands
 
     TestCoalesceKernel(
-        std::vector<TPgInt>{TPgInt(), TPgInt{1}, TPgInt{3}},
-        std::vector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
-        std::vector<TPgInt>{TPgInt{10}, TPgInt{1}, TPgInt{3}});
+        TVector<TPgInt>{TPgInt(), TPgInt{1}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{1}, TPgInt{3}});
 
     TestCoalesceKernel(
-        std::vector<TMaybe<TPgInt>>{Nothing(), TPgInt{1}, TPgInt{3}},
-        std::vector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
-        std::vector<TPgInt>{TPgInt{10}, TPgInt{1}, TPgInt{3}});
+        TVector<TMaybe<TPgInt>>{Nothing(), TPgInt{1}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{1}, TPgInt{3}});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        std::vector<TMaybe<TPgInt>>{Nothing(), TPgInt{1}, TPgInt{3}},
+        TVector<TMaybe<TPgInt>>{Nothing(), TPgInt{1}, TPgInt{3}},
         TPgInt{99},
-        std::vector<TPgInt>{TPgInt{99}, TPgInt{1}, TPgInt{3}});
+        TVector<TPgInt>{TPgInt{99}, TPgInt{1}, TPgInt{3}});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TPgInt>>{TPgInt{1}, TPgInt{2}, TPgInt{3}},
-        std::vector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
-        std::vector<TPgInt>{TPgInt{1}, TPgInt{2}, TPgInt{3}});
+        TVector<TMaybe<TPgInt>>{TPgInt{1}, TPgInt{2}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{1}, TPgInt{2}, TPgInt{3}});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<TPgInt>>{Nothing(), Nothing(), Nothing()},
-        std::vector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
-        std::vector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}});
+        TVector<TMaybe<TPgInt>>{Nothing(), Nothing(), Nothing()},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        std::vector<TMaybe<TPgInt>>{Nothing(), TPgInt{5}, Nothing()},
-        std::vector<TMaybe<TPgInt>>{TPgInt{50}, Nothing(), Nothing()},
-        std::vector<TMaybe<TPgInt>>{TPgInt{50}, TPgInt{5}, Nothing()});
+        TVector<TMaybe<TPgInt>>{Nothing(), TPgInt{5}, Nothing()},
+        TVector<TMaybe<TPgInt>>{TPgInt{50}, Nothing(), Nothing()},
+        TVector<TMaybe<TPgInt>>{TPgInt{50}, TPgInt{5}, Nothing()});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
         TMaybe<TPgInt>{TPgInt{42}},
-        std::vector<TPgInt>{TPgInt{1}, TPgInt{2}, TPgInt{3}},
-        std::vector<TPgInt>{TPgInt{42}, TPgInt{42}, TPgInt{42}});
+        TVector<TPgInt>{TPgInt{1}, TPgInt{2}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{42}, TPgInt{42}, TPgInt{42}});
 }
 
 // Test for Double optional objects
@@ -504,45 +504,45 @@ Y_UNIT_TEST(TestDoubleOptionalType) {
 
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}});
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        std::vector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}},
         DoubleOptInt{TMaybe<ui32>{99}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{99}}, DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}});
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{99}}, DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}});
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<DoubleOptInt>>{Nothing(), Nothing(), Nothing()},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}});
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), Nothing(), Nothing()},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}});
 
     // Test with inner nulls
     TestCoalesceKernel(
-        std::vector<TMaybe<DoubleOptInt>>{DoubleOptInt{Nothing()}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{Nothing()}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{Nothing()}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{Nothing()}});
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{Nothing()}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{Nothing()}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{Nothing()}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{Nothing()}});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        std::vector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{5}}, Nothing()},
-        std::vector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{50}}, Nothing(), DoubleOptInt{Nothing()}},
-        std::vector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{50}}, DoubleOptInt{TMaybe<ui32>{5}}, DoubleOptInt{Nothing()}});
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{5}}, Nothing()},
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{50}}, Nothing(), DoubleOptInt{Nothing()}},
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{50}}, DoubleOptInt{TMaybe<ui32>{5}}, DoubleOptInt{Nothing()}});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
         TMaybe<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{42}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}},
-        std::vector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{42}}, DoubleOptInt{TMaybe<ui32>{42}}, DoubleOptInt{TMaybe<ui32>{42}}});
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{42}}, DoubleOptInt{TMaybe<ui32>{42}}, DoubleOptInt{TMaybe<ui32>{42}}});
 }
 
 // Test for Optional objects of singular types
@@ -551,45 +551,45 @@ Y_UNIT_TEST(TestOptionalSingularType) {
 
     // Test with mixed null/non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+        TVector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
 
     // Test with scalar right operand
     TestCoalesceKernel(
-        std::vector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
         OptVoid{TSingularVoid{}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
 
     // Test with all non-null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+        TVector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
 
     // Test with all null left operands
     TestCoalesceKernel(
-        std::vector<TMaybe<OptVoid>>{Nothing(), Nothing(), Nothing()},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+        TVector<TMaybe<OptVoid>>{Nothing(), Nothing(), Nothing()},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
 
     // Test with inner nulls
     TestCoalesceKernel(
-        std::vector<TMaybe<OptVoid>>{OptVoid{Nothing()}, OptVoid{TSingularVoid{}}, OptVoid{Nothing()}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{Nothing()}, OptVoid{TSingularVoid{}}, OptVoid{Nothing()}});
+        TVector<TMaybe<OptVoid>>{OptVoid{Nothing()}, OptVoid{TSingularVoid{}}, OptVoid{Nothing()}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{Nothing()}, OptVoid{TSingularVoid{}}, OptVoid{Nothing()}});
 
     // Test with both operands optional
     TestCoalesceKernel(
-        std::vector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, Nothing()},
-        std::vector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, Nothing(), Nothing()},
-        std::vector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, Nothing()});
+        TVector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, Nothing()},
+        TVector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, Nothing(), Nothing()},
+        TVector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, Nothing()});
 
     // Test with scalar left operand and vector right operand
     TestCoalesceKernel(
         TMaybe<OptVoid>{OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
-        std::vector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest)

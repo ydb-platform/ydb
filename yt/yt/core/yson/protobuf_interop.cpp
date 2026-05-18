@@ -68,6 +68,10 @@ class TProtobufEnumType;
 
 static constexpr size_t TypicalFieldCount = 16;
 using TFieldNumberList = TCompactVector<int, TypicalFieldCount>;
+using TProtobufCustomFieldConverter = std::variant<
+    TProtobufMessageBytesFieldConverter,
+    TProtobufIntFieldConverter,
+    TProtobufUintFieldConverter>;
 
 static constexpr int AttributeDictionaryAttributeFieldNumber = 1;
 static constexpr int ProtobufMapKeyFieldNumber = 1;
@@ -351,12 +355,12 @@ public:
     }
 
     //! This method is called during static initialization and is not expected to be called during runtime.
-    void RegisterMessageBytesFieldConverter(
+    void RegisterMessageCustomFieldConverter(
         const Descriptor* descriptor,
         int fieldNumber,
-        const TProtobufMessageBytesFieldConverter& converter)
+        const TProtobufCustomFieldConverter& converter)
     {
-        EmplaceOrCrash(MessageFieldConverterMap_, std::pair(descriptor, fieldNumber), converter);
+        EmplaceOrCrash(MessageCustomFieldConverterMap_, std::pair(descriptor, fieldNumber), converter);
     }
 
     //! This method is called while reflecting types.
@@ -375,16 +379,15 @@ public:
     }
 
     //! This method is called while reflecting types.
-    std::optional<TProtobufMessageBytesFieldConverter> FindMessageBytesFieldConverter(
+    std::optional<TProtobufCustomFieldConverter> FindMessageCustomFieldConverter(
         const Descriptor* descriptor,
-        int fieldIndex) const
+        int fieldNumber) const
     {
         // No need to call Initialize: it has been already called within Reflect*Type higher up the stack.
         YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
-        auto fieldNumber = descriptor->field(fieldIndex)->number();
-        auto it = MessageFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
-        if (it == MessageFieldConverterMap_.end()) {
+        auto it = MessageCustomFieldConverterMap_.find(std::pair(descriptor, fieldNumber));
+        if (it == MessageCustomFieldConverterMap_.end()) {
             return std::nullopt;
         } else {
             return it->second;
@@ -443,7 +446,7 @@ private:
     TForkAwareSyncMap<const EnumDescriptor*, const TProtobufEnumType*> EnumTypeSyncMap_;
 
     THashMap<const Descriptor*, TProtobufMessageConverter> MessageTypeConverterMap_;
-    THashMap<std::pair<const Descriptor*, int>, TProtobufMessageBytesFieldConverter> MessageFieldConverterMap_;
+    THashMap<std::pair<const Descriptor*, int>, TProtobufCustomFieldConverter> MessageCustomFieldConverterMap_;
 
     THashSet<TString> InternedStrings_;
 
@@ -468,7 +471,7 @@ public:
         , YsonString_(descriptor->options().GetExtension(NYson::NProto::yson_string))
         , YsonMap_(descriptor->options().GetExtension(NYson::NProto::yson_map))
         , Required_(descriptor->options().GetExtension(NYson::NProto::required))
-        , Converter_(registry->FindMessageBytesFieldConverter(descriptor->containing_type(), descriptor->index()))
+        , Converter_(registry->FindMessageCustomFieldConverter(descriptor->containing_type(), descriptor->number()))
         , EnumYsonStorageType_(TryGetExtension(descriptor, NYson::NProto::enum_yson_storage_type))
         , StrictEnumValueCheck_(TryGetExtension(descriptor, NYson::NProto::strict_enum_value_check))
     {
@@ -485,9 +488,41 @@ public:
             }
         }
 
-        if (Converter_ && GetType() != FieldDescriptor::Type::TYPE_BYTES) {
-            THROW_ERROR_EXCEPTION("Field %v with custom converter has invalid type, only bytes fields are allowed",
-                GetFullName());
+        if (Converter_) {
+            Visit(*Converter_,
+                [&] (const TProtobufMessageBytesFieldConverter&) {
+                    if (GetType() != FieldDescriptor::Type::TYPE_BYTES) {
+                        THROW_ERROR_EXCEPTION("Field %v with custom converter has invalid type, only bytes fields are allowed",
+                            GetFullName());
+                    }
+                },
+                [&] (const TProtobufIntFieldConverter&) {
+                    switch (GetType()) {
+                        case FieldDescriptor::Type::TYPE_INT32:
+                        case FieldDescriptor::Type::TYPE_INT64:
+                        case FieldDescriptor::Type::TYPE_SINT32:
+                        case FieldDescriptor::Type::TYPE_SINT64:
+                        case FieldDescriptor::Type::TYPE_SFIXED32:
+                        case FieldDescriptor::Type::TYPE_SFIXED64:
+                            break;
+                        default:
+                            THROW_ERROR_EXCEPTION("Field %v with custom converter has invalid type, only int32 and int64 fields are allowed",
+                                GetFullName());
+                    }
+                },
+                [&] (const TProtobufUintFieldConverter&) {
+                    switch (GetType()) {
+                        case FieldDescriptor::Type::TYPE_UINT32:
+                        case FieldDescriptor::Type::TYPE_UINT64:
+                        case FieldDescriptor::Type::TYPE_FIXED32:
+                        case FieldDescriptor::Type::TYPE_FIXED64:
+                            break;
+                        default:
+                            THROW_ERROR_EXCEPTION("Field %v with custom converter has invalid type, only uint32 and uint64 fields are allowed",
+                                GetFullName());
+                    }
+                }
+            );
         }
     }
 
@@ -576,13 +611,24 @@ public:
 
     TProtobufElement GetElement(bool insideRepeated) const;
 
-    const std::optional<TProtobufMessageBytesFieldConverter>& GetBytesFieldConverter() const
+    template <typename TConverter>
+    requires std::is_constructible_v<TProtobufCustomFieldConverter, TConverter>
+    const TConverter* GetCustomFieldConverter() const
     {
-        return Converter_;
+        if (Converter_) {
+            return std::get_if<TConverter>(&*Converter_);
+        } else {
+            return nullptr;
+        }
     }
 
     EEnumYsonStorageType GetEnumYsonStorageType() const
     {
+        auto config = GetProtobufInteropConfig();
+        if (config->ForceEnumStringType) {
+            return EEnumYsonStorageType::String;
+        }
+
         if (EnumYsonStorageType_) {
             switch (*EnumYsonStorageType_) {
                 case NYson::NProto::EEnumYsonStorageType::EYST_STRING:
@@ -592,7 +638,6 @@ public:
             }
         }
 
-        auto config = GetProtobufInteropConfig();
         return config->DefaultEnumYsonStorageType;
     }
 
@@ -740,7 +785,7 @@ private:
     const bool YsonString_;
     const bool YsonMap_;
     const bool Required_;
-    const std::optional<TProtobufMessageBytesFieldConverter> Converter_;
+    const std::optional<TProtobufCustomFieldConverter> Converter_;
     const std::optional<NYson::NProto::EEnumYsonStorageType> EnumYsonStorageType_;
     const std::optional<bool> StrictEnumValueCheck_;
 };
@@ -2083,16 +2128,16 @@ private:
         }
 
         const auto* field = FieldStack_.back().Field;
-        if (field->GetBytesFieldConverter()) {
+        const auto* converter = field->GetCustomFieldConverter<TProtobufMessageBytesFieldConverter>();
+        if (converter) {
             if (field->IsRepeated() && !FieldStack_.back().ParsingList) {
                 return;
             }
-            const auto& converter = *field->GetBytesFieldConverter();
             TreeBuilder_->BeginTree();
             Forward(TreeBuilder_.get(), [this, converter] {
                 auto node = TreeBuilder_->EndTree();
                 BytesString_.clear();
-                converter.Deserializer(&BytesString_, node);
+                converter->Deserializer(&BytesString_, node);
                 OnMyStringScalar(BytesString_);
             });
         } else if (field->GetType() == FieldDescriptor::TYPE_MESSAGE && field->GetMessageType()->GetConverter()) {
@@ -2736,14 +2781,24 @@ private:
                     case FieldDescriptor::TYPE_INT64:
                         ParseScalar([&] {
                             auto signedValue = static_cast<i64>(unsignedValue);
-                            Consumer_->OnInt64Scalar(signedValue);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, signedValue);
+                            } else {
+                                Consumer_->OnInt64Scalar(signedValue);
+                            }
                         });
                         break;
 
                     case FieldDescriptor::TYPE_UINT32:
                     case FieldDescriptor::TYPE_UINT64:
                         ParseScalar([&] {
-                            Consumer_->OnUint64Scalar(unsignedValue);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufUintFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, unsignedValue);
+                            } else {
+                                Consumer_->OnUint64Scalar(unsignedValue);
+                            }
                         });
                         break;
 
@@ -2751,7 +2806,12 @@ private:
                     case FieldDescriptor::TYPE_SINT32:
                         ParseScalar([&] {
                             auto signedValue = ZigZagDecode64(unsignedValue);
-                            Consumer_->OnInt64Scalar(signedValue);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, signedValue);
+                            } else {
+                                Consumer_->OnInt64Scalar(signedValue);
+                            }
                         });
                         break;
 
@@ -2776,14 +2836,24 @@ private:
                 switch (field->GetType()) {
                     case FieldDescriptor::TYPE_FIXED32:
                         ParseScalar([&] {
-                            Consumer_->OnUint64Scalar(unsignedValue);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufUintFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, unsignedValue);
+                            } else {
+                                Consumer_->OnUint64Scalar(unsignedValue);
+                            }
                         });
                         break;
 
                     case FieldDescriptor::TYPE_SFIXED32: {
                         ParseScalar([&] {
                             auto signedValue = static_cast<i32>(unsignedValue);
-                            Consumer_->OnInt64Scalar(signedValue);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, signedValue);
+                            } else {
+                                Consumer_->OnInt64Scalar(signedValue);
+                            }
                         });
                         break;
                     }
@@ -2817,14 +2887,24 @@ private:
                 switch (field->GetType()) {
                     case FieldDescriptor::TYPE_FIXED64:
                         ParseScalar([&] {
-                            Consumer_->OnUint64Scalar(unsignedValue);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufUintFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, unsignedValue);
+                            } else {
+                                Consumer_->OnUint64Scalar(unsignedValue);
+                            }
                         });
                         break;
 
                     case FieldDescriptor::TYPE_SFIXED64: {
                         ParseScalar([&] {
                             auto signedValue = static_cast<i64>(unsignedValue);
-                            Consumer_->OnInt64Scalar(signedValue);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, signedValue);
+                            } else {
+                                Consumer_->OnInt64Scalar(signedValue);
+                            }
                         });
                         break;
                     }
@@ -2870,9 +2950,9 @@ private:
                             ValidateString(data, field->GetFullName(), Options_.Utf8Check);
                         }
                         ParseScalar([&] {
-                            if (field->GetBytesFieldConverter()) {
-                                const auto& converter = *field->GetBytesFieldConverter();
-                                converter.Serializer(Consumer_, data);
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufMessageBytesFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, data);
                             } else if (field->IsYsonString()) {
                                 Consumer_->OnRaw(data, NYson::EYsonType::Node);
                             } else {
@@ -2903,22 +2983,50 @@ private:
                     }
 
                     case FieldDescriptor::TYPE_FIXED32: {
-                        ParseFixedPacked<ui32>(length, field, [&] (auto value) {Consumer_->OnUint64Scalar(value);});
+                        ParseFixedPacked<ui32>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufUintFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, value);
+                            } else {
+                                Consumer_->OnUint64Scalar(value);
+                            }
+                        });
                         break;
                     }
 
                     case FieldDescriptor::TYPE_FIXED64: {
-                        ParseFixedPacked<ui64>(length, field, [&] (auto value) {Consumer_->OnUint64Scalar(value);});
+                        ParseFixedPacked<ui64>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufUintFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, value);
+                            } else {
+                                Consumer_->OnUint64Scalar(value);
+                            }
+                        });
                         break;
                     }
 
                     case FieldDescriptor::TYPE_SFIXED32: {
-                        ParseFixedPacked<ui32>(length, field, [&] (auto value) {Consumer_->OnInt64Scalar(static_cast<i32>(value));});
+                        ParseFixedPacked<ui32>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, static_cast<i32>(value));
+                            } else {
+                                Consumer_->OnInt64Scalar(static_cast<i32>(value));
+                            }
+                        });
                         break;
                     }
 
                     case FieldDescriptor::TYPE_SFIXED64: {
-                        ParseFixedPacked<ui64>(length, field, [&] (auto value) {Consumer_->OnInt64Scalar(static_cast<i64>(value));});
+                        ParseFixedPacked<ui64>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, static_cast<i64>(value));
+                            } else {
+                                Consumer_->OnInt64Scalar(static_cast<i64>(value));
+                            }
+                        });
                         break;
                     }
 
@@ -2941,22 +3049,50 @@ private:
                     }
 
                     case FieldDescriptor::TYPE_INT32: {
-                        ParseVarintPacked<ui32>(length, field, [&] (auto value) {Consumer_->OnInt64Scalar(static_cast<i32>(value));});
+                        ParseVarintPacked<ui32>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, static_cast<i32>(value));
+                            } else {
+                                Consumer_->OnInt64Scalar(static_cast<i32>(value));
+                            }
+                        });
                         break;
                     }
 
                     case FieldDescriptor::TYPE_INT64: {
-                        ParseVarintPacked<ui64>(length, field, [&] (auto value) {Consumer_->OnInt64Scalar(static_cast<i64>(value));});
+                        ParseVarintPacked<ui64>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufIntFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, static_cast<i64>(value));
+                            } else {
+                                Consumer_->OnInt64Scalar(static_cast<i64>(value));
+                            }
+                        });
                         break;
                     }
 
                     case FieldDescriptor::TYPE_UINT32: {
-                        ParseVarintPacked<ui32>(length, field, [&] (auto value) {Consumer_->OnUint64Scalar(value);});
+                        ParseVarintPacked<ui32>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufUintFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, value);
+                            } else {
+                                Consumer_->OnUint64Scalar(value);
+                            }
+                        });
                         break;
                     }
 
                     case FieldDescriptor::TYPE_UINT64: {
-                        ParseVarintPacked<ui64>(length, field, [&] (auto value) {Consumer_->OnUint64Scalar(value);});
+                        ParseVarintPacked<ui64>(length, field, [&] (auto value) {
+                            const auto* converter = field->GetCustomFieldConverter<TProtobufUintFieldConverter>();
+                            if (converter) {
+                                converter->Serializer(Consumer_, value);
+                            } else {
+                                Consumer_->OnUint64Scalar(value);
+                            }
+                        });
                         break;
                     }
 
@@ -3350,7 +3486,25 @@ void RegisterCustomProtobufBytesFieldConverter(
     const TProtobufMessageBytesFieldConverter& converter)
 {
     // NB: Protobuf internal singletons might not be ready, so we can't get field descriptor here.
-    TProtobufTypeRegistry::Get()->RegisterMessageBytesFieldConverter(descriptor, fieldNumber, converter);
+    TProtobufTypeRegistry::Get()->RegisterMessageCustomFieldConverter(descriptor, fieldNumber, converter);
+}
+
+void RegisterCustomProtobufIntFieldConverter(
+    const Descriptor* descriptor,
+    int fieldNumber,
+    const TProtobufIntFieldConverter& converter)
+{
+    // NB: Protobuf internal singletons might not be ready, so we can't get field descriptor here.
+    TProtobufTypeRegistry::Get()->RegisterMessageCustomFieldConverter(descriptor, fieldNumber, converter);
+}
+
+void RegisterCustomProtobufUIntFieldConverter(
+    const Descriptor* descriptor,
+    int fieldNumber,
+    const TProtobufUintFieldConverter& converter)
+{
+    // NB: Protobuf internal singletons might not be ready, so we can't get field descriptor here.
+    TProtobufTypeRegistry::Get()->RegisterMessageCustomFieldConverter(descriptor, fieldNumber, converter);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

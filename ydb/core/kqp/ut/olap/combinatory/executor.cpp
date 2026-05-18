@@ -18,6 +18,7 @@ void TScriptExecutor::Execute(const TKikimrSettings& settings) {
     longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
     longTxConfig.SetSnapshotsExchangeIntervalSeconds(1);
     longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+    kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableSnapshotsLocking(true);
     auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
     csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));

@@ -53,6 +53,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(1000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -102,9 +104,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -130,6 +130,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(1000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -179,9 +181,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -212,6 +212,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(1000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -261,9 +263,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
@@ -306,6 +306,8 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto timeout = TDuration::MilliSeconds(10000);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -355,9 +357,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
 
@@ -403,6 +403,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         const auto pbufferReplyTimeout = TDuration::MilliSeconds(500);
 
         Init();
+        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
+        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
+        DirectBlockGroup->Oracle.PBufferReplyTimeout = pbufferReplyTimeout;
 
         TVector<std::pair<TDuration, TCallback>> scheduled;
         DirectBlockGroup->ScheduleHandler =
@@ -468,10 +471,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
                 std::move(callContext),
                 std::move(originalRequest),
                 userLsn,
-                NWilson::TTraceId(),
-                hedgeDelay,
-                timeout,
-                pbufferReplyTimeout);
+                NWilson::TTraceId());
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());

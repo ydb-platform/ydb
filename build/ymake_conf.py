@@ -196,6 +196,8 @@ class Platform(object):
 
         self.is_none = self.os == 'none'
 
+        self.is_freertos = self.os == 'freertos'
+
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
     @staticmethod
@@ -811,6 +813,7 @@ class Build(object):
         cuda = Cuda(self)
         cuda.print_()
         CuDNN(cuda).print_()
+        CuTENSOR(cuda).print_()
 
         if self.ignore_local_files or host.is_windows or is_positive('NO_SVN_DEPENDS'):
             emit_with_ignore_comment('SVN_DEPENDS_CACHE__NO_UID__')
@@ -1478,10 +1481,14 @@ class GnuCompiler(Compiler):
         self.tc = tc
 
         self.debug_info_flags = [
-            '-g'
+            '-g',
         ]
+
+        if not self.build.is_release and self.target.is_linux:
+            # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
+            self.debug_info_flags.append('-gz=zstd')
         if self.tc.is_clang and self.tc.version_at_least(14):
-            # DTCC-1231: Clang 14 has switched to DWARFv5 by defaulg
+            # DTCC-1231: Clang 14 has switched to DWARFv5 by default
             self.debug_info_flags.append('-fdebug-default-version=4')
         if self.tc.is_clang and self.target.is_linux:
             self.debug_info_flags.append('-ggnu-pubnames')
@@ -1583,8 +1590,11 @@ class GnuCompiler(Compiler):
             # Arcadia have API 16 for 32-bit Androids.
             self.c_defines.append('-D_FILE_OFFSET_BITS=64')
 
-        if self.target.is_linux or self.target.is_android or self.target.is_none:
+        if self.target.is_linux or self.target.is_android or self.target.is_none or self.target.is_freertos:
             self.c_defines.append('-D_GNU_SOURCE')
+
+        if self.target.is_freertos:
+            self.c_defines.append('-D__FREERTOS__')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
@@ -1799,6 +1809,9 @@ class LD(Linker):
                 self.llvm_ar_format = "gnu"
 
         self.ld_flags = []
+        if not self.build.is_release and target.is_linux:
+            # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
+            self.ld_flags.extend(['-Wl,--compress-debug-sections=zstd'])
 
         if self.musl.value:
             self.ld_flags.extend(['-Wl,--no-as-needed'])
@@ -2731,6 +2744,26 @@ class CuDNN(object):
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():
             self.cudnn_version.emit()
+
+
+class CuTENSOR(object):
+    def __init__(self, cuda):
+        """
+        :type cuda: Cuda
+        """
+        self.cuda = cuda
+
+        self.cutensor_version = Setting('CUTENSOR_VERSION', auto=self.auto_cutensor_version)
+
+    def have_cutensor(self):
+        return self.cutensor_version.value in ('2.6.0')
+
+    def auto_cutensor_version(self):
+        return '2.6.0'
+
+    def print_(self):
+        if self.cuda.have_cuda.value and self.have_cutensor():
+            self.cutensor_version.emit()
 
 
 def customization():

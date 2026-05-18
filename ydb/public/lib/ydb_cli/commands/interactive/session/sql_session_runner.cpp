@@ -141,6 +141,9 @@ public:
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
         settings.ConcurrentResultSets(false);
+        if (!ResourcePool.empty()) {
+            settings.ResourcePool(ResourcePool);
+        }
 
         try {
             TExecuteGenericQuery executeRunner(SqlLazyDriver->Get());
@@ -195,6 +198,11 @@ private:
         })));
 
         elements.emplace_back(CreateListItem(hbox({
+            keyword("SET resource_pool = "), CreateEntityName("POOL_NAME"),
+            text(": set resource pool for workload manager (empty string to reset).")
+        })));
+
+        elements.emplace_back(CreateListItem(hbox({
             keyword("EXPLAIN"), text(" ["), keyword("AST"), text("] "), CreateEntityName("SQL_QUERY"),
             text(": execute query in explain mode and optionally print AST.")
         })));
@@ -236,6 +244,8 @@ private:
             Cerr << Colors.Red() << "\nMissing variable value for \"SET\" special command." << Colors.OldColor() << Endl;
         } else if (to_lower(TString(tokens[1].data)) == "stats") {
             TrySetCollectStatsMode(tokens);
+        } else if (to_lower(TString(tokens[1].data)) == "resource_pool") {
+            TrySetResourcePool(tokens);
         } else {
             Cerr << Colors.Red() << "\nUnknown variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Colors.OldColor() << Endl;
         }
@@ -259,10 +269,24 @@ private:
         CollectStatsMode = *statsMode;
     }
 
+    void TrySetResourcePool(const std::vector<TLexer::TToken>& tokens) {
+        size_t tokensSize = tokens.size();
+        Y_VALIDATE(tokensSize >= 4, "Not enough tokens for \"SET resource_pool\" special command.");
+
+        if (tokensSize > 4) {
+            Cerr << Colors.Red() << "\nVariable value for \"SET resource_pool\" special command should contain exactly one token." << Colors.OldColor() << Endl;
+            return;
+        }
+
+        ResourcePool = std::string(tokens[3].data);
+        Cout << "Resource pool set to \"" << ResourcePool << "\"." << Endl;
+    }
+
 private:
     TQueryPlanPrinter QueryPlanPrinter;
     TLazyDriver::TPtr SqlLazyDriver;
     NQuery::EStatsMode CollectStatsMode = NQuery::EStatsMode::None;
+    std::string ResourcePool;
     bool EnableAiInteractive;
 };
 

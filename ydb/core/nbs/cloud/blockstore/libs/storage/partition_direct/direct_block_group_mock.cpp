@@ -6,6 +6,36 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+THostIndex TOracleMock::SelectBestPBufferHost(
+    std::span<const THostIndex> hostIndexes,
+    EOperation operation) const
+{
+    Y_UNUSED(operation);
+    return hostIndexes[0];
+}
+
+TDuration TOracleMock::GetWriteHedgingDelay() const
+{
+    return WriteHedgingDelay;
+}
+
+TDuration TOracleMock::GetWriteRequestTimeout() const
+{
+    return WriteRequestTimeout;
+}
+
+TDuration TOracleMock::GetPBufferReplyTimeout() const
+{
+    return PBufferReplyTimeout;
+}
+
+EWriteMode TOracleMock::GetWriteMode() const
+{
+    return WriteMode;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 {
     VChunks.push_back(std::move(vChunk));
@@ -14,6 +44,11 @@ void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
 {
     return Executor;
+}
+
+IOraclePtr TDirectBlockGroupMock::GetOracle()
+{
+    return &Oracle;
 }
 
 void TDirectBlockGroupMock::Schedule(TDuration delay, TCallback callback)

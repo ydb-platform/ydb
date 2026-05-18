@@ -201,7 +201,6 @@ TEST_F(TSpliceAsyncTest, ReadFileSimple)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -226,14 +225,12 @@ TEST_F(TSpliceAsyncTest, ReadFileConcurrent)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename2_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -269,7 +266,6 @@ TEST_F(TSpliceAsyncTest, ReadFileBrokenPipe)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -296,7 +292,6 @@ TEST_F(TSpliceAsyncTest, WriteFileSimple)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -327,14 +322,12 @@ TEST_F(TSpliceAsyncTest, WriteFileConcurrent)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         pipeRead2,
         TFile(Filename2_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -373,7 +366,6 @@ TEST_F(TSpliceAsyncTest, WriteFileCancelFuture)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 

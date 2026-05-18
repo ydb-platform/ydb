@@ -448,6 +448,7 @@ void TDqComputeActorCheckpoints::DoCheckpoint() {
     if (SaveState()) {
         LOG_PCP_T("Injecting checkpoint barrier to outputs");
         ComputeActor->InjectBarrierToOutputs(*PendingCheckpoint.Checkpoint);
+        ComputeActor->ResumeInputsByCheckpoint();
         TryToSavePendingCheckpoint();
     }
 }

@@ -32,6 +32,7 @@ YT_DEFINE_ERROR_ENUM(
     ((PipelineStateVersionMismatch)    (3301))
     ((FlowViewKeeperIsNotInitialized)  (3302))
     ((FlowCoreTargetVersionMismatch)   (3303))
+    ((GracefulShutdown)                (3304))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);

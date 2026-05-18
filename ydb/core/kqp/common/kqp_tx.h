@@ -262,19 +262,13 @@ public:
                 break;
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-<<<<<<< HEAD
-                EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED
-                    : NKqpProto::ISOLATION_LEVEL_READ_COMMITTED;
-=======
                 if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
                     EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
                 } else {
                     EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
-                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                        ? NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED
+                        : NKqpProto::ISOLATION_LEVEL_READ_COMMITTED;
                 }
->>>>>>> 823e653198f (Disable OnlineRO (feature flag + monitoring) (#40265))
                 Readonly = true;
                 break;
 

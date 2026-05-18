@@ -284,14 +284,8 @@ message TFeatureFlags {
     optional bool EnableSnapshotsLocking = 254 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
-<<<<<<< HEAD
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
     optional bool EnableLocalMinMaxIndex = 261 [default = false];
-=======
     optional bool EnableStreamingQueryDisposition = 260 [default = true];
-    // Skip persisting partition rows that are not affected by a split/merge operation.
-    optional bool EnableSplitMergePartialPersistence = 261 [default = true];
-    optional bool EnableLocalMinMaxIndex = 262 [default = false];
     optional bool DisableOnlineRO = 263 [default = false];
->>>>>>> 823e653198f (Disable OnlineRO (feature flag + monitoring) (#40265))
 }

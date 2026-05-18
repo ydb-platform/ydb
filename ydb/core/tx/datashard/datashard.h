@@ -381,6 +381,10 @@ namespace TEvDataShard {
         EvValidateRowConditionRequest,
         EvValidateRowConditionResponse,
 
+        EvIncrementalRestoreShardProgress,
+
+        EvIncrementalRestoreSrcCreateRequest,
+
         EvEnd
     };
 
@@ -1536,6 +1540,25 @@ namespace TEvDataShard {
                           NKikimrTxDataShard::TEvBuildIndexProgressResponse,
                           TEvDataShard::EvBuildIndexProgressResponse>
     {
+    };
+
+    // Sent DS->SS once an incremental restore scan terminates.
+    struct TEvIncrementalRestoreShardProgress
+        : public TEventPB<TEvIncrementalRestoreShardProgress,
+                          NKikimrTxDataShard::TEvIncrementalRestoreShardProgress,
+                          TEvDataShard::EvIncrementalRestoreShardProgress>
+    {
+        TEvIncrementalRestoreShardProgress() = default;
+    };
+
+    // Sent SS->DS to invoke an incremental restore scan on a source DataShard.
+    // Reply arrives via TEvIncrementalRestoreShardProgress on the SS pipe.
+    struct TEvIncrementalRestoreSrcCreateRequest
+        : public TEventPB<TEvIncrementalRestoreSrcCreateRequest,
+                          NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest,
+                          TEvDataShard::EvIncrementalRestoreSrcCreateRequest>
+    {
+        TEvIncrementalRestoreSrcCreateRequest() = default;
     };
 
     struct TEvSampleKRequest

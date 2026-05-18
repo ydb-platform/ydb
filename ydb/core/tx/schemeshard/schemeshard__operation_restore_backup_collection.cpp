@@ -250,10 +250,10 @@ public:
         TVector<TString> incrBackupNames;
 
         for (auto& [child, _] : bcPath.Base()->GetChildren()) {
-            if (child.EndsWith("_full")) {
+            if (child.EndsWith(NBackup::FullBackupSuffix)) {
                 lastFullBackupName = child;
                 incrBackupNames.clear();
-            } else if (child.EndsWith("_incremental")) {
+            } else if (child.EndsWith(NBackup::IncrementalBackupSuffix)) {
                 incrBackupNames.push_back(child);
             }
         }
@@ -285,13 +285,13 @@ public:
         }
 
         TStringBuf fullBackupName = lastFullBackupName;
-        fullBackupName.ChopSuffix("_full"_sb);
+        fullBackupName.ChopSuffix(NBackup::FullBackupSuffix);
 
         op.SetFullBackupTrimmedName(TString(fullBackupName));
 
         for (const auto& backupName : incrBackupNames) {
             TStringBuf incrBackupName = backupName;
-            incrBackupName.ChopSuffix("_incremental"_sb);
+            incrBackupName.ChopSuffix(NBackup::IncrementalBackupSuffix);
 
             op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
@@ -393,10 +393,10 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
             "Assume path children list is lexicographically sorted");
 
         for (auto& [child, _] : bcPath.Base()->GetChildren()) {
-            if (child.EndsWith("_full")) {
+            if (child.EndsWith(NBackup::FullBackupSuffix)) {
                 lastFullBackupName = child;
                 incrBackupNames.clear();
-            } else if (child.EndsWith("_incremental")) {
+            } else if (child.EndsWith(NBackup::IncrementalBackupSuffix)) {
                 incrBackupNames.push_back(child);
             }
         }
@@ -436,10 +436,11 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         if(!CreateIncrementalBackupPathStateOps(opId, tx, bc, bcPath, incrBackupNames, context, result)) {
             return result;
         }
-
-        // we don't need long op when we don't have incremental backups
-        CreateLongIncrementalRestoreOp(opId, bcPath, result);
     }
+
+    // Always create the long-op so full-only restores have a state row that Get/List
+    // can surface; the handler drives empty-incrementals straight to Completed.
+    CreateLongIncrementalRestoreOp(opId, bcPath, result);
 
     return result;
 }

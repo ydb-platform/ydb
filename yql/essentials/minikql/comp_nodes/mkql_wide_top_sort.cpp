@@ -718,11 +718,33 @@ private:
         bool FinishWriteInProgress = false;
     };
 
-    void ResetFields() {
-        auto pos = Storage.size();
-        Storage.insert(Storage.end(), Indexes.size(), {});
-        auto ptr = Pointer = Storage.data() + pos;
-        std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
+    bool ResetFields() {
+        if (CanSpill() && !HasMemoryForProcessing() && HasEnoughRowsToSpill()) {
+            SwitchMode(EOperatingMode::Spilling);
+            return false;
+        }
+        try {
+            auto pos = Storage.size();
+            Storage.insert(Storage.end(), Indexes.size(), {});
+            const size_t rowCount = Storage.size() / Indexes.size();
+            if (Full.capacity() < rowCount) {
+                Full.reserve(rowCount);
+            }
+            auto ptr = Pointer = Storage.data() + pos;
+            std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
+        } catch (TMemoryLimitExceededException) {
+            if (CanSpill() && HasEnoughRowsToSpill()) {
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
+                     << (const void*)this << "# TMemoryLimitExceededException caught in ResetFields()"
+                     << " | rowsInMemory=" << (Storage.size() / Indexes.size())
+                     << " memUsed=" << TlsAllocState->GetUsed()
+                     << " memLimit=" << TlsAllocState->GetLimit());
+                SwitchMode(EOperatingMode::Spilling);
+                return false;
+            }
+            throw;
+        }
+        return true;
     }
 
 public:
@@ -799,14 +821,7 @@ public:
     }
 
     void Put() {
-        if (Mode == EOperatingMode::Spilling) {
-            return;
-        }
-        if (!TryGrowStorage()) {
-            return;
-        }
-        auto ptr = Pointer = Storage.data() + Storage.size() - Indexes.size();
-        std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
+        ResetFields();
     }
 
     bool Seal() {
@@ -854,37 +869,15 @@ private:
             && !TlsAllocState->GetMaximumLimitValueReached();
     }
 
-    bool TryGrowStorage() {
-        if (CanSpill() && !HasMemoryForProcessing() && HasEnoughRowsToSpill()) {
-            SwitchMode(EOperatingMode::Spilling);
-            return false;
-        }
-        try {
-            Storage.insert(Storage.end(), Indexes.size(), {});
-            const size_t rowCount = Storage.size() / Indexes.size();
-            if (Full.capacity() < rowCount) {
-                Full.reserve(rowCount);
-            }
-        } catch (TMemoryLimitExceededException) {
-            if (CanSpill() && HasEnoughRowsToSpill()) {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                     << (const void*)this << "# TMemoryLimitExceededException caught in TryGrowStorage()"
-                     << " | rowsInMemory=" << (Storage.size() / Indexes.size())
-                     << " memUsed=" << TlsAllocState->GetUsed()
-                     << " memLimit=" << TlsAllocState->GetLimit());
-                SwitchMode(EOperatingMode::Spilling);
-                return false;
-            }
-            throw;
-        }
-        return true;
-    }
-
     bool IsReadFromChannelFinished() const {
         return InputStatus == EFetchResult::Finish;
     }
 
     EOperatingMode ChooseNextMode() const {
+        MKQL_ENSURE(Mode == EOperatingMode::Spilling || Mode == EOperatingMode::MergeSpilled,
+                     "ChooseNextMode called from unexpected mode: " << ModeName(Mode));
+        MKQL_ENSURE(!ActiveSpill, "ChooseNextMode called with active spill still in progress");
+        MKQL_ENSURE(!Merge, "ChooseNextMode called with active merge still in progress");
         if (SealedStates.size() >= MaxSealedStates) {
             return EOperatingMode::MergeSpilled;
         } else if (IsReadFromChannelFinished()) {

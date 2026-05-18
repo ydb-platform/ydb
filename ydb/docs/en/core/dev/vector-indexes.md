@@ -18,7 +18,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=768, overlap_clusters=3);
+  WITH (distance=cosine, vector_type="float", vector_dimension=512, overlap_clusters=3);
 ```
 
 Example search query using this index:
@@ -58,7 +58,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=768);
+  WITH (distance=cosine, vector_type="float", vector_dimension=512);
 ```
 
 Search queries using this filtered index must include conditions on the `user` column:

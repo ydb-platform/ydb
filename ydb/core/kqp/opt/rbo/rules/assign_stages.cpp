@@ -159,14 +159,21 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         const auto prevStageId = *(sort->GetInput()->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(prevStageId)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages sort";
     } else if (input->Kind == EOperator::Limit) {
         auto limit = CastOperator<TOpLimit>(input);
         const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
-        const auto prevStageId = *(limit->GetInput()->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+        const auto input = limit->GetInput();
+        const auto prevStageId = *input->Props.StageId;
+        const auto outputIndex = props.StageGraph.GetOutputIndex(prevStageId);
+        if (input->GetKind() == EOperator::Sort) {
+            const auto sort = CastOperator<TOpSort>(input);
+            props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TMergeConnection>(sort->GetSortElements(), outputIndex));
+        } else {
+            props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+        }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages limit";
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
@@ -187,19 +194,16 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
     } else if (input->Kind == EOperator::Aggregate) {
         auto aggregate = CastOperator<TOpAggregate>(input);
         const auto inputStageId = *(aggregate->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
         if (!aggregate->KeyColumns.empty()) {
-            const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
-            auto connection = MakeIntrusive<TShuffleConnection>(
-                aggregate->KeyColumns,
-                outputIndex
-            );
+            auto connection = MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex);
 
             props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));
         } else {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>());
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";

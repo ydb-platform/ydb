@@ -115,6 +115,8 @@ class TestHttpApi(TestBase):
                         time.sleep(0.1)
                         continue
                     raise
+            else:
+                pytest.fail("stop_query did not succeed after 10 retries while query remained in COMPLETING state")
             assert response.status_code == 204
 
     def test_empty_query(self):

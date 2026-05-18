@@ -14,6 +14,8 @@ Before deploying the system, complete the preparatory steps. Review the [{#T}](d
 
 Prepare the {{ ydb-short-name }} configuration file:
 
+Also, if you need to enable Kafka API topic operation, add the `kafka_proxy_config` section to the configuration file (see [configuring Kafka API](../../../reference/configuration/kafka_proxy_config)).
+
 ```yaml
 metadata:
   kind: MainConfig
@@ -135,7 +137,6 @@ Leave the other sections and configuration file settings unchanged.
 Save the YDB configuration file as `/tmp/config.yaml` on each cluster server.
 
 For more information on creating the configuration file, see [{#T}](../../../../reference/configuration/index.md).
-
 ## Copy TLS Keys and Certificates to Each Server {#tls-copy-cert}
 
 Copy the prepared TLS keys and certificates to a secure directory on each {{ ydb-short-name }} cluster node. Below is an example of commands to create a secure directory and copy the key and certificate files.
@@ -180,7 +181,7 @@ After running this command, the source file `/tmp/config.yaml` is no longer used
   cd /opt/ydb
   export LD_LIBRARY_PATH=/opt/ydb/lib
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
+      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --kafka-port 9092 --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
 * Using systemd
@@ -208,7 +209,7 @@ After running this command, the source file `/tmp/config.yaml` is no longer used
   Environment=LD_LIBRARY_PATH=/opt/ydb/lib
   ExecStart=/opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp \
       --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 \
+      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --kafka-port 9092 \
       --mon-cert /opt/ydb/certs/web.pem --node static
   LimitNOFILE=65536
   LimitCORE=0
@@ -233,7 +234,6 @@ After starting the static nodes, verify they are working via the {{ ydb-short-na
 3. Make sure all 3 static nodes are displayed in the list.
 
 ![Manual installation, static nodes running](../../_assets/manual_installation_1.png)
-
 ## Initialize the Cluster {#initialize-cluster}
 
 The cluster initialization operation configures the set of static nodes listed in the cluster configuration file for {{ ydb-short-name }} data storage.
@@ -303,6 +303,7 @@ The example commands above use the following parameters:
   /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+      --kafka-port 9093 \
       --yaml-config  /opt/ydb/cfg/config.yaml \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
@@ -341,6 +342,7 @@ The example commands above use the following parameters:
       --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
+      --kafka-port 9093 \
       --yaml-config  /opt/ydb/cfg/config.yaml \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
@@ -367,7 +369,6 @@ The example commands above use the following parameters:
 {% endlist %}
 
 Start additional dynamic nodes on other servers to scale and ensure database fault tolerance.
-
 ## Configure User Accounts {#security-setup}
 
 1. Set a password for the `root` account using the token obtained earlier:

@@ -285,13 +285,13 @@ jobs:
             echo "threads_count=$TEST_THREADS" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
-            echo "threads_count=$(awk "BEGIN {printf \"%.0f\", $TEST_THREADS * 0.38}")" >> $GITHUB_ENV
+            echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.38; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
-            echo "threads_count=$(awk "BEGIN {printf \"%.0f\", $TEST_THREADS * 0.1}")" >> $GITHUB_ENV
+            echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.1; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
-            echo "threads_count=$(awk "BEGIN {printf \"%.0f\", $TEST_THREADS * 0.35}")" >> $GITHUB_ENV
+            echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.35; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           else
             echo "Unknown build_preset value."
@@ -380,7 +380,7 @@ jobs:
           test_retry_count: 3
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
-          test_threads: ${{ fromJson(env.threads_count) }}
+          test_threads: ${{ env.threads_count }}
           custom_branch_name: ${{ steps.determine-branch.outputs.branch_name }}
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps }}

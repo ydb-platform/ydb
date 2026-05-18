@@ -1,7 +1,6 @@
 #include "kqp_opt_log_json_index.h"
 
 #include <expected>
-#include <functional>
 
 #include <ydb/core/base/json_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -18,6 +17,8 @@ using namespace NYql::NNodes;
 using namespace NJsonIndex;
 
 namespace {
+
+static constexpr char kErrorMessage[] = "Failed to extract jsonpath tokens from the predicate: ";
 
 struct TPredicateCollectResult {
     TString ColumnName;
@@ -684,45 +685,19 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(const TExprBase& predi
 
 } // namespace
 
-std::optional<TJsonIndexSettings> CollectJsonIndexPredicate(const TExprBase& body, const TExprBase& node, TExprContext& ctx) {
-    bool hasJsonQuery = false;
-
-    std::function<void(const TExprNode::TPtr&)> countJsonNodes = [&](const TExprNode::TPtr& expr) {
-        if (TExprBase(expr).Maybe<TCoJsonQueryBase>()) {
-            hasJsonQuery |= static_cast<bool>(TExprBase(expr).Maybe<TCoJsonQuery>());
-            return;
-        }
-        for (const auto& child : expr->Children()) {
-            countJsonNodes(child);
-        }
-    };
-
-    countJsonNodes(body.Ptr());
-
-    if (hasJsonQuery) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: JSON_QUERY is not supported"));
-        return std::nullopt;
-    }
-
+std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(const TExprBase& body, const TExprBase& node, TExprContext& ctx) {
     const auto result = VisitJsonPredicate(body, ctx);
     if (!result.has_value()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: nothing to extract"));
-        return std::nullopt;
+        return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << "nothing to extract"));
     }
 
     const auto& collectResult = result->Collect;
     if (collectResult.IsError()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: " << collectResult.GetError().GetMessage()));
-        return std::nullopt;
+        return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << collectResult.GetError().GetMessage()));
     }
 
     if (collectResult.GetTokens().empty()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Failed to extract search terms from predicate: Empty result"));
-        return std::nullopt;
+        return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << "empty tokens set"));
     }
 
     TVector<TExprNode::TPtr> tokenNodes;

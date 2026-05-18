@@ -1987,13 +1987,15 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         return {};
     }
 
-    auto jsonIndexSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx);
-    if (!jsonIndexSettings) {
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx);
+    if (!expectedSettings.has_value()) {
+        ctx.AddError(std::move(expectedSettings.error()));
         return {};
     }
 
+    const auto& jsonIndexSettings = expectedSettings.value();
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
-        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings->ColumnName).Done())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings.ColumnName).Done())
         .Done();
 
     auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
@@ -2002,7 +2004,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         .Columns(read.Columns())
         .Query<TExprList>().Build()
         .QueryColumns(searchColumns.Ptr())
-        .Settings(jsonIndexSettings->Settings.BuildNode(ctx, node.Pos()))
+        .Settings(jsonIndexSettings.Settings.BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TCoFlatMap>(ctx, read.Pos())

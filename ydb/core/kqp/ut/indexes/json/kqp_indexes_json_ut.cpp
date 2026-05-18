@@ -256,7 +256,9 @@ void ValidatePredicate(TQueryClient& db, const std::string& predicate, TParams p
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
-void ValidateError(TQueryClient& db, const std::string& predicate, const std::string& errorMessage = "Failed to extract search terms from predicate") {
+void ValidateError(TQueryClient& db, const std::string& predicate,
+    const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate")
+{
     static constexpr const char* table = "TestTable";
     static constexpr const char* indexTable = "json_idx";
 
@@ -272,7 +274,8 @@ void ValidateError(TQueryClient& db, const std::string& predicate, const std::st
 }
 
 void ValidateError(TQueryClient& db, const std::string& predicate, TParams params,
-    const std::string& errorMessage = "Failed to extract search terms from predicate") {
+    const std::string& errorMessage = "Failed to extract jsonpath tokens from the predicate")
+{
     static constexpr const char* table = "TestTable";
     static constexpr const char* indexTable = "json_idx";
 
@@ -2191,7 +2194,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
         });
     }
 
-    // JSON index does not support JSON_QUERY, every predicate that references it should fail term extraction
     Y_UNIT_TEST(JsonQuery) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             ValidateError(db, R"(JSON_QUERY(Text, '$.k1') IS NOT NULL)");
@@ -2215,9 +2217,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
             ValidateError(db, R"((JSON_QUERY(Text, '$.k1') IS NOT NULL) AND (JSON_QUERY(Text, '$.k2') IS NOT NULL) OR (JSON_QUERY(Text, '$.k3') IS NOT NULL))");
             ValidateError(db, R"(((JSON_QUERY(Text, '$.k1') IS NOT NULL) AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)) OR (JSON_QUERY(Text, '$.k3') IS NOT NULL))");
 
-            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)))");
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)))", {"\3k1"});
             ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') OR (JSON_QUERY(Text, '$.k2') IS NOT NULL)))");
-            ValidateError(db, R"((JSON_VALUE(Text, '$.k1' RETURNING Utf8) = "1") AND (JSON_QUERY(Text, '$.k2') IS NOT NULL))");
+            ValidateTokens(db, R"((JSON_VALUE(Text, '$.k1' RETURNING Utf8) = "1") AND (JSON_QUERY(Text, '$.k2') IS NOT NULL))", {"\3k1" + strSuffix("1")});
         });
     }
 
@@ -2577,7 +2579,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
                 {"\2a", "\2b" + numSuffix(0), "\2c" + strSuffix("z")}, "and");
 
             // AND with JSON_QUERY in the same predicate
-            ValidateError(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)))");
+            ValidateTokens(db, R"((JSON_EXISTS(Text, '$.k1') AND (JSON_QUERY(Text, '$.k2') IS NOT NULL)))", {"\3k1"});
 
             // (OR of indexable predicates) AND (non-indexable JSON predicate) - OR lookup + post-filter
             // Case 1: non-indexable is arithmetic JSON_VALUE

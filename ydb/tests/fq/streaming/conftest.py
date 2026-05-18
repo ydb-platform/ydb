@@ -40,6 +40,7 @@ def kikimr(request):
             table_service_config={
                 "dq_channel_version": 2,
                 "enable_watermarks": enable_watermarks,
+                "enable_watermarks_advanced": enable_watermarks_advanced,
                 "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             },
             default_clusteradmin="root@builtin",

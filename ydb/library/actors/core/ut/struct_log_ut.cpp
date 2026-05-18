@@ -250,8 +250,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(CreateMessageIterableKV) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}}}), "value={1:a}");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}, {2, "b"}}}), "value={1:a 2:b}");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}, {2, "b"}, {3, "c"}}}), "value={1:a 2:b 3:c}");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}, {2, "b"}}}), "value={1:a, 2:b}");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMap<ui64, TString>{{1, "a"}, {2, "b"}, {3, "c"}}}), "value={1:a, 2:b, 3:c}");
 
         /* @todo IterableKV*/
     }

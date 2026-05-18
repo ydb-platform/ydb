@@ -853,7 +853,11 @@ void TInputDescriptor::Terminate() {
 
 void TInputDescriptor::AbortChannel(const TString& message) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.InputActorId, BuildTempUnavailableError(Info, message).Release());
+        ActorSystem->Send(Info.InputActorId, BuildTempUnavailableError(Info,
+            TStringBuilder() << "Push-Pop: " << PushStats.Bytes.load() << '-' << PopStats.Bytes.load() << '=' << (PushStats.Bytes.load() - PopStats.Bytes.load())
+            << ", Q: " << QueueBytes.load() << ", FP: " << FinishPushed.load() << ", F: " << Finished.load() << ", EF: " << EarlyFinished.load()
+            << ", " << message
+        ).Release());
     }
 }
 

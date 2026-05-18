@@ -1025,15 +1025,26 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::CreateAiProfile(const TSt
         return nullptr;
     }
 
+    return PersistProfile(profile.GetConfig(), profile.GetName());
+}
+
+TAiModelConfig::TPtr TInteractiveConfigurationManager::PromoteInMemoryProfile(TAiModelConfig::TPtr profile) {
+    Y_VALIDATE(profile, "Profile must not be null");
+    Y_VALIDATE(profile->GetId().empty(), "Profile is already persisted (Id is non-empty)");
+
+    return PersistProfile(profile->GetConfig(), profile->GetName());
+}
+
+TAiModelConfig::TPtr TInteractiveConfigurationManager::PersistProfile(YAML::Node config, const TString& preferredName) {
     const auto& existingAiProfiles = ListAiProfiles();
-    auto id = profile.GetName();
+    auto id = preferredName;
     TString suffix;
     for (ui64 i = 0; existingAiProfiles.find(id + suffix) != existingAiProfiles.end(); ++i) {
         suffix = TStringBuilder() << "_" << i;
     }
     id += suffix;
 
-    Config[AI_PROFILES_PROPERTY][id] = profile.GetConfig();
+    Config[AI_PROFILES_PROPERTY][id] = std::move(config);
     ChangeActiveAiProfile(id);
 
     return std::make_shared<TAiModelConfig>(Config[AI_PROFILES_PROPERTY][id], shared_from_this(), id);

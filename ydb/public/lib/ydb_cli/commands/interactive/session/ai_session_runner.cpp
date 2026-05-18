@@ -182,22 +182,32 @@ private:
                 }
             });
 
-            // Edit/Remove only make sense for persisted profiles. In-memory profiles
-            // (built from a default preset on the fly) have an empty Id; for them the
-            // user has to pick the preset explicitly via "Switch AI model" first,
-            // which creates a real profile that can then be edited or removed.
+            options.emplace_back("Change current AI model settings", [&]() {
+                bool changed = false;
+                if (!AiModel->Edit(changed)) {
+                    exit = true;
+                }
+
+                if (changed) {
+                    // For an in-memory profile (built from the default preset on
+                    // the fly, empty Id) any user-confirmed change is treated as
+                    // an explicit choice: promote the profile to disk now.
+                    // If the user did not change anything or aborted with Esc,
+                    // no promotion happens and the profile stays in memory.
+                    if (AiModel->GetId().empty()) {
+                        auto persisted = ConfigurationManager->PromoteInMemoryProfile(AiModel);
+                        if (!persisted) {
+                            std::exit(EXIT_FAILURE);
+                        }
+                        AiModel = std::move(persisted);
+                    }
+                    ChangeAiProfile(AiModel);
+                }
+            });
+
+            // Remove only makes sense for persisted profiles — nothing to remove
+            // on disk for an in-memory default-preset profile.
             if (!AiModel->GetId().empty()) {
-                options.emplace_back("Change current AI model settings", [&]() {
-                    bool changed = false;
-                    if (!AiModel->Edit(changed)) {
-                        exit = true;
-                    }
-
-                    if (changed) {
-                        ChangeAiProfile(AiModel);
-                    }
-                });
-
                 options.emplace_back("Remove current AI model", [&]() {
                     ConfigurationManager->RemoveAiProfile(AiModel->GetId());
                     AiModel = ConfigurationManager->ActivateAiProfile();

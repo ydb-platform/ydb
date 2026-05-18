@@ -44,3 +44,5 @@ items:
   when: feature_transfer
 - name: Streaming queries
   href: streaming-query.md
+- name: Scan queries
+  href: scan_query.md  

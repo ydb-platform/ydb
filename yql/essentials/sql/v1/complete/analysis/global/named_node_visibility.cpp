@@ -48,7 +48,7 @@ public:
 
     std::any visitNamed_nodes_stmt(SQLv1::Named_nodes_stmtContext* ctx) override {
         if (IsEnclosing(ctx)) {
-            visitChildren(ctx);
+            return visitChildren(ctx);
         }
         VisitNullableCollecting(ctx->bind_parameter_list());
         return {};

@@ -61,7 +61,6 @@ Y_UNIT_TEST(LocalNamesCollected) {
         "acc",
         "b",
         "i",
-        "plus",
         "x",
         "y",
     };
@@ -78,6 +77,17 @@ Y_UNIT_TEST(RecursiveName) {
 
     TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
     UNIT_ASSERT_VALUES_EQUAL(ctx.Names, TVector<TString>{"x"});
+}
+
+Y_UNIT_TEST(LetVsLetRec) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+
+    TString query = R"(
+            $x = #;
+        )";
+
+    TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+    UNIT_ASSERT_VALUES_EQUAL(ctx.Names, TVector<TString>{});
 }
 
 Y_UNIT_TEST(EnclosingFunctionName) {

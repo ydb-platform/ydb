@@ -490,6 +490,113 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         RunSimpleSnapshotsTest(4, HasTable, true);
     }
 
+    Y_UNIT_TEST(SnapshotsLockingNetworkPartition) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(3);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetPrefillTimeoutSeconds(10);
+
+        const size_t nodeCount = 10;
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodeCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        auto sender1 = runtime.AllocateEdgeActor(0);
+        auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        for (size_t i = 0; i < nodeCount; ++i) {
+            UNIT_ASSERT(runtime.GetNodeId(i) == i + 1);
+        }
+
+        // Sleep to allow nodes to discover each other
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        const ::NKikimr::TTableId table(0, 1);
+
+        ui32 rootNode = 0; 
+        size_t dropCounter = 0;
+        bool splitNetwork = false;
+        auto grabFirst = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NLongTxService::TEvLongTxService::TEvCollectSnapshots::EventType
+                || ev->GetTypeRewrite() == NKikimr::NLongTxService::TEvLongTxService::TEvPropagateSnapshots::EventType) {
+
+                if (rootNode == 0) {
+                    rootNode = ev->Sender.NodeId();
+                }
+
+                if (ev->Sender.NodeId() == rootNode && ev->Recipient.NodeId() != ev->Sender.NodeId()) {
+                
+                    if (dropCounter == 0) {
+                        ++dropCounter;
+                        Cerr << "Disconnecting node " << ev->Recipient.NodeId() << Endl;
+                        auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(ev->Recipient.NodeId());
+                        runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), ev->Sender.NodeId() - 1, true);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+
+                if (splitNetwork && ev->Recipient.NodeId() != ev->Sender.NodeId()) {
+                    if (((ev->Recipient.NodeId() - 1) < nodeCount / 2 && (ev->Sender.NodeId() - 1) >= nodeCount / 2)
+                            || ((ev->Recipient.NodeId() - 1) >= nodeCount / 2 && (ev->Sender.NodeId() - 1) < nodeCount / 2)) {
+                        ++dropCounter;
+                        Cerr << "Disconnecting node " << ev->Recipient.NodeId() << Endl;
+                        auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(ev->Recipient.NodeId());
+                        runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), ev->Sender.NodeId() - 1, true);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto saveObserver = runtime.SetObserverFunc(grabFirst);
+        Y_DEFER {
+            runtime.SetObserverFunc(saveObserver);
+        };
+
+        // Create a snapshot on node 1
+        NKqp::TSnapshotHandle handle1;
+        TRowVersion snapshot1;
+        {
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            handle1 = std::move(msg->SnapshotHandle);
+            snapshot1 = msg->Snapshot;
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(5));
+
+        UNIT_ASSERT(dropCounter == 1); // retry
+        for (size_t i = 0; i < nodeCount; ++i) {
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1));
+        }
+
+        splitNetwork = true;
+
+        handle1.Reset();
+
+        SimulateSleep(runtime, TDuration::Seconds(5));
+
+        UNIT_ASSERT(dropCounter > 1);
+        for (size_t i = 0; i < nodeCount / 2; ++i) {
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1)
+                    == runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1));
+        }
+        for (size_t i = nodeCount / 2; i < nodeCount; ++i) {
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1)
+                    != runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1));
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(LongTxService)
 
 Y_UNIT_TEST_SUITE(LockWaitGraph) {

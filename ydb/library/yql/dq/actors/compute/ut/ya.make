@@ -31,7 +31,6 @@ PEERDIR(
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/public/ydb_issue
-    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/minikql/computation
     yql/essentials/providers/common/comp_nodes
     yql/essentials/public/udf/service/stub

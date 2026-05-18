@@ -32,14 +32,22 @@ class _TeeWriter:
             try:
                 sink.write(data)
             except Exception:
-                pass
+                logging.getLogger(__name__).warning(
+                    "Suppressed exception while writing to tee sink %r",
+                    sink,
+                    exc_info=True,
+                )
 
     def flush(self):
         for sink in self._sinks:
             try:
                 sink.flush()
             except Exception:
-                pass
+                logging.getLogger(__name__).warning(
+                    "Suppressed exception while flushing tee sink %r",
+                    sink,
+                    exc_info=True,
+                )
 
     def add_sink(self, sink):
         self._sinks.append(sink)

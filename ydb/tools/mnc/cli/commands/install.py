@@ -8,13 +8,14 @@ import rich
 from ydb.tools.mnc.lib import agent_client, common, configs, deploy, deploy_ctx, init, progress, service, term, tools
 from ydb.tools.mnc.scheme import multinode
 
-from . import disks, uninstall
+from . import agent, disks, uninstall
 
 
 logger = logging.getLogger(__name__)
 
 
 expected_config = multinode.scheme
+prefer_tui_launcher = True
 
 
 def make_build_dependencies_step(config: dict):
@@ -199,9 +200,57 @@ def make_init_dynamic_step(config: dict):
     )
 
 
+class EnsureAgentsInstalledStep(progress.StepBase):
+    def __init__(self, hosts: list[str], config: dict):
+        self.title = "[bold blue]Ensure agents are installed[/]"
+        self.hosts = hosts
+        self.config = config
+        self._task = None
+
+    async def run(self, parent_task: progress.TaskNode, subtasks=None, kv_storage=None) -> progress.TaskResult:
+        self._task = await parent_task.add_subtask(self.title, total=3, is_cutted=True)
+        if subtasks is not None:
+            subtasks.append(self._task)
+
+        results = []
+        check_result = await agent_client.CheckAgentHealthOnHosts(self.hosts).run(self._task, kv_storage=kv_storage)
+        results.append(check_result)
+        await self._task.update(advance=1)
+        if check_result:
+            await self._task.update(completed=3)
+            return progress.TaskResult(level=progress.TaskResultLevel.OK, step_title=self.title, subresults=results)
+
+        install_result = await agent.make_install_steps(
+            self.hosts,
+            self.config,
+            do_not_build=False,
+            do_not_start=False,
+            waiting=2,
+        ).run(self._task, kv_storage=kv_storage)
+        results.append(install_result)
+        await self._task.update(advance=1)
+        if not install_result:
+            return progress.TaskResult(level=progress.TaskResultLevel.ERROR, step_title=self.title, subresults=results)
+
+        final_check_result = await agent_client.CheckAgentHealthOnHosts(self.hosts).run(self._task, kv_storage=kv_storage)
+        results.append(final_check_result)
+        await self._task.update(advance=1)
+        if not final_check_result:
+            return progress.TaskResult(level=progress.TaskResultLevel.ERROR, step_title=self.title, subresults=results)
+
+        return progress.TaskResult(level=progress.TaskResultLevel.OK, step_title=self.title, subresults=results)
+
+    def task(self) -> progress.TaskNode:
+        return self._task
+
+
+def make_ensure_agents_installed_step(hosts: list[str], config: dict):
+    return EnsureAgentsInstalledStep(hosts, config)
+
+
 def make_install_steps(hosts, config, waiting: int, do_not_init: bool, ignore_failed_stop: bool):
     steps = [
-        agent_client.CheckAgentHealthOnHosts(hosts),
+        make_ensure_agents_installed_step(hosts, config),
     ]
 
     if deploy_ctx.do_rebuild:
@@ -257,14 +306,14 @@ async def act(
     with progress.MyProgress(console=console) as pbar:
         result = await progress.run_steps([install_steps], progress=pbar, title="[bold]Install[/]")
     console.print(result.to_rich_panel())
-    return bool(result)
+    return result
 
 
 def add_arguments(parser):
     common.add_common_options(parser)
     parser.add_argument('--waiting', dest='waiting', type=int, default=15)
-    parser.add_argument('--bin-path', '--bin_path', default=None, type=str, help='path to binary file')
-    parser.add_argument('--do-not-init', '--do_not_init', action='store_const', const=True, default=False, help='do not init bsc and etc')
+    parser.add_argument('--bin-path', default=None, type=str, help='path to binary file')
+    parser.add_argument('--do-not-init', action='store_const', const=True, default=False, help='do not init bsc and etc')
     parser.add_argument('--ignore-failed-stop', action='store_const', const=True, default=False, help='ignore failed stop')
 
 

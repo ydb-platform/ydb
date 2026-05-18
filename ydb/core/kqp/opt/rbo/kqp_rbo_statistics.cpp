@@ -59,13 +59,14 @@ TInfoUnit TRBOMetadata::MapColumn(const TInfoUnit& key) {
 }
 
 TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts) {
-    TVector<TInfoUnit> keyColumns;
-    return BuildOptimizerStatistics(props, withStatsAndCosts, keyColumns);
-}
-
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts, const TVector<TInfoUnit>& keyColumns) {
+    TVector<TInfoUnit> mappedKeyColumns;
     TVector<TString> keyColumnNames;
-    for (const auto& iu: (keyColumns.empty() ? props.Metadata->KeyColumns : keyColumns)) {
+
+    for (const auto& col : props.Metadata->KeyColumns) {
+        mappedKeyColumns.push_back(props.Metadata->MapColumn(col));
+    }
+
+    for (const auto& iu: mappedKeyColumns) {
         keyColumnNames.push_back(iu.GetColumnName());
     }
 

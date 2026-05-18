@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
 /***
  * All the methods to compute metadata and statistics are collected in this file
@@ -14,22 +15,6 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
-TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
-    if (!keyColumns) {
-        return {};
-    }
-
-    TVector<TInfoUnit> result;
-    for (const auto& key : keyColumns->Data) {
-        auto it = std::find_if(outputColumns.begin(), outputColumns.end(), [&key](const TInfoUnit& iu) {
-            return key == iu.GetColumnName();
-        });
-
-        Y_ENSURE(it != outputColumns.end(), TStringBuilder() << "Cannot convert key column: " << key);
-        result.push_back(*it);
-    }
-    return result;
-}
 
 void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusivePtr<IOperator>& right, TVector<TString>& leftAliases,
                           TVector<TString>& rightAliases, TVector<TString>& unionOfAliases) {
@@ -59,6 +44,34 @@ void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusive
     std::sort(rightAliases.begin(), rightAliases.end());
     std::set_union(leftAliasSet.begin(), leftAliasSet.end(), rightAliasSet.begin(), rightAliasSet.end(),
             std::back_inserter(unionOfAliases));
+}
+
+TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
+    auto leftKeys = join->GetLeftInput()->Props.Metadata->KeyColumns;
+    if (join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
+        return leftKeys;
+    }
+
+    auto rightKeys = join->GetRightInput()->Props.Metadata->KeyColumns;
+    if (join->JoinKind == "RightSemi" || join->JoinKind == "RightOnly") {
+        return rightKeys;
+    }
+    
+    if (leftKeys.empty() || rightKeys.empty()) {
+        return {};
+    }
+
+    if(IUSetDiff(leftKeys, rightKeys).empty()) {
+        return rightKeys;
+    }
+    else if (IUSetDiff(rightKeys, leftKeys).empty()) {
+        return leftKeys;
+    }
+    else {
+        auto concatKeys = leftKeys;
+        AddUnique<TInfoUnit>(rightKeys, concatKeys);
+        return concatKeys;
+    }
 }
 }
 
@@ -442,7 +455,7 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         FindCardHint(unionOfAliases, *hints.BytesHints));
 
     Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
-    Props.Metadata->KeyColumns = ConvertKeyColumns(CBOStats.KeyColumns, GetOutputIUs());
+    Props.Metadata->KeyColumns = ComputeKeysAfterJoin(this);
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 

@@ -436,3 +436,4 @@ ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompressio
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[too_big_level-algorithm=zstd, level=99-annot parse serializer]
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
+ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test

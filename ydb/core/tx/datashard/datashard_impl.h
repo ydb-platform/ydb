@@ -1331,11 +1331,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
-<<<<<<< HEAD
-=======
-    void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev, const TActorContext& ctx);
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
     void Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
@@ -3316,11 +3312,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
-<<<<<<< HEAD
-=======
-            HFunc(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
             HFuncTraced(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest, Handle);
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
             HFuncTraced(TEvDataShard::TEvValidateUniqueIndexRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);

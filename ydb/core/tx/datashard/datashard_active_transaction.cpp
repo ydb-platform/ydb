@@ -534,16 +534,7 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
         count++;
     }
-<<<<<<< HEAD
-    
-    if (SchemeTx->HasCreateIncrementalRestoreSrc()) {
-        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
-        count++;
-    }
-    
-=======
 
->>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
     if (SchemeTx->HasCreateIncrementalBackupSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
         count++;

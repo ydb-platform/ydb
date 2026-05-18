@@ -1468,7 +1468,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "pq_source"_a = pqSourceName
         ));
 
-        executeQuery({.PhysicalGraph = LoadPhysicalGraph(executionId)});
+        executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
@@ -1526,7 +1526,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "source"_a = pqSourceName
         ));
 
-        executeQuery({.PhysicalGraph = LoadPhysicalGraph(executionId)});
+        executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {

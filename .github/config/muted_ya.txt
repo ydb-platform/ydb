@@ -52,6 +52,7 @@ ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_blo
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_not_null[restart_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_secret.py */*] chunk
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks[True-1-no_shared-kikimr0]
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_dynamic_node_start_with_seed_nodes

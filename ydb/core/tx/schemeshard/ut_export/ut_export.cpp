@@ -310,8 +310,12 @@ namespace {
             return {};
         }
 
-        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", ui64 minWriteBatchSize = 1) {
+        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1) {
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+
+            if (encryptionBlock) {
+                Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+            }
 
             THolder<IEventHandle> injectResult;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -360,6 +364,11 @@ namespace {
                 compressionLine = Sprintf(R"(compression: "%s")", compression.c_str());
             }
 
+            TString extraSettings;
+            if (compressionLine || encryptionBlock) {
+                extraSettings = compressionLine + "\n" + encryptionBlock;
+            }
+
             const auto exportId = ++txId;
             TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
                 ExportToS3Settings {
@@ -372,7 +381,7 @@ namespace {
                   }
                   %s
                 }
-            )", S3Port(), compressionLine.c_str()));
+            )", S3Port(), extraSettings.c_str()));
 
             if (!injectResult) {
                 TDispatchOptions opts;
@@ -3030,5 +3039,48 @@ attributes {
         Env().TestWaitNotification(Runtime(), importId);
 
         TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldNotCorruptEncryptedBufferOnRetry) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        txId = ExportWithRetryInjection(txId, "",
+        R"(
+            destination_prefix: "export1"
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+        )");
+
+        const auto* data = S3Mock().GetData().FindPtr("/export1/001/data_00.csv.enc");
+        UNIT_ASSERT(data);
+
+        TBuffer decryptedData;
+        NBackup::TEncryptionIV iv;
+        UNIT_ASSERT_NO_EXCEPTION(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+            NBackup::TEncryptionKey("0123456789012345"),
+            TBuffer(data->data(), data->size())
+        ));
+
+        const TString expected = "1,\"valueA\"\n2,\"valueB\"\n";
+        const TString decrypted(decryptedData.Data(), decryptedData.Size());
+        UNIT_ASSERT_VALUES_EQUAL_C(decrypted, expected, "Encrypted buffer corruption detected");
     }
 }

@@ -73,6 +73,7 @@ private:
 
 class TS3Buffer: public NExportScan::IBuffer {
     using TChecksumCreator = std::function<NBackup::IChecksum*()>;
+    using TEncryptionCreator = std::function<TMaybe<NBackup::TEncryptedFileSerializer>()>;
     using TTagToColumn = IExport::TTableColumns;
     using TTagToIndex = THashMap<ui32, ui32>; // index in IScan::TRow
 
@@ -94,6 +95,7 @@ private:
     virtual TMaybe<TBuffer> Flush(bool last);
 
     static TChecksumCreator GenChecksumCreator(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
+    static TEncryptionCreator GenEncryptionCreator(const TMaybe<TS3ExportBufferSettings::TEncryptionSettings>& settings);
     static TZStdCompressionProcessor* CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings);
 
 private:
@@ -112,6 +114,7 @@ protected:
     TChecksumCreator ChecksumCreator;
     NBackup::IChecksum::TPtr Checksum;
     TZStdCompressionProcessor::TPtr Compression;
+    TEncryptionCreator EncryptionCreator;
     TMaybe<NBackup::TEncryptedFileSerializer> Encryption;
 
     TString ErrorString;
@@ -125,14 +128,9 @@ TS3Buffer::TS3Buffer(TS3ExportBufferSettings&& settings)
     , ChecksumCreator(GenChecksumCreator(settings.ChecksumSettings))
     , Checksum(ChecksumCreator())
     , Compression(CreateCompression(settings.CompressionSettings))
+    , EncryptionCreator(GenEncryptionCreator(settings.EncryptionSettings))
+    , Encryption(EncryptionCreator())
 {
-    if (settings.EncryptionSettings) {
-        Encryption.ConstructInPlace(
-            std::move(settings.EncryptionSettings->Algorithm),
-            std::move(settings.EncryptionSettings->Key),
-            std::move(settings.EncryptionSettings->IV)
-        );
-    }
 }
 
 std::function<NBackup::IChecksum*()> TS3Buffer::GenChecksumCreator(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings) {
@@ -144,6 +142,15 @@ std::function<NBackup::IChecksum*()> TS3Buffer::GenChecksumCreator(const TMaybe<
             }
         }
         return nullptr;
+    };
+}
+
+TS3Buffer::TEncryptionCreator TS3Buffer::GenEncryptionCreator(const TMaybe<TS3ExportBufferSettings::TEncryptionSettings>& settings) {
+    return [settings]() -> TMaybe<NBackup::TEncryptedFileSerializer> {
+        if (settings) {
+            return NBackup::TEncryptedFileSerializer(settings->Algorithm, settings->Key, settings->IV);
+        }
+        return Nothing();
     };
 }
 
@@ -338,6 +345,7 @@ void TS3Buffer::Clear() {
     if (Compression) {
         Compression->Clear();
     }
+    Encryption = EncryptionCreator();
 }
 
 bool TS3Buffer::IsFilled() const {

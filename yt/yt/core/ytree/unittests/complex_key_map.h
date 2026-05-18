@@ -8,11 +8,11 @@ namespace NYT::NYTree {
 
 struct TTestComplexKey
 {
-    TString First;
-    TString Second;
+    std::string First;
+    std::string Second;
 
     static TTestComplexKey FromString(TStringBuf string);
-    TString ToString() const;
+    std::string ToString() const;
 
     bool operator==(const TTestComplexKey& other) const;
     bool operator<(const TTestComplexKey& other) const;

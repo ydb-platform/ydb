@@ -3,6 +3,9 @@
 #include "base_test_fixture.h"
 #include "write_with_direct_replication_request.h"
 #include "write_with_pb_replication_request.h"
+#include "write_with_pb_test_fixture.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -37,6 +40,11 @@ THostMask MakeHostMask(std::initializer_list<THostIndex> hosts)
         result.Set(h);
     }
     return result;
+}
+
+THostMask MakeAllHostsMask()
+{
+    return MakeHostMask({0, 1, 2, 3, 4});
 }
 
 }   // namespace
@@ -391,118 +399,290 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2, 3}), response.RequestedWrites);
         UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2}), response.CompletedWrites);
     }
+}
 
-    Y_UNIT_TEST_F(
-        ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOkWithPbReplication,
-        TBaseFixture)
+Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
+{
+    // @brief we want to sure that base path with no errors works
+    Y_UNIT_TEST_F(ShouldBaseSuccessPath, TWriteWithPbTestFixture)
     {
-        const ui64 userLsn = 123;
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
-        const auto hedgeDelay = TDuration::MilliSeconds(1000);
-        const auto timeout = TDuration::MilliSeconds(1000);
-        const auto pbufferReplyTimeout = TDuration::MilliSeconds(500);
-
-        Init();
-        DirectBlockGroup->Oracle.WriteHedgingDelay = hedgeDelay;
-        DirectBlockGroup->Oracle.WriteRequestTimeout = timeout;
-        DirectBlockGroup->Oracle.PBufferReplyTimeout = pbufferReplyTimeout;
-
-        TVector<std::pair<TDuration, TCallback>> scheduled;
-        DirectBlockGroup->ScheduleHandler =
-            [&](TDuration delay, TCallback callback)
-        {
-            scheduled.emplace_back(delay, std::move(callback));
-        };
-
-        TVector<TPromise<TDBGWriteBlocksToManyPBuffersResponse>>
-            manyPBufferBatchPromises;
-
+        // make main request ok reply
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
-            [&](ui32 vChunkIndex,
-                TVector<THostIndex> hostIndexes,
-                ui64 lsn,
-                TBlockRange64 range,
-                TDuration replyTimeout,
-                const TGuardedSgList& guardedSglist,
-                const NWilson::TTraceId& traceId)   //
-            -> TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-        {
-            Y_UNUSED(traceId);
-            Y_UNUSED(guardedSglist);
+            GetManyPBuffersHandlerWithImmediateOkResponse();
 
-            UNIT_ASSERT_C(userLsn, lsn);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-            UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
-            UNIT_ASSERT_VALUES_EQUAL(pbufferReplyTimeout, replyTimeout);
-
-            if (manyPBufferBatchPromises.empty()) {
-                UNIT_ASSERT_VALUES_EQUAL(3u, hostIndexes.size());
-                UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndexes[0]);
-                UNIT_ASSERT_VALUES_EQUAL(THostIndex{1}, hostIndexes[1]);
-                UNIT_ASSERT_VALUES_EQUAL(THostIndex{2}, hostIndexes[2]);
-            } else {
-                // Hedged wave is shuffled, so check membership not order.
-                auto sorted = hostIndexes;
-                std::sort(sorted.begin(), sorted.end());
-                UNIT_ASSERT_VALUES_EQUAL(
-                    (TVector<THostIndex>{2, 3, 4}),
-                    sorted);
-            }
-
-            auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
-            manyPBufferBatchPromises.push_back(std::move(promise));
-            return manyPBufferBatchPromises.back().GetFuture();
-        };
-
-        ExpectedRange = range;
-        RangeData = GenerateRandomString(BlockSize * range.Size());
-
-        auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
-        auto originalRequest = std::make_shared<TWriteBlocksLocalRequest>(
-            MakeWriteTestRequestHeaders(range, BlockSize));
-        originalRequest->Sglist = MakeSgList();
-
+        // prepare and call main request
         auto writeRequest =
-            std::make_shared<TWriteWithPbReplicationRequestExecutor>(
-                Runtime->GetActorSystem(0),
-                VChunkConfig,
-                DirectBlockGroup,
-                range,
-                std::move(callContext),
-                std::move(originalRequest),
-                userLsn,
-                NWilson::TTraceId());
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
         auto future = writeRequest->GetFuture();
         writeRequest->Run();
+
+        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(true, ManyPBufferPromise.HasValue());
+
+        const auto& response = future.GetValue();
+
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_EQUAL(
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            response.CompletedWrites);
+    }
+
+    // @brief we want to sure that in case of hanging main 'multi' request,
+    // hedge mechanism will work
+    Y_UNIT_TEST_F(
+        ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOk,
+        TWriteWithPbTestFixture)
+    {
+        // make main request hanging
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+
+        // prepare and call main request
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto future = writeRequest->GetFuture();
+        writeRequest->Run();
+
+        // as response is hanging, there is no results
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(2, scheduled.size());
-        UNIT_ASSERT_VALUES_EQUAL(timeout, scheduled[0].first);
-        UNIT_ASSERT_VALUES_EQUAL(hedgeDelay, scheduled[1].first);
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
 
-        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferBatchPromises.size());
+        // call hedge mechanism. It will work with default response's handler
+        // from base fixture
+        RunScheduledHedge();
 
-        scheduled[1].second();
-
-        UNIT_ASSERT_VALUES_EQUAL(2, manyPBufferBatchPromises.size());
-
-        TDBGWriteBlocksToManyPBuffersResponse hedgeOk;
-        hedgeOk.OverallError = MakeError(S_OK);
-        hedgeOk.Responses.push_back(
-            {.HostIndex = 3, .Error = MakeError(S_OK)});   // HandOff0
-        hedgeOk.Responses.push_back(
-            {.HostIndex = 4, .Error = MakeError(S_OK)});   // HandOff1
-        hedgeOk.Responses.push_back(
-            {.HostIndex = 2, .Error = MakeError(S_OK)});   // Primary2
-
-        manyPBufferBatchPromises[1].SetValue(std::move(hedgeOk));
-
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
+
+        // make sure that there were successful hedge requests
+        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{3}));
+        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{4}));
+    }
+
+    // @brief sending main request then hedge requests.
+    // main's responses come before hedge and return reply to the caller
+    Y_UNIT_TEST_F(ShouldMainPlusHedgeAndReplyFromMain, TWriteWithPbTestFixture)
+    {
+        // make main request hanging
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        // prepare and call main request
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto future = writeRequest->GetFuture();
+        writeRequest->Run();
+
+        // as response is hanging, there is no results
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+
+        // call hedge mechanism
+        RunScheduledHedge();
+
+        // hedge is hanging too
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        // reply from main request
+        ManyPBufferPromise.SetValue(CreateOkResponse());
+        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+
+        // but there were sent requests to HO too
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
+
         UNIT_ASSERT_EQUAL(
-            MakeHostMask({0, 1, 2, 3, 4}),
-            response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(MakeHostMask({2, 3, 4}), response.CompletedWrites);
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            response.CompletedWrites);
+    }
+
+    // @brief sending main request then hedge requests.
+    // main's responses come partially before hedge responses
+    // return reply with mix of main's and hedge replies
+    Y_UNIT_TEST_F(ShouldMainPlusHedgeAndReplyWithMix, TWriteWithPbTestFixture)
+    {
+        // make main request hanging
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        // prepare and call main request
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto future = writeRequest->GetFuture();
+        writeRequest->Run();
+
+        // as response is hanging, there is no results
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+
+        // call hedge mechanism
+        RunScheduledHedge();
+
+        // hedge is hanging too
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        // partially reply from main request
+        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
+        auto manyPBufferResult = ManyPBufferPromise.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+
+        // reply is ready
+        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(3, response.CompletedWrites.Count());
+
+        // but there were sent requests to HO too
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
+
+        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{0}));
+        UNIT_ASSERT_EQUAL(
+            true,
+            response.CompletedWrites.Get(
+                *VChunkConfig.PBufferHosts.GetHandOff().Nth(0)));
+        UNIT_ASSERT_EQUAL(
+            true,
+            response.CompletedWrites.Get(
+                *VChunkConfig.PBufferHosts.GetHandOff().Nth(1)));
+    }
+
+    // @brief sending main request then hedge requests.
+    // main's responses come partially before hedge responses
+    // 1 hedge comes with success and 2 with errors
+    // sending 1 retry for hedge. Getting reply for it
+    // overall reply
+    Y_UNIT_TEST_F(ShouldMainPlusHedgeRetry, TWriteWithPbTestFixture)
+    {
+        // make main request hanging
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        // prepare and call main request
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto future = writeRequest->GetFuture();
+        writeRequest->Run();
+
+        // as response is hanging, there is no results
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+
+        // call hedge mechanism
+        RunScheduledHedge();
+
+        // hedge is hanging too
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        // partially reply from main request
+        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
+        auto manyPBufferResult = ManyPBufferPromise.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+        DirectWritePromises[0].SetValue(CreateFailDirectResponse());
+        DirectWritePromises[1].SetValue(CreateFailDirectResponse());
+        DirectWritePromises[2].SetValue(CreateOkDirectResponse());
+
+        // reply is not ready still
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        // there is retry direct write
+        UNIT_ASSERT_VALUES_EQUAL(4, DirectWritePromises.size());
+        DirectWritePromises[3].SetValue(CreateOkDirectResponse());
+
+        // reply is ready
+        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(3, response.CompletedWrites.Count());
+
+        // there were sent requests to HO too
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
+    }
+
+    // @brief getting errors on all retry attempts. We should receive an error.
+    // Hedge requests are not sent because of existed retries from main path.
+    // Retries are failed too.
+    Y_UNIT_TEST_F(ShouldNotMainPlusHedgeRetry, TWriteWithPbTestFixture)
+    {
+        // make main request hanging
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        // prepare and call main request
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+        auto future = writeRequest->GetFuture();
+        writeRequest->Run();
+
+        // as response is hanging, there is no results
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
+
+        // partially reply from main request
+        ManyPBufferPromise.SetValue(CreateOneOkResponse(THostIndex{0}));
+        auto manyPBufferResult = ManyPBufferPromise.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL(1, manyPBufferResult.Responses.size());
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+
+        // immediate automatically sent retries
+        UNIT_ASSERT_VALUES_EQUAL(2, DirectWritePromises.size());
+
+        // call hedge mechanism
+        RunScheduledHedge();
+        // there is no hedge direct writes because of existed main's retries
+        UNIT_ASSERT_VALUES_EQUAL(2, DirectWritePromises.size());
+
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[1].SetValue(CreateFailDirectResponse());
+        // there are 2 success reply now
+
+        // immediate retry after fail of direct request
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+        DirectWritePromises[2].SetValue(CreateFailDirectResponse());
+
+        // immediate retry after fail of direct request
+        UNIT_ASSERT_VALUES_EQUAL(4, DirectWritePromises.size());
+        UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
+        DirectWritePromises[3].SetValue(CreateFailDirectResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+
+        // reply is ready with error result
+        UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
+        const auto& response = future.GetValue();
+        UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
+        UNIT_ASSERT_VALUES_EQUAL(2, response.CompletedWrites.Count());
+
+        // there were sent requests all locations
+        UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
     }
 }
 

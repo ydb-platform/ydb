@@ -123,7 +123,7 @@ TReadSingleLocationRequestExecutor::GetFuture() const
 void TReadSingleLocationRequestExecutor::OnReadResponse(
     const TDBGReadBlocksResponse& response)
 {
-    bool retriesLimitReached = TryNumber == 3;
+    bool retriesLimitReached = TryNumber == 3 - 1;   // can try 3 times
     if (!HasError(response.Error) || retriesLimitReached) {
         if (retriesLimitReached) {
             LOG_ERROR(

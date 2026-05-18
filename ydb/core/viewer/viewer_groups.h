@@ -896,6 +896,7 @@ public:
         } if (Params.Get("with") == "space") {
             With = EWith::SpaceProblems;
             FieldsRequired.set(+EGroupFields::Available);
+            FieldsRequired.set(+EGroupFields::Usage);
             NeedFilter = true;
         }
         if (Params.Has("offset")) {
@@ -1434,7 +1435,50 @@ public:
     }
 
     bool WaitingForHive() const {
-        return HiveStorageStatsInFlight != 0 && (FieldsHive.test(+SortBy) || FieldsHive.test(+GroupBy));
+        return HiveStorageStatsInFlight != 0 && ((NeedSort && FieldsHive.test(+SortBy))
+            || (NeedGroup && FieldsHive.test(+GroupBy))
+            || (NeedFilter && !FilterGroup.empty() && FieldsHive.test(+FilterGroupBy)));
+    }
+
+    bool NeedToWaitForFieldBeforeHive(EGroupFields field) const {
+        return field != EGroupFields::COUNT && FieldsRequired.test(+field) && !FieldsAvailable.test(+field) && !FieldsHive.test(+field);
+    }
+
+    bool NeedToWaitForFilterBeforeHive() const {
+        if (!NeedFilter) {
+            return false;
+        }
+        if (!DatabaseStoragePools.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PoolName)) {
+            return true;
+        }
+        if (!FilterStoragePools.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PoolName)) {
+            return true;
+        }
+        if (!FilterNodeIds.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::NodeId)) {
+            return true;
+        }
+        if (!FilterPDiskIds.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PDiskId)) {
+            return true;
+        }
+        if (With == EWith::MissingDisks && NeedToWaitForFieldBeforeHive(EGroupFields::MissingDisks)) {
+            return true;
+        }
+        if (With == EWith::SpaceProblems && NeedToWaitForFieldBeforeHive(EGroupFields::Usage)) {
+            return true;
+        }
+        if (!Filter.empty() && (NeedToWaitForFieldBeforeHive(EGroupFields::PoolName) || NeedToWaitForFieldBeforeHive(EGroupFields::GroupId))) {
+            return true;
+        }
+        if (!FilterGroup.empty() && NeedToWaitForFieldBeforeHive(FilterGroupBy)) {
+            return true;
+        }
+        return false;
+    }
+
+    bool NeedToWaitBeforeCollectingHiveData() const {
+        return NeedToWaitForFilterBeforeHive()
+            || (NeedSort && NeedToWaitForFieldBeforeHive(SortBy))
+            || (NeedGroup && NeedToWaitForFieldBeforeHive(GroupBy));
     }
 
     bool TimeToAskWhiteboard() const {
@@ -1617,7 +1661,8 @@ public:
             }
         }
         if (AreBSControllerRequestsDone()) {
-            if (FieldsNeeded(FieldsHive) && !CollectedHiveData) {
+            ApplyEverything();
+            if (FieldsNeeded(FieldsHive) && !CollectedHiveData && !NeedToWaitBeforeCollectingHiveData()) {
                 CollectHiveData();
             }
             if (FieldsAvailable.test(+EGroupFields::GroupId) && FieldsNeeded(FieldsHive) && NavigateKeySetInFlight == 0 && HiveStorageStatsInFlight == 0) {
@@ -2014,6 +2059,7 @@ public:
     void BSGroupRequestDone() {
         if (--BSGroupStateRequestsInFlight == 0) {
             ProcessWhiteboardGroups();
+            ProcessResponses();
         }
         RequestDone();
     }
@@ -2022,6 +2068,7 @@ public:
         --VDiskStateRequestsInFlight;
         if (VDiskStateRequestsInFlight == 0 && PDiskStateRequestsInFlight == 0) {
             ProcessWhiteboardDisks();
+            ProcessResponses();
         }
         RequestDone();
     }
@@ -2030,6 +2077,7 @@ public:
         --PDiskStateRequestsInFlight;
         if (VDiskStateRequestsInFlight == 0 && PDiskStateRequestsInFlight == 0) {
             ProcessWhiteboardDisks();
+            ProcessResponses();
         }
         RequestDone();
     }

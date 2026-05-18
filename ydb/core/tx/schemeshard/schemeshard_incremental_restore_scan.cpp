@@ -808,8 +808,8 @@ void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
 
     auto tableInfoPtr = Tables.FindPtr(tablePathId);
     if (tableInfoPtr) {
-        for (const auto& [shardIdx, _] : (*tableInfoPtr)->GetPartitionStore()) {
-            tableOpState.ExpectedShards.insert(shardIdx);
+        for (const auto& partition : (*tableInfoPtr)->GetPartitions()) {
+            tableOpState.ExpectedShards.insert(partition.ShardIdx);
         }
     }
 }
@@ -844,12 +844,13 @@ void TSchemeShard::DispatchIncrementalRestoreShardRequests(
     auto opIt = state.TableOperations.find(subOpId);
     if (opIt != state.TableOperations.end()) {
         opIt->second.ExpectedShards.clear();
-        for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
-            opIt->second.ExpectedShards.insert(shardIdx);
+        for (const auto& partition : (*srcTableInfoPtr)->GetPartitions()) {
+            opIt->second.ExpectedShards.insert(partition.ShardIdx);
         }
     }
 
-    for (const auto& [shardIdx, _] : (*srcTableInfoPtr)->GetPartitionStore()) {
+    for (const auto& partition : (*srcTableInfoPtr)->GetPartitions()) {
+        const auto& shardIdx = partition.ShardIdx;
         auto shardInfoIt = ShardInfos.find(shardIdx);
         if (shardInfoIt == ShardInfos.end()) {
             LOG_W("DispatchIncrementalRestoreShardRequests: ShardInfo missing for shardIdx=" << shardIdx);

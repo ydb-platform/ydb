@@ -452,7 +452,7 @@ message TTableServiceConfig {
 
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableWatermarks = 110 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 
     optional uint64 LocalChannelInflightBytes  = 111 [default = 8388608];
     optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216];

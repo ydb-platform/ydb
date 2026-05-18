@@ -147,6 +147,34 @@ class TAuditLogActor final : public TActor<TAuditLogActor> {
 private:
     const TAuditLogBackends LogBackends;
 
+    static inline const std::unordered_map<TString, ui32> FieldsOrder =
+    {
+        // operation's kind
+        {"component", 1},
+
+        // subject
+        {"subject", 2},
+        {"remote_address", 3},
+        {"sanitized_token", 4},
+        {"masked_token", 5},
+
+        // verb
+        {"operation", 6},
+        {"status", 7},
+        {"detailed_status", 8},
+        {"reason", 9},
+
+        // object
+        // (these fields are not required for all audit logs)
+        {"cloud_id", 10},
+        {"folder_id", 11},
+        {"resource_id", 12},
+        {"database", 13}
+
+        // specific fields
+        // ...
+    };
+
 public:
     TAuditLogActor(TAuditLogBackends&& logBackends)
         : TActor(&TThis::StateWork)
@@ -180,12 +208,32 @@ private:
 
     void HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
         EscapeNonUtf8LogParts(ev);
+        auto time = ev->Get()->Time;
+        auto sortedParts = ev->Get()->Parts;
+
+        auto cmpToSort = [](const std::pair<TString, TString>& lhs, const std::pair<TString, TString>& rhs){
+            ui32 lhsOrder, rhsOrder;
+
+            {
+                auto it = FieldsOrder.find(lhs.first);
+                lhsOrder = (it == FieldsOrder.end() ? FieldsOrder.size() : it->second);
+            }
+
+            {
+                auto it = FieldsOrder.find(rhs.first);
+                rhsOrder = (it == FieldsOrder.end() ? FieldsOrder.size() : it->second);
+            }
+
+            return std::make_pair(lhsOrder, lhs.first) < std::make_pair(rhsOrder, rhs.first);
+        };
+
+        std::sort(sortedParts.begin(), sortedParts.end(), cmpToSort);
+
         for (auto& logBackends : LogBackends) {
             const auto builderIndex = static_cast<size_t>(logBackends.first);
             const auto builder = builderIndex < AuditLogItemBuilders.size() && AuditLogItemBuilders[builderIndex] != nullptr
                 ? AuditLogItemBuilders[builderIndex] : AuditLogItemBuilders[DefaultAuditLogItemBuilder];
-            const auto msg = ev->Get();
-            const auto auditLogItem = builder(msg->Time, msg->Parts);
+            const auto auditLogItem = builder(time, sortedParts);
             if (!auditLogItem.empty()) {
                 WriteLog(auditLogItem, logBackends.second);
             }

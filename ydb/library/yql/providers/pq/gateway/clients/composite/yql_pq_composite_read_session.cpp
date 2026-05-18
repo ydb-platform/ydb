@@ -787,6 +787,7 @@ public:
         Y_VALIDATE(update(SuspendedPartitions) + update(PendingPartitions) + update(ReadyPartitions) + update(IdlePartitions) == 1, "Unexpected partition state");
 
         RefreshPartitionsState(minReadTimeBefore);
+        UpdateMetrics();
     }
 
     void AdvanceExternalTime(TInstant readTime) final {
@@ -895,8 +896,6 @@ private:
         if (*minReadTimeBefore != GetMinimalLocalReadTime()) {
             MinReadTimeChangedSignal.Signal();
         }
-
-        UpdateMetrics();
     }
 
     void DistributePartitionSession(const TPartitionKey& key) {

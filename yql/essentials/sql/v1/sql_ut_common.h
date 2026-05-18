@@ -131,7 +131,8 @@ Y_UNIT_TEST(TokensAsTableAlias) { // id_table
 Y_UNIT_TEST(TokensAsHints) { // id_hint
     auto failed = ValidateTokens({"AUTOMAP", "CALLABLE", "COLUMNS", "DICT", "ENUM", "FALSE", "FLOW",
                                   "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
-                                  "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"},
+                                  "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT",
+                                  "WATERMARK"},
                                  [](const TString& token) {
                                      TStringBuilder req;
                                      req << "SELECT * FROM Plato.Input WITH " << token;

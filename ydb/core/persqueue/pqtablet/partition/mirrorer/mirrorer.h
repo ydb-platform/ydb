@@ -55,6 +55,7 @@ private:
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
+            HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -74,6 +75,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvReaderEventArrived, ProcessNextReaderEvent);
+            HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -106,6 +108,8 @@ private:
     void ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr& ev, const TActorContext& ctx);
     void DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup=false);
 
+    bool TryRewindCommittedOffset(const TActorContext& ctx);
+
     TString BuildLogPrefix() const override;
 
     TString GetCurrentState() const;
@@ -136,6 +140,7 @@ public:
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
     void CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr& ev, const TActorContext& ctx);
+    void HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const TActorContext& ctx);
     void RequestSourcePartitionStatus(TEvPQ::TEvRequestPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
@@ -160,6 +165,7 @@ private:
     std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
     TDuration WriteRetryTimeout = WRITE_RETRY_TIMEOUT_START;
     TInstant WriteRequestTimestamp;
+    TInstant LastRewindCommitTimestamp;
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     ui64 ReaderGeneration = 0;

@@ -1,11 +1,12 @@
 #pragma once
 
+#include "dq_watermark_tracker_impl.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/system/types.h>
 #include <util/string/builder.h>
 #include <util/generic/set.h>
-#include <ydb/library/yql/dq/actors/compute/dq_watermark_tracker_impl.h>
 
 namespace NYql::NDq {
 

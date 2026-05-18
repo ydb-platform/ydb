@@ -1,4 +1,4 @@
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
             UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);
         }
         systemTime += TDuration::Seconds(11);
-        // 3) then simulate idleness in one partition, receive idleness watermark, 
+        // 3) then simulate idleness in one partition, receive idleness watermark,
         {
             const auto actual = tracker.NotifyNewPartitionTime(1, TInstant::Seconds(16), systemTime);
             UNIT_ASSERT_VALUES_EQUAL(Nothing(), actual);

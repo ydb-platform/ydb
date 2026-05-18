@@ -56,8 +56,29 @@ TBaseWriteRequestExecutor::GetFuture() const
     return Promise.GetFuture();
 }
 
+void TBaseWriteRequestExecutor::LogOnReply(const NProto::TError& error) const
+{
+    if (HasError(error)) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TBaseWriteRequestExecutor::Reply %s, %s, error: %s",
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str(),
+            FormatError(error).c_str());
+    } else {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TBaseWriteRequestExecutor::Reply %s, %s",
+            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
+            Request->Headers.Range.Print().c_str());
+    }
+}
+
 void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 {
+    LogOnReply(error);
     Promise.TrySetValue(TResponse{
         .Error = std::move(error),
         .Lsn = Lsn,
@@ -105,7 +126,7 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
+        if (ShouldReplyOk()) {
             Reply(MakeError(S_OK));
         }
         return;
@@ -160,6 +181,11 @@ void TBaseWriteRequestExecutor::RequestTimeoutCallback()
         Request->Headers.Range.Print().c_str());
 
     Reply(MakeError(E_TIMEOUT, "Write request timeout"));
+}
+
+bool TBaseWriteRequestExecutor::ShouldReplyOk() const
+{
+    return CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount;
 }
 
 TVector<THostIndex> TBaseWriteRequestExecutor::GetAvailableHandOffHosts() const

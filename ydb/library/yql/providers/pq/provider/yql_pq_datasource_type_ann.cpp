@@ -322,6 +322,25 @@ public:
                 const TCoLambda lambda(watermarkNode);
                 const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
                 const auto lambdaBody = lambda.Body();
+
+                if (!IsPureIsolatedLambda(*lambdaBody.Ptr())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected pure expression for watermark definition"));
+                    return TStatus::Error;
+                }
+
+                const auto maybeSub = lambdaBody.Maybe<TCoSub>();
+                if (!maybeSub) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected top-level subtraction"));
+                    return TStatus::Error;
+                }
+                const auto sub = maybeSub.Cast();
+
+                const auto maybeInterval = sub.Right().Maybe<TCoInterval>();
+                if (!maybeInterval) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected interval as watermark delay"));
+                    return TStatus::Error;
+                }
+
                 if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
                     TStringBuilder err;
                     err << "Bad watermark expression: ";

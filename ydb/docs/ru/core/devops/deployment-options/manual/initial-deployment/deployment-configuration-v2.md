@@ -164,7 +164,7 @@ sudo chown -R ydb:ydb /opt/ydb/cfg
 Выполнив специальную команду на каждой машине, инициализируйте эту директорию файлом конфигурации.
 
 ```bash
-sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-config /tmp/config.yaml
+sudo /opt/ydb/bin/ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
 ```
 
 Исходный файл `/tmp/config.yaml` после выполнения этой команды больше не используется, его можно удалить.

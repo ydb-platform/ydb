@@ -481,20 +481,8 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
+# Redirects for concepts
 
-ru:
-  - from: /postgresql/index.md
-    to: /postgresql/intro.md
-  - from: /db/terraform.md
-    to: /dev/terraform.md
-  - from: /postgresql/docker-connect.md
-    to: /postgresql/connect.md
-  - from: /maintenance/manual/replacing_nodes.md
-    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
-  - from: /concepts/topic.md
-    to: /concepts/datamodel/topic.md
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
   - from: /concepts/mvcc.md
@@ -520,21 +508,19 @@ ru:
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
 
-en:
-  - from: /concepts/query_execution.md
-    to: /concepts/query_execution/index.md
-  - from: /concepts/mvcc.md
-    to: /concepts/query_execution/mvcc.md
-  - from: /concepts/optimizer.md
-    to: /concepts/query_execution/optimizer.md
-  - from: /concepts/spilling.md
-    to: /concepts/query_execution/spilling.md
-  - from: /concepts/vector_search.md
-    to: /concepts/query_execution/vector_search.md
-  - from: /concepts/secondary_indexes.md
-    to: /concepts/query_execution/secondary_indexes.md
-  - from: /concepts/federated_query/(.*)$
-    to: /concepts/query_execution/federated_query/$1
+ru:
+  - from: /postgresql/index.md
+    to: /postgresql/intro.md
+  - from: /db/terraform.md
+    to: /dev/terraform.md
+  - from: /postgresql/docker-connect.md
+    to: /postgresql/connect.md
+  - from: /maintenance/manual/replacing_nodes.md
+    to: /devops/configuration-management/configuration-v1/replacing-nodes.md
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
+  - from: /concepts/topic.md
+    to: /concepts/datamodel/topic.md
 
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md

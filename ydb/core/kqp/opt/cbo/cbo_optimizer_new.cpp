@@ -334,7 +334,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             cols.insert(cols.begin(), rightStats.KeyColumns->Data.begin(), rightStats.KeyColumns->Data.end());
             keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(cols));
         } else {
-            keyColumns = leftStats.KeyColumns;
+            keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>();
         }
     }
 

@@ -30,24 +30,11 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 
 ## Разрешения
 
-### Разрешение на создание пула
-
 Требуется [разрешение](./grant.md#permissions-list) `CREATE TABLE` на директорию `.metadata/workload_manager/pools`, пример выдачи такого разрешения:
 
 ```yql
 GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 ```
-
-### Разрешение на выполнение запроса в пуле {#run-access}
-
-Чтобы выполнить запрос в пуле, пользователь должен иметь [разрешение](./grant.md#permissions-list) `SELECT` на этот пул. Пример выдачи разрешения:
-
-```yql
-GRANT SELECT
-    ON `.metadata/workload_manager/pools/olap`
-    TO `user1@domain`;
-```
-
 ## Примеры {#examples}
 
 ```yql

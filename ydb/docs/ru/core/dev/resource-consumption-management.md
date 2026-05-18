@@ -105,10 +105,22 @@ CREATE RESOURCE POOL default WITH (
 
 ## Управление ACL пула ресурсов
 
+### Права на создание, изменение, удаление пула ресурсов
+
 Для создания, изменения или удаления пула ресурсов необходимо выдать права доступа в соответствии с разрешениями, описанными в справке по [{#T}](../yql/reference/syntax/create-resource-pool.md). Например, для создания пулов ресурсов нужно иметь разрешение `CREATE TABLE` на директорию `.metadata/workload_manager/pools`, которое можно выдать запросом следующего вида:
 
 ```yql
 GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
+```
+
+### Права на выполнение запроса в пуле ресурсов {#run-access}
+
+Чтобы выполнить запрос в пуле, пользователь должен иметь [право доступа](./grant.md#permissions-list) `SELECT` на этот пул. Пример выдачи прав:
+
+```yql
+GRANT SELECT
+    ON `.metadata/workload_manager/pools/olap`
+    TO `user1@domain`;
 ```
 
 ## Создание классификатора пула ресурсов
@@ -128,17 +140,15 @@ WITH (
 
 ## Управление ACL классификатора пула ресурсов
 
-Классификаторы пула ресурсов глобальны для всей базы данных и применяются ко всем пользователям. Для создания, удаления или изменения классификатора пула ресурсов необходимо иметь [разрешение](../yql/reference/syntax/grant.md#permissions-list) `USE` на всю базу данных, которое можно выдать запросом вида:
+Классификаторы пула ресурсов глобальны для всей базы данных и применяются ко всем пользователям. Для создания, удаления или изменения классификатора пула ресурсов необходимо иметь [право доступа](./grant.md#permissions-list) `USE` на всю базу данных, которое можно выдать запросом вида:
 
 ```yql
 GRANT USE ON `/my_db` TO user1;
 ```
 
-Для использования классификатора у пользователя должен быть [доступ к пулу ресурсов](../yql/reference/syntax/create-resource-pool.md#run-access), на который этот классификатор ссылается. Если такого доступа нет, классификатор пропускается и обрабатывается следующий.
-
 {% note warning %}
 
-Описанное поведение при отсутствии доступа к пулу ресурсов (пропуск классификатора вместо ошибки) может быть изменено в будущих версиях.
+Для использования классификатора у пользователя должен быть [доступ к пулу ресурсов](#run-access), на который этот классификатор ссылается. Если такого доступа нет, классификатор пропускается и обрабатывается следующий.
 
 {% endnote %}
 
@@ -206,11 +216,16 @@ CREATE RESOURCE POOL the_ceo WITH (
 При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
 
 - **Встроенный UI** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
-- **YDB CLI** — в команде [`ydb sql`](../reference/ydb-cli/sql) с параметром `--resource-pool`, например, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
-- **YDB CLI (интерактивный режим)** — командой `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.
+- **YDB CLI** — в команде [`ydb sql`](../reference/ydb-cli/sql.md) с параметром `--resource-pool`, например, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
+- **YDB CLI ([интерактивный режим](../reference/ydb-cli/interactive-cli.md))** — [командой](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.
 - **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
 - **YDB GO SDK** — в настройках запуска запроса `ExecuteOption` через вызов [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool).
 
+{% note warning %}
+
+Текущая версия **YDB Python SDK** не позволяет определять пул ресурса, в котором необходимо выполнить запрос.
+
+{% endnote %}
 
 ## Диагностика
 

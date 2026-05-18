@@ -81,7 +81,8 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const std::vector<std::pair<TString, TString>>& taskSensorLabels = {},
     const std::vector<ui64>& nodeIds = {},
     bool useActorSystemThreadsInTopicClient = true,
-    bool useYtflowEngine = false
+    bool useYtflowEngine = false,
+    bool addTransparentPrefixToTransparentSystemColumns = true
 );
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);

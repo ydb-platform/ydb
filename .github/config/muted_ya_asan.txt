@@ -207,7 +207,6 @@ ydb/core/sys_view/ut ShowCreateSystemView.TableSystemTableWithEmptyKeyColumnIds
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Double
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int16
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_DifferentBatch
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_OneBatch
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional unittest.sole chunk
@@ -218,7 +217,6 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPar
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Uuid
 ydb/core/transfer/ut/row_table unittest.sole chunk
-ydb/core/tx/columnshard/ut_schema unittest.[*/*] chunk
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToPosting

@@ -8,13 +8,17 @@
 
 namespace NYdb::inline Dev::NObservability {
 
+inline constexpr auto kDefaultFlushInterval = std::chrono::milliseconds(100);
+inline constexpr std::size_t kDefaultThreadPendingThreshold = 64 * 1024;
+inline constexpr std::size_t kDefaultThreadPendingLimit =
+    4 * kDefaultThreadPendingThreshold;
+inline constexpr std::size_t kDefaultHistogramReserveSamples = 256;
+
 struct TMetricBufferSettings {
-    std::chrono::milliseconds FlushInterval = std::chrono::milliseconds(100);
-
-    std::size_t ThreadPendingThreshold = 65536;
-    std::size_t ThreadPendingLimit = 262144;
-
-    std::size_t HistogramReserveSamples = 256;
+    std::chrono::milliseconds FlushInterval = kDefaultFlushInterval;
+    std::size_t ThreadPendingThreshold = kDefaultThreadPendingThreshold;
+    std::size_t ThreadPendingLimit = kDefaultThreadPendingLimit;
+    std::size_t HistogramReserveSamples = kDefaultHistogramReserveSamples;
 
     std::shared_ptr<NMetrics::IMetricRegistry> SelfMetricsRegistry;
 };

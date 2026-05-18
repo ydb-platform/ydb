@@ -45,39 +45,29 @@ private:
 class TBenchHistogram : public IHistogram {
 public:
     void Record(double value) override {
-        std::lock_guard<std::mutex> lock(Mu_);
-        ++Count_;
-        Sum_ += value;
-        ++RecordCalls_;
+        (void)value;
+        Count_.fetch_add(1, std::memory_order_relaxed);
+        RecordCalls_.fetch_add(1, std::memory_order_relaxed);
     }
     void RecordMany(const std::vector<double>& values) override {
         if (values.empty()) return;
-        double s = 0.0;
-        for (double v : values) s += v;
-        std::lock_guard<std::mutex> lock(Mu_);
-        Count_ += values.size();
-        Sum_ += s;
-        ++RecordManyCalls_;
+        Count_.fetch_add(values.size(), std::memory_order_relaxed);
+        RecordManyCalls_.fetch_add(1, std::memory_order_relaxed);
     }
     std::uint64_t Count() const {
-        std::lock_guard<std::mutex> lock(Mu_);
-        return Count_;
+        return Count_.load(std::memory_order_relaxed);
     }
     std::uint64_t RecordCalls() const {
-        std::lock_guard<std::mutex> lock(Mu_);
-        return RecordCalls_;
+        return RecordCalls_.load(std::memory_order_relaxed);
     }
     std::uint64_t RecordManyCalls() const {
-        std::lock_guard<std::mutex> lock(Mu_);
-        return RecordManyCalls_;
+        return RecordManyCalls_.load(std::memory_order_relaxed);
     }
 
 private:
-    mutable std::mutex Mu_;
-    std::uint64_t Count_ = 0;
-    double Sum_ = 0;
-    std::uint64_t RecordCalls_ = 0;
-    std::uint64_t RecordManyCalls_ = 0;
+    std::atomic<std::uint64_t> Count_{0};
+    std::atomic<std::uint64_t> RecordCalls_{0};
+    std::atomic<std::uint64_t> RecordManyCalls_{0};
 };
 
 class TBenchGauge : public IGauge {

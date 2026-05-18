@@ -88,12 +88,15 @@ cmake --build . --target otel_tracing_example -j$(nproc)
 | `--iterations`,`-n`| `20`                      | Итераций в Query- и Table-нагрузке                                       |
 | `--retry-workers`  | `6`                       | Параллельных воркеров в retry-нагрузке (`0` чтобы пропустить)            |
 | `--retry-ops`      | `30`                      | Операций на каждого retry-воркера                                        |
+| `--disable-tracing`| off                       | Не передавать `TraceProvider` в YDB SDK                                   |
+| `--disable-metrics`| off                       | Не передавать `MetricRegistry` в YDB SDK                                  |
 | `--trace-max-queue-size`        | `4096` | `BatchSpanProcessor`: ёмкость in-process очереди спанов               |
 | `--trace-schedule-delay-ms`     | `1000` | `BatchSpanProcessor`: интервал между экспортами, мс                   |
 | `--trace-max-export-batch-size` | `512`  | `BatchSpanProcessor`: максимум спанов в одном OTLP-вызове             |
 | `--metric-export-interval-ms`   | `5000` | `PeriodicExportingMetricReader`: интервал экспорта метрик, мс         |
 | `--metric-export-timeout-ms`    | `3000` | `PeriodicExportingMetricReader`: таймаут одного экспорта, мс          |
 | `--metric-buffer-flush-ms`      | `100`  | `TMetricBuffer`: интервал flush'а внутреннего буфера, мс (`0` отключает буфер) |
+| `--telemetry-drain-sleep-ms`    | `3000` | Пауза после `ForceFlush`, чтобы внешние системы успели принять demo-данные (`0` для бенчмарка) |
 
 #### Демонстрация реальных ретраев
 

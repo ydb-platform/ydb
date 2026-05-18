@@ -52,6 +52,9 @@ struct TConfig {
     int RetryWorkers = 6;
     int RetryOps = 30;
 
+    bool EnableTracing = true;
+    bool EnableMetrics = true;
+
     int TraceMaxQueueSize = 4096;
     int TraceScheduleDelayMs = 1000;
     int TraceMaxExportBatchSize = 512;
@@ -60,6 +63,7 @@ struct TConfig {
     int MetricExportTimeoutMs = 3000;
 
     int MetricBufferFlushIntervalMs = 100;
+    int TelemetryDrainSleepMs = 3000;
 };
 
 nostd::shared_ptr<opentelemetry::trace::TracerProvider> InitTracing(const TConfig& cfg) {
@@ -397,6 +401,13 @@ int main(int argc, char** argv) {
     opts.AddLongOption("retry-ops", "Operations per retry worker")
         .DefaultValue(std::to_string(cfg.RetryOps)).StoreResult(&cfg.RetryOps);
 
+    opts.AddLongOption("disable-tracing", "Do not pass TraceProvider to YDB SDK")
+        .NoArgument()
+        .Handler0([&]{ cfg.EnableTracing = false; });
+    opts.AddLongOption("disable-metrics", "Do not pass MetricRegistry to YDB SDK")
+        .NoArgument()
+        .Handler0([&]{ cfg.EnableMetrics = false; });
+
     opts.AddLongOption("trace-max-queue-size",
                        "BatchSpanProcessor: max queued spans before drop")
         .DefaultValue(std::to_string(cfg.TraceMaxQueueSize)).StoreResult(&cfg.TraceMaxQueueSize);
@@ -420,6 +431,10 @@ int main(int argc, char** argv) {
                        "TMetricBuffer: flush interval, ms (0 disables the buffer)")
         .DefaultValue(std::to_string(cfg.MetricBufferFlushIntervalMs))
         .StoreResult(&cfg.MetricBufferFlushIntervalMs);
+    opts.AddLongOption("telemetry-drain-sleep-ms",
+                       "Sleep after ForceFlush so external collectors can scrape demo data")
+        .DefaultValue(std::to_string(cfg.TelemetryDrainSleepMs))
+        .StoreResult(&cfg.TelemetryDrainSleepMs);
 
     NLastGetopt::TOptsParseResult parsedOpts(&opts, argc, argv);
 
@@ -430,6 +445,8 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "Initializing OpenTelemetry..." << std::endl;
+    std::cout << "  Tracing: " << (cfg.EnableTracing ? "enabled" : "disabled") << std::endl;
+    std::cout << "  Metrics: " << (cfg.EnableMetrics ? "enabled" : "disabled") << std::endl;
     std::cout << "  OTLP endpoint: " << cfg.OtlpEndpoint << std::endl;
     std::cout << "  Trace batching: max_queue_size=" << cfg.TraceMaxQueueSize
               << ", schedule_delay_ms=" << cfg.TraceScheduleDelayMs
@@ -439,25 +456,31 @@ int main(int argc, char** argv) {
     std::cout << "  Metric buffer (in-SDK): flush_interval_ms="
               << cfg.MetricBufferFlushIntervalMs
               << (cfg.MetricBufferFlushIntervalMs == 0 ? " (disabled)" : "") << std::endl;
+    std::cout << "  Telemetry drain sleep: " << cfg.TelemetryDrainSleepMs << " ms" << std::endl;
 
-    auto tracerProvider = InitTracing(cfg);
-    auto meterProvider = InitMetrics(cfg);
+    auto tracerProvider = cfg.EnableTracing ? InitTracing(cfg) : nullptr;
+    auto meterProvider = cfg.EnableMetrics ? InitMetrics(cfg) : nullptr;
 
-    opentelemetry::trace::Provider::SetTracerProvider(tracerProvider);
-    opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
-
-    auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(tracerProvider);
-    auto otelMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
-
+    std::shared_ptr<NTrace::ITraceProvider> ydbTraceProvider;
     std::shared_ptr<NMetrics::IMetricRegistry> ydbMetricRegistry;
-    if (cfg.MetricBufferFlushIntervalMs > 0) {
-        NObservability::TMetricBufferSettings bufferSettings;
-        bufferSettings.FlushInterval =
-            std::chrono::milliseconds(cfg.MetricBufferFlushIntervalMs);
-        ydbMetricRegistry = NObservability::CreateBufferedMetricRegistry(
-            otelMetricRegistry, bufferSettings);
-    } else {
-        ydbMetricRegistry = otelMetricRegistry;
+
+    if (cfg.EnableTracing) {
+        opentelemetry::trace::Provider::SetTracerProvider(tracerProvider);
+        ydbTraceProvider = NTrace::CreateOtelTraceProvider(tracerProvider);
+    }
+
+    if (cfg.EnableMetrics) {
+        opentelemetry::metrics::Provider::SetMeterProvider(meterProvider);
+        auto otelMetricRegistry = NMetrics::CreateOtelMetricRegistry(meterProvider);
+        if (cfg.MetricBufferFlushIntervalMs > 0) {
+            NObservability::TMetricBufferSettings bufferSettings;
+            bufferSettings.FlushInterval =
+                std::chrono::milliseconds(cfg.MetricBufferFlushIntervalMs);
+            ydbMetricRegistry = NObservability::CreateBufferedMetricRegistry(
+                otelMetricRegistry, bufferSettings);
+        } else {
+            ydbMetricRegistry = otelMetricRegistry;
+        }
     }
 
     std::cout << "Connecting to YDB at " << cfg.Endpoint << cfg.Database << std::endl;
@@ -466,9 +489,14 @@ int main(int argc, char** argv) {
         auto driverConfig = TDriverConfig()
             .SetEndpoint(cfg.Endpoint)
             .SetDatabase(cfg.Database)
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetTraceProvider(ydbTraceProvider)
-            .SetMetricRegistry(ydbMetricRegistry);
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+
+        if (ydbTraceProvider) {
+            driverConfig.SetTraceProvider(ydbTraceProvider);
+        }
+        if (ydbMetricRegistry) {
+            driverConfig.SetMetricRegistry(ydbMetricRegistry);
+        }
 
         TDriver driver(driverConfig);
         NQuery::TQueryClient queryClient(driver);
@@ -506,9 +534,10 @@ int main(int argc, char** argv) {
     }
 
     ydbMetricRegistry.reset();
-    otelMetricRegistry.reset();
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    if (cfg.TelemetryDrainSleepMs > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(cfg.TelemetryDrainSleepMs));
+    }
 
     opentelemetry::trace::Provider::SetTracerProvider(
         nostd::shared_ptr<opentelemetry::trace::TracerProvider>{});

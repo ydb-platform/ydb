@@ -13,7 +13,6 @@ SRCS(
     dq_compute_actor_async_input_helper_ut.cpp
     dq_compute_actor_channels_ut.cpp
     dq_compute_issues_buffer_ut.cpp
-    dq_source_watermark_tracker_ut.cpp
     mock_lookup_factory.cpp
 )
 
@@ -23,10 +22,11 @@ PEERDIR(
     ydb/library/actors/wilson
     ydb/library/services
     ydb/library/yql/dq/actors
+    ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/compute/ut/proto
     ydb/library/yql/dq/actors/input_transforms
     ydb/library/yql/dq/actors/task_runner
-    ydb/library/yql/dq/comp_nodes/no_llvm
+    ydb/library/yql/dq/runtime/streaming
     ydb/library/yql/dq/tasks
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/task_runner

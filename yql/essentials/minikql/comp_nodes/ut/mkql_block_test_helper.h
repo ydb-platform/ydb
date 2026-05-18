@@ -233,7 +233,8 @@ public:
         return ConvertLiteralListToDatum(std::move(convertedNodes), type, fuzzId);
     }
 
-    template <typename T> requires(!TIsVectorV<T>)
+    template <typename T>
+        requires(!TIsVectorV<T>)
     TRuntimeNode ConvertNodeFuzzied(const T& node) {
         return Pb_.AsScalar(ConvertValueToLiteralNode(node));
     }
@@ -246,7 +247,8 @@ public:
         return convertedNode;
     }
 
-    template <typename T> requires(!TIsVectorV<T>)
+    template <typename T>
+        requires(!TIsVectorV<T>)
     TRuntimeNode ConvertNodeUnfuzzied(const T& node) {
         return Pb_.AsScalar(ConvertValueToLiteralNode(node));
     }
@@ -260,7 +262,7 @@ public:
 
     template <typename T, typename U, typename V>
     void TestKernel(const T& left, const U& right, const V& expected, std::function<TRuntimeNode(TSetup<false>&, TRuntimeNode, TRuntimeNode)> binaryOp, TMaybe<size_t> iterations = Nothing()) {
-        size_t iterationCount =  (TIsVectorV<T> || TIsVectorV<U>) ? ManyIterations : SignleIteration;
+        size_t iterationCount = (TIsVectorV<T> || TIsVectorV<U>) ? ManyIterations : SignleIteration;
         if (iterations) {
             iterationCount = *iterations;
         }

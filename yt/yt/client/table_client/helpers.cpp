@@ -1522,7 +1522,7 @@ TUnversionedValue TryDecodeUnversionedAnyValue(
     TStatelessLexer lexer; // this will not allocate on happy path
     TToken token;
     lexer.ParseToken(value.AsStringBuf(), &token);
-    YT_VERIFY(!token.IsEmpty());
+    YT_VERIFY(token.GetType() != ETokenType::EndOfStream);
 
     switch (token.GetType()) {
         case ETokenType::Int64:

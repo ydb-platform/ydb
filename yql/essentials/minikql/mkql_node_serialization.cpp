@@ -16,18 +16,18 @@ namespace NKikimr::NMiniKQL {
 using namespace NDetail;
 
 namespace {
-static const char KindMask = 0x0f;
-static const char TypeMask = 0x7f;
+const char KindMask = 0x0f;
+const char TypeMask = 0x7f;
 static_assert(KindMask == char(TType::EKind::ReservedKind), "Kind should be encoded in 4 bit");
-static const char UserMarker1 = 0x10;
-static const char UserMarker2 = 0x20;
-static const char UserMarker3 = 0x40;
-static const char TypeMarker = '\x80';
-static const char SystemMask = KindMask;
-static const char CommandMask = '\xf0';
-static const ui32 NameRefMark = 0x01;
-static const ui32 RequiresNextPass = 0x80000000U;
-static const ui32 AllPassesDone = 0xFFFFFFFFU;
+const char UserMarker1 = 0x10;
+const char UserMarker2 = 0x20;
+const char UserMarker3 = 0x40;
+const char TypeMarker = '\x80';
+const char SystemMask = KindMask;
+const char CommandMask = '\xf0';
+const ui32 NameRefMark = 0x01;
+const ui32 RequiresNextPass = 0x80000000U;
+const ui32 AllPassesDone = 0xFFFFFFFFU;
 
 enum class ESystemCommand {
     Begin = 0x10,

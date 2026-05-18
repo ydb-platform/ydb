@@ -1225,14 +1225,16 @@ private:
                 }
                 indexType = TIndexDescription::EType::GlobalJson;
             } else if (type == "localBloomFilter") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                if (meta->StoreType == EStoreType::Column &&
+                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
                     return TStatus::Error;
                 }
 
                 indexType = TIndexDescription::EType::LocalBloomFilter;
             } else if (type == "localBloomNgramFilter") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                if (meta->StoreType == EStoreType::Column &&
+                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter index support is disabled"));
                     return TStatus::Error;
                 }
@@ -1348,7 +1350,7 @@ private:
                     break;
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     TString error;
-                    if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }

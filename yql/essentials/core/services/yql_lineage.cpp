@@ -336,18 +336,20 @@ private:
             TVector<TPinInfo> inputs;
             auto& formatter = r.second->GetPlanFormatter();
             formatter.GetInputs(*r.first, inputs, false);
-            TVectorLimited<ui32> readIds(Allocator_.get());
             for (const auto& i : inputs) {
                 const TStringBuf& tableName = AppendString(i.DisplayName);
                 readTables.emplace_back(tableName, r.first);
-                const TStructExprType& itemType = *r.first->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                AddSchemaRef(&itemType, tableName);
             }
         }
         SortBy(readTables, [](const auto& x) { return x.first; });
         for (const auto& r : readTables) {
-            TableIds_[r.first] = ++NextReadId_;
-            ReadIds_.try_emplace(r.second, TVectorLimited<ui32>(Allocator_.get())).first->second.push_back(NextReadId_);
+            auto [it, inserted] = TableIds_.try_emplace(r.first, 0);
+            if (inserted) {
+                it->second = ++NextReadId_;
+                const TStructExprType& itemType = *r.second->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                AddSchemaRef(&itemType, r.first);
+            }
+            ReadIds_.try_emplace(r.second, TVectorLimited<ui32>(Allocator_.get())).first->second.push_back(it->second);
         }
         THashMapLimited<TStringBuf, TVectorLimited<NodeDataProviderPair>> writeTables(Allocator_.get());
         for (const auto& w : Writes_) {

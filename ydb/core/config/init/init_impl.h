@@ -463,7 +463,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&MonitoringPrivateKeyFile);
         opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
         opts.AddLongOption("mon-ca", "Path to CA certificate file for verifying client certificates (mTLS)").OptionalArgument("PATH").StoreResult(&MonitoringCaFile);
-        opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().SetFlag(&SuppressVersionCheck);
+        // Should be provided in yaml config: TStaticNameserviceConfig.SuppressVersionCheck
+        opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().Hidden().SetFlag(&SuppressVersionCheck);
 
         opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
         opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
@@ -471,15 +472,22 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
         opts.AddLongOption("kafka-port", "enable kafka proxy to listen on port").OptionalArgument("PORT").StoreResult(&KafkaPort);
-        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
-        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
-        opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
-        opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
-        opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
+        // Should be provided in yaml config: TLocalPgWireConfig.Address
+        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").Hidden().StoreResult(&PGWireAddress);
+        // Should be provided in yaml config: TLocalPgWireConfig.ListeningPort
+        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").Hidden().StoreResult(&PGWirePort);
+        // Should be provided in yaml config: TGRpcConfig.PublicAddressesV4
+        opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").Hidden().EmplaceTo(&GRpcPublicAddressesV4);
+        // Should be provided in yaml config: TGRpcConfig.PublicAddressesV6
+        opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").Hidden().EmplaceTo(&GRpcPublicAddressesV6);
+        // Should be provided in yaml config: TGRpcConfig.PublicTargetNameOverride
+        opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").Hidden().StoreResult(&GRpcPublicTargetNameOverride);
+        // Should be provided in yaml config: TRestartsCountConfig.RestartsCountFile
         opts.AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
             .OptionalArgument("PATH").DefaultValue(RestartsCountFile)
-            .StoreResult(&RestartsCountFile);
-        opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&CompileInflightLimit);
+            .Hidden().StoreResult(&RestartsCountFile);
+        // Should be provided in yaml config: TCompileServiceConfig.InflightLimit
+        opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").Hidden().StoreResult(&CompileInflightLimit);
         opts.AddLongOption("udf", "Load shared library with UDF by given path").AppendTo(&UDFsPaths);
         opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory").StoreResult(&UDFsDir);
         opts.AddLongOption("node-kind", Sprintf("Kind of the node (affects list of services activated allowed values are {'%s', '%s'} )", NODE_KIND_YDB.data(), NODE_KIND_YQ.data()))
@@ -511,8 +519,9 @@ struct TCommonAppOptions {
             .RequiredArgument("NAME").StoreResult(&Workload);
         opts.AddLongOption("seed-nodes", "Path to seed nodes configuration file")
             .RequiredArgument("PATH").StoreResult(&SeedNodesFile);
+        // Should be provided in yaml config: TMonitoringConfig.ForceDatabaseLabels
         opts.AddLongOption("force-database-labels", "Forced reporting of a label with the name of the database (tenant/domain)")
-            .NoArgument().SetFlag(&ForceDatabaseLabels);
+            .NoArgument().Hidden().SetFlag(&ForceDatabaseLabels);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -1071,13 +1080,22 @@ struct TMbusAppOptions {
     bool Start = false;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
-        opts.AddLongOption("mbus", "Start MessageBus proxy").NoArgument().SetFlag(&Start);
-        opts.AddLongOption("mbus-port", "MessageBus proxy port").RequiredArgument("PORT").StoreResult(&BusProxyPort);
-        opts.AddLongOption("mbus-trace-path", "Path for trace files").RequiredArgument("PATH").StoreResult(&TracePath);
-        opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
+        // MessageBus is deprecated
+        opts.AddLongOption("mbus", "Start MessageBus proxy").NoArgument().Hidden().SetFlag(&Start);
+        opts.AddLongOption("mbus-port", "MessageBus proxy port").RequiredArgument("PORT").Hidden().StoreResult(&BusProxyPort);
+        opts.AddLongOption("mbus-trace-path", "Path for trace files").RequiredArgument("PATH").Hidden().StoreResult(&TracePath);
+        opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").Hidden().AppendTo(&ProxyBindToProxy);
         SetMsgBusDefaults(ProxyBusSessionConfig, ProxyBusQueueConfig);
         ProxyBusSessionConfig.ConfigureLastGetopt(opts, "mbus-");
         ProxyBusQueueConfig.ConfigureLastGetopt(opts, "mbus-");
+        for (auto& opt : opts.Opts_) {
+            for (const TString& longName : opt->GetLongNames()) {
+                if (longName.StartsWith("mbus-")) {
+                    opt->Hidden_ = true;
+                    break;
+                }
+            }
+        }
     }
 
     void ValidateCliOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) const {

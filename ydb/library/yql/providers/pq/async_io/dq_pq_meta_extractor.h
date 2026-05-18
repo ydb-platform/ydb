@@ -9,12 +9,16 @@
 
 #include <util/generic/string.h>
 
-namespace NYql::NDq {
-    struct TPqMetaExtractor {
-        using TPqMetaExtractorLambda = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage&)>;
+namespace NKikimr::NMiniKQL {
+class THolderFactory;
+class TTypeEnvironment;
+}
 
-    public:
-        TPqMetaExtractor();
-        TPqMetaExtractorLambda FindExtractorLambda(const TString& sysColumn) const;
-    };
+namespace NYql::NDq {
+using TPqMetaExtractorLambda = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage&)>;
+
+TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
+    const TString& columnName,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);
 }

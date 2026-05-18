@@ -3,6 +3,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -63,6 +64,23 @@ void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider
     CallCredentials = grpc::MetadataCredentialsFromPlugin(
         std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(CredentialsProvider)));
 #endif
+}
+
+bool TDbDriverState::AreClientTlsCredentialsValid() const {
+    std::call_once(ClientTlsValidationOnceFlag_, [this]() {
+        ClientTlsValidationDetail_.clear();
+        grpc::SslCredentialsOptions sslOptions{
+            .pem_root_certs = NYdb::TStringType{SslCredentials.CaCert},
+            .pem_private_key = NYdb::TStringType{SslCredentials.PrivateKey},
+            .pem_cert_chain = NYdb::TStringType{SslCredentials.Cert}
+        };
+        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateTlsCredentials(sslOptions, ClientTlsValidationDetail_);
+    });
+    return ClientTlsCredentialsValid_;
+}
+
+const std::string& TDbDriverState::GetClientTlsValidationDetail() const {
+    return ClientTlsValidationDetail_;
 }
 
 void TDbDriverState::AddCb(TCb&& cb, ENotifyType type) {

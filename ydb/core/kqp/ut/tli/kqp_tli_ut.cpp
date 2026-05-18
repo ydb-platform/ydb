@@ -848,57 +848,60 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     Y_UNIT_TEST(LogDisabled) {
         TStringStream ss;
-        TTliTestContext ctx(ss, false);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss, false);
+        ctx->CreateAndSeedTables(1);
 
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
-        ctx.ExecuteQuery(breakerQueryText);
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogsWhenDisabled(issues, ss);
     }
 
     Y_UNIT_TEST(Basic) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
-        ctx.ExecuteQuery(breakerQueryText);
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     Y_UNIT_TEST(SeparateCommit) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
         const TString breakerQueryText2 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (2u, \"UsualValue\")";
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
 
         // Breaker: begin tx, write key 1, write key 2, then separate commit
-        auto breakerTx = BeginTx(ctx.Session, breakerQueryText);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerQueryText2);
+        auto breakerTx = BeginTx(ctx->Session, breakerQueryText);
+        ExecuteInTx(ctx->Session, *breakerTx, breakerQueryText2);
         NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
 
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
@@ -908,8 +911,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // by non-conflicting writes to the same shard before AND after it.
     Y_UNIT_TEST(SeparateCommitBreakerInMiddleOfSameShard) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
@@ -925,20 +928,21 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerAfter3 = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (60u, \"After3\")";
 
         // Victim: read Key=1 (creates a lock)
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
 
         // Breaker: 7 queries all to the same table, Key=1 (the breaker) is Q4.
-        auto breakerTx = BeginTx(ctx.Session, breakerBefore1);                    // Q1: Key=10
-        ExecuteInTx(ctx.Session, *breakerTx, breakerBefore2);                     // Q2: Key=20
-        ExecuteInTx(ctx.Session, *breakerTx, breakerBefore3);                     // Q3: Key=30
-        ExecuteInTx(ctx.Session, *breakerTx, breakerQueryText);                   // Q4: Key=1 (BREAKER)
-        ExecuteInTx(ctx.Session, *breakerTx, breakerAfter1);                      // Q5: Key=40
-        ExecuteInTx(ctx.Session, *breakerTx, breakerAfter2);                      // Q6: Key=50
-        ExecuteInTx(ctx.Session, *breakerTx, breakerAfter3);                      // Q7: Key=60
+        auto breakerTx = BeginTx(ctx->Session, breakerBefore1);                    // Q1: Key=10
+        ExecuteInTx(ctx->Session, *breakerTx, breakerBefore2);                     // Q2: Key=20
+        ExecuteInTx(ctx->Session, *breakerTx, breakerBefore3);                     // Q3: Key=30
+        ExecuteInTx(ctx->Session, *breakerTx, breakerQueryText);                   // Q4: Key=1 (BREAKER)
+        ExecuteInTx(ctx->Session, *breakerTx, breakerAfter1);                      // Q5: Key=40
+        ExecuteInTx(ctx->Session, *breakerTx, breakerAfter2);                      // Q6: Key=50
+        ExecuteInTx(ctx->Session, *breakerTx, breakerAfter3);                      // Q7: Key=60
         NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());             // Standalone commit
 
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
@@ -946,8 +950,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: Many upserts in a single transaction, the breaker is the middle upsert
     Y_UNIT_TEST(ManyUpserts) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(6);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -958,18 +962,19 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable3);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable4);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimSelectTable1);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then commit (breaks victim's lock on table 2)
-        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable2);
-        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdateTable6);
+        auto breakerTx = BeginTx(ctx->Session, breakerUpdateTable5);
+        ExecuteInTx(ctx->Session, *breakerTx, breakerUpdateTable2);
+        ExecuteAndCommitTx(ctx->Session, *breakerTx, breakerUpdateTable6);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
@@ -979,8 +984,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // This is different from CommitTx() on the last query (QUERY_ACTION_EXECUTE_PREPARED with commit flag)
     Y_UNIT_TEST(ManyUpsertsStandaloneCommit) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(6);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -991,20 +996,21 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable3);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable4);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimSelectTable1);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then standalone COMMIT_TX (no query, just commit)
-        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable2);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable6);
+        auto breakerTx = BeginTx(ctx->Session, breakerUpdateTable5);
+        ExecuteInTx(ctx->Session, *breakerTx, breakerUpdateTable2);
+        ExecuteInTx(ctx->Session, *breakerTx, breakerUpdateTable6);
         // Standalone COMMIT_TX (QUERY_ACTION_COMMIT_TX, unlike CommitTx() which is QUERY_ACTION_EXECUTE with commit flag)
         NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
@@ -1012,17 +1018,18 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
     Y_UNIT_TEST(DifferentKeys) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTablesWithSecondKey(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTablesWithSecondKey(1);
 
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"Breaker\")";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (2u, \"VictimWrite\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
-        ctx.ExecuteQuery(breakerQueryText);
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
@@ -1032,20 +1039,21 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // (which established the lock), not the subsequent write within the same transaction.
     Y_UNIT_TEST(VictimReadThenWriteSameTable) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTablesWithSecondKey(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTablesWithSecondKey(1);
 
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimWriteText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (2u, \"VictimWrite\")";
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimWriteText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimWriteText);
 
-        ctx.ExecuteQuery(breakerQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimWriteText);
     }
@@ -1055,8 +1063,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // SELECTs and then UPDATEs the same row (e.g., customer table).
     Y_UNIT_TEST(VictimReadThenWriteSameTableMultiTable) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(3);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(3);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -1064,15 +1072,16 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString victimUpdateTable3 = "UPDATE `/Root/Tenant1/Table3` SET Value = \"VictimUpdate3\" WHERE Key = 1u";
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimSelectTable1);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable1);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimUpdateTable3);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimSelectTable1);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimUpdateTable1);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimUpdateTable3);
 
-        ctx.ExecuteQuery(breakerQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimSelectTable1, victimUpdateTable1,
             /* expectedBreakerCount */ 2);
@@ -1081,18 +1090,19 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: Victim reads multiple keys, breaker writes them all
     Y_UNIT_TEST(MultipleKeys) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTablesWithSecondKey(1);
-        ctx.SeedTable("/Root/Tenant1/Table1", {{3, "V3"}});
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTablesWithSecondKey(1);
+        ctx->SeedTable("/Root/Tenant1/Table1", {{3, "V3"}});
 
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key IN (1u, 2u, 3u)";
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"B1\"), (2u, \"B2\"), (3u, \"B3\")";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"Victim\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
-        ctx.ExecuteQuery(breakerQueryText);
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
@@ -1100,17 +1110,18 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: Cross-table lock breakage - victim reads TableA, breaker writes TableA, victim writes TableB
     Y_UNIT_TEST(CrossTables) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(2);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(2);
 
         const TString victimQueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"Breaker\")";
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table2` (Key, Value) VALUES (1u, \"DstVal\")";
 
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
-        ctx.ExecuteQuery(breakerQueryText);
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText);
     }
@@ -1120,13 +1131,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // each matching the corresponding DataShard's BreakerQuerySpanId.
     Y_UNIT_TEST(TwoVictimsOneBreaker) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
 
         // Create two victim sessions
-        TSession victim1Session = ctx.Client.GetSession().GetValueSync().GetSession();
-        TSession victim2Session = ctx.Client.GetSession().GetValueSync().GetSession();
+        TSession victim1Session = ctx->Client.GetSession().GetValueSync().GetSession();
+        TSession victim2Session = ctx->Client.GetSession().GetValueSync().GetSession();
 
-        ctx.CreateAndSeedTables(2);
+        ctx->CreateAndSeedTables(2);
 
         const TString victim1QueryText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victim2QueryText = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -1140,8 +1151,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         auto victim2Tx = BeginReadTx(victim2Session, victim2QueryText);
 
         // Breaker: write to both tables in a single transaction
-        auto breakerTx = BeginTx(ctx.Session, breakerUpdate1);
-        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdate2);
+        auto breakerTx = BeginTx(ctx->Session, breakerUpdate1);
+        ExecuteAndCommitTx(ctx->Session, *breakerTx, breakerUpdate2);
 
         // Both victims try to commit - both should be aborted
         auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victim1CommitText);
@@ -1149,6 +1160,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victim2CommitText);
         UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
+        ctx.reset();
 
         // Verify each victim independently
         VerifyTliIssueAndLogs(issues1, ss, breakerUpdate1, victim1QueryText, victim1CommitText,
@@ -1160,8 +1172,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
     Y_UNIT_TEST(InvisibleRowSkips) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         const TString victimRead1Text = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u /* victim-read1 */";
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerV2\")";
@@ -1169,17 +1181,18 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimVal\")";
 
         // Victim reads key 1 at snapshot V1 - establishes lock
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimRead1Text);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimRead1Text);
 
         // Breaker writes to key 1 at V2 > V1, breaking victim's lock
-        ctx.ExecuteQuery(breakerQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
 
         // Victim reads key 1 AGAIN - triggers InvisibleRowSkips detection
-        ExecuteInTxReassign(ctx.VictimSession, victimTx, victimRead2Text);
+        ExecuteInTxReassign(ctx->VictimSession, victimTx, victimRead2Text);
 
         // Victim tries to commit -> aborted because lock was broken
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         // The breaker immediately breaks victim's lock (1 immediate entry)
         // AND the victim re-read detects InvisibleRowSkips (1 deferred entry) = 2 total
@@ -1191,8 +1204,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: Victim snapshots on one key, breaker commits, victim reads and writes another key
     Y_UNIT_TEST(SnapshotThenReadWrite) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTablesWithSecondKey(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTablesWithSecondKey(1);
 
         const TString victimSnapshotText = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 2u /* snapshot */";
         const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
@@ -1200,17 +1213,18 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString victimWriteText = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"VictimValue\")";
 
         // Victim: start tx and get snapshot on a different key
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimSnapshotText);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimSnapshotText);
 
         // Breaker: write and commit key 1
-        ctx.ExecuteQuery(breakerQueryText);
+        ctx->ExecuteQuery(breakerQueryText);
 
         // Victim: read the conflicting key after breaker commit
-        ExecuteInTxReassign(ctx.VictimSession, victimTx, victimReadText);
+        ExecuteInTxReassign(ctx->VictimSession, victimTx, victimReadText);
 
         // Victim: write the key and try to commit -> should be aborted
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteText);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimWriteText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimReadText, victimSnapshotText);
     }
@@ -1220,9 +1234,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // and several SELECTs in victim (only the middle one detects InvisibleRowSkips).
     Y_UNIT_TEST(ManyUpsertsDeferredLock) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
         // Note: key 2 is needed for snapshot on Table1 in this scenario.
-        ctx.CreateAndSeedTablesWithSecondKey(6);
+        ctx->CreateAndSeedTablesWithSecondKey(6);
 
         // Victim queries
         const TString victimSnapshotTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 2u /* snapshot */";
@@ -1237,22 +1251,23 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
 
         // Step 1: Victim starts tx with snapshot on a safe key of Table1
-        auto victimTx = BeginReadTx(ctx.VictimSession, victimSnapshotTable1);
+        auto victimTx = BeginReadTx(ctx->VictimSession, victimSnapshotTable1);
 
         // Step 2: Breaker writes to tables 5, 3, 6 and commits (only Table3 key 1 conflicts)
-        auto breakerTx = BeginTx(ctx.Session, breakerUpdateTable5);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdateTable3);
-        ExecuteAndCommitTx(ctx.Session, *breakerTx, breakerUpdateTable6);
+        auto breakerTx = BeginTx(ctx->Session, breakerUpdateTable5);
+        ExecuteInTx(ctx->Session, *breakerTx, breakerUpdateTable3);
+        ExecuteAndCommitTx(ctx->Session, *breakerTx, breakerUpdateTable6);
 
         // Step 3: Victim reads tables 2, 3, 4 after breaker committed
         // Only SELECT Table3 key 1 triggers InvisibleRowSkips (deferred detection)
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable2);
-        ExecuteInTxReassign(ctx.VictimSession, victimTx, victimSelectTable3);
-        ExecuteInTx(ctx.VictimSession, victimTx, victimSelectTable4);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTxReassign(ctx->VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(ctx->VictimSession, victimTx, victimSelectTable4);
 
         // Step 4: Victim writes and tries to commit -> should be aborted
-        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimWriteTable3);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victimTx, victimWriteTable3);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable3, victimSelectTable3, victimSnapshotTable1);
     }
@@ -1262,12 +1277,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
     Y_UNIT_TEST(ConcurrentUpsertSelect) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         // Seed with initial data in the key range 1-10
         for (ui64 i = 2; i <= 10; ++i) {
-            ctx.SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
+            ctx->SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
         }
 
         // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
@@ -1280,16 +1295,17 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Victim: start transaction with UPSERT...SELECT (reads keys 1-5, then writes them)
         // Note: with OLTP sink, the lock is NOT created immediately here (deferred lock creation)
-        auto victimTx = BeginTx(ctx.VictimSession, victimUpsertSelect);
+        auto victimTx = BeginTx(ctx->VictimSession, victimUpsertSelect);
 
         // Breaker: write to key 3
         // At this point, victim's lock doesn't exist yet (deferred lock creation)
         // The breaker's write is tracked for later TLI linkage via RecentWritesForTli cache
-        ctx.ExecuteQuery(breakerUpsert);
+        ctx->ExecuteQuery(breakerUpsert);
 
         // Victim: try to commit - should be aborted due to MVCC conflict detection
         auto [status, issues] = CommitTxWithIssues(*victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         // Verify issue and TLI logs using common verification function
         VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
@@ -1305,8 +1321,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: 2-node version of ManyUpserts
     Y_UNIT_TEST(ManyUpserts2Node) {
         TStringStream ss;
-        TTli2NodeTestContext ctx(ss);
-        ctx.CreateAndSeedTables(6);
+        auto ctx = std::make_unique<TTli2NodeTestContext>(ss);
+        ctx->CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -1317,18 +1333,19 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
-        auto victimTx = BeginReadTx(*ctx.VictimSession, victimSelectTable1);
-        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable2);
-        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable3);
-        ExecuteInTx(*ctx.VictimSession, victimTx, victimUpdateTable4);
+        auto victimTx = BeginReadTx(*ctx->VictimSession, victimSelectTable1);
+        ExecuteInTx(*ctx->VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(*ctx->VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(*ctx->VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then commit separately (breaks victim's lock on table 2)
-        auto breakerTx = BeginTx(*ctx.BreakerSession, breakerUpdateTable5);
-        ExecuteInTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable2);
-        ExecuteAndCommitTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable6);
+        auto breakerTx = BeginTx(*ctx->BreakerSession, breakerUpdateTable5);
+        ExecuteInTx(*ctx->BreakerSession, *breakerTx, breakerUpdateTable2);
+        ExecuteAndCommitTx(*ctx->BreakerSession, *breakerTx, breakerUpdateTable6);
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
@@ -1336,8 +1353,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: 2-node version of ManyUpsertsStandaloneCommit
     Y_UNIT_TEST(ManyUpsertsStandaloneCommit2Node) {
         TStringStream ss;
-        TTli2NodeTestContext ctx(ss);
-        ctx.CreateAndSeedTables(6);
+        auto ctx = std::make_unique<TTli2NodeTestContext>(ss);
+        ctx->CreateAndSeedTables(6);
 
         const TString victimSelectTable1 = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimSelectTable2 = "SELECT * FROM `/Root/Tenant1/Table2` WHERE Key = 1u";
@@ -1348,20 +1365,21 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpdateTable6 = "UPDATE `/Root/Tenant1/Table6` SET Value = \"BreakerUpdate6\" WHERE Key = 1u";
 
         // Victim: read tables 1,2,3, then update table 4 (without commit)
-        auto victimTx = BeginReadTx(*ctx.VictimSession, victimSelectTable1);
-        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable2);
-        ExecuteInTx(*ctx.VictimSession, victimTx, victimSelectTable3);
-        ExecuteInTx(*ctx.VictimSession, victimTx, victimUpdateTable4);
+        auto victimTx = BeginReadTx(*ctx->VictimSession, victimSelectTable1);
+        ExecuteInTx(*ctx->VictimSession, victimTx, victimSelectTable2);
+        ExecuteInTx(*ctx->VictimSession, victimTx, victimSelectTable3);
+        ExecuteInTx(*ctx->VictimSession, victimTx, victimUpdateTable4);
 
         // Breaker: update tables 5,2,6, then standalone COMMIT_TX (no query, just commit)
-        auto breakerTx = BeginTx(*ctx.BreakerSession, breakerUpdateTable5);
-        ExecuteInTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable2);
-        ExecuteInTx(*ctx.BreakerSession, *breakerTx, breakerUpdateTable6);
+        auto breakerTx = BeginTx(*ctx->BreakerSession, breakerUpdateTable5);
+        ExecuteInTx(*ctx->BreakerSession, *breakerTx, breakerUpdateTable2);
+        ExecuteInTx(*ctx->BreakerSession, *breakerTx, breakerUpdateTable6);
         // Standalone COMMIT_TX (QUERY_ACTION_COMMIT_TX)
         NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerUpdateTable2, victimSelectTable2);
     }
@@ -1369,12 +1387,12 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: 2-node version of ConcurrentUpsertSelect
     Y_UNIT_TEST(ConcurrentUpsertSelect2Node) {
         TStringStream ss;
-        TTli2NodeTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTli2NodeTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         // Seed with initial data in the key range 1-10
         for (ui64 i = 2; i <= 10; ++i) {
-            ctx.SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
+            ctx->SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
         }
 
         // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
@@ -1386,15 +1404,16 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (3u, \"BreakerValue\")";
 
         // Victim: start transaction with UPSERT...SELECT
-        auto victimTx = BeginTx(*ctx.VictimSession, victimUpsertSelect);
+        auto victimTx = BeginTx(*ctx->VictimSession, victimUpsertSelect);
 
         // Breaker: write to key 3
-        NKqp::AssertSuccessResult(ctx.BreakerSession->ExecuteQuery(
+        NKqp::AssertSuccessResult(ctx->BreakerSession->ExecuteQuery(
             breakerUpsert, TTxControl::BeginTx().CommitTx()).GetValueSync());
 
         // Victim: try to commit - should be aborted
         auto [status, issues] = CommitTxWithIssues(*victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         // Verify issue and TLI logs
         VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
@@ -1470,8 +1489,8 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // must still collect and propagate breaker TLI stats.
     Y_UNIT_TEST(BreakerAndVictimInSameTransaction) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(3);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(3);
 
         const TString victimOfTSelect = "SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1u";
         const TString victimOfTUpdate = "UPDATE `/Root/Tenant1/Table3` SET Value = \"VictimOfTWrite\" WHERE Key = 1u";
@@ -1480,17 +1499,17 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString externalBreakerWrite = "UPSERT INTO `/Root/Tenant1/Table2` (Key, Value) VALUES (1u, \"ExtBreaker\")";
 
         // VictimOfT: read table1 (lock on table1) + write table3 (non-read-only tx)
-        auto victimOfTTx = BeginReadTx(ctx.VictimSession, victimOfTSelect);
-        ExecuteInTx(ctx.VictimSession, victimOfTTx, victimOfTUpdate);
+        auto victimOfTTx = BeginReadTx(ctx->VictimSession, victimOfTSelect);
+        ExecuteInTx(ctx->VictimSession, victimOfTTx, victimOfTUpdate);
 
         // T: read table2, write table1 (uses TKqpBufferWriteActor path)
-        auto tSession = ctx.Client.GetSession().GetValueSync().GetSession();
+        auto tSession = ctx->Client.GetSession().GetValueSync().GetSession();
         auto tTx = BeginTx(tSession, tSelectTable2);
         UNIT_ASSERT(tTx);
         ExecuteInTx(tSession, *tTx, tWriteTable1);
 
         // ExternalBreaker: write to table2 -> breaks T's lock on table2
-        ctx.ExecuteQuery(externalBreakerWrite);
+        ctx->ExecuteQuery(externalBreakerWrite);
 
         // T: standalone commit -> distributed commit via TKqpBufferWriteActor
         //   shard1 (table1): T's write breaks VictimOfT's lock -> reports BreakerQuerySpanId
@@ -1498,6 +1517,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         //   Result: T is BOTH a breaker (of VictimOfT) and a victim (of ExternalBreaker)
         auto [tStatus, tIssues] = CommitTxWithIssues(*tTx);
         UNIT_ASSERT_VALUES_EQUAL_C(tStatus, EStatus::ABORTED, tIssues);
+        ctx.reset();
 
         // Verify the ExternalBreaker->T victim pair and record counts.
         // expectedBreakerCount=2: ExternalBreaker's session + T's session (T broke VictimOfT).
@@ -1517,14 +1537,14 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         TStringStream ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
-        TTliTestContext ctx(std::move(settings));
+        auto ctx = std::make_unique<TTliTestContext>(std::move(settings));
 
-        ctx.CreateAndSeedTables(3);
-        UpdateTliConfigForKqpProxy(ctx.Kikimr, {"/Root/.*/Table1"});
+        ctx->CreateAndSeedTables(3);
+        UpdateTliConfigForKqpProxy(ctx->Kikimr, {"/Root/.*/Table1"});
 
         // TliConfig runtime updates are applied to newly created sessions.
-        auto breakerSession = ctx.Client.GetSession().GetValueSync().GetSession();
-        auto victimSession = ctx.Client.GetSession().GetValueSync().GetSession();
+        auto breakerSession = ctx->Client.GetSession().GetValueSync().GetSession();
+        auto victimSession = ctx->Client.GetSession().GetValueSync().GetSession();
 
         // Victim: JOIN of 3 tables — Table1 is ignored, Table2 and Table3 are not
         const TString victimQueryText = R"(
@@ -1549,6 +1569,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         auto [status, issues] = CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         // Table2 and Table3 (NOT ignored): full TLI verification
         // 3 breaker records: Table2 immediate + Table3 immediate + Table3 deferred
@@ -1566,13 +1587,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
         settings.AppConfig.MutableTliConfig()->AddIgnoredTableRegexes("/Root/Tenant1/Table1");
-        TTliTestContext ctx(std::move(settings));
+        auto ctx = std::make_unique<TTliTestContext>(std::move(settings));
 
-        ctx.CreateAndSeedTables(3);
+        ctx->CreateAndSeedTables(3);
         const TString tablePathPrefix = "PRAGMA TablePathPrefix = \"/Root/Tenant1\";\n";
 
         // Two victims: both touch ignored Table1 first, then lock different non-ignored tables.
-        TSession victim2Session = ctx.Client.GetSession().GetValueSync().GetSession();
+        TSession victim2Session = ctx->Client.GetSession().GetValueSync().GetSession();
 
         const TString victim1ReadIgnored = tablePathPrefix + "SELECT * FROM Table1 WHERE Key = 1u";
         const TString victim1QueryText = tablePathPrefix + "SELECT * FROM Table2 WHERE Key = 1u";
@@ -1586,22 +1607,23 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         const TString breakerUpdate2 = tablePathPrefix + "UPDATE Table2 SET Value = \"Breaker2\" WHERE Key = 1u";
         const TString breakerUpdate3 = tablePathPrefix + "UPDATE Table3 SET Value = \"Breaker3\" WHERE Key = 1u";
 
-        auto victim1Tx = BeginReadTx(ctx.VictimSession, victim1ReadIgnored);
-        ExecuteInTx(ctx.VictimSession, victim1Tx, victim1QueryText);
+        auto victim1Tx = BeginReadTx(ctx->VictimSession, victim1ReadIgnored);
+        ExecuteInTx(ctx->VictimSession, victim1Tx, victim1QueryText);
 
         auto victim2Tx = BeginReadTx(victim2Session, victim2ReadIgnored);
         ExecuteInTx(victim2Session, victim2Tx, victim2QueryText);
 
-        auto breakerTx = BeginTx(ctx.Session, breakerUpdate1);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdate2);
-        ExecuteInTx(ctx.Session, *breakerTx, breakerUpdate3);
+        auto breakerTx = BeginTx(ctx->Session, breakerUpdate1);
+        ExecuteInTx(ctx->Session, *breakerTx, breakerUpdate2);
+        ExecuteInTx(ctx->Session, *breakerTx, breakerUpdate3);
         NKqp::AssertSuccessResult(breakerTx->Commit().GetValueSync());
 
-        auto [status1, issues1] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victim1Tx, victim1CommitText);
+        auto [status1, issues1] = ExecuteVictimCommitWithIssues(ctx->VictimSession, victim1Tx, victim1CommitText);
         UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
 
         auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victim2CommitText);
         UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
+        ctx.reset();
 
         // Verify each non-ignored table independently like other multi-victim tests.
         VerifyTliIssueAndLogs(issues1, ss, breakerUpdate2, victim1QueryText, victim1CommitText,
@@ -1619,11 +1641,11 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     Y_UNIT_TEST(BasicDataQuery) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         // Create DataQuery sessions
-        NYdb::NTable::TTableClient tableClient(ctx.Kikimr.GetTableClient());
+        NYdb::NTable::TTableClient tableClient(ctx->Kikimr.GetTableClient());
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto victimSession = tableClient.CreateSession().GetValueSync().GetSession();
 
@@ -1635,17 +1657,18 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(breakerQueryText, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync());
         auto [status, issues] = NDataQueryCompat::ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     Y_UNIT_TEST(SeparateCommitDataQuery) {
         TStringStream ss;
-        TTliTestContext ctx(ss);
-        ctx.CreateAndSeedTables(1);
+        auto ctx = std::make_unique<TTliTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
 
         // Create DataQuery sessions
-        NYdb::NTable::TTableClient tableClient(ctx.Kikimr.GetTableClient());
+        NYdb::NTable::TTableClient tableClient(ctx->Kikimr.GetTableClient());
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto victimSession = tableClient.CreateSession().GetValueSync().GetSession();
 
@@ -1664,6 +1687,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         auto [status, issues] = NDataQueryCompat::ExecuteVictimCommitWithIssues(victimSession, victimTx, victimCommitText);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
 
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }

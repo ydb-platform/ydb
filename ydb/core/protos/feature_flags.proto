@@ -165,7 +165,7 @@ message TFeatureFlags {
     optional bool EnablePgSyntax = 139 [default = false];
     optional bool EnableTieringInColumnShard = 140 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
-    optional bool EnableOlapCompression = 142 [default = false];
+    optional bool EnableOlapCompression = 142 [default = true];
     optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
     optional bool EnableSparsedColumns = 144 [default = false];
     optional bool EnableParameterizedDecimal = 145 [default = true];
@@ -229,7 +229,7 @@ message TFeatureFlags {
     optional bool EnableSetColumnConstraint = 202 [default = false];
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
-    optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
+    optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = true];
     optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];
@@ -255,7 +255,7 @@ message TFeatureFlags {
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
-    optional bool EnableForcedCompactions = 231 [default = false];
+    optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
@@ -299,4 +299,6 @@ message TFeatureFlags {
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
+    optional bool DisableOnlineRO = 263 [default = false];
+    optional bool EnableUserAttributesInTopicQuery = 264 [default = false];
 }

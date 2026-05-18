@@ -218,7 +218,10 @@ public:
                     return false;
                 }
             }
-            src->AddDependentSource(Source_);
+
+            if (!IsInlineScalar_ && !CheckExist_) {
+                src->AddDependentSource(Source_);
+            }
         }
 
         TTableList tableList;
@@ -237,11 +240,14 @@ public:
             return false;
         }
 
-        if (!CheckExist_) {
+        const bool areInlineScalarReadsRequired = IsInlineScalar_ && !tableList.empty();
+        if (!CheckExist_ && !areInlineScalarReadsRequired) {
             return true;
         }
 
-        TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
+        const bool isInSubquery = areInlineScalarReadsRequired ? false : IsSubquery();
+
+        TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, isInSubquery, ctx.Scoped));
         if (!inputTables->Init(ctx, Source_.Get())) {
             return false;
         }

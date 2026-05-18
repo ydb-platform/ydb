@@ -216,6 +216,39 @@ void InferStatisticsForKqpTable(
         alias = *aliases->begin();;
     }
 
+    // PRAGMA OptimizerHints: Rows(<label> # N) / Bytes(<label> # N) can override the
+    // base-table row count and byte size before they are propagated through the rest
+    // of the plan. The table is matched by its single-relation alias, short name or
+    // full path.
+    {
+        auto optHints = kqpCtx.GetOptimizerHints();
+        THashSet<TString> candidates;
+        if (!alias.empty()) {
+            candidates.insert(alias);
+        }
+        TString pathStr = path.StringValue();
+        candidates.insert(pathStr);
+        if (auto pos = pathStr.rfind('/'); pos != TString::npos && pos + 1 < pathStr.size()) {
+            candidates.insert(pathStr.substr(pos + 1));
+        }
+
+        auto applySingleLabelHint = [&](TCardinalityHints& hints, double& target) {
+            for (auto& h : hints.Hints) {
+                if (h.JoinLabels.size() == 1 && candidates.contains(h.JoinLabels[0])) {
+                    target = h.ApplyHint(target);
+                    break;
+                }
+            }
+        };
+
+        if (optHints.CardinalityHints) {
+            applySingleLabelHint(*optHints.CardinalityHints, stats->Nrows);
+        }
+        if (optHints.BytesHints) {
+            applySingleLabelHint(*optHints.BytesHints, stats->ByteSize);
+        }
+    }
+
     if (!tableData.Metadata->PartitionedByColumns.empty()) {
         TVector<TJoinColumn> shuffledByColumns;
         for (const auto& columnName: tableData.Metadata->PartitionedByColumns) {

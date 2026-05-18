@@ -98,7 +98,7 @@ void TBaseFixture::Init()
 
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
-         ui8 hostIndex,
+         THostIndex hostIndex,
          ui64 lsn,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
@@ -150,6 +150,26 @@ void TBaseFixture::Init()
         UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);
 
         return WritePromise.GetFuture();
+    };
+
+    DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
+        (ui32 vChunkIndex,
+         ui8 hostIndex,
+         ui64 lsn,
+         TBlockRange64 range,
+         const TGuardedSgList& guardedSglist,
+         const NWilson::TTraceId& traceId)
+    {
+        Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
+
+        UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
+        UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
+
+        TPromise<TDBGWriteBlocksResponse> response(
+            NewPromise<TDBGWriteBlocksResponse>());
+        response.SetValue({.Error = MakeError(S_OK)});
+
+        return response.GetFuture();
     };
 }
 

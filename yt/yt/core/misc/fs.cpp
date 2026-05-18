@@ -1005,7 +1005,6 @@ void Splice(
 TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
-    bool pipeIsSrc,
     const IInvokerPtr& ioInvoker,
     const NConcurrency::IPollerPtr& poller,
     i64 chunkSize)
@@ -1026,15 +1025,22 @@ TFuture<TSpliceResult> SpliceAsync(
         return flags & O_NONBLOCK;
     };
 
-    auto fdPipe = (pipeIsSrc ? src : dst).GetHandle();
-    YT_VERIFY(isPipe(fdPipe));
+    bool srcIsPipe = isPipe(src.GetHandle());
+    auto fdPipe = (srcIsPipe ? src : dst).GetHandle();
+    auto fdOther = (srcIsPipe ? dst : src).GetHandle();
 
-    auto fdOther = (pipeIsSrc ? dst : src).GetHandle();
+    // These syscalls don't do IO so we can afford to make them even in release builds. Sources:
+    // 1. For as long as the file is open, it keeps the dentry in use, which in turn means that the
+    //    VFS inode is still in use. (https://docs.kernel.org/filesystems/vfs.html#the-file-object)
+    // 2. The stat(2) operation is fairly simple: once the VFS has the dentry, it peeks at the inode
+    //    data and passes some of it back to userspace. (https://docs.kernel.org/filesystems/vfs.html#the-inode-object)
+    // 3. Each open file description has certain associated status flags, initialized by open(2) and
+    //    possibly modified by fcntl(2). (https://man7.org/linux/man-pages/man2/f_getfl.2const.html#DESCRIPTION)
+    YT_VERIFY(isPipe(dst.GetHandle()) != srcIsPipe);
     YT_VERIFY(!isNonblocking(fdOther));
-    YT_VERIFY(!isPipe(fdOther));
 
     auto control = NConcurrency::EPollControl::EdgeTriggered | (
-        pipeIsSrc
+        srcIsPipe
             ? NConcurrency::EPollControl::Read
             : NConcurrency::EPollControl::Write);
 
@@ -1099,7 +1105,7 @@ TFuture<TSpliceResult> SpliceAsync(
         }));
     }));
 #else
-    Y_UNUSED(src, dst, pipeIsSrc, ioInvoker, poller, chunkSize);
+    Y_UNUSED(src, dst, ioInvoker, poller, chunkSize);
     ThrowNotSupported();
 #endif
 }

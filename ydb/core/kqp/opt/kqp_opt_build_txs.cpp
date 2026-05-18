@@ -753,6 +753,7 @@ private:
                 
                 const auto sinkSettings = dqSink.Cast().Settings().Maybe<TKqpTableSinkSettings>();
                 if (!sinkSettings) {
+                    AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
                     /// ???
                     externalEffects.emplace_back(sinkEffect.Cast());
                 } else {
@@ -760,7 +761,11 @@ private:
 
                     const bool needSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
                         || sinkSettings.Cast().InconsistentWrite().Value() == "true"sv
-                        || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
+                        || (kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap)
+                        || kqpCtx.UsePessimisticLocks;
+
+                    // At current time Read Committed (pessimistic locks) support only one effect per query.
+                    AFL_ENSURE(!kqpCtx.UsePessimisticLocks || effectsInfos.empty());
 
                     if (needSingleEffect) {
                         const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
@@ -793,6 +798,7 @@ private:
                     }
                 }
             } else {
+                AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
                 // Table effects are executed all in one physical transaction.
                 auto it = std::find_if(
                     std::begin(effectsInfos),

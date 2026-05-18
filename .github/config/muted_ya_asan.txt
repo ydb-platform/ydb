@@ -219,6 +219,7 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPar
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Uuid
 ydb/core/transfer/ut/row_table unittest.sole chunk
+ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToPosting

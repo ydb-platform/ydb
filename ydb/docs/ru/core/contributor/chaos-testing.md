@@ -58,4 +58,28 @@
 
 ## Инструмент Nemesis
 
-Для проведения хаос-тестирования {{ ydb-short-name }} используется инструмент **Nemesis** — приложение для внесения сбоев, расположенный в `ydb/tests/stability/nemesis`. Он разворачивается непосредственно на узлах тестируемого кластера и управляет внесением сбоев по заданному расписанию.
+Для проведения хаос-тестирования {{ ydb-short-name }} используется инструмент **Nemesis** — приложение для внесения сбоев, расположенное в [репозитории YDB на GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stability/nemesis). Он разворачивается непосредственно на узлах тестируемого кластера и управляет внесением сбоев по заданному расписанию.
+
+### Установка
+
+Разверните Nemesis на кластере:
+
+```bash
+# Однофайловая конфигурация (cluster.yaml содержит и хосты, и шаблон базы данных)
+nemesis install --yaml-config-location /path/to/cluster.yaml
+
+# Двухфайловая конфигурация (отдельные cluster.yaml и databases.yaml)
+nemesis install \
+    --yaml-config-location /path/to/config.yaml \
+    --database-config-location /path/to/databases.yaml
+```
+
+Первый хост в конфигурации кластера становится оркестратором, остальные — агентами. Сервисы разворачиваются как systemd-юниты и запускаются автоматически.
+
+### Остановка сервисов
+
+Остановите все сервисы Nemesis на кластере:
+
+```bash
+nemesis stop --yaml-config-location /path/to/config.yaml
+```

@@ -58,4 +58,28 @@ Failures are injected automatically on a schedule, and check results are aggrega
 
 ## The Nemesis Tool
 
-{{ ydb-short-name }} uses the **Nemesis** tool for chaos testing — a fault injection application located at `ydb/tests/stability/nemesis`. It is deployed directly on the nodes of the cluster under test and manages fault injection according to a configured schedule.
+{{ ydb-short-name }} uses the **Nemesis** tool for chaos testing — a fault injection application located in the [YDB repository on GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/tests/stability/nemesis). It is deployed directly on the nodes of the cluster under test and manages fault injection according to a configured schedule.
+
+### Installation
+
+Deploy Nemesis to your cluster:
+
+```bash
+# Single-file config (cluster.yaml contains both hosts and database template)
+nemesis install --yaml-config-location /path/to/cluster.yaml
+
+# Two-file config (separate cluster.yaml and databases.yaml)
+nemesis install \
+    --yaml-config-location /path/to/config.yaml \
+    --database-config-location /path/to/databases.yaml
+```
+
+The first host in the cluster configuration becomes the orchestrator; all other hosts become agents. Services are deployed as systemd units and started automatically.
+
+### Stopping Services
+
+Stop all Nemesis services on the cluster:
+
+```bash
+nemesis stop --yaml-config-location /path/to/config.yaml
+```

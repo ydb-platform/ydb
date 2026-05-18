@@ -378,6 +378,16 @@ namespace TEvDataShard {
         EvBuildFulltextDictRequest,
         EvBuildFulltextDictResponse,
 
+<<<<<<< HEAD
+=======
+        EvValidateRowConditionRequest,
+        EvValidateRowConditionResponse,
+
+        EvIncrementalRestoreShardProgress,
+
+        EvIncrementalRestoreSrcCreateRequest,
+
+>>>>>>> a1c83e9cbc7 (Fix incremental restore to survive SchemeShard reboots and handle shard failures (#35663))
         EvEnd
     };
 
@@ -1542,6 +1552,25 @@ namespace TEvDataShard {
                           NKikimrTxDataShard::TEvBuildIndexProgressResponse,
                           TEvDataShard::EvBuildIndexProgressResponse>
     {
+    };
+
+    // Sent DS->SS once an incremental restore scan terminates.
+    struct TEvIncrementalRestoreShardProgress
+        : public TEventPB<TEvIncrementalRestoreShardProgress,
+                          NKikimrTxDataShard::TEvIncrementalRestoreShardProgress,
+                          TEvDataShard::EvIncrementalRestoreShardProgress>
+    {
+        TEvIncrementalRestoreShardProgress() = default;
+    };
+
+    // Sent SS->DS to invoke an incremental restore scan on a source DataShard.
+    // Reply arrives via TEvIncrementalRestoreShardProgress on the SS pipe.
+    struct TEvIncrementalRestoreSrcCreateRequest
+        : public TEventPB<TEvIncrementalRestoreSrcCreateRequest,
+                          NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest,
+                          TEvDataShard::EvIncrementalRestoreSrcCreateRequest>
+    {
+        TEvIncrementalRestoreSrcCreateRequest() = default;
     };
 
     struct TEvSampleKRequest

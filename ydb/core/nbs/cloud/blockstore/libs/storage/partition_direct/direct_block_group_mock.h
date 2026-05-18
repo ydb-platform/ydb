@@ -109,6 +109,8 @@ public:
 
     TVector<TVChunkWeakPtr> VChunks;
 
+    TDirectBlockGroupMock();
+
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;

@@ -1,5 +1,7 @@
 #include "direct_block_group_mock.h"
 
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
 using namespace NThreading;
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -35,6 +37,67 @@ EWriteMode TOracleMock::GetWriteMode() const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TDirectBlockGroupMock::TDirectBlockGroupMock()
+{
+    Executor = TExecutor::Create("NBS_TEST");
+    Executor->Start();
+
+    ScheduleHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set ScheduleHandler");
+    };
+    ReadBlocksFromDDiskHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set ReadBlocksFromDDiskHandler");
+        return NThreading::TFuture<TDBGReadBlocksResponse>();
+    };
+    ReadBlocksFromPBufferHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set ReadBlocksFromPBufferHandler");
+        return NThreading::TFuture<TDBGReadBlocksResponse>();
+    };
+    WriteBlocksToDDiskHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set WriteBlocksToDDiskHandler");
+        return NThreading::TFuture<TDBGWriteBlocksResponse>();
+    };
+    WriteBlocksToPBufferHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set WriteBlocksToPBufferHandler");
+        return NThreading::TFuture<TDBGWriteBlocksResponse>();
+    };
+    WriteBlocksToManyPBuffersHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set WriteBlocksToManyPBuffersHandler");
+        return NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>();
+    };
+    SyncWithPBufferHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set SyncWithPBufferHandler");
+        return NThreading::TFuture<TDBGFlushResponse>();
+    };
+    EraseFromPBufferHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set EraseFromPBufferHandler");
+        return NThreading::TFuture<TDBGEraseResponse>();
+    };
+    RestoreDBGPBuffersHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set RestoreDBGPBuffersHandler");
+        return NThreading::TFuture<TDBGRestoreResponse>();
+    };
+    ListPBuffersHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set ListPBuffersHandler");
+        return NThreading::TFuture<TListPBufferResponse>();
+    };
+    DumpHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set DumpHandler");
+        return NThreading::TFuture<TDBGDumpResponse>();
+    };
+}
 
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 {

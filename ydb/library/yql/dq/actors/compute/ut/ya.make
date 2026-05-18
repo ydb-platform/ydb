@@ -31,10 +31,7 @@ PEERDIR(
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/public/ydb_issue
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/no_llvm
     yql/essentials/minikql/computation
-    yql/essentials/minikql/invoke_builtins
     yql/essentials/providers/common/comp_nodes
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy

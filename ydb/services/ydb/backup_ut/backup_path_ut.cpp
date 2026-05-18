@@ -1,10 +1,12 @@
 #include "s3_backup_test_base.h"
 #include "fs_backup_test_base.h"
 
+#include <fmt/format.h>
 #include <util/random/random.h>
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/testlib/helpers.h>
 
 using namespace NYdb;
@@ -54,6 +56,10 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
 
     TString FilePrefixRaw() {
         return "/test_bucket/";
+    }
+
+    TString GetBucketLocation(const TStringBuf bucket) {
+        return TStringBuilder() << GetEnv("S3_ENDPOINT") << '/' << bucket << '/';
     }
 
     static TImportSettings::TItem MakeImportItem(const TString& dst, const TString& srcPath) {
@@ -480,17 +486,66 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
         });
     }
 
-    // {
-    //     auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
-    //     auto res = traits.Import(f, importSettings);
-    //     f.WaitOpSuccess(res);
+    {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/external_table0_data";
+        const TString bucket = "test_bucket/Prefix/RecursiveFolderProcessing/Table0";
+        const TString object = "data_00.parquet";
 
-    //     f.ValidateHasYdbPaths({
-    //         TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", isOlap),
-    //         TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", isOlap),
-    //         TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", isOlap),
-    //     });
-    // }
+        auto kikimr = NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner();
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{external_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="{object}",
+                FORMAT="json_each_row"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "external_table"_a = externalTableName,
+            "location"_a = traits.GetBucketLocation(bucket),
+            "object"_a = object
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_table}`
+            )", "external_table"_a=externalTableName);
+
+        auto db = kikimr->GetQueryClient();
+        auto executeQueryIterator = db.StreamExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        size_t currentRow = 0;
+        while (true) {
+            auto part = executeQueryIterator.ReadNext().ExtractValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (!part.HasResultSet()) {
+                continue;
+            }
+
+            auto result = part.GetResultSet();
+
+            TResultSetParser resultSet(result);
+            while (resultSet.TryNextRow()) {
+               ++currentRow;
+            }
+            UNIT_ASSERT_GE(currentRow, 1);
+        }
+    }
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>

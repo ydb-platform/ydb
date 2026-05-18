@@ -282,7 +282,7 @@ void TPartitionActor::Start(
             .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
             .VChunkSize = StorageConfig->GetVChunkSize(),
-            .VhostQueuesCount = 1};
+            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
             fastPathService,

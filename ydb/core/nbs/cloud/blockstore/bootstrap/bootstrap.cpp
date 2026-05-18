@@ -22,9 +22,11 @@ constexpr ui32 DefaultLogLevel = 5;
 
 TNbsServicePtr NbsService;
 
-NVhost::TServerConfig CreateDefaultVhostServerConfig()
+NVhost::TServerConfig CreateVhostServerConfig(
+    const TStorageConfig& storageConfig)
 {
     NVhost::TServerConfig result;
+    result.ThreadsCount = storageConfig.GetVhostThreadsCount();
     return result;
 }
 
@@ -56,7 +58,7 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
         VHostStats,
         NVhost::CreateVhostQueueFactory(),
         CreateDefaultDeviceHandlerFactory(),
-        CreateDefaultVhostServerConfig(),
+        CreateVhostServerConfig(*StorageConfig),
         VhostCallbacks);
 }
 

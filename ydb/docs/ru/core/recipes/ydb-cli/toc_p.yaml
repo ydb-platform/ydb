@@ -5,3 +5,5 @@ items:
   href: benchmarks.md
 - name: Настройка TTL таблиц
   href: ttl.md
+- name: Резервное копирование через NFS
+  href: nfs-backup.md

@@ -14,5 +14,6 @@
 - [Загрузка из S3-совместимого объектного хранилища `import s3`](../import-s3.md)
 - [Выгрузка в NFS `export nfs`](../export-nfs.md)
 - [Загрузка из NFS `import nfs`](../import-nfs.md)
+- [Резервное копирование через NFS (настройка кластера)](../../../../recipes/ydb-cli/nfs-backup.md)
 
 {% include [_includes/options_overlay.md](options_overlay.md) %}

@@ -29,7 +29,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneB
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
-ydb/core/kqp/ut/runtime KqpScanSpilling.HandleErrorsCorrectly
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/workload_service/ut DefaultPoolSettings.TestResourcePoolsSysViewFilters
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
@@ -77,7 +76,6 @@ ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
 ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
 ydb/core/transfer/ut/functional Transfer.WriteToNotExists
 ydb/core/transfer/ut/functional Transfer.WriteToNotTable
-ydb/core/tx/columnshard/ut_schema unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]

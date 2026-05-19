@@ -28,7 +28,7 @@ struct IBusServer
     /*
      *  \param config New config.
      */
-    virtual void OnDynamicConfigChanged(const NBus::NTcp::TBusServerDynamicConfigPtr& config) = 0;
+    virtual void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config) = 0;
 
     //! Asynchronously stops the listener.
     /*!

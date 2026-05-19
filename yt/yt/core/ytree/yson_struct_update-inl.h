@@ -381,7 +381,7 @@ NDetail::TFieldConfigurator<TValue>& TConfigurator<TStruct>::Field(const std::st
 
 template <CYsonStructDerived TStruct>
 template <class TValue>
-NDetail::TMapFieldConfigurator<TValue>& TConfigurator<TStruct>::MapField(const TString& name, TYsonStructField<TStruct, TValue> field)
+NDetail::TMapFieldConfigurator<TValue>& TConfigurator<TStruct>::MapField(const std::string& name, TYsonStructField<TStruct, TValue> field)
 {
     IYsonStructParameterPtr parameter;
 

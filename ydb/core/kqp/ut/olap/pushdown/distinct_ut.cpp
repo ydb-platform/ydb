@@ -518,6 +518,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
 
         const auto planRes = CollectStreamResult(res);
         const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
         UNIT_ASSERT_C(ast.find("ItemsLimit") == TString::npos, ast);
     }
 
@@ -544,7 +545,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         UNIT_ASSERT_C(ast.find("KqpOlapDistinct") == TString::npos, ast);
     }
 
-    // With aggregate pushdown enabled, standalone DISTINCT is not fused into KqpOlapDistinct (review: Issue 6).
+    // With aggregate pushdown enabled, standalone DISTINCT is not fused into KqpOlapDistinct.
     Y_UNIT_TEST(SimpleDistinct_WithAggPushdownAndForcePragma_NoOlapDistinctInPlan) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

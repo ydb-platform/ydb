@@ -1,5 +1,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
@@ -62,8 +63,16 @@ public:
     }
 };
 
-std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(const std::vector<i64>& timestamps, const std::vector<TString>& resourceIds, const TString& uidPrefix) {
+std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(
+    const std::vector<i64>& timestamps,
+    const std::vector<TString>& resourceIds,
+    const TString& uidPrefix,
+    const std::vector<std::optional<i32>>* levels = nullptr)
+{
     Y_ABORT_UNLESS(timestamps.size() == resourceIds.size());
+    if (levels) {
+        Y_ABORT_UNLESS(timestamps.size() == levels->size());
+    }
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{
         arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::MICRO), false),
         arrow::field("resource_id", arrow::utf8()),
@@ -86,68 +95,20 @@ std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(const std::vector<i64>& ti
         Y_ABORT_UNLESS(tsBuilder.Append(ts).ok());
         const TString& rid = resourceIds[i];
         Y_ABORT_UNLESS(resourceBuilder.Append(rid.data(), rid.size()).ok());
-        const TString uid = TStringBuilder() << uidPrefix << "_" << idx;
+        const TString uid = TStringBuilder() << uidPrefix << "_" << (levels ? i : idx);
         Y_ABORT_UNLESS(uidBuilder.Append(uid.data(), uid.size()).ok());
-        Y_ABORT_UNLESS(levelBuilder.Append((i32)(idx % 5)).ok());
-        Y_ABORT_UNLESS(msgBuilder.Append("m").ok());
-        Y_ABORT_UNLESS(ncolBuilder.Append(idx).ok());
-        ++idx;
-    }
-
-    std::shared_ptr<arrow::TimestampArray> a1;
-    std::shared_ptr<arrow::StringArray> a2;
-    std::shared_ptr<arrow::StringArray> a3;
-    std::shared_ptr<arrow::Int32Array> a4;
-    std::shared_ptr<arrow::StringArray> a5;
-    std::shared_ptr<arrow::UInt64Array> a6;
-
-    Y_ABORT_UNLESS(tsBuilder.Finish(&a1).ok());
-    Y_ABORT_UNLESS(resourceBuilder.Finish(&a2).ok());
-    Y_ABORT_UNLESS(uidBuilder.Finish(&a3).ok());
-    Y_ABORT_UNLESS(levelBuilder.Finish(&a4).ok());
-    Y_ABORT_UNLESS(msgBuilder.Finish(&a5).ok());
-    Y_ABORT_UNLESS(ncolBuilder.Finish(&a6).ok());
-
-    return arrow::RecordBatch::Make(schema, timestamps.size(), {a1, a2, a3, a4, a5, a6});
-}
-
-std::shared_ptr<arrow::RecordBatch> BuildBatchForRowsWithNullableLevel(
-    const std::vector<i64>& timestamps,
-    const std::vector<TString>& resourceIds,
-    const TString& uidPrefix,
-    const std::vector<std::optional<i32>>& levels)
-{
-    Y_ABORT_UNLESS(timestamps.size() == resourceIds.size());
-    Y_ABORT_UNLESS(timestamps.size() == levels.size());
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{
-        arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::MICRO), false),
-        arrow::field("resource_id", arrow::utf8()),
-        arrow::field("uid", arrow::utf8(), false),
-        arrow::field("level", arrow::int32()),
-        arrow::field("message", arrow::utf8()),
-        arrow::field("new_column1", arrow::uint64()),
-    });
-
-    arrow::TimestampBuilder tsBuilder(arrow::timestamp(arrow::TimeUnit::MICRO), arrow::default_memory_pool());
-    arrow::StringBuilder resourceBuilder;
-    arrow::StringBuilder uidBuilder;
-    arrow::Int32Builder levelBuilder;
-    arrow::StringBuilder msgBuilder;
-    arrow::UInt64Builder ncolBuilder;
-
-    for (ui64 i = 0; i < timestamps.size(); ++i) {
-        Y_ABORT_UNLESS(tsBuilder.Append(timestamps[i]).ok());
-        const TString& rid = resourceIds[i];
-        Y_ABORT_UNLESS(resourceBuilder.Append(rid.data(), rid.size()).ok());
-        const TString uid = TStringBuilder() << uidPrefix << "_" << i;
-        Y_ABORT_UNLESS(uidBuilder.Append(uid.data(), uid.size()).ok());
-        if (levels[i].has_value()) {
-            Y_ABORT_UNLESS(levelBuilder.Append(*levels[i]).ok());
+        if (levels) {
+            if ((*levels)[i].has_value()) {
+                Y_ABORT_UNLESS(levelBuilder.Append(*(*levels)[i]).ok());
+            } else {
+                Y_ABORT_UNLESS(levelBuilder.AppendNull().ok());
+            }
         } else {
-            Y_ABORT_UNLESS(levelBuilder.AppendNull().ok());
+            Y_ABORT_UNLESS(levelBuilder.Append((i32)(idx % 5)).ok());
         }
         Y_ABORT_UNLESS(msgBuilder.Append("m").ok());
-        Y_ABORT_UNLESS(ncolBuilder.Append(i).ok());
+        Y_ABORT_UNLESS(ncolBuilder.Append(levels ? i : idx).ok());
+        ++idx;
     }
 
     std::shared_ptr<arrow::TimestampArray> a1;
@@ -268,6 +229,18 @@ TCollectedStreamResult RunDistinctQuery(
     return RunDistinctScanQuery(
         tableClient, tablePath, enablePushdown, "resource_id", "resource_id", {}, {},
         std::optional<ui64>(sqlLimit), true, std::nullopt);
+}
+
+void AssertQueryPlanContains(
+    NYdb::NTable::TTableClient& tableClient,
+    const TString& query,
+    TStringBuf needle)
+{
+    auto res = StreamExplainQuery(query, tableClient);
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    const auto planRes = CollectStreamResult(res);
+    const TString ast = TString(planRes.QueryStats->Getquery_ast());
+    UNIT_ASSERT_C(ast.find(needle) != TString::npos, ast);
 }
 
 } // namespace
@@ -761,7 +734,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "empty result: forced vs plain");
     }
 
-    // Nullable DISTINCT key: NULL must count as a single distinct value (review: Issue 1).
+    // Nullable DISTINCT key: NULL must count as a single distinct value.
     Y_UNIT_TEST(OneShard_NullableLevel_DistinctOnOff_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -782,7 +755,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             }
         }
         TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem(
-            "/Root/olapStore/olapTable", BuildBatchForRowsWithNullableLevel(ts, rids, "u", levels));
+            "/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u", &levels));
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 10;
@@ -805,7 +778,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             "nullable level DISTINCT: pushdown on/off must match (NULL is one distinct value)");
     }
 
-    // ORDER BY + LIMIT with force distinct only (no force limit pragma): ordered results must match (review: Issue 2).
+    // ORDER BY + LIMIT with force distinct only (no force limit pragma): ordered results must match.
     Y_UNIT_TEST(OneShard_OrderByLimit_ForceDistinctOnly_OnOff_SameOrderedResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -818,9 +791,13 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kLimit = 7;
-        auto resOff = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", {},
+        const TString tablePath = "/Root/olapStore/olapTable";
+        AssertQueryPlanContains(tableClient,
+            BuildDistinctScanQueryText(tablePath, true, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit, false),
+            "KqpOlapDistinct");
+        auto resOff = RunDistinctScanQuery(tableClient, tablePath, false, "resource_id", "resource_id", {},
             "ORDER BY resource_id", kLimit, false);
-        auto resOn = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", true, "resource_id", "resource_id", {},
+        auto resOn = RunDistinctScanQuery(tableClient, tablePath, true, "resource_id", "resource_id", {},
             "ORDER BY resource_id", kLimit, false);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
@@ -851,7 +828,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             "DISTINCT timestamp: pushdown on/off must match");
     }
 
-    // Several ingestion batches (multiple portions); only 10 distinct resource_id values total (review: Issue 5).
+    // Several ingestion batches (multiple portions); only 10 distinct resource_id values total.
     Y_UNIT_TEST(MultiInsert_DistinctOnOff_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -886,7 +863,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             "multi-insert DISTINCT (10 uniques): pushdown on/off must match");
     }
 
-    // Both aggregate and force-distinct pragmas: results must still match (review: Issue 6).
+    // Both aggregate and force-distinct pragmas: results must still match.
     Y_UNIT_TEST(SimpleDistinct_WithAggPushdownAndForcePragma_OnOff_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

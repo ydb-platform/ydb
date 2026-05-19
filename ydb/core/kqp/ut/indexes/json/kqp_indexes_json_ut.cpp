@@ -1959,6 +1959,30 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, where, empty, "LIMIT 10 OFFSET 5");
             ValidatePredicate(db, where, empty, "LIMIT 100000 OFFSET 5");
             ValidatePredicate(db, where, empty, "LIMIT -1 OFFSET 5");
+
+            {
+                ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') LIMIT 5)", {"\3k1"});
+
+                const std::string query = R"(
+                    SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.k1') LIMIT 5;
+                )";
+
+                auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
+            }
+
+            {
+                ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') LIMIT 5 OFFSET 3)", {"\3k1"});
+
+                const std::string query = R"(
+                    SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.k1') LIMIT 5 OFFSET 3;
+                )";
+
+                auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
+            }
         });
     }
 
@@ -1982,6 +2006,30 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, where, empty, "ORDER BY Key DESC LIMIT 5");
             ValidatePredicate(db, where, empty, "ORDER BY Key ASC LIMIT 5 OFFSET 3");
             ValidatePredicate(db, where, empty, "ORDER BY Key DESC LIMIT 5 OFFSET 3");
+
+            {
+                ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') ORDER BY Data LIMIT 5)", {"\3k1"});
+
+                const std::string query = R"(
+                    SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.k1') ORDER BY Data LIMIT 5;
+                )";
+
+                auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
+            }
+
+            {
+                ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') ORDER BY Data LIMIT 5 OFFSET 3)", {"\3k1"});
+
+                const std::string query = R"(
+                    SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.k1') ORDER BY Data LIMIT 5 OFFSET 3;
+                )";
+
+                auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
+            }
         });
     }
 }

@@ -288,4 +288,5 @@ message TFeatureFlags {
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
+    optional bool DisableOnlineRO = 263 [default = false];
 }

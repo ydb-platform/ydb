@@ -193,8 +193,8 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
     bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber <
                       QuorumDirectBlockGroupHostCount;
 
-    // We are relying on IC layer - sometime reply will be ready and
-    // there will be no always hanging requests.
+    // We are relying on the IC layer: a reply will eventually arrive,
+    // and requests will not hang forever.
     if (!needToSend) {
         return;
     }

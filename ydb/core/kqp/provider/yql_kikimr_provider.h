@@ -8,11 +8,13 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/library/actors/core/actor.h>
+
 #include <yql/essentials/ast/yql_gc_nodes.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
-#include <ydb/library/actors/core/actor.h>
 #include <library/cpp/cache/cache.h>
 
 #include <util/generic/flags.h>
@@ -25,7 +27,7 @@ namespace NGRpcService {
 class IRequestCtxMtSafe;
 
 }
-}
+} // namespace NKikimr
 
 namespace NYql {
 
@@ -567,6 +569,14 @@ public:
         return UserRequestContext;
     }
 
+    void SetInternalTypeAnnTransformer(THolder<TVisitorTransformerBase>&& transformer) {
+        InternalTypeAnnTransformer = std::move(transformer);
+    }
+
+    TVisitorTransformerBase* GetInternalTypeAnnTransformer() {
+        return InternalTypeAnnTransformer.Get();
+    }
+
 private:
     TString UserName;
     TString Cluster;
@@ -579,6 +589,7 @@ private:
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TIntrusivePtr<NKikimr::NKqp::TUserRequestContext> UserRequestContext;
+    THolder<TVisitorTransformerBase> InternalTypeAnnTransformer;
 };
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
@@ -605,4 +616,4 @@ namespace NSQLTranslation {
 void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationSettings& serializedSettings);
 void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, TTranslationSettings& settings);
 
-}
+} // namespace NSQLTranslation

@@ -9,9 +9,12 @@
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 
+namespace NKikimr::NKqp {
+
+namespace {
+
 using namespace NYql;
 using namespace NYql::NNodes;
-using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 TVector<TDqPhyStage> TopSortStages(const TDqPhyStageList& stages) {
@@ -163,16 +166,13 @@ TAutoPtr<IGraphTransformer> CreateKqpTxHashFuncPropagateTransformer(const TKikim
 class TKqpTxsHashFuncPropagateTransformer : public TSyncTransformerBase {
 public:
     TKqpTxsHashFuncPropagateTransformer(
-        TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
         TTypeAnnotationContext& typesCtx,
         const TKikimrConfiguration::TPtr& config
-    )
-        : TypeAnnTransformer(std::move(typeAnnTransformer))
-    {
+    ) {
         TxTransformer =
             TTransformationPipeline(&typesCtx)
                 .AddServiceTransformers()
-                .Add(*TypeAnnTransformer, "TypeAnnotation")
+                .AddTypeAnnotationTransformer()
                 .AddPostTypeAnnotation(/* forSubgraph */ true)
                 .Add(CreateKqpTxHashFuncPropagateTransformer(config), "Peephole")
             .Build(false);
@@ -233,14 +233,13 @@ private:
     }
 
     TAutoPtr<IGraphTransformer> TxTransformer;
-    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
     bool ShuffleEliminationEnabled = false;
 };
 
-TAutoPtr<IGraphTransformer>  NKikimr::NKqp::CreateKqpTxsHashFuncPropagateTransformer(
-    TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
-    TTypeAnnotationContext& typesCtx,
-    const TKikimrConfiguration::TPtr& config
-) {
-    return THolder<IGraphTransformer>(new TKqpTxsHashFuncPropagateTransformer(typeAnnTransformer, typesCtx, config));
+} // anonymous namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpTxsHashFuncPropagateTransformer(TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config) {
+    return THolder<IGraphTransformer>(new TKqpTxsHashFuncPropagateTransformer(typesCtx, config));
 }
+
+} // namespace NKikimr::NKqp

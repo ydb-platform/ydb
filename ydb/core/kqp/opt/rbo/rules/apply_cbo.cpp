@@ -15,6 +15,7 @@
 #include <bitset>
 #include <limits>
 #include <optional>
+#include <algorithm>
 
 namespace NKikimr::NKqp {
 
@@ -221,6 +222,24 @@ TInfoUnitSet BuildOutputIUSet(const TIntrusivePtr<IOperator>& input) {
     return result;
 }
 
+bool SameLineageSource(const TColumnLineageEntry& lhs, const TColumnLineageEntry& rhs) {
+    return lhs.SourceAlias == rhs.SourceAlias
+        && lhs.TableName == rhs.TableName
+        && lhs.ColumnName == rhs.ColumnName
+        && lhs.DuplicateNo == rhs.DuplicateNo;
+}
+
+TString FormatInfoUnitCandidates(const TVector<TInfoUnit>& candidates) {
+    TStringBuilder result;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (i) {
+            result << ", ";
+        }
+        result << candidates[i].GetFullName();
+    }
+    return result;
+}
+
 TInfoUnit ConvertJoinColumn(const TJoinColumn& column, const TColumnLineage& lineage, const TInfoUnitSet& visibleColumns) {
     const auto original = TInfoUnit(column.RelName, column.AttributeName);
     if (visibleColumns.contains(original)) {
@@ -233,7 +252,8 @@ TInfoUnit ConvertJoinColumn(const TJoinColumn& column, const TColumnLineage& lin
         return it->second;
     }
 
-    std::optional<TInfoUnit> resolved;
+    TVector<TInfoUnit> candidates;
+    std::optional<TColumnLineageEntry> resolvedLineage;
     for (const auto& [unit, entry] : lineage.Mapping) {
         const bool matchesLineageColumn =
             entry.ColumnName == column.AttributeName &&
@@ -246,12 +266,27 @@ TInfoUnit ConvertJoinColumn(const TJoinColumn& column, const TColumnLineage& lin
             continue;
         }
 
-        Y_ENSURE(!resolved || *resolved == unit, "Ambiguous CBO column mapping for NEW RBO input");
-        resolved = unit;
+        if (!resolvedLineage) {
+            resolvedLineage = entry;
+        } else {
+            Y_ENSURE(
+                SameLineageSource(*resolvedLineage, entry),
+                TStringBuilder() << "Ambiguous CBO column mapping for NEW RBO input "
+                    << column.RelName << "." << column.AttributeName
+                    << "; candidates: " << FormatInfoUnitCandidates(candidates)
+                    << ", " << unit.GetFullName());
+        }
+        candidates.push_back(unit);
     }
 
-    Y_ENSURE(resolved, "Could not map CBO column back to NEW RBO input");
-    return *resolved;
+    Y_ENSURE(
+        !candidates.empty(),
+        TStringBuilder() << "Could not map CBO column " << column.RelName << "." << column.AttributeName
+            << " back to NEW RBO input");
+    std::sort(candidates.begin(), candidates.end(), [](const TInfoUnit& lhs, const TInfoUnit& rhs) {
+        return lhs.GetFullName() < rhs.GetFullName();
+    });
+    return candidates.front();
 }
 
 TVector<TInfoUnit> ConvertJoinColumns(const TVector<TJoinColumn>& columns, const TColumnLineage& lineage, const TInfoUnitSet& visibleColumns) {

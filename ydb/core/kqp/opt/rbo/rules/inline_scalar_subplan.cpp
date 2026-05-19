@@ -1,5 +1,21 @@
 #include "kqp_rules_include.h"
 
+namespace {
+using namespace NKikimr;
+using namespace NKikimr::NKqp;
+
+void RenameSubtreeIUs(
+    const TIntrusivePtr<IOperator>& root,
+    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap,
+    TExprContext& ctx)
+{
+    for (auto it = TOpIterator(root, nullptr); it != TOpIterator(nullptr); ++it) {
+        (*it).Current->RenameIUs(renameMap, ctx);
+    }
+}
+
+} // namespace
+
 namespace NKikimr {
 namespace NKqp {
     
@@ -42,12 +58,9 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         TVector<TExpression> joinFilters;
-
-        TVector<TMapElement> mappings;
-        mappings.push_back(TMapElement(subplanResIU, subplanResIU, filter->Pos, &ctx.ExprCtx, &props));
+        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> subplanKeyRenames;
 
         auto leftIUs = child->GetOutputIUs();
-        bool conflictsWithLeft = false;
 
         auto conjuncts = filter->FilterExpr.SplitConjunct();
 
@@ -68,19 +81,21 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
             }
 
             if (std::find(leftIUs.begin(), leftIUs.end(), rightKey) != leftIUs.end()) {
-                auto newKey = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
-                mappings.push_back(TMapElement(newKey, rightKey, filter->Pos, &ctx.ExprCtx, &props));
-                rightKey = newKey;
-                conflictsWithLeft = true;
-            } else {
-                mappings.push_back(TMapElement(rightKey, rightKey, filter->Pos, &ctx.ExprCtx, &props));
+                const auto renameIt = subplanKeyRenames.find(rightKey);
+                if (renameIt != subplanKeyRenames.end()) {
+                    rightKey = renameIt->second;
+                } else {
+                    auto newKey = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
+                    subplanKeyRenames.emplace(rightKey, newKey);
+                    rightKey = newKey;
+                }
             }
 
             joinKeys.push_back(std::make_pair(leftKey, rightKey));
         }
 
-        if (conflictsWithLeft) {
-            uncorrSubplan = MakeIntrusive<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings);
+        if (!subplanKeyRenames.empty()) {
+            RenameSubtreeIUs(uncorrSubplan, subplanKeyRenames, ctx.ExprCtx);
         }
 
         auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);

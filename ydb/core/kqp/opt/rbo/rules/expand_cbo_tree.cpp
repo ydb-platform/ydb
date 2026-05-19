@@ -40,6 +40,17 @@ TIntrusivePtr<TOpFilter> FuseFilters(const TIntrusivePtr<TOpFilter>& top, const 
     return MakeIntrusive<TOpFilter>(bottom->GetInput(), top->Pos, MakeConjunction(conjuncts, pgSyntax));
 }
 
+bool CanMergeJoinIntoCBOTree(const TIntrusivePtr<TOpJoin>& join) {
+    if (!join->JoinFilters.empty()) {
+        return false;
+    }
+
+    // RBO does not yet pass non-reorderable boundary information into the CBO
+    // tree. Keep outer/semi joins as boundaries and optimize inner/cross join
+    // islands on each side independently.
+    return join->JoinKind == "Inner" || join->JoinKind == "Cross";
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -62,6 +73,10 @@ TIntrusivePtr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const TIntrusiv
 
     if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
+        if (!CanMergeJoinIntoCBOTree(join)) {
+            return input;
+        }
+
         auto leftInput = join->GetLeftInput();
         auto rightInput = join->GetRightInput();
 
@@ -102,7 +117,9 @@ TIntrusivePtr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const TIntrusiv
         auto otherSide = leftSideCBOTree ? join->GetRightInput() : join->GetLeftInput();
         TIntrusivePtr<TOpCBOTree> otherSideCBOTree;
 
-        if (otherSide->Kind == EOperator::Filter &&
+        if (otherSide->Kind == EOperator::CBOTree) {
+            otherSideCBOTree = CastOperator<TOpCBOTree>(otherSide);
+        } else if (otherSide->Kind == EOperator::Filter &&
                 CastOperator<TOpFilter>(otherSide)->GetInput()->Kind == EOperator::CBOTree &&
                 join->JoinKind == "Inner") {
 

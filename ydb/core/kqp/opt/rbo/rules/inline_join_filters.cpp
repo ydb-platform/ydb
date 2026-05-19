@@ -85,8 +85,8 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
-    // In case of inner join, we push the join filters above the join
-    if (join->JoinKind == "Inner") {
+    // In case of inner or cross join, we push the join filters above the join
+    if (join->JoinKind == "Inner" || join->JoinKind == "Cross") {
         auto filterExpr = MakeConjunction(join->JoinFilters);
         auto newFilter = MakeIntrusive<TOpFilter>(join, input->Pos, filterExpr);
 

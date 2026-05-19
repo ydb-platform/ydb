@@ -777,7 +777,9 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 
     if (JoinFilters.size()) {
-        Y_ENSURE(false, "Join filters unsupported at this stage");
+        for (auto& filter : JoinFilters) {
+            filter = filter.ApplyRenames(renameMap);
+        }
     }
 }
 

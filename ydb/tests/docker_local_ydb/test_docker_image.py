@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 
@@ -56,16 +57,26 @@ def test_docker_image_starts_healthy():
     container = None
 
     try:
-        image, _ = client.images.build(
-            path=ctx,
-            dockerfile="main/.github/docker/Dockerfile",
-            tag=image_tag,
-            buildargs={"BUILD_MODE": "prebuilt"},
-            rm=True,
+        # docker-py uses the classic (non-BuildKit) /build endpoint, which
+        # validates COPY paths in every stage of the Dockerfile — including
+        # the unused `builder-full` stage that references `ydbd/`, `cli/` and
+        # `local_ydb/` from the context. BuildKit lazily skips unused stages,
+        # so we shell out to `docker build` with DOCKER_BUILDKIT=1.
+        subprocess.run(
+            [
+                "docker", "build",
+                "--build-arg", "BUILD_MODE=prebuilt",
+                "-f", "main/.github/docker/Dockerfile",
+                "-t", image_tag,
+                ".",
+            ],
+            cwd=ctx,
+            env={**os.environ, "DOCKER_BUILDKIT": "1"},
+            check=True,
         )
 
         container = client.containers.run(
-            image=image.id,
+            image=image_tag,
             name=container_name,
             detach=True,
         )

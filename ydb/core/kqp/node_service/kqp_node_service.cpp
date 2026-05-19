@@ -75,7 +75,7 @@ public:
     }
 
     void Bootstrap() {
-        STLOG_I("Starting KQP Node service",
+        STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Starting KQP Node service",
             (node_id, SelfId().NodeId()));
 
         State_ = std::make_shared<TNodeState>();
@@ -131,7 +131,7 @@ private:
             IgnoreFunc(NConsole::TEvConsole::TEvConfigNotificationRequest);
 
             default: {
-                STLOG_W("Ignoring unexpected event 0x%x (" << ev->GetTypeName()
+                STLOG(PRI_WARN, NKikimrServices::KQP_NODE, KQPNS, "Ignoring unexpected event 0x%x (" << ev->GetTypeName()
                     << ") during graceful shutdown",
                     (node_id, SelfId().NodeId()),
                     (sender, ev->Sender));
@@ -168,7 +168,7 @@ private:
         const auto executerId = ev->Sender;
         auto& reason = ev->Get()->Record.GetReason();
 
-        STLOG_W("Terminate transaction",
+        STLOG(PRI_WARN, NKikimrServices::KQP_NODE, KQPNS, "Terminate transaction",
             (node_id, SelfId().NodeId()),
             (tx_id, txId),
             (reason, reason));
@@ -181,7 +181,7 @@ private:
         State_->MarkRequestAsCancelled(executerId);
 
         if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
-            STLOG_E("Node service cancelled the task, because it " << reason,
+            STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Node service cancelled the task, because it " << reason,
                 (node_id, SelfId().NodeId()),
                 (tx_id, txId));
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
@@ -201,11 +201,11 @@ private:
 
     void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
         if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
-            STLOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request",
+            STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request",
                 (node_id, SelfId().NodeId()));
             return;
         }
-        STLOG_I("Prepare to shutdown: do not accept any messages from this time",
+        STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Prepare to shutdown: do not accept any messages from this time",
             (node_id, SelfId().NodeId()));
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);
@@ -216,12 +216,12 @@ private:
         // continue to process tasks that are already started before shutdown
         auto& msg = ev->Get()->Record;
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
-            STLOG_D("Accepting local StartRequest during shutdown",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Accepting local StartRequest during shutdown",
                 (node_id, SelfId().NodeId()),
                 (tx_id, msg.GetTxId()));
             HandleWork(ev);
         } else if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
-            STLOG_D("Rejecting remote StartRequest in ShuttingDown State",
+            STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Rejecting remote StartRequest in ShuttingDown State",
                 (node_id, SelfId().NodeId()),
                 (tx_id, msg.GetTxId()));
             ReplyError(ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
@@ -257,7 +257,7 @@ private:
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        STLOG_D("Subscribed for config changes");
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Subscribed for config changes");
     }
 
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -282,7 +282,7 @@ private:
             CaFactory_->ApplyConfig(Config);
             CaFactory_->AccountDefaultPoolInScheduler.store(event.GetConfig().GetTableServiceConfig().GetComputeSchedulerSettings().GetAccountDefaultPool());
 
-            STLOG_I("Updated table service RM config",
+            STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, "Updated table service RM config",
                 (node_id, SelfId().NodeId()),
                 (config, Config.DebugString()));
         }
@@ -356,17 +356,17 @@ private:
             }
 
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                STLOG_C("Failed to deliver subscription request to config dispatcher",
+                STLOG(PRI_CRIT, NKikimrServices::KQP_NODE, KQPNS, "Failed to deliver subscription request to config dispatcher",
                     (node_id, SelfId().NodeId()));
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                STLOG_E("Failed to deliver config notification response",
+                STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Failed to deliver config notification response",
                     (node_id, SelfId().NodeId()));
                 break;
 
             default:
-                STLOG_E("Undelivered event with unexpected source type",
+                STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Undelivered event with unexpected source type",
                     (node_id, SelfId().NodeId()),
                     (source_type, ev->Get()->SourceType));
                 break;

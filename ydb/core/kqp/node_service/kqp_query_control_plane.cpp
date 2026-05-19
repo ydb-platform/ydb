@@ -232,7 +232,7 @@ public:
         ui32 lockNodeId = msg.GetLockNodeId();
         TMaybe<NKikimrDataEvents::ELockMode> lockMode = msg.HasLockMode() ? TMaybe<NKikimrDataEvents::ELockMode>(msg.GetLockMode()) : Nothing();
 
-        STLOG_D("HandleStartKqpTasksRequest",
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "HandleStartKqpTasksRequest",
             (node_id, SelfId().NodeId()),
             (tx_id, txId),
             (requester, executerId),
@@ -286,7 +286,7 @@ public:
                 ev->Cookie, "Request was cancelled");
         }
 
-        STLOG_D(((tasks.size() == taskCount) ? "Created new request" : "Added tasks to existing request"),
+        STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, ((tasks.size() == taskCount) ? "Created new request" : "Added tasks to existing request"),
                 (node_id, SelfId().NodeId()),
                 (tx_id, txId),
                 (tasks_count, tasks.size()),
@@ -331,7 +331,7 @@ public:
             State_->MarkRequestAsCancelled(executerId);
 
             if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
-                STLOG_E("Node service unable to allocate " << tasksCount << " tasks, reason: " << rmResult.GetFailReason(),
+                STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, "Node service unable to allocate " << tasksCount << " tasks, reason: " << rmResult.GetFailReason(),
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId));
                 for (const auto& [taskId, computeActorId]: tasksToAbort) {
@@ -390,14 +390,14 @@ public:
             startedTask->SetTaskId(taskId);
             ActorIdToProto(actorId, startedTask->MutableActorId());
             if (State_->OnTaskStarted(executerId, taskId, actorId)) {
-                STLOG_D("Executing task",
+                STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Executing task",
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId),
                     (task_id, taskId),
                     (compute_actor_id, actorId),
                     (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             } else {
-                STLOG_D("Task finished in an instant",
+                STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, "Task finished in an instant",
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId),
                     (task_id, taskId),

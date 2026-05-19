@@ -12,7 +12,7 @@
 #include <mutex>
 
 inline std::string GetMillisecondsStr(const TDuration& d) {
-    return TStringBuilder() << d.MilliSeconds() << '.' << Sprintf("%03" PRIu64, d.MicroSeconds() % 1000);
+    return TStringBuilder() << d.MilliSeconds() << Sprintf("%03" PRIu64, d.MicroSeconds() % 1000);
 }
 
 inline double GetMillisecondsDouble(const TDuration& d) {

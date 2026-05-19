@@ -80,7 +80,7 @@ TTabletTypes::EType TTabletInfo::GetTabletType() const {
 TString TTabletInfo::ToString() const {
     const TLeaderTabletInfo& leader = GetLeader();
     TStringBuilder str;
-    str << TTabletTypes::TypeToStr(leader.Type) << '.' << leader.Id << '.' << ETabletRoleName(TabletRole);
+    str << TTabletTypes::TypeToStr(leader.Type) << leader.Id << '.' << ETabletRoleName(TabletRole);
     if (IsFollower()) {
         const TFollowerTabletInfo& follower(AsFollower());
         str << '.' << follower.Id;

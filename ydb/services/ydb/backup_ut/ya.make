@@ -19,7 +19,6 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/fmt
     library/cpp/streams/zstd
     ydb/core/kqp/ut/federated_query/common
     ydb/core/testlib/pg
@@ -43,5 +42,7 @@ YQL_LAST_ABI_VERSION()
 IF (OS_LINUX)
     LDFLAGS(-Wl,--wrap=statfs)
 ENDIF()
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 END()

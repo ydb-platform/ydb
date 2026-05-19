@@ -1,13 +1,17 @@
 #include "s3_backup_test_base.h"
 #include "fs_backup_test_base.h"
 
-#include <fmt/format.h>
 #include <util/random/random.h>
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+// #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
+
+#include <fmt/format.h>
 
 using namespace NYdb;
 
@@ -15,6 +19,8 @@ using TBackupPathTestFixture = TS3BackupTestFixture;
 using TBackupPathTestFixtureFs = TFsBackupTestFixture;
 
 namespace {
+
+using namespace fmt::literals;
 
 template <typename TExportSettings>
 struct TBackupTraits;
@@ -439,15 +445,16 @@ void ExportWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
-void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
+void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {    
     Y_UNUSED(isOlap);
     
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableParquetForS3Export(true);
 
+    auto exportSettings = traits.MakeExportParquetSettings(f, "");
+
     {
-        auto exportSettings = traits.MakeExportParquetSettings(f, "");
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
 
@@ -487,12 +494,17 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
     }
 
     {
+        // std::cerr << "[Diseaz] Test Parquet Reading" << std::endl;
+
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/external_table0_data";
-        const TString bucket = "test_bucket/Prefix/RecursiveFolderProcessing/Table0";
-        const TString object = "data_00.parquet";
+        const TString bucket = "test_bucket";
+        const TString object = "Prefix/RecursiveFolderProcessing/Table0/data_00.parquet";
 
-        auto kikimr = NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner();
+        auto kikimr = NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory(), NKikimr::NKqp::NFederatedQueryTest::TKikimrRunnerOptions{});
+
+        auto bucketUrl = TString(TStringBuilder() << exportSettings.Endpoint_ << "/" << exportSettings.Bucket_);
+        // std::cerr << "[Diseaz] BucketUrl: " << bucketUrl << std::endl;
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -503,18 +515,19 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
                 AUTH_METHOD="NONE"
             );
             CREATE EXTERNAL TABLE `{external_table}` (
-                key Utf8 NOT NULL,
-                value Utf8 NOT NULL
+                key Uint32 NOT NULL,
+                value String NOT NULL
             ) WITH (
                 DATA_SOURCE="{external_source}",
                 LOCATION="{object}",
-                FORMAT="json_each_row"
+                FORMAT="parquet"
             );)",
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
-            "location"_a = traits.GetBucketLocation(bucket),
+            "location"_a = bucketUrl,
             "object"_a = object
             );
+        // std::cerr << "[Diseaz] Query: " << query << std::endl;
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -523,21 +536,27 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
             )", "external_table"_a=externalTableName);
 
         auto db = kikimr->GetQueryClient();
-        auto executeQueryIterator = db.StreamExecuteQuery(sql, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto executeQueryIterator = db.StreamExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        // std::cerr << "[Diseaz] Got iterator for SQL: " << sql << std::endl;
 
         size_t currentRow = 0;
         while (true) {
+            // std::cerr << "[Diseaz] Reading next part" << std::endl;
             auto part = executeQueryIterator.ReadNext().ExtractValueSync();
             if (!part.IsSuccess()) {
+                // std::cerr << "[Diseaz] Got error: " << part.GetIssues().ToString() << std::endl;
                 UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
                 break;
             }
 
             if (!part.HasResultSet()) {
+                // std::cerr << "[Diseaz] No result set" << std::endl;
                 continue;
             }
 
             auto result = part.GetResultSet();
+
+            // std::cerr << "[Diseaz] Got " << result.RowsCount() << " rows" << std::endl;
 
             TResultSetParser resultSet(result);
             while (resultSet.TryNextRow()) {
@@ -545,6 +564,7 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
             }
             UNIT_ASSERT_GE(currentRow, 1);
         }
+        // std::cerr << "[Diseaz] Finally got " << currentRow << " rows" << std::endl;
     }
 }
 

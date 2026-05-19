@@ -3009,6 +3009,10 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+  {% endlist %}
+
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

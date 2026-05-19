@@ -534,12 +534,7 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
         count++;
     }
-    
-    if (SchemeTx->HasCreateIncrementalRestoreSrc()) {
-        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
-        count++;
-    }
-    
+
     if (SchemeTx->HasCreateIncrementalBackupSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
         count++;
@@ -937,7 +932,6 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::AlterCdcStream);
         plan.push_back(EExecutionUnitKind::DropCdcStream);
         plan.push_back(EExecutionUnitKind::RotateCdcStream);
-        plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
         plan.push_back(EExecutionUnitKind::Truncate);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);

@@ -653,7 +653,8 @@ private:
         state = ctx.HolderFactory.Create<TState<Sort>>(count, directions, Directions.size(), TMyValueCompare(Keys), Indexes);
 #else
         state = ctx.HolderFactory.Create<TState<Sort>>(count, directions, Directions.size(), ctx.ExecuteLLVM && Compare ? TCompareFunc(Compare) : TCompareFunc(TMyValueCompare(Keys)), Indexes);
-#endif    }
+#endif
+    }
 
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOn(Flow)) {

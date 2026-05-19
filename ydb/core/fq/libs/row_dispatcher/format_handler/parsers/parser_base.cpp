@@ -114,14 +114,19 @@ void TTopicParserBase::ParseBuffer() {
 //// Functions
 
 NYql::NUdf::TUnboxedValue LockObject(NYql::NUdf::TUnboxedValue&& value) {
-    // All UnboxedValue's with type Boxed or String should be locked
-    // because after parsing they will be used under another MKQL allocator in purecalc filters
-    NKikimr::NMiniKQL::TlsAllocState->LockObject(value);
-    return value;
+    // Object must be one of:
+    // 1) null (refs = -1)
+    // 2) embedded string (refs = -1)
+    // 3) large string (refs = 1)
+    // 4) (struct | tuple | list) as boxed -> direct array holder
+    // Zero-length direct array holder points to special shared zero-length container
+    Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
+    return std::move(value);
 }
 
 void ClearObject(NYql::NUdf::TUnboxedValue& value) {
-    NKikimr::NMiniKQL::TlsAllocState->UnlockObject(value);
+    // Every other reference to value must be cleared (except for special case - zero-length list)
+    Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
     value.Clear();
 }
 

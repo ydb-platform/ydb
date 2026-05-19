@@ -177,6 +177,7 @@ TString BuildDistinctScanQueryText(
         PRAGMA Kikimr.OptForceOlapPushdownDistinct = ")" << forceDistinctColumn << R"(";
     )";
         if (withForceDistinctLimitPragma && (forceDistinctLimitValue.has_value() || sqlLimit.has_value())) {
+            // Pragma limit defaults to sqlLimit when forceDistinctLimitValue is omitted (typical E2E case).
             const ui64 pragmaLimit = forceDistinctLimitValue.has_value() ? *forceDistinctLimitValue : *sqlLimit;
             q << R"(
         PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = ")" << pragmaLimit << R"(";
@@ -236,6 +237,7 @@ void AssertQueryPlanContains(
     auto res = StreamExplainQuery(query, tableClient);
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     const auto planRes = CollectStreamResult(res);
+    UNIT_ASSERT(planRes.QueryStats.Defined());
     const TString ast = TString(planRes.QueryStats->Getquery_ast());
     UNIT_ASSERT_C(ast.find(needle) != TString::npos, ast);
 }
@@ -772,7 +774,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "nullable level DISTINCT: pushdown on/off must match (NULL is one distinct value)");
+            "nullable level DISTINCT: force distinct on/off must match (NULL is one distinct value)");
     }
 
     // ORDER BY + LIMIT with force distinct only (no force limit pragma): ordered results must match.
@@ -800,7 +802,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
         CompareYson(resOff.ResultSetYson, resOn.ResultSetYson,
-            "ORDER BY + LIMIT without force limit pragma: row order must match with pushdown on/off");
+            "ORDER BY + LIMIT without force limit pragma: row order must match with force distinct on/off");
     }
 
     // Non-string DISTINCT key column (Timestamp).
@@ -830,7 +832,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "DISTINCT timestamp: pushdown on/off must match");
+            "DISTINCT timestamp: force distinct on/off must match");
     }
 
     // Several ingestion batches (multiple portions); only 10 distinct resource_id values total.
@@ -865,10 +867,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "multi-insert DISTINCT (10 uniques): pushdown on/off must match");
+            "multi-insert DISTINCT (10 uniques): force distinct on/off must match");
     }
 
-    // Both aggregate and force-distinct pragmas: results must still match.
+    // Aggregate pushdown wins over force-distinct (no KqpOlapDistinct in plan); both arms share the
+    // same execution path. Checks result compatibility when agg + force pragmas are combined.
     Y_UNIT_TEST(SimpleDistinct_WithAggPushdownAndForcePragma_OnOff_SameResult) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -911,7 +914,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
-            "DISTINCT level with agg+force pragmas: on/off must match");
+            "DISTINCT level with agg+force pragmas: force pragma on/off must match");
     }
 }
 

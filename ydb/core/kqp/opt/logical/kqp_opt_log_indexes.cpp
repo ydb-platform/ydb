@@ -2010,14 +2010,11 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
             continue;
         }
 
-        for (const auto& keyCol : indexInfo.KeyColumns) {
-            if (keyCol == columnName) {
-                selectedIndex = indexInfo.Name;
-                break;
-            }
-        }
+        YQL_ENSURE(indexInfo.KeyColumns.size() == 1, "Expected single key column in JSON index");
+        const auto& keyCol = indexInfo.KeyColumns.at(0);
 
-        if (!selectedIndex.empty()) {
+        if (keyCol == columnName) {
+            selectedIndex = indexInfo.Name;
             break;
         }
     }

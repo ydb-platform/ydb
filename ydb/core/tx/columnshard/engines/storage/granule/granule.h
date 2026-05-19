@@ -306,6 +306,10 @@ public:
         return OptimizerPlanner->GetMaxCompactionInflight();
     }
 
+    bool UsesPullCompactionScheduling() const {
+        return OptimizerPlanner->UsesPullCompactionScheduling();
+    }
+
     const NGranule::NPortionsIndex::TPortionsIndex& GetPortionsIndex() const {
         return PortionsIndex;
     }

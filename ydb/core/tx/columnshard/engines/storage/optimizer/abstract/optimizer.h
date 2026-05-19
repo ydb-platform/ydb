@@ -154,6 +154,10 @@ protected:
         return 1;
     }
 
+    virtual bool DoUsesPullCompactionScheduling() const {
+        return false;
+    }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
 
@@ -302,6 +306,10 @@ public:
 
     ui32 GetMaxCompactionInflight() const {
         return DoGetMaxCompactionInflight();
+    }
+
+    bool UsesPullCompactionScheduling() const {
+        return DoUsesPullCompactionScheduling();
     }
 
     TOptimizationPriority GetUsefulMetric() const {

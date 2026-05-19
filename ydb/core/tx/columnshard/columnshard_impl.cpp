@@ -518,7 +518,8 @@ void TColumnShard::TryScheduleCompaction(const std::set<TInternalPathId>& pathId
         BackgroundController.ClearCompactionSession();
     }
     if (BackgroundController.GetCompactionsCount()) {
-        if (BackgroundController.CanStartMoreCompactions() && BackgroundController.HasCompactionSession()) {
+        if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling() && BackgroundController.CanStartMoreCompactions() &&
+            BackgroundController.HasCompactionSession()) {
             StartCompactionTasksUpToLimit();
         }
         return;
@@ -695,22 +696,42 @@ void TColumnShard::StartCompactionTasksUpToLimit() {
     }
 }
 
-void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
-    if (!BackgroundController.CanStartMoreCompactions() && BackgroundController.GetCompactionsCount()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_inflight_full");
+void TColumnShard::StartCompactionBatch(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+    AFL_VERIFY(guard);
+    if (BackgroundController.GetCompactionsCount()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_in_progress");
         return;
     }
+
+    auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
+    if (indexChangesList.empty()) {
+        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
+        return;
+    }
+
+    for (const auto& indexChanges : indexChangesList) {
+        StartOneCompactionTask(std::static_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges), guard);
+    }
+}
+
+void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
     Counters.GetCSCounters().OnSetupCompaction();
     BackgroundController.ResetWaitingPriority();
 
-    if (!BackgroundController.HasCompactionSession()) {
-        BackgroundController.SetCompactionSessionGuard(guard);
-    }
-
-    StartCompactionTasksUpToLimit();
-
-    if (!BackgroundController.GetCompactionsCount()) {
-        BackgroundController.ClearCompactionSession();
+    if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling()) {
+        if (!BackgroundController.CanStartMoreCompactions() && BackgroundController.GetCompactionsCount()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_inflight_full");
+            return;
+        }
+        if (!BackgroundController.HasCompactionSession()) {
+            BackgroundController.SetCompactionSessionGuard(guard);
+        }
+        StartCompactionTasksUpToLimit();
+        if (!BackgroundController.GetCompactionsCount()) {
+            BackgroundController.ClearCompactionSession();
+        }
+    } else {
+        StartCompactionBatch(guard);
     }
 }
 

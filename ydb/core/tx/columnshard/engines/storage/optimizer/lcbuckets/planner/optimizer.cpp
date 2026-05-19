@@ -76,6 +76,7 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
     return results;
 }
 
+// Reserved for future pull scheduling; tablet still uses batch StartCompaction for lc-buckets.
 std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetNextOptimizationTask(
     std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
     AFL_VERIFY(LevelsByWeight.size());

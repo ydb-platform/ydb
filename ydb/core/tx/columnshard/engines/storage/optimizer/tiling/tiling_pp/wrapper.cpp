@@ -180,6 +180,10 @@ protected:
             std::vector<TPortionInfo::TConstPtr>(add.begin(), add.end()), std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
     }
 
+    bool DoUsesPullCompactionScheduling() const override {
+        return true;
+    }
+
     std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
         const auto isLocked = [dataLocksManager](TPortionInfo::TConstPtr p) -> bool {

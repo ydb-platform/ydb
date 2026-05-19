@@ -433,6 +433,14 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCo
     return changes;
 }
 
+bool TColumnEngineForLogs::UsesPullCompactionScheduling() const noexcept {
+    const auto granules = GranulesStorage->GetGranulesForCompaction();
+    if (granules.empty()) {
+        return false;
+    }
+    return granules.front().GetGranule()->UsesPullCompactionScheduling();
+}
+
 std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> TColumnEngineForLogs::GetNextCompactionTask(
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);

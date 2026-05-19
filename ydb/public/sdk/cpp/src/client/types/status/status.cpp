@@ -8,6 +8,8 @@
 
 #include <util/string/cast.h>
 
+#include <functional>
+
 namespace NYdb::inline Dev {
 
 class TStatus::TImpl {
@@ -101,7 +103,32 @@ bool TStreamPartStatus::EOS() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+template <typename TIssuePredicate>
+bool StatusContainsIssueIf(const TStatus& status, TIssuePredicate&& pred) {
+    for (const auto& top : status.GetIssues()) {
+        const bool walkedToEnd = NYdb::NIssue::WalkThroughIssues(
+            top,
+            false,
+            std::function<bool(const NYdb::NIssue::TIssue&, uint16_t)>(
+                [&](const NYdb::NIssue::TIssue& issue, uint16_t /*level*/) -> bool {
+                    return !static_cast<bool>(pred(issue));
+                }));
+        if (!walkedToEnd) {
+            return true;
+        }
+    }
+    return false;
+}
+} // anonymous namespace
+
 namespace NStatusHelpers {
+
+bool StatusContainsIssueWithCode(const TStatus& status, NYdb::NIssue::TIssueCode code) {
+    return StatusContainsIssueIf(status, [code](const NYdb::NIssue::TIssue& issue) noexcept {
+        return issue.GetCode() == code;
+    });
+}
 
 void ThrowOnError(TStatus status, std::function<void(TStatus)> onSuccess) {
     if (!status.IsSuccess()) {

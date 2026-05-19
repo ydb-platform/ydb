@@ -1,4 +1,5 @@
 """Tests for ambiguous_width parameter."""
+
 # 3rd party
 import pytest
 

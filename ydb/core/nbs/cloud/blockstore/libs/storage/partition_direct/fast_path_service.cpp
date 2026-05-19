@@ -176,6 +176,9 @@ void TFastPathService::Run()
     for (const auto& dbg: DirectBlockGroups) {
         dbg->Run(this);
     }
+    for (const auto& region: Regions) {
+        region->Run();
+    }
     ScheduleDirtyMapDebugPrint();
 }
 

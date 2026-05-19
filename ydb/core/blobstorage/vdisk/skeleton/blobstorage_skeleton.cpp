@@ -1816,9 +1816,9 @@ namespace NKikimr {
             TEvDetectedPhantomBlob *msg = ev->Get();
 
             for (const TLogoBlobID& logoBlobId : msg->Phantoms) {
-                YDB_LOG_CTX_COMP_NOTICE(ctx, NKikimrServices::BS_SKELETON, "adding DoNotKeep to phantom Marker# BSVS27",
-                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"LogoBlobId", logoBlobId});
+                LOG_INFO_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
+                        << "adding DoNotKeep to phantom LogoBlobId# " << logoBlobId
+                        << " Marker# BSVS27");
             }
 
             TLsnSeg seg = Hull->AllocateLsnForPhantoms(msg->Phantoms);

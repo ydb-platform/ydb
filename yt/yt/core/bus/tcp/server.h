@@ -8,17 +8,17 @@
 
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IBusServerPtr CreateRemoteTcpBusServer(
+IBusServerPtr CreateRemoteBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker(),
     std::optional<NCrypto::TCertProfiler> certProfiler = std::nullopt);
 
-IBusServerPtr CreateLocalTcpBusServer(
+IBusServerPtr CreateLocalBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker(),
@@ -32,4 +32,4 @@ IBusServerPtr CreateBusServer(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

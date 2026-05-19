@@ -1,5 +1,7 @@
 #include "auth_actors.h"
 
+#include "http_req.h"
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/protos/config.pb.h>

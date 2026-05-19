@@ -1,6 +1,5 @@
 """Core tests for wcwidth module."""
 # std imports
-import sys
 import importlib.metadata
 
 # 3rd party
@@ -8,9 +7,7 @@ import pytest
 
 # local
 import wcwidth
-
-_wcwidth_module = sys.modules['wcwidth.wcwidth']
-_WIDTH_FAST_PATH_MIN_LEN = _wcwidth_module._WIDTH_FAST_PATH_MIN_LEN
+from wcwidth._width import _WIDTH_FAST_PATH_MIN_LEN
 
 
 def test_package_version():
@@ -68,9 +65,8 @@ def test_hello_jp():
     """
     Width of Japanese phrase: コンニチハ, セカイ!
 
-    Given a phrase of 5 and 3 Katakana ideographs, joined with
-    3 English-ASCII punctuation characters, totaling 11, this
-    phrase consumes 19 cells of a terminal emulator.
+    Given a phrase of 5 and 3 Katakana ideographs, joined with 3 English-ASCII punctuation
+    characters, totaling 11, this phrase consumes 19 cells of a terminal emulator.
     """
     # given,
     phrase = 'コンニチハ, セカイ!'
@@ -90,8 +86,7 @@ def test_wcswidth_substr():
     """
     Test wcswidth() optional 2nd parameter, ``n``.
 
-    ``n`` determines at which position of the string
-    to stop counting length.
+    ``n`` determines at which position of the string to stop counting length.
     """
     # given,
     phrase = 'コンニチハ, セカイ!'
@@ -414,13 +409,8 @@ def test_bengali_nukta_mc():
 
 @pytest.mark.parametrize("repeat", [1, _WIDTH_FAST_PATH_MIN_LEN])
 def test_mc_width_consistency(repeat):
-    # width(), wcswidth(), and per-grapheme width sums must all agree.
-    #
-    # The repeat parameter ensures both the short (parse) and long (fast) code
-    # paths of width() are exercised.  At repeat=1 the phrases are short enough
-    # to go through character-by-character parse mode.  At repeat=_WIDTH_FAST_PATH_MIN_LEN
-    # every phrase exceeds the threshold and takes the fast path that delegates
-    # to wcswidth().
+    """Check width() to wcswidth() consistency."""
+    # repeat value 'WIDTH_FAST_PATH_MIN_LEN' ensures both "fast" and "slow" paths are taken
     phrases = [
         "\u0915\u094D\u0937\u093F",
         "\u0b95\u0bcd\u0bb7\u0bcc",
@@ -464,6 +454,11 @@ def test_virama_conjunct(phrase, expected):
     assert wcwidth.width(phrase) == expected
 
 
+def test_zwj_at_end_of_string():
+    """ZWJ at end of string (not after virama) is consumed with zero width."""
+    assert wcwidth.wcswidth('a\u200D') == 1
+
+
 def test_soft_hyphen():
     # Test SOFT HYPHEN, category 'Cf' usually are zero-width, but most
     # implementations agree to draw it was '1' cell, visually
@@ -493,3 +488,24 @@ def test_prepended_concatenation_mark_width(codepoint, name):
     """Prepended Concatenation Marks have width 1, not 0."""
     # https://github.com/jquast/wcwidth/issues/119
     assert wcwidth.wcwidth(chr(codepoint)) == 1
+
+
+def test_legacy_module():
+    """Verify legacy ``wcwidth.wcwidth`` module's public items are importable."""
+    # pylint: disable=import-outside-toplevel
+    # std imports
+    import sys
+
+    # Access the legacy submodule via sys.modules (matching 0.6.0 where
+    # 'import wcwidth.wcwidth' returned the function, not the module).
+    _legacy = sys.modules['wcwidth.wcwidth']
+
+    for name in _legacy.__all__:
+        attr = getattr(_legacy, name)
+        assert attr is not None, f"wcwidth.wcwidth.{name} is None"
+
+    # Verify that individual imports from the legacy path also work,
+    # e.g. 'from wcwidth.wcwidth import wcswidth'
+    for name in _legacy.__all__:
+        obj = getattr(_legacy, name)
+        assert obj is not None, f"could not import {name} from wcwidth.wcwidth"

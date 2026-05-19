@@ -1200,6 +1200,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     YT_OPTIONAL_SET_PROTO(req, expression_builder_version, options.ExpressionBuilderVersion);
     YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
+    YT_OPTIONAL_SET_PROTO(req, enable_parallelize_unordered_group_by, options.EnableParallelizeUnorderedGroupBy);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
     YT_OPTIONAL_SET_PROTO(req, max_join_batch_size, options.MaxJoinBatchSize);
     YT_OPTIONAL_SET_PROTO(req, rowset_processing_batch_size, options.RowsetProcessingBatchSize);

@@ -34,6 +34,24 @@ jobs:
   build:
     runs-on: [self-hosted, auto-provisioned]
     steps:
+      - name: Show run parameters
+        env:
+          INPUTS_JSON: ${{ toJson(inputs) }}
+        run: |
+          {
+            echo "## Run parameters"
+            echo ""
+            echo "Event: \`${{ github.event_name }}\`"
+            echo ""
+            if [ -z "${INPUTS_JSON:-}" ] || [ "$INPUTS_JSON" = "null" ] || [ "$INPUTS_JSON" = "{}" ]; then
+              echo "No explicit inputs (scheduled run uses workflow defaults)."
+            else
+              echo '```json'
+              printf '%s\n' "$INPUTS_JSON" | jq .
+              echo '```'
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout .github
         uses: actions/checkout@v4
         with:

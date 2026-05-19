@@ -1,7 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG BUILD_MODE=full
-
-FROM ubuntu:22.04 AS builder-full
+FROM ubuntu:22.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
@@ -38,16 +36,6 @@ RUN ./ya make -r -T \
     && tree /ydbwork/out/ \
     && strip /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
     && rm -rf ~/.ya  || echo 'unable to delete ~/.ya' # for reduce cache size
-
-# Prebuilt mode: skip the ./ya make builder and take binaries from the build
-# context. Used by the PR-time docker test (ydb/tests/docker_local_ydb/), which
-# already has ydbd/ydb/local_ydb compiled by the surrounding ya make run.
-FROM scratch AS builder-prebuilt
-COPY prebuilt/ydbd      /ydbwork/out/ydb/apps/ydbd/ydbd
-COPY prebuilt/ydb       /ydbwork/out/ydb/apps/ydb/ydb
-COPY prebuilt/local_ydb /ydbwork/out/ydb/public/tools/local_ydb/local_ydb
-
-FROM builder-${BUILD_MODE} AS builder
 
 FROM ubuntu:22.04
 RUN apt-get update  \

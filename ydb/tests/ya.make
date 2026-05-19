@@ -1,12 +1,12 @@
 RECURSE(
     compatibility
     datashard
-    docker_local_ydb
     example
     fq
     functional
     library
     library/sqs
+    local_ydb_smoke
     olap
     oss
     solomon

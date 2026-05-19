@@ -65,6 +65,12 @@ using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
 using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
 
+static ui64 GetSelfHash(void* self) {
+    char buf[sizeof(void*)];
+    WriteUnaligned<void*>(buf, self);
+    return CityHash64(buf, sizeof(buf));
+}
+
 struct TSegmentedArena
 {
     // TODO: Account for MKQL-specific headers
@@ -987,7 +993,9 @@ protected:
         ui64 bucketId = 0;
         ui64 hash = Hasher(tempKey);
         if (EnableSpilling) {
-            bucketId = (hash * 11400714819323198485llu) & ((1ull << BucketBits) - 1);
+            // Lower 16 bits are used by the hash shuffle connection to distribute keys among tasks, so we can't use these (even with the hash seed)
+            // Another solution would be to rehash using a different function but shifted bits are uniform enough
+            bucketId = ((hash * 11400714819323198485llu) >> 16) & ((1ull << BucketBits) - 1ull);
         }
 
         if (!SpillingStack.empty()) {
@@ -1140,7 +1148,7 @@ public:
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes)))
+        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes, GetSelfHash(this))))
         , Equals(TWideUnboxedEqual(KeyTypes))
         , Draining(false)
         , SourceEmpty(false)

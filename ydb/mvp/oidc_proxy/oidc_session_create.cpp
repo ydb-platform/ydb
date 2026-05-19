@@ -5,6 +5,7 @@
 #include <ydb/mvp/core/mvp_log.h>
 
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -24,42 +25,46 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
 void THandlerSessionCreate::Bootstrap() {
     BLOG_D("Restore oidc session");
     NHttp::TUrlParameters urlParameters(Request->URL);
-    TString code = urlParameters["code"];
-    TString state = urlParameters["state"];
+    Code = urlParameters["code"];
 
-    TCheckStateResult checkStateResult = CheckState(state, Settings.ClientSecret);
-
+    const TString state = urlParameters["state"];
+    const TDecodeStateResult decodedState = DecodeState(state);
+    const TCheckStateResult checkStateResult = decodedState.Check(Settings.ClientSecret);
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret, checkStateResult.CookieSuffix);
-    Context = restoreContextResult.Context;
+    CookieContextResult = RestoreOidcContext(cookies, Settings.ClientSecret, checkStateResult.CookieSuffix);
+    const TString flowId = decodedState.Payload.FlowId;
+    const TString forwardUrl = decodedState.Payload.ForwardUrl;
 
-    if (checkStateResult.Ok) {
-        if (restoreContextResult.IsSuccess()) {
-            if (code.empty()) {
-                BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
-                RetryRequestToProtectedResourceAndDie();
-            } else {
-                RequestSessionToken(code);
-            }
-        } else {
-            const auto& restoreSessionStatus = restoreContextResult.Status;
-            BLOG_D(restoreSessionStatus.ErrorMessage);
-            if (restoreSessionStatus.IsErrorRetryable) {
-                RetryRequestToProtectedResourceAndDie();
-            } else {
-                SendUnknownErrorResponseAndDie();
-            }
-        }
-    } else {
+    if (!checkStateResult.Ok) {
         BLOG_D(checkStateResult.ErrorMessage);
-        if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
+        if (CookieContextResult.IsSuccess() || CookieContextResult.Status.IsErrorRetryable) {
+            Context = CookieContextResult.Context;
             RetryRequestToProtectedResourceAndDie();
         } else {
             SendUnknownErrorResponseAndDie();
         }
+        return;
     }
 
+    if (forwardUrl.empty() || forwardUrl == Settings.LocalEndpoint) {
+        BLOG_D("Restore oidc context from local store"
+            << " (flow_id: " << NKikimr::MaskTicket(flowId) << ")");
+        ContinueAfterContextRestore(RestoreOidcContextFromStore(Settings.AuthFlowContextStore, flowId));
+        return;
+    }
+
+    BLOG_D("Request oidc auth callback context from owner"
+        << " (flow_id: " << NKikimr::MaskTicket(flowId)
+        << ", forward_url: " << forwardUrl
+        << ", timeout: " << TOpenIdConnectSettings::DEFAULT_AUTH_CALLBACK_CONTEXT_TIMEOUT << ")");
+    NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(
+        CreateAuthCallbackContextRequestUrl(forwardUrl, state));
+    httpRequest->Set(REQUEST_ID_HEADER, GetRequestId());
+    auto requestEvent = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
+    requestEvent->Timeout = TOpenIdConnectSettings::DEFAULT_AUTH_CALLBACK_CONTEXT_TIMEOUT;
+    Send(HttpProxyId, requestEvent.release());
+    Become(&THandlerSessionCreate::StateWaitAuthCallbackContextResponse);
 }
 
 void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
@@ -92,6 +97,35 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
     return ReplyBadRequestAndPassAway(event->Get()->Error);
 }
 
+void THandlerSessionCreate::HandleAuthCallbackContextResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
+    if (!event->Get()->Error.empty() || !event->Get()->Response) {
+        BLOG_D("Request oidc auth callback context failed: " << event->Get()->Error);
+        ContinueAfterContextRestore(TRestoreOidcContextResult({
+            .IsSuccess = false,
+            .IsErrorRetryable = false,
+            .ErrorMessage = TStringBuilder() << "Restore oidc context from owner failed: " << event->Get()->Error,
+        }));
+        return;
+    }
+
+    NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
+    BLOG_D("Incoming response from oidc auth callback context: " << response->Status);
+    if (response->Status != "200") {
+        ContinueAfterContextRestore(TRestoreOidcContextResult({
+            .IsSuccess = false,
+            .IsErrorRetryable = false,
+            .ErrorMessage = TStringBuilder() << "Restore oidc context from owner failed with status " << response->Status,
+        }));
+        return;
+    }
+
+    TRestoreOidcContextResult restoreContextResult = RestoreOidcContextFromResponseBody(response->Body);
+    if (restoreContextResult.IsSuccess()) {
+        BLOG_D("Incoming oidc auth callback context successfully restored");
+    }
+    ContinueAfterContextRestore(restoreContextResult);
+}
+
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
     const static TStringBuf SameSiteParameter {"SameSite=Lax"};
     size_t n = cookie.find(SameSiteParameter);
@@ -115,6 +149,36 @@ void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeader
     SetRequestIdHeader(*responseHeaders, GetRequestId());
     responseHeaders->Set("Location", Context.GetRequestedAddress());
     ReplyAndPassAway(Request->CreateResponse("302", "Found", *responseHeaders));
+}
+
+void THandlerSessionCreate::ContinueAfterResolvedContext(const TContext& context) {
+    Context = context;
+    if (Code.empty()) {
+        BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
+        RetryRequestToProtectedResourceAndDie();
+    } else {
+        RequestSessionToken(Code);
+    }
+}
+
+void THandlerSessionCreate::ContinueAfterContextRestore(const TRestoreOidcContextResult& restoreContextResult) {
+    if (restoreContextResult.IsSuccess()) {
+        ContinueAfterResolvedContext(restoreContextResult.Context);
+        return;
+    }
+
+    BLOG_D(restoreContextResult.Status.ErrorMessage);
+    if (CookieContextResult.IsSuccess()) {
+        BLOG_D("Falling back to oidc context from cookie");
+        ContinueAfterResolvedContext(CookieContextResult.Context);
+        return;
+    }
+
+    if (restoreContextResult.Status.IsErrorRetryable) {
+        RetryRequestToProtectedResourceAndDie();
+    } else {
+        SendUnknownErrorResponseAndDie();
+    }
 }
 
 void THandlerSessionCreate::SendUnknownErrorResponseAndDie() {

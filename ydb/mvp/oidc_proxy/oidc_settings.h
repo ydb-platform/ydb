@@ -1,6 +1,9 @@
 #pragma once
 
+#include "auth_flow_context.h"
+
 #include <ydb/mvp/core/protos/mvp.pb.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
@@ -22,6 +25,7 @@ struct TOpenIdConnectSettings {
 
     static constexpr inline TDuration DEFAULT_REQUEST_TIMEOUT = TDuration::Seconds(120);
     static constexpr inline TDuration DEFAULT_AUTH_STATE_LIFETIME = TDuration::Minutes(10);
+    static constexpr inline TDuration DEFAULT_AUTH_CALLBACK_CONTEXT_TIMEOUT = TDuration::Seconds(5);
 
     static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
     static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;
@@ -35,6 +39,8 @@ struct TOpenIdConnectSettings {
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;
+    TString LocalEndpoint;
+    TAuthFlowContextStorePtr AuthFlowContextStore;
     TDuration DefaultRequestTimeout = DEFAULT_REQUEST_TIMEOUT;
     THashMap<TStringBuf, TDuration> RequestTimeoutsByPath;
 

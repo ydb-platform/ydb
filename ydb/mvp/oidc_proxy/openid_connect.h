@@ -52,11 +52,15 @@ struct TCheckStateResult;
 struct TState {
     TString AntiForgeryToken;
     TString CookieSuffix;
+    TString FlowId;
+    TString ForwardUrl;
     TMaybe<TInstant> ExpirationTime;
 
     bool operator==(const TState& other) const {
         return AntiForgeryToken == other.AntiForgeryToken
             && CookieSuffix == other.CookieSuffix
+            && FlowId == other.FlowId
+            && ForwardUrl == other.ForwardUrl
             && ExpirationTime == other.ExpirationTime;
     }
 };
@@ -92,10 +96,13 @@ TString CreateNameYdbOidcCookie(TStringBuf suffix = "");
 TString CreateNameSessionCookie(TStringBuf key);
 TString CreateNameImpersonatedCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
+const TString& GetAuthCallbackContextUrl();
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds);
 TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
 TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf cookieSuffix = "");
+TRestoreOidcContextResult RestoreOidcContextFromStore(const TAuthFlowContextStorePtr& store, TStringBuf flowId);
+TRestoreOidcContextResult RestoreOidcContextFromResponseBody(TStringBuf body);
 TString EncodeState(const TState& payload, TStringBuf signingKey);
 TDecodeStateResult DecodeState(TStringBuf encodedState);
 TCheckStateResult CheckState(const TString& state, const TString& key);
@@ -103,6 +110,7 @@ TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 TString GetAddressWithoutPort(const TString& address);
 TString GenerateRandomBase64(size_t byteNumber = 32);
+TString CreateAuthCallbackContextRequestUrl(TStringBuf forwardUrl, TStringBuf state);
 
 
 struct TProxiedRequestParams {

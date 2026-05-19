@@ -18,15 +18,13 @@ THandlerSessionCreateNebius::THandlerSessionCreateNebius(const NActors::TActorId
 {}
 
 void THandlerSessionCreateNebius::RequestSessionToken(const TString& code) {
-    TStringBuf host = Request->Host;
-
     TCgiParameters params;
     params.emplace("code", code);
     params.emplace("client_id", Settings.ClientId);
     params.emplace("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:access_token_bearer");
     params.emplace("grant_type", "authorization_code");
-    params.emplace("redirect_uri", TStringBuilder() << (Request->Endpoint->Secure ? "https://" : "http://")
-                                                          << host
+    params.emplace("redirect_uri", TStringBuilder() << (Request->Endpoint->Secure ? "https" : "http") << "://"
+                                                          << Request->Host
                                                           << GetAuthCallbackUrl());
 
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());

@@ -1,12 +1,14 @@
 import requests
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from oidc_proxy_testlib import (
-    CALLBACK_PATH,
     assert_nc_auth_not_started,
+    CALLBACK_PATH,
+    finish_auth_callback,
     get_auth_callback,
     protected_host,
     session_cookie_header,
+    start_navigation_auth_flow,
 )
 
 AUTH_AUTHORIZE_PATH = "/oauth/authorize"
@@ -125,33 +127,6 @@ def assert_navigation_auth_redirect(env, response):
     assert "Set-Cookie" in response.headers, response.headers
 
 
-def start_navigation_auth_flow(env, start_path):
-    response = env.get(
-        start_path,
-        allow_redirects=False,
-        headers={"Host": "oidcproxy.net"},
-    )
-    assert_navigation_auth_redirect(env, response)
-    state = parse_qs(urlparse(response.headers["Location"]).query)["state"][0]
-    oidc_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
-    return state, oidc_cookie
-
-
-def finish_auth_callback(env, state, oidc_cookies):
-    return env.get(
-        "/auth/callback",
-        params={
-            "code": "code_template#",
-            "state": state,
-        },
-        allow_redirects=False,
-        headers={
-            "Host": "oidcproxy.net",
-            "Cookie": "; ".join(oidc_cookies),
-        },
-    )
-
-
 def test_background_request_returns_json_401_with_auth_url(oidc_proxy_full_flow_env):
     response = start_background_auth_challenge_request(oidc_proxy_full_flow_env)
     assert_background_auth_challenge(response)
@@ -162,7 +137,7 @@ def test_navigation_request_returns_oidc_redirect(oidc_proxy_full_flow_env):
     assert_navigation_auth_redirect(oidc_proxy_full_flow_env, response)
 
 
-def test_navigation_callback_uses_cookie_from_state_when_background_cookie_exists(oidc_proxy_full_flow_env):
+def test_navigation_callback_uses_state_when_background_request_overwrites_temp_cookie(oidc_proxy_full_flow_env):
     env = oidc_proxy_full_flow_env
     host = protected_host(env)
     navigation_target = f"/{host}{LANDING_DATA_PATH}&from=navigation"
@@ -172,7 +147,8 @@ def test_navigation_callback_uses_cookie_from_state_when_background_cookie_exist
     assert_background_auth_challenge(background_response)
     background_oidc_cookie = background_response.headers["Set-Cookie"].split(";", 1)[0]
 
-    callback_response = finish_auth_callback(env, navigation_state, [navigation_oidc_cookie, background_oidc_cookie])
+    assert navigation_oidc_cookie.split("=", 1)[0] == background_oidc_cookie.split("=", 1)[0]
+    callback_response = finish_auth_callback(env, navigation_state, [background_oidc_cookie])
 
     assert callback_response.status_code == 302, callback_response.text
     assert callback_response.headers["Location"] == navigation_target, callback_response.headers

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/mvp/oidc_proxy)
 SIZE(SMALL)
 
 SRCS(
+    auth_flow_context_ut.cpp
     mvp_config_validation_ut.cpp
     oidc_proxy_ut.cpp
     openid_connect.cpp

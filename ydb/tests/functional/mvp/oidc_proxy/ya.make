@@ -13,6 +13,7 @@ TEST_SRCS(
     oidc_proxy_testlib.py
     test_auth_failures.py
     test_basic_scenarios.py
+    test_cross_pod_callback.py
     test_streaming.py
 )
 

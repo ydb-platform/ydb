@@ -119,11 +119,11 @@ TString CreateNameYdbOidcCookie(TStringBuf suffix) {
 }
 
 TString CreateNameSessionCookie(TStringBuf key) {
-    return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
+    return "__Host-" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
 }
 
 TString CreateNameImpersonatedCookie(TStringBuf key) {
-    return "__Host_" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
+    return "__Host-" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
 }
 
 const TString& GetAuthCallbackUrl() {

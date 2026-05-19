@@ -23,11 +23,11 @@ def direct_bearer_headers(token=TEST_IAM_TOKEN):
 
 
 def session_cookie_name(client_id=TEST_CLIENT_ID):
-    return f"__Host_session_cookie_{client_id.encode().hex().upper()}"
+    return f"__Host-session_cookie_{client_id.encode().hex().upper()}"
 
 
 def impersonated_cookie_name(client_id=TEST_CLIENT_ID):
-    return f"__Host_impersonated_cookie_{client_id.encode().hex().upper()}"
+    return f"__Host-impersonated_cookie_{client_id.encode().hex().upper()}"
 
 
 def encoded_cookie_value(token):
@@ -201,7 +201,7 @@ def authenticate_session(oidc_proxy_full_flow_env, start_path):
 
     assert callback_response.status_code == 302, callback_response.text
     assert callback_response.headers["Location"] == start_path, callback_response.headers
-    assert "__Host_session_cookie_" in callback_response.headers["Set-Cookie"], callback_response.headers["Set-Cookie"]
+    assert "__Host-session_cookie_" in callback_response.headers["Set-Cookie"], callback_response.headers["Set-Cookie"]
 
     return callback_response.headers["Set-Cookie"].split(";", 1)[0]
 

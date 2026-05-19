@@ -189,20 +189,36 @@ private:
                 }
 
                 if (changed) {
-                    ChangeAiProfile(AiModel);                    
+                    // For an in-memory profile (built from the default preset on
+                    // the fly, empty Id) any user-confirmed change is treated as
+                    // an explicit choice: promote the profile to disk now.
+                    // If the user did not change anything or aborted with Esc,
+                    // no promotion happens and the profile stays in memory.
+                    if (AiModel->GetId().empty()) {
+                        auto persisted = ConfigurationManager->PromoteInMemoryProfile(AiModel);
+                        if (!persisted) {
+                            std::exit(EXIT_FAILURE);
+                        }
+                        AiModel = std::move(persisted);
+                    }
+                    ChangeAiProfile(AiModel);
                 }
             });
 
-            options.emplace_back("Remove current AI model", [&]() {
-                ConfigurationManager->RemoveAiProfile(AiModel->GetId());
-                AiModel = ConfigurationManager->ActivateAiProfile();
-                if (!AiModel) {
-                    // Can not continue in AI mode
-                    std::exit(EXIT_FAILURE);
-                }
+            // Remove only makes sense for persisted profiles — nothing to remove
+            // on disk for an in-memory default-preset profile.
+            if (!AiModel->GetId().empty()) {
+                options.emplace_back("Remove current AI model", [&]() {
+                    ConfigurationManager->RemoveAiProfile(AiModel->GetId());
+                    AiModel = ConfigurationManager->ActivateAiProfile();
+                    if (!AiModel) {
+                        // Can not continue in AI mode
+                        std::exit(EXIT_FAILURE);
+                    }
 
-                ChangeAiProfile(AiModel);
-            });
+                    ChangeAiProfile(AiModel);
+                });
+            }
 
             if (!RunFtxuiMenuWithActions("Please choose setting to change:", options)) {
                 exit = true;

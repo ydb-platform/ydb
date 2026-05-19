@@ -2113,7 +2113,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  4, 7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                      50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 78, 79, 81, 82, 84, 85, 90, 91, 92, 96, 99},
                            {}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
-    }
+    } 
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {
         NYdb::TValueBuilder rows;
@@ -3005,6 +3005,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestOlapProjectionPushdown(Explain);
     }
 
+    ui32 CountNumberOfCallables(const std::string& ast, const std::string_view callable) {
+        ui32 count = 0;
+        auto pos = ast.find(callable);
+        while (pos != std::string::npos) {
+            pos = ast.find(callable, pos + 1);
+            ++count;
+        }
+        return count;
+    }
+
     void TestLimit(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -3071,6 +3081,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             const auto& query = queries[i];
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "DqCnMerge"), 1);
+
+            result =
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -3078,18 +3095,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-     Y_UNIT_TEST_TWIN(Limit, ColumnStore) {
+    Y_UNIT_TEST_TWIN(Limit, ColumnStore) {
         TestLimit(ColumnStore);
-    }
-
-    ui32 CountNumberOfCallables(const std::string& ast, const std::string_view callable) {
-        ui32 count = 0;
-        auto pos = ast.find(callable);
-        while (pos != std::string::npos) {
-            pos = ast.find(callable, pos + 1);
-            ++count;
-        }
-        return count;
     }
 
     Y_UNIT_TEST(PropagateLimitThroughStages) {

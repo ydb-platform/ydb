@@ -102,6 +102,16 @@ TString ToString(const TLogTitle::TDirectBlockGroup& data)
     return stream;
 }
 
+TString ToString(const TLogTitle::TVChunk& data)
+{
+    TStringBuilder stream;
+
+    stream << "[vchk:" << data.DiskId;
+    stream << " indx:" << data.VChunkIndex;
+
+    return stream;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////

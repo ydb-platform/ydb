@@ -167,6 +167,34 @@
             "uri": "https://{canondata_backend}/1784826/4b432a0ba8a92ba103a312932b387fbf0d4da434/resource.tar.gz#test.test_agg_phases-bool_or_opt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-median-default.txt-Debug]": [
+        {
+            "checksum": "79d2c385599b3514e4e6dc1b5e2fbe47",
+            "size": 4095,
+            "uri": "https://{canondata_backend}/1937492/0a5d89ff081baa2c8fe396ce32d6e32aecc06f7c/resource.tar.gz#test.test_agg_phases-median-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-median-default.txt-Results]": [
+        {
+            "checksum": "11c727175de617f3458047d7055f1e96",
+            "size": 6341,
+            "uri": "https://{canondata_backend}/1937429/f2d1059ba6701880b992c0e0d30468720222841a/resource.tar.gz#test.test_agg_phases-median-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[agg_phases-percentile_scalar-default.txt-Debug]": [
+        {
+            "checksum": "5cd6a6bcecd1ca7fd95af9b98c8e2c7e",
+            "size": 4089,
+            "uri": "https://{canondata_backend}/1900335/fb51f2984238eec955d738ddccf15b7fa49d02dd/resource.tar.gz#test.test_agg_phases-percentile_scalar-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-percentile_scalar-default.txt-Results]": [
+        {
+            "checksum": "331646a826fdb4cef8d80d1fd129f4e0",
+            "size": 6269,
+            "uri": "https://{canondata_backend}/1775059/cc8027e86d6b1f738de145cab22db701eed7bd17/resource.tar.gz#test.test_agg_phases-percentile_scalar-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-random_value_opt-default.txt-Debug]": [
         {
             "checksum": "117899a68fdc2ae784df312078f0b962",

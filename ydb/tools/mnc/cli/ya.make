@@ -5,7 +5,16 @@ PY3_PROGRAM(mnc)
     PY_MAIN(ydb.tools.mnc.cli.main)
 
     PY_SRCS(
+        arg_metadata.py
         main.py
+        parser_factory.py
+        tui/__init__.py
+        tui/app.py
+        tui/command_picker.py
+        tui/common.py
+        tui/config_picker.py
+        tui/launcher.py
+        tui/options_form.py
 
         commands/__init__.py
         commands/install.py
@@ -28,6 +37,7 @@ PY3_PROGRAM(mnc)
         ydb/tests/library
         ydb/tools/mnc/lib
         contrib/python/requests
+        contrib/python/textual
     )
 
 END()

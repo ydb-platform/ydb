@@ -10,6 +10,7 @@ SRCS(
     pg_dump_parser_ut.cpp
     print_utils_ut.cpp
     recursive_remove_ut.cpp
+    tabbed_table_ut.cpp
 )
 
 END()

@@ -9,7 +9,9 @@
 
 #include <util/string/cast.h>
 
+#include <functional>
 #include <optional>
+#include <type_traits>
 
 namespace NYql {
 
@@ -25,8 +27,7 @@ struct TEvCompositeSessionTest {
         EvBegin = EventSpaceBegin(TEvents::ES_USERSPACE),
         EvCreateSession = EvBegin,
         EvSessionCreated,
-        EvLock,
-        EvLockReceived,
+        EvRunAction,
         EvEnd
     };
 
@@ -52,15 +53,16 @@ struct TEvCompositeSessionTest {
         {}
     };
 
-    struct TEvLock : public TEventLocal<TEvLock, EvLock> {
-        NThreading::TFuture<void> Future;
+    // Carries an action to be performed on the creator-actor mailbox, so it
+    // serializes with TDqPqReadBalancerActor (registered on the same mailbox).
+    // The test thread only waits on a promise — it never touches the session
+    // directly, which keeps TSAN's happens-before graph clean.
+    struct TEvRunAction : public TEventLocal<TEvRunAction, EvRunAction> {
+        std::function<void()> Action;
 
-        explicit TEvLock(NThreading::TFuture<void> future)
-            : Future(std::move(future))
+        explicit TEvRunAction(std::function<void()> action)
+            : Action(std::move(action))
         {}
-    };
-
-    struct TEvLockReceived : public TEventLocal<TEvLockReceived, EvLockReceived> {
     };
 };
 
@@ -72,7 +74,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvCompositeSessionTest::TEvCreateSession, Handle)
-        hFunc(TEvCompositeSessionTest::TEvLock, Handle)
+        hFunc(TEvCompositeSessionTest::TEvRunAction, Handle)
         hFunc(TEvents::TEvPoison, Handle)
     )
 
@@ -90,9 +92,8 @@ private:
         Send(ev->Sender, new TEvCompositeSessionTest::TEvSessionCreated(std::move(session), std::move(control)));
     }
 
-    void Handle(TEvCompositeSessionTest::TEvLock::TPtr& ev) {
-        Send(ev->Sender, new TEvCompositeSessionTest::TEvLockReceived());
-        ev->Get()->Future.Wait(TDuration::Seconds(10));
+    void Handle(TEvCompositeSessionTest::TEvRunAction::TPtr& ev) {
+        ev->Get()->Action();
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
@@ -102,31 +103,6 @@ private:
 
 class TCompositeClientTestFixture : public TTestWithActorSystemFixture {
     using TBase = TTestWithActorSystemFixture;
-
-    template <typename TValue>
-    class TActorGuard {
-    public:
-        TActorGuard(NActors::TTestActorRuntime* runtime, TActorId actorId, std::shared_ptr<TValue> value)
-            : Value(std::move(value))
-            , LockPromise(NThreading::NewPromise<void>())
-        {
-            const auto edge = runtime->AllocateEdgeActor();
-            runtime->Send(actorId, edge, new TEvCompositeSessionTest::TEvLock(LockPromise.GetFuture()));
-            UNIT_ASSERT(runtime->GrabEdgeEvent<TEvCompositeSessionTest::TEvLockReceived>(edge));
-        }
-
-        ~TActorGuard() {
-            LockPromise.SetValue();
-        }
-
-        TValue* operator->() const {
-            return Value.get();
-        }
-
-    private:
-        const std::shared_ptr<TValue> Value;
-        NThreading::TPromise<void> LockPromise;
-    };
 
     class TSessionHolder {
     public:
@@ -157,15 +133,47 @@ class TCompositeClientTestFixture : public TTestWithActorSystemFixture {
             Control.reset();
         }
 
-        TActorGuard<IReadSession> GetSession() {
-            return TActorGuard<IReadSession>(Runtime, SessionCreator, Session);
+        // Ships `func` to the creator actor's mailbox, runs it there (so it
+        // serializes with TDqPqReadBalancerActor — same mailbox), then
+        // synchronously waits for the result via TPromise.
+        template <typename TFunc>
+        auto RunOnSession(TFunc&& func) {
+            return RunOnActor([this, f = std::forward<TFunc>(func)]() mutable -> decltype(auto) {
+                return f(*Session);
+            });
         }
 
-        TActorGuard<ICompositeTopicReadSessionControl> GetControl() {
-            return TActorGuard<ICompositeTopicReadSessionControl>(Runtime, SessionCreator, Control);
+        template <typename TFunc>
+        auto RunOnControl(TFunc&& func) {
+            return RunOnActor([this, f = std::forward<TFunc>(func)]() mutable -> decltype(auto) {
+                return f(*Control);
+            });
         }
 
     private:
+        template <typename TFunc>
+        auto RunOnActor(TFunc&& func) {
+            using TResult = std::invoke_result_t<TFunc&>;
+            auto promise = NThreading::NewPromise<TResult>();
+
+            Runtime->Send(SessionCreator, Runtime->AllocateEdgeActor(),
+                new TEvCompositeSessionTest::TEvRunAction(
+                    [f = std::forward<TFunc>(func), promise]() mutable {
+                        try {
+                            if constexpr (std::is_void_v<TResult>) {
+                                f();
+                                promise.SetValue();
+                            } else {
+                                promise.SetValue(f());
+                            }
+                        } catch (...) {
+                            promise.SetException(std::current_exception());
+                        }
+                    }));
+
+            return promise.GetFuture().GetValueSync();
+        }
+
         NActors::TTestActorRuntime* const Runtime = nullptr;
         TActorId SessionCreator;
         std::shared_ptr<IReadSession> Session;
@@ -231,6 +239,11 @@ protected:
     std::vector<TSessionHolder::TPtr> Sessions;
 };
 
+
+NYdb::NTopic::TReadSessionGetEventSettings DefaultGetEventSettings() {
+    return NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
@@ -240,8 +253,9 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         auto holder = CreateSession(gateway.Get(), settings);
 
-        UNIT_ASSERT(!holder->GetSession()->GetSessionId().empty());
-        UNIT_ASSERT(holder->GetSession()->GetSessionId().find("0=") != TString::npos);
+        auto sessionId = holder->RunOnSession([](IReadSession& s) { return s.GetSessionId(); });
+        UNIT_ASSERT(!sessionId.empty());
+        UNIT_ASSERT(sessionId.find("0=") != std::string::npos);
     }
 
     Y_UNIT_TEST_F(GetEventWhenNoDataReturnsNullopt, TCompositeClientTestFixture) {
@@ -250,8 +264,7 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         auto holder = CreateSession(gateway.Get(), settings);
 
-        auto event = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(!event.has_value());
     }
 
@@ -265,8 +278,7 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "msg1");
 
-        auto event = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event.has_value());
 
         const auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event);
@@ -285,8 +297,7 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "msg1");
 
-        auto event = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event.has_value());
 
         const auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event);
@@ -295,13 +306,12 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         const ui64 partitionId = dataEv->GetPartitionSession()->GetPartitionId();
         const TInstant eventTime = TInstant::MilliSeconds(100);
 
-        holder->GetControl()->AdvancePartitionTime(partitionId, eventTime);
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, eventTime); });
 
         mockSession->AddDataReceivedEvent(1, "msg2");
-        holder->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
+        holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
 
-        auto event2 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event2 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event2);
         UNIT_ASSERT(dataEv2 != nullptr);
@@ -319,19 +329,17 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "a", T0);
 
-        auto event1 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event1 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event1.has_value());
         const auto* data1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event1);
         UNIT_ASSERT(data1 != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(data1->GetMessages()[0].GetData()), "a");
         const ui64 partitionId = data1->GetPartitionSession()->GetPartitionId();
-        holder->GetControl()->AdvancePartitionTime(partitionId, T0);
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, T0); });
 
         mockSession->AddDataReceivedEvent({{.Offset = 1, .Data = "b", .MessageTime = T0}, {.Offset = 2, .Data = "c", .MessageTime = T0}});
-        holder->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
-        auto event2 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        auto event2 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event2.has_value());
         const auto* data2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event2);
         UNIT_ASSERT(data2 != nullptr);
@@ -349,7 +357,7 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         auto mockSession = gateway->ExtractReadSession("topic");
         UNIT_ASSERT(mockSession != nullptr);
 
-        NThreading::TFuture<void> waitFuture = holder->GetSession()->WaitEvent();
+        NThreading::TFuture<void> waitFuture = holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); });
         UNIT_ASSERT(!waitFuture.HasValue());
 
         mockSession->AddDataReceivedEvent(0, "wake");
@@ -364,7 +372,7 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         auto holder = CreateSession(gateway.Get(), settings);
 
-        bool closed = holder->GetSession()->Close(TDuration::Zero());
+        bool closed = holder->RunOnSession([](IReadSession& s) { return s.Close(TDuration::Zero()); });
         UNIT_ASSERT(closed);
     }
 
@@ -378,8 +386,7 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockSession != nullptr);
         mockSession->AddDataReceivedEvent(0, "msg1");
 
-        auto event = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event.has_value());
 
         const auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event);
@@ -387,15 +394,14 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         const ui64 partitionId = dataEv->GetPartitionSession()->GetPartitionId();
         const TInstant eventTime = TInstant::MilliSeconds(100);
 
-        holder->GetControl()->AdvancePartitionTime(partitionId, eventTime);
-        holder->GetControl()->AdvancePartitionTime(partitionId, TInstant::MilliSeconds(50));
-        holder->GetControl()->AdvancePartitionTime(partitionId, eventTime);
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, eventTime); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, TInstant::MilliSeconds(50)); });
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, eventTime); });
 
         mockSession->AddDataReceivedEvent(1, "msg2");
-        holder->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
+        holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
 
-        auto event2 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event2 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event2);
         UNIT_ASSERT(dataEv2 != nullptr);
@@ -414,10 +420,11 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         mockSession->AddDataReceivedEvent(1, "b");
         mockSession->AddDataReceivedEvent(2, "c");
 
-        auto events = holder->GetSession()->GetEvents(
-            NYdb::NTopic::TReadSessionGetEventSettings()
+        auto events = holder->RunOnSession([](IReadSession& s) {
+            return s.GetEvents(NYdb::NTopic::TReadSessionGetEventSettings()
                 .MaxEventsCount(1)
                 .MaxByteSize(65536));
+        });
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(
             std::string(std::get<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(events[0]).GetMessages()[0].GetData()),
@@ -436,17 +443,15 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         mockSession->AddStartSessionEvent();
         mockSession->AddDataReceivedEvent(0, "after_start", T0);
 
-        auto event = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event.has_value());
         const auto* startEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event);
         UNIT_ASSERT(startEv != nullptr);
         const ui64 partitionId = startEv->GetPartitionSession() ? startEv->GetPartitionSession()->GetPartitionId() : 0u;
-        holder->GetControl()->AdvancePartitionTime(partitionId, T0);
-        holder->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(partitionId, T0); });
+        holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
 
-        auto event2 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto event2 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event2);
         UNIT_ASSERT(dataEv != nullptr);
@@ -469,28 +474,33 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         mockP0->AddDataReceivedEvent(0, "p0_first", T0);
         mockP1->AddDataReceivedEvent(0, "p1_first", T1);
-        auto ev0 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto ev0 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev0.has_value());
         const auto* d0 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev0);
         UNIT_ASSERT(d0 != nullptr);
-        holder->GetControl()->AdvancePartitionTime(d0->GetPartitionSession()->GetPartitionId(), d0->GetPartitionSession()->GetPartitionId() == 0 ? T0 : T1);
-        auto ev1 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        {
+            const ui64 pid = d0->GetPartitionSession()->GetPartitionId();
+            const TInstant t = pid == 0 ? T0 : T1;
+            holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid, t); });
+        }
+        auto ev1 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev1.has_value());
         const auto* d1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev1);
         UNIT_ASSERT(d1 != nullptr);
-        holder->GetControl()->AdvancePartitionTime(d1->GetPartitionSession()->GetPartitionId(), d1->GetPartitionSession()->GetPartitionId() == 0 ? T0 : T1);
+        {
+            const ui64 pid = d1->GetPartitionSession()->GetPartitionId();
+            const TInstant t = pid == 0 ? T0 : T1;
+            holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid, t); });
+        }
 
-        TString state = holder->GetControl()->GetInternalState();
+        TString state = holder->RunOnControl([](ICompositeTopicReadSessionControl& c) { return c.GetInternalState(); });
         UNIT_ASSERT_C(state.Contains("SuspendedPartitions"), "Partition 1 should be suspended: " << state);
 
         Sleep(shortIdle + TDuration::Seconds(3));
 
         mockP1->AddDataReceivedEvent(1, "p1_after_idle_unsuspend", T1);
-        holder->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
-        auto event1 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        auto event1 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event1.has_value());
         const auto* dataEv1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event1);
         UNIT_ASSERT(dataEv1 != nullptr);
@@ -498,9 +508,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT_C(content1 == "p1_after_idle_unsuspend", "Expected p1_after_idle_unsuspend, got: " << content1);
 
         mockP0->AddDataReceivedEvent(1, "after_idle", T1);
-        holder->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
-        auto event2 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        auto event2 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(event2.has_value());
         const auto* dataEv2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event2);
         UNIT_ASSERT(dataEv2 != nullptr);
@@ -523,37 +532,33 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockP1 != nullptr);
 
         mockP0->AddDataReceivedEvent(0, "p0_msg", T0);
-        auto ev0 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto ev0 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev0.has_value());
         const auto* data0 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev0);
         UNIT_ASSERT(data0 != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(data0->GetMessages()[0].GetData()), "p0_msg");
-        holder->GetControl()->AdvancePartitionTime(0, T0);
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T0); });
 
         mockP1->AddDataReceivedEvent(0, "p1_msg", T1);
-        auto ev1 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto ev1 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev1.has_value());
         const auto* data1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev1);
         UNIT_ASSERT(data1 != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(data1->GetMessages()[0].GetData()), "p1_msg");
-        holder->GetControl()->AdvancePartitionTime(1, T1);
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(1, T1); });
 
-        TString state = holder->GetControl()->GetInternalState();
+        TString state = holder->RunOnControl([](ICompositeTopicReadSessionControl& c) { return c.GetInternalState(); });
         UNIT_ASSERT_C(state.Contains("SuspendedPartitions"), "Expected suspended partitions: " << state);
         UNIT_ASSERT_C(state.Contains("PartitionId: 1"), "Partition 1 should be suspended (ahead in time): " << state);
 
-        auto evNone = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto evNone = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT_C(!evNone.has_value(), "No event while partition 1 is suspended");
 
-        holder->GetControl()->AdvancePartitionTime(0, T1);
+        holder->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T1); });
 
         mockP1->AddDataReceivedEvent(1, "after_unsuspend", T1);
-        holder->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
-        auto ev2 = holder->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        holder->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        auto ev2 = holder->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev2.has_value());
         const auto* data2 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev2);
         UNIT_ASSERT(data2 != nullptr);
@@ -577,10 +582,8 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         mockA->AddDataReceivedEvent(0, "data_a");
         mockB->AddDataReceivedEvent(0, "data_b");
 
-        auto evA = holderA->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
-        auto evB = holderB->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto evA = holderA->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
+        auto evB = holderB->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
 
         UNIT_ASSERT(evA.has_value());
         UNIT_ASSERT(evB.has_value());
@@ -606,26 +609,30 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         mockP0_1->AddDataReceivedEvent(0, "first_p0", T0);
         mockP1_1->AddDataReceivedEvent(0, "first_p1", T1);
-        auto ev0 = holder1->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto ev0 = holder1->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev0.has_value());
         const auto* d0 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev0);
         UNIT_ASSERT(d0 != nullptr);
         ui64 pid0 = d0->GetPartitionSession()->GetPartitionId();
-        holder1->GetControl()->AdvancePartitionTime(pid0, pid0 == 0 ? T0 : T1);
-        auto ev1 = holder1->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        {
+            const TInstant t = pid0 == 0 ? T0 : T1;
+            holder1->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid0, t); });
+        }
+        auto ev1 = holder1->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev1.has_value());
         const auto* d1 = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev1);
         UNIT_ASSERT(d1 != nullptr);
         ui64 pid1 = d1->GetPartitionSession()->GetPartitionId();
-        holder1->GetControl()->AdvancePartitionTime(pid1, pid1 == 0 ? T0 : T1);
+        {
+            const TInstant t = pid1 == 0 ? T0 : T1;
+            holder1->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid1, t); });
+        }
         UNIT_ASSERT(pid0 != pid1);
 
-        UNIT_ASSERT(holder1->GetSession()->Close(TDuration::Zero()));
+        UNIT_ASSERT(holder1->RunOnSession([](IReadSession& s) { return s.Close(TDuration::Zero()); }));
 
         auto holder2 = CreateSession(gateway.Get(), settings);
-        UNIT_ASSERT(!holder2->GetSession()->GetSessionId().empty());
+        UNIT_ASSERT(!holder2->RunOnSession([](IReadSession& s) { return s.GetSessionId(); }).empty());
         auto mockP0_2 = gateway->GetReadSession("topic", 0);
         auto mockP1_2 = gateway->GetReadSession("topic", 1);
         UNIT_ASSERT(mockP0_2 != nullptr);
@@ -633,18 +640,19 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
 
         mockP0_2->AddDataReceivedEvent(1, "reconnected_p0", T0);
         mockP1_2->AddDataReceivedEvent(1, "reconnected_p1", T1);
-        auto ev2a = holder2->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto ev2a = holder2->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev2a.has_value());
         const auto* d2a = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev2a);
         UNIT_ASSERT(d2a != nullptr);
         TString content2a(d2a->GetMessages()[0].GetData());
         UNIT_ASSERT(content2a == "reconnected_p0" || content2a == "reconnected_p1");
         ui64 pid2a = d2a->GetPartitionSession()->GetPartitionId();
-        holder2->GetControl()->AdvancePartitionTime(pid2a, pid2a == 0 ? T0 : T1);
-        holder2->GetSession()->WaitEvent().Wait(TDuration::Seconds(2));
-        auto ev2b = holder2->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        {
+            const TInstant t = pid2a == 0 ? T0 : T1;
+            holder2->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(pid2a, t); });
+        }
+        holder2->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(2));
+        auto ev2b = holder2->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(ev2b.has_value());
         const auto* d2b = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev2b);
         UNIT_ASSERT(d2b != nullptr);
@@ -674,38 +682,34 @@ Y_UNIT_TEST_SUITE(TCompositeTopicReadSessionTest) {
         UNIT_ASSERT(mockP1 != nullptr);
 
         mockP0->AddDataReceivedEvent(0, "p0_msg", T0);
-        auto evA = holderA->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto evA = holderA->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(evA.has_value());
         const auto* dataA = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*evA);
         UNIT_ASSERT(dataA != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(dataA->GetMessages()[0].GetData()), "p0_msg");
-        holderA->GetControl()->AdvancePartitionTime(0, T0);
+        holderA->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T0); });
 
         mockP1->AddDataReceivedEvent(0, "p1_msg", T1);
-        auto evB = holderB->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto evB = holderB->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT(evB.has_value());
         const auto* dataB = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*evB);
         UNIT_ASSERT(dataB != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(std::string(dataB->GetMessages()[0].GetData()), "p1_msg");
-        holderB->GetControl()->AdvancePartitionTime(1, T1);
+        holderB->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(1, T1); });
 
-        TString stateB = holderB->GetControl()->GetInternalState();
+        TString stateB = holderB->RunOnControl([](ICompositeTopicReadSessionControl& c) { return c.GetInternalState(); });
         UNIT_ASSERT_C(stateB.Contains("SuspendedPartitions"), "Session B should have suspended partition: " << stateB);
 
         mockP1->AddDataReceivedEvent(1, "blocked_until_a_advances", T1);
-        auto evNone = holderB->GetSession()->GetEvent(
-            NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+        auto evNone = holderB->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
         UNIT_ASSERT_C(!evNone.has_value(), "Session B should not get event while its partition is suspended (waiting for A)");
 
-        holderA->GetControl()->AdvancePartitionTime(0, T1);
+        holderA->RunOnControl([&](ICompositeTopicReadSessionControl& c) { c.AdvancePartitionTime(0, T1); });
         std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> evB2;
         const auto deadline = TInstant::Now() + TDuration::Seconds(10);
         while (TInstant::Now() < deadline) {
-            holderB->GetSession()->WaitEvent().Wait(TDuration::Seconds(1));
-            evB2 = holderB->GetSession()->GetEvent(
-                NYdb::NTopic::TReadSessionGetEventSettings().MaxEventsCount(1).MaxByteSize(4096));
+            holderB->RunOnSession([](IReadSession& s) { return s.WaitEvent(); }).Wait(TDuration::Seconds(1));
+            evB2 = holderB->RunOnSession([](IReadSession& s) { return s.GetEvent(DefaultGetEventSettings()); });
             if (evB2.has_value()) {
                 break;
             }

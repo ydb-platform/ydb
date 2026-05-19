@@ -66,6 +66,36 @@ message TShardOpResult {
     optional uint64 RowsProcessed = 4;
 }
 
+// Per-shard scan-completion event sent DS->SS on a dedicated channel,
+// decoupled from TEvSchemaChanged so the schema op can finish immediately.
+message TEvIncrementalRestoreShardProgress {
+    enum EEndStatus {
+        END_UNSPECIFIED = 0;
+        END_SUCCESS = 1;
+        END_TRANSIENT_FAILURE = 2;
+        END_FATAL_FAILURE = 3;
+    }
+
+    optional uint64 OperationId = 1;          // SS-side restore long-op id (TIncrementalRestoreState key)
+    optional uint64 SubOpTxId = 2;            // per-table sub-op TxId (TableOperations[opId] correlator)
+    optional uint64 ShardIdx = 3;             // localShardIdx of the replying DS
+    optional uint64 TabletId = 4;             // sender's tablet id (for pipe routing)
+    optional fixed64 Generation = 5;          // SS Generation at request time; dedup key
+    optional EEndStatus EndStatus = 6;
+    optional bool Success = 7;
+    optional string Error = 8;
+}
+
+message TEvIncrementalRestoreSrcCreateRequest {
+    optional uint64 OperationId = 1;          // SS-side restore long-op id (TIncrementalRestoreState key)
+    optional uint64 SubOpTxId = 2;            // per-table sub-op TxId (correlator for the reply)
+    optional uint64 ShardIdx = 3;             // localShardIdx of the destination DS (echoed in reply)
+    optional fixed64 SchemeShardGeneration = 4; // SS Generation at request time; dedup key
+    optional NKikimrProto.TPathID SrcPathId = 5; // source (incremental backup) table
+    optional NKikimrProto.TPathID DstPathId = 6; // destination (restored) table
+    optional uint64 SchemeShardId = 7;        // tablet id of the requesting SS (for the reply pipe)
+}
+
 message TEvSchemaChanged {
     optional NActorsProto.TActorId Source = 1;
     optional uint64 Origin = 2;

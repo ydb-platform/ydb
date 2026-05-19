@@ -5110,7 +5110,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
 
         winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
-        if (Ctx_.AnsiCurrentRow) {
+        if (Ctx_.AnsiCurrentRow && ordered) {
             // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             winSpecPtr->Frame->FrameType = EFrameType::FrameByRange;
             winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;

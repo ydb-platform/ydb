@@ -279,8 +279,6 @@ async def uninstall(host, disks, parent_task: progress.TaskNode = None, subtasks
 
 @progress.with_parent_task
 async def act_install(hosts, config, reinstall=False, parent_task: progress.TaskNode = None):
-    freehost = config['freehost']
-
     is_installed = any(await for_each_async(hosts, check_installed))
     subtasks = []
 
@@ -300,7 +298,6 @@ async def act_install(hosts, config, reinstall=False, parent_task: progress.Task
     dynamic_node_range_per_host = node_counts.dynamic_node_count_by_host()
     nbs_node_range_per_host = node_counts.nbs_node_count_by_host()
 
-    common_hosts = (host for host in hosts if host != freehost)
     prepare_commands = (prepare_host(host, parent_task=parent_task, subtasks=subtasks) for host in hosts)
     install_commands = [
         install_host(
@@ -311,10 +308,8 @@ async def act_install(hosts, config, reinstall=False, parent_task: progress.Task
             parent_task=parent_task,
             subtasks=subtasks,
         )
-        for host in common_hosts
+        for host in hosts
     ]
-    if freehost:
-        install_commands.append(install_host(freehost, 1, parent_task=parent_task, subtasks=subtasks))
 
     result = await tools.chain_async(
         make_archive_with_configs(),
@@ -352,9 +347,8 @@ async def act_update_cfg(
     if not await make_archive_with_configs():
         return False
     nodes_per_host = config['nodes_per_host']
-    freehost = config['freehost']
     locations_by_host = common.get_node_locations_by_host(
-        hosts, nodes_per_host, freehost, nodes, exclude_nodes
+        hosts, nodes_per_host, nodes, exclude_nodes
     )
     for host, ids in locations_by_host.items():
         prepare_tmp_dir_task = await parent_task.add_subtask(f"[bold green]Prepare tmp dir on {host}", total=1)

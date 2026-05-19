@@ -215,7 +215,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
     for (const auto& column : colNames) {
         const auto it = mapping.find(column.GetFullName());
-        if (it != mapping.end()) {
+        if (it != mapping.end() && it->second.TableName != "") {
             const auto& tableName = it->second.TableName;
             const auto& colName = it->second.ColumnName;
             CMColumnsByTableName[tableName].insert(colName);
@@ -419,6 +419,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());
+    physicalStageRules.emplace_back(std::make_unique<TDisableBlocksOnColumnsLimitRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));
 
     // CBO stages.

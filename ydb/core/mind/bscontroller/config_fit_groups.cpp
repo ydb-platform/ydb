@@ -675,11 +675,16 @@ namespace NKikimr {
                     }
                 }
 
+                ui32 maxSlots = 0;
+                ui32 slotSizeInUnits = 0;
+                info.ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
+
                 // calculate vdisk space quota (or amount of available space when no enforcement is enabled)
                 i64 availableSpace = Max<i64>();
                 if (usable && !IgnoreVSlotQuotaCheck) {
                     if (info.SlotSpaceEnforced(State.Self)) {
-                        availableSpace = info.Metrics.GetEnforcedDynamicSlotSize() * (1000 - PDiskSpaceMarginPromille) / 1000;
+                        const ui32 weight = TPDiskConfig::GetOwnerWeight(StoragePool.DefaultGroupSizeInUnits, slotSizeInUnits);
+                        availableSpace = info.Metrics.GetEnforcedDynamicSlotSize() * weight * (1000 - PDiskSpaceMarginPromille) / 1000;
                     } else {
                         // here we assume that no space enforcement takes place and we have to calculate available space
                         // for this disk; we take it as available space and keep in mind that PDisk must have at least
@@ -726,10 +731,6 @@ namespace NKikimr {
                         Y_DEBUG_ABORT_S("can't find pile for NodeId# " << id.NodeId);
                     }
                 }
-
-                ui32 maxSlots = 0;
-                ui32 slotSizeInUnits = 0;
-                info.ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
 
                 auto location = State.HostRecords->GetLocation(id.NodeId);
 

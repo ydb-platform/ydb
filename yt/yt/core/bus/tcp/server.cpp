@@ -83,7 +83,7 @@ public:
         YT_LOG_INFO("Bus server started");
     }
 
-    void OnDynamicConfigChanged(const NBus::NTcp::TBusServerDynamicConfigPtr& config)
+    void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config)
     {
         YT_VERIFY(config);
 
@@ -480,21 +480,21 @@ public:
 
         Server_.Store(server);
         server->Start();
-        server->OnDynamicConfigChanged(DynamicConfig_.Acquire());
+        server->Reconfigure(DynamicConfig_.Acquire());
 
         if (UpdateCertSensorsExecutor_) {
             UpdateCertSensorsExecutor_->Start();
         }
     }
 
-    void OnDynamicConfigChanged(const NBus::NTcp::TBusServerDynamicConfigPtr& config) final
+    void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config) final
     {
         YT_VERIFY(config);
 
         DynamicConfig_.Store(config);
 
         if (auto server = Server_.Acquire()) {
-            server->OnDynamicConfigChanged(config);
+            server->Reconfigure(config);
         }
     }
 
@@ -638,12 +638,12 @@ public:
         }
     }
 
-    void OnDynamicConfigChanged(const NBus::NTcp::TBusServerDynamicConfigPtr& config) final
+    void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config) final
     {
         YT_VERIFY(config);
 
         for (const auto& server : Servers_) {
-            server->OnDynamicConfigChanged(config);
+            server->Reconfigure(config);
         }
     }
 

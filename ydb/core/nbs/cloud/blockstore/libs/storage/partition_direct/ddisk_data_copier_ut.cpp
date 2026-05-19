@@ -76,16 +76,17 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
             // expectedRange should be locked for reading and copying.
             UNIT_ASSERT_VALUES_EQUAL(
-                ExpectedRange.Print(),
+                ExpectedRange.Print() + "[H1];" + ExpectedRange.Print() +
+                    "[H0,H2,H3];",
                 DirtyMap.DebugPrintLockedDDiskRanges());
 
-            // Complete reading and rea-arm.
+            // Complete reading and re-arm promise.
             SetReadResult({.Error = MakeError(S_OK)});
             ClearReadPromises();
 
             // expectedRange should be locked for copying.
             UNIT_ASSERT_VALUES_EQUAL(
-                ExpectedRange.Print(),
+                ExpectedRange.Print() + "[H1];",
                 DirtyMap.DebugPrintLockedDDiskRanges());
 
             // Set next expected range right before completing write.

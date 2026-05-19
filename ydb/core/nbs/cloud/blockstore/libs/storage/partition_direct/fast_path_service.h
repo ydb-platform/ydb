@@ -29,8 +29,6 @@ private:
     const ITimerPtr Timer;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
-    const EWriteMode WriteMode;
-    const TDuration PBufferReplyTimeout;
 
     std::atomic<ui64> SequenceGenerator;
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};

@@ -728,7 +728,7 @@ TErrorCodicils& TErrorCodicils::GetOrCreate()
     return *ErrorCodicilsSlot().GetOrCreate();
 }
 
-const TErrorCodicils* TErrorCodicils::TryGet()
+TErrorCodicils* TErrorCodicils::TryGet()
 {
     return ErrorCodicilsSlot().TryGet();
 }

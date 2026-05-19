@@ -1732,7 +1732,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
 
                 for (auto& col: join->Child(3)->ChildrenList()) {
                     if (col->Child(0)->IsAtom()) {
-                        leftColumns.push_back(col->Child(0));
+                        leftColumns.emplace_back(col->Child(0));
                     } else {
                         auto pname = col->Child(0)->Child(0);
                         auto lname = ctx.Builder(pos).Atom(TString("_left_.") + pname->Content()).Build();
@@ -1745,7 +1745,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                         leftColumns.push_back(lname);
                     }
                     if (col->Child(1)->IsAtom()) {
-                        rightColumns.push_back(col->Child(1));
+                        rightColumns.emplace_back(col->Child(1));
                     } else {
                         auto pname = col->Child(1)->Child(0);
                         auto lname = ctx.Builder(pos).Atom(TString("_right_.") + pname->Content()).Build();

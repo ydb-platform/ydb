@@ -8,7 +8,9 @@
 #include <util/string/builder.h>
 
 #include <arrow/array/validate.h>
+#include <arrow/scalar.h>
 #include <arrow/util/config.h>
+#include <arrow/util/checked_cast.h>
 
 namespace NKikimr::NMiniKQL {
 namespace {
@@ -56,10 +58,8 @@ namespace {
 std::shared_ptr<arrow::ArrayData> ConvertYqlOffsetsToArrowStandard(
     const arrow::ArrayData& arrayData) {
     auto result = arrayData.Copy();
-    if (result->type->id() == arrow::Type::STRUCT ||
-        result->type->id() == arrow::Type::DENSE_UNION ||
-        result->type->id() == arrow::Type::SPARSE_UNION) {
-        if (result->buffers[0]) {
+    if (result->type->id() == arrow::Type::STRUCT) {
+        if (!result->buffers.empty() && result->buffers[0]) {
             auto actualSize = arrow::BitUtil::BytesForBits(result->length + result->offset);
             MKQL_ENSURE(result->buffers[0]->size() >= actualSize, "Bitmask is invalid.");
         }
@@ -103,7 +103,13 @@ private:
 
 class TUnimplementedValidator: public TDatumValidatorBase {
 public:
-    using TDatumValidatorBase::TDatumValidatorBase;
+    template <typename... TArgs>
+    explicit TUnimplementedValidator(TArgs&&... args)
+        : TDatumValidatorBase(nullptr)
+    {
+        Y_UNUSED(args...);
+    }
+
     void Validate(arrow::Datum datum) const override {
         Y_UNUSED(datum);
     }
@@ -241,12 +247,12 @@ std::unique_ptr<TValidatorTraits::TResult> MakeBlockValidator(const NYql::NUdf::
 }
 
 arrow::Status ValidateArrayCheap(arrow::Datum datum, const TType* type) {
+    auto array = ConvertYqlOffsetsToArrowStandard(*datum.array());
+    ARROW_RETURN_NOT_OK(arrow::internal::ValidateArray(*array));
     if (type) {
         MakeBlockValidator(TTypeInfoHelper(), type)->Validate(datum);
     }
-    auto array = ConvertYqlOffsetsToArrowStandard(*datum.array());
-    arrow::Status status = arrow::internal::ValidateArray(*array);
-    return status;
+    return arrow::Status::OK();
 }
 
 arrow::Status ValidateArrayExpensive(arrow::Datum datum, const TType* type) {

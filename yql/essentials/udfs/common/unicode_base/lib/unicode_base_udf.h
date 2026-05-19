@@ -646,7 +646,7 @@ DEFINE_UTF8_OPERATION_BIN_STRICT(TryToUint64, TToUint64Converter</*strict=*/true
 using TTmpVector = TSmallVec<TUnboxedValue, TUnboxedValue::TAllocator>;
 
 template <typename TIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const std::string_view::const_iterator from,
@@ -658,7 +658,7 @@ static void SplitToListImpl(
 }
 
 template <typename TIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const TUtf32String::const_iterator start,
@@ -682,7 +682,7 @@ static void SplitToListImpl(
 }
 
 template <typename TIt, typename TStrIt>
-static void SplitToListImpl(
+void SplitToListImpl(
     const IValueBuilder* valueBuilder,
     const TUnboxedValue& input,
     const TStrIt from,

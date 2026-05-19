@@ -5864,7 +5864,7 @@ bool TSqlTranslation::ParseViewQuery(
 
 namespace {
 
-static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
+TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString StatementSeparator = ";\n";
 
     TVector<TString> statements;

@@ -225,6 +225,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasMaxBarriersLimit()) {
                     pbufferFormat.MaxBarriersLimit = Cfg->PBufferConfig->GetMaxBarriersLimit();
                 }
+                if (Cfg->PBufferConfig->HasMaxPendingEventsQueueSize()) {
+                    pbufferFormat.MaxPendingEventsQueueSize = Cfg->PBufferConfig->GetMaxPendingEventsQueueSize();
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));

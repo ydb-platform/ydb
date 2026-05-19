@@ -159,7 +159,4 @@ NNodes::TMaybeNode<NNodes::TCoLambda> GetMapLambda(const NNodes::TYtWithUserJobs
 
 TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TString& cluster, const NLayers::ILayersRegistryPtr& layersRegistry,
     const NLayers::ILayersIntegrationPtr& integration, const TYtSettings::TConstPtr& conf, TExprContext& ctx);
-
-ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config);
-
-};
+}

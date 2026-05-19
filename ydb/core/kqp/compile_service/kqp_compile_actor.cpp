@@ -87,7 +87,7 @@ public:
         , UsePessimisticLocks(usePessimisticLocks)
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = UsePessimisticLocks || (perStatementResult && Config->GetEnablePerStatementQueryExecution());
+        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
     }
 
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {

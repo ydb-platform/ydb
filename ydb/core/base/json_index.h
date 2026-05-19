@@ -8,9 +8,7 @@
 #include <set>
 #include <variant>
 
-namespace NKikimr {
-
-namespace NJsonIndex {
+namespace NKikimr::NJsonIndex {
 
 // YQL json numbers are double precision floats. The maximum supported integer is +-2^53.
 static constexpr i64 MaxSupportedInt = 9007199254740992ll;
@@ -19,15 +17,15 @@ static constexpr i64 MaxSupportedInt = 9007199254740992ll;
 struct TToken {
 public:
     // Constructs a token with the given path token (full or partial path-prefix token)
-    explicit TToken(const TString& pathToken)
-        : PathToken(pathToken)
+    explicit TToken(TString pathToken)
+        : PathToken(std::move(pathToken))
     {
     }
 
     // Constructs a token with the given path token and parameter name (partial path-prefix and YQL param name)
-    explicit TToken(const TString& pathToken, const TString& paramName)
-        : PathToken(pathToken)
-        , ParamName(paramName)
+    explicit TToken(TString pathToken, TString paramName)
+        : PathToken(std::move(pathToken))
+        , ParamName(std::move(paramName))
     {
     }
 
@@ -63,13 +61,13 @@ public:
 
 public:
     // Constructs a collect result with the given tokens
-    TCollectResult(TTokens&& tokens);
+    explicit TCollectResult(TTokens&& tokens);
 
     // Constructs a collect result with the given token
-    TCollectResult(TString&& token);
+    explicit TCollectResult(TString&& token);
 
     // Constructs a collect result with the given error
-    TCollectResult(TError&& issue);
+    explicit TCollectResult(TError&& issue);
 
     // Returns the collected tokens for the JSON index
     const TTokens& GetTokens() const;
@@ -115,15 +113,15 @@ enum class ECallableType {
 
 // Tokenizes the given JSON string into a list of tokens
 // The tokenization result is filled into the JSON index table
-TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error);
+TVector<TString> TokenizeJson(TStringBuf text, TString& error);
 
 // Tokenizes the given binary JSON into a list of tokens
 // The tokenization result is filled into the JSON index table
-TVector<TString> TokenizeBinaryJson(const TStringBuf text);
+TVector<TString> TokenizeBinaryJson(TStringBuf text);
 
 // Builds tokens for the given jsonpath expression
 // The tokens are used for searching in the JSON index
-TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType,
+TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr& path, ECallableType callableType,
     const std::unordered_map<TString, TString>& variables, const std::unordered_map<TString, TString>& paramVariables = {});
 
 // Merges two collect results with AND semantics (all tokens must match)
@@ -148,6 +146,4 @@ void AppendJsonIndexLiteral(TString& out, NBinaryJson::EEntryType type, TStringB
 //   ("", "")             -> {}
 TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName);
 
-}  // namespace NJsonIndex
-
-}  // namespace NKikimr
+} // namespace NKikimr::NJsonIndex

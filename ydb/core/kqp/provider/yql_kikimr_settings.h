@@ -81,6 +81,8 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownAggregate;
+    NCommon::TConfSetting<TString, Static> OptForceOlapPushdownDistinct;
+    NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;

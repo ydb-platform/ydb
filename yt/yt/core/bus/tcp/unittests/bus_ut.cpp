@@ -1,0 +1,15 @@
+#include "traits.h"
+
+#include <yt/yt/core/bus/unittests/lib/bus_ut.h>
+
+namespace NYT::NBus::NTests {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+INSTANTIATE_TYPED_TEST_SUITE_P(Tcp, TBusTest, TTcpBusTraits);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+} // namespace NYT::NBus::NTests

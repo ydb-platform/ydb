@@ -1,4 +1,12 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value:"fdsa"|>,
+    <|value:"aswedfg"|>,
+    <|value:"asdadsaasd"|>,
+    <|value:"gdsfsassas"|>,
+    <|value:""|>,
+    <|value:"`Привет, мир!`"|>
+);
+
 SELECT
     value,
     String::Contains(value, "as") AS contains,
@@ -9,4 +17,4 @@ SELECT
     String::Find(value, "as") AS find,
     String::ReverseFind(value, "as") AS rfind,
     String::LevensteinDistance(value, "as") AS levenstein
-FROM Input;
+FROM AS_TABLE($input);

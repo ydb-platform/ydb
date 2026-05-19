@@ -41,7 +41,7 @@ TRuntimeNode WideTopImpl(const TExprNode& node, TMkqlBuildContext& ctx,
     std::vector<std::pair<ui32, TRuntimeNode>> directions;
     directions.reserve(node.Tail().ChildrenSize());
     node.Tail().ForEachChild([&](const TExprNode& dir) {
-        directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+        directions.emplace_back(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx));
     });
 
     return (ctx.ProgramBuilder.*func)(flow, count, directions);
@@ -54,7 +54,7 @@ TRuntimeNode WideSortImpl(const TExprNode& node, TMkqlBuildContext& ctx,
     std::vector<std::pair<ui32, TRuntimeNode>> directions;
     directions.reserve(node.Tail().ChildrenSize());
     node.Tail().ForEachChild([&](const TExprNode& dir) {
-        directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+        directions.emplace_back(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx));
     });
 
     return (ctx.ProgramBuilder.*func)(flow, directions);

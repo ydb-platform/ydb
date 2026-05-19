@@ -61,16 +61,24 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    ui64 CalculateChecksum(const TRope::TIterator begin, size_t numBytes) {
+    ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin) {
+        Y_ABORT_UNLESS(PersistentBufferUniqueId != Max<ui64>());
+
         XXH3_state_t state;
         XXH3_64bits_reset(&state);
-
+        size_t numBytes = SectorSize;
         for (auto it = begin; numBytes && it.Valid(); it.AdvanceToNextContiguousBlock()) {
             const size_t n = Min(numBytes, it.ContiguousSize());
             XXH3_64bits_update(&state, it.ContiguousData(), n);
             numBytes -= n;
         }
-
+        XXH3_64bits_update(&state, &PersistentBufferUniqueId, sizeof(PersistentBufferUniqueId));
+        auto nodeId = BaseInfo.PDiskActorID.NodeId();
+        auto pdiskId = BaseInfo.PDiskId;
+        auto slotId = BaseInfo.VDiskSlotId;
+        XXH3_64bits_update(&state, &nodeId, sizeof(nodeId));
+        XXH3_64bits_update(&state, &pdiskId, sizeof(pdiskId));
+        XXH3_64bits_update(&state, &slotId, sizeof(slotId));
         return XXH3_64bits_digest(&state);
     }
 
@@ -135,7 +143,7 @@ namespace NKikimr::NDDisk {
                 loc.HasSignatureCorrection = true;
                 *it.ContiguousDataMut() = 0;
             }
-            loc.Checksum = CalculateChecksum(it, SectorSize);
+            loc.Checksum = CalculateChecksum(it);
             sectors[i].Checksum = loc.Checksum;
         }
         header->HeaderChecksum = 0;
@@ -148,8 +156,8 @@ namespace NKikimr::NDDisk {
                 TRope data;
                 ui32 partSize = (sectorIdx - (first == 0 ? 1 : first)) * SectorSize;
                 if (first == 0) {
-                    header->HeaderChecksum = XXH3_64bits(headerData.GetDataMut(), SectorSize);
                     data = headerData;
+                    header->HeaderChecksum = CalculateChecksum(data.Begin());
                 }
                 payload.ExtractFront(partSize, &data);
                 parts.push_back({(ui32)sectors[first].ChunkIdx, sectors[first].SectorIdx * SectorSize, std::move(data)});
@@ -195,7 +203,7 @@ namespace NKikimr::NDDisk {
                 TPersistentBufferHeader* header = (TPersistentBufferHeader*)&sector;
                 ui64 headerChecksum = header->HeaderChecksum;
                 header->HeaderChecksum = 0;
-                ui64 sectorChecksum = XXH3_64bits((char*)&sector, SectorSize);
+                ui64 sectorChecksum = CalculateChecksum(dataPos);
                 if (headerChecksum != sectorChecksum) {
                     STLOG_E("TDDiskActor::StartRestorePersistentBuffer header checksum failed", (TabletId, header->Record.TabletId), (VChunkIndex, header->Record.VChunkIndex), (Lsn, header->Record.Lsn));
                     continue;
@@ -225,7 +233,7 @@ namespace NKikimr::NDDisk {
                     pr.Sectors.push_back(header->Record.Locations[i]);
                 }
             } else {
-                PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = XXH3_64bits((char*)&sector, SectorSize);
+                PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = CalculateChecksum(dataPos);
             }
         }
 
@@ -429,7 +437,7 @@ namespace NKikimr::NDDisk {
                     if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
                         *it.ContiguousDataMut() = 0;
                     }
-                    if (data.Sectors[i + 1].Checksum != CalculateChecksum(it, SectorSize)) {
+                    if (data.Sectors[i + 1].Checksum != CalculateChecksum(it)) {
                         dataEqual = false;
                         break;
                     }
@@ -918,7 +926,8 @@ namespace NKikimr::NDDisk {
         auto headerData = TRcBuf::UninitializedPageAligned(SectorSize);
         barrier.Header.HeaderChecksum = 0;
         memcpy(headerData.GetDataMut(), &barrier.Header, sizeof(TPersistentBufferHeader));
-        ((TPersistentBufferHeader*)headerData.GetDataMut())->HeaderChecksum = XXH3_64bits(headerData.GetDataMut(), SectorSize);
+        TRope headerRope(headerData);
+        ((TPersistentBufferHeader*)headerData.GetDataMut())->HeaderChecksum = CalculateChecksum(headerRope.Begin());
 
         auto chunkOffset = barrier.SectorIdx * SectorSize;
         auto diskOffset = DiskFormat->Offset(barrier.ChunkIdx, 0, chunkOffset);
@@ -927,7 +936,7 @@ namespace NKikimr::NDDisk {
         partOp->SetCookie(barrierEraseCookie);
         partOp->SetPartCookie(cookie);
         partOp->SetIsErase(true);
-        partOp->PrepareWrite(TRope(headerData), diskOffset, barrier.ChunkIdx, chunkOffset);
+        partOp->PrepareWrite(std::move(headerRope), diskOffset, barrier.ChunkIdx, chunkOffset);
         DirectUringOp(op);
     }
 

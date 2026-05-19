@@ -327,7 +327,8 @@ namespace NKikimr::NDDisk {
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
-            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd);
+            ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
+            TFileHandle&& diskFd);
 
         ~TDDiskActor();
         void Bootstrap();
@@ -695,6 +696,7 @@ namespace NKikimr::NDDisk {
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
         std::vector<ui32> PersistentBufferChunks;
+        ui64 PersistentBufferUniqueId = Max<ui64>();
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
         TPersistentBufferBarriersManager PersistentBufferBarriersManager;
@@ -709,6 +711,8 @@ namespace NKikimr::NDDisk {
 
         TActorId WritePersistentBuffersActor;
         TActorId PersistentBufferActorId;
+
+        ui64 CalculateChecksum(const TRope::TIterator begin);
 
         void CreatePersistentBuffer();
         void InitPersistentBuffer();

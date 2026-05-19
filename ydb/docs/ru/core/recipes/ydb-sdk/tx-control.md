@@ -160,20 +160,7 @@
       pool.execute_with_retries("SELECT 1")
   ```
 
-<<<<<<< HEAD
-- C++
-
-  ```cpp
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::NoTx()
-  ).GetValueSync();
-  ```
-
-- C# (.NET)
-=======
 - C#
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   {% cut "ADO.NET" %}
 
@@ -442,21 +429,7 @@
       pool.retry_operation_sync(callee)
   ```
 
-<<<<<<< HEAD
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
-- C# (.NET)
-=======
 - C#
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   {% cut "ADO.NET" %}
 
@@ -792,21 +765,7 @@
       pool.retry_operation_sync(callee)
   ```
 
-<<<<<<< HEAD
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
-- C# (.NET)
-=======
 - C#
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   {% cut "ADO.NET" %}
 
@@ -1071,21 +1030,7 @@
       pool.retry_operation_sync(callee)
   ```
 
-<<<<<<< HEAD
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::StaleRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
-- C# (.NET)
-=======
 - C#
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   {% cut "ADO.NET" %}
 
@@ -1340,21 +1285,7 @@
       pool.retry_operation_sync(callee)
   ```
 
-<<<<<<< HEAD
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
-- C# (.NET)
-=======
 - C#
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   {% cut "ADO.NET" %}
 
@@ -1612,21 +1543,7 @@
       pool.retry_operation_sync(callee)
   ```
 
-<<<<<<< HEAD
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
-- C# (.NET)
-=======
 - C#
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   {% cut "ADO.NET" %}
 

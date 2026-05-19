@@ -27,8 +27,6 @@
 
 {% list tabs %}
 
-<<<<<<< HEAD
-=======
 - C++
 
   ```cpp
@@ -69,7 +67,6 @@
     }
     ```
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Python
 
     Для выполнения запросов необходимо создать `ydb.QuerySessionPool`.
@@ -84,16 +81,6 @@
     pool = ydb.QuerySessionPool(driver)
     ```
 
-<<<<<<< HEAD
-- C++
-
-    ```cpp
-    auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database);
-    NYdb::TDriver driver(driverConfig);
-    NYdb::NQuery::TQueryClient client(driver);
-    ```
-
-=======
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -136,7 +123,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 
@@ -161,8 +147,6 @@
 
 {% list tabs %}
 
-<<<<<<< HEAD
-=======
 - C++
 
     ```cpp
@@ -200,7 +184,6 @@
     }
     ```
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Python
 
     ```python
@@ -218,28 +201,6 @@
         print(f"Vector table {table_name} created")
     ```
 
-<<<<<<< HEAD
-- C++
-
-    ```cpp
-    void CreateVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tableName)
-    {
-        std::string query = std::format(R"(
-            CREATE TABLE IF NOT EXISTS `{}` (
-                id Utf8,
-                document Utf8,
-                embedding String,
-                PRIMARY KEY (id)
-            ))", tableName);
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        }));
-
-        std::cout << "Vector table created: " << tableName << std::endl;
-    }
-    ```
-=======
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -287,7 +248,6 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
 {% endlist %}
 
@@ -302,8 +262,6 @@
 
 {% list tabs %}
 
-<<<<<<< HEAD
-=======
 - C++
 
     ```cpp
@@ -419,7 +377,6 @@
     }
     ```
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Python
 
     Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста, заранее сериализованное в последовательность байт.
@@ -473,22 +430,6 @@
         print(f"{len(items)} items inserted")
     ```
 
-<<<<<<< HEAD
-- C++
-
-    ```cpp
-    std::string ConvertVectorToBytes(const std::vector<float>& vector)
-    {
-        std::string result;
-        for (const auto& value : vector) {
-            const char* bytes = reinterpret_cast<const char*>(&value);
-            result += std::string(bytes, sizeof(float));
-        }
-        return result + "\x01";
-    }
-
-    void InsertItemsAsBytes(
-=======
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -678,7 +619,6 @@
 
     ```cpp
     void InsertItemsAsFloatList(
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
         NYdb::NQuery::TQueryClient& client,
         const std::string& tableName,
         const std::vector<TItem>& items)
@@ -687,16 +627,10 @@
             DECLARE $items AS List<Struct<
                 id: Utf8,
                 document: Utf8,
-<<<<<<< HEAD
-                embedding: String
-            >>;
-            UPSERT INTO `{0}`
-=======
                 embedding: List<Float>
             >>;
 
             UPSERT INTO `{}`
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
             (
                 id,
                 document,
@@ -705,11 +639,7 @@
             SELECT
                 id,
                 document,
-<<<<<<< HEAD
-                embedding,
-=======
                 Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
             FROM AS_TABLE($items);
         )", tableName);
 
@@ -721,15 +651,11 @@
             valueBuilder.BeginStruct();
             valueBuilder.AddMember("id").Utf8(item.Id);
             valueBuilder.AddMember("document").Utf8(item.Document);
-<<<<<<< HEAD
-            valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
-=======
             valueBuilder.AddMember("embedding").BeginList();
             for (const auto& value : item.Embedding) {
                 valueBuilder.AddListItem().Float(value);
             }
             valueBuilder.EndList();
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
             valueBuilder.EndStruct();
         }
         valueBuilder.EndList();
@@ -743,15 +669,6 @@
     }
     ```
 
-<<<<<<< HEAD
-    {% note info %}
-
-    В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
-
-    {% endnote %}
-
-=======
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Python (альтернативный)
 
     Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
@@ -796,61 +713,6 @@
         print(f"{len(items)} items inserted")
     ```
 
-<<<<<<< HEAD
-- C++ (альтернативный)
-
-    ```cpp
-    void InsertItemsAsFloatList(
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& tableName,
-        const std::vector<TItem>& items)
-    {
-        std::string query = std::format(R"(
-            DECLARE $items AS List<Struct<
-                id: Utf8,
-                document: Utf8,
-                embedding: List<Float>
-            >>;
-
-            UPSERT INTO `{}`
-            (
-                id,
-                document,
-                embedding
-            )
-            SELECT
-                id,
-                document,
-                Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-            FROM AS_TABLE($items);
-        )", tableName);
-
-        NYdb::TParamsBuilder paramsBuilder;
-        auto& valueBuilder = paramsBuilder.AddParam("$items");
-        valueBuilder.BeginList();
-        for (const auto& item : items) {
-            valueBuilder.AddListItem();
-            valueBuilder.BeginStruct();
-            valueBuilder.AddMember("id").Utf8(item.Id);
-            valueBuilder.AddMember("document").Utf8(item.Document);
-            valueBuilder.AddMember("embedding").BeginList();
-            for (const auto& value : item.Embedding) {
-                valueBuilder.AddListItem().Float(value);
-            }
-            valueBuilder.EndList();
-            valueBuilder.EndStruct();
-        }
-        valueBuilder.EndList();
-        valueBuilder.Build();
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-        }));
-
-        std::cout << items.size() << " items inserted" << std::endl;
-    }
-    ```
-=======
 - JavaScript (альтернативный)
 
   ```javascript
@@ -875,7 +737,6 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
 {% endlist %}
 
@@ -906,8 +767,6 @@
 
 {% list tabs %}
 
-<<<<<<< HEAD
-=======
 - C++
 
     ```cpp
@@ -992,7 +851,6 @@
     }
     ```
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Python
 
     ```python

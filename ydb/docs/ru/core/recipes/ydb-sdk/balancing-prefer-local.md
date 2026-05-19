@@ -4,9 +4,6 @@
 
 {% list tabs %}
 
-<<<<<<< HEAD
-- Go (native)
-=======
 - С++
 
   {% list tabs %}
@@ -51,7 +48,6 @@
   {% endlist %}
 
 - Go
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   ```go
   package main
@@ -128,27 +124,6 @@
   }
   ```
 
-<<<<<<< HEAD
-- С++
-
-  {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-=======
 - Python
 
   {% list tabs %}
@@ -250,6 +225,5 @@
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
 {% endlist %}

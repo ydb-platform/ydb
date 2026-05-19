@@ -63,8 +63,6 @@
   NYdb::NTopic::TTopicClient topicClient(driver);
   ```
 
-<<<<<<< HEAD
-=======
 - Go
 
   Для работы с топиками используется экземпляр драйвера {{ ydb-short-name }}, созданный с помощью `ydb.Open`. Клиент топиков доступен через метод `db.Topic()`.
@@ -108,7 +106,6 @@
   }
   ```
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Java
 
   Для работы с топиками создаются экземпляры транспорта {{ ydb-short-name }} и клиента.
@@ -1978,8 +1975,6 @@
 
 {% list tabs group=lang %}
 
-<<<<<<< HEAD
-=======
 - C++
 
   В `NYdb::NTopic::TReadSessionSettings` вызовите `WithoutConsumer()`:
@@ -2016,7 +2011,6 @@
   }
   ```
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Java
 
   Для чтения без Consumer'а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
@@ -2610,8 +2604,6 @@
 
 {% list tabs group=lang %}
 
-<<<<<<< HEAD
-=======
 - C++
 
   Подтверждение обработки вне сессии чтения производится с помощью метода `NYdb::NTopic::TTopicClient::CommitOffset`:
@@ -2681,7 +2673,6 @@
   )
   ```
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 - Python
 
   Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:

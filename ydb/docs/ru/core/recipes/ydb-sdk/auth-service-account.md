@@ -6,9 +6,6 @@
 
 {% list tabs %}
 
-<<<<<<< HEAD
-- Go (native)
-=======
 - C++
 
   {% list tabs %}
@@ -62,7 +59,6 @@
   {% endlist %}
 
 - Go
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
   ```go
   package main

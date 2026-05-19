@@ -33,8 +33,6 @@
      - Чем меньше значение, тем выше вероятность ложных срабатываний, когда живой лидер может завершить работу для перестраховки, так как не будет уверен, что этот период не закончился у нового лидера.
      - Должен быть строго больше, чем `SelfCheckPeriod`.
 
-<<<<<<< HEAD
-=======
 - Go
 
     ```go
@@ -133,7 +131,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 ## Работа с сессиями {#session}
@@ -166,8 +163,6 @@
    - `OnStopped` - вызывается, когда сессия прекращает попытки восстановить связь с сервисом, что может быть полезно для установления нового соединения.
    - `Timeout` - максимальный таймаут, в течение которого сессия может быть восстановлена после потери связи с сервисом.
 
-<<<<<<< HEAD
-=======
 - Go
 
     ```go
@@ -253,7 +248,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 ### Контроль завершения сессии {#session-control}
@@ -266,8 +260,6 @@
 
   В C++ SDK установленная сессия в фоне поддерживает и автоматически восстанавливает связь с кластером {{ ydb-short-name }}.
 
-<<<<<<< HEAD
-=======
 - Go
 
   В Go SDK для отслеживания таких ситуаций используется контекст сессии `session.Context()`, который завершается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить только за контекстом сессии, чтобы своевременно отреагировать на её потерю.
@@ -298,7 +290,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 ## Работа с семафорами {#semaphore}
@@ -334,8 +325,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Go
 
     ```go
@@ -415,7 +404,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 ### Захват семафора {#acquire-semaphore}
@@ -454,8 +442,6 @@
     - `Shared()` - алиас для выставления `Count = 1`, захват семафора в shared режиме.
     - `Exclusive()` - алиас для выставления `Count = max`, захват семафора в exclusive режиме (для семафоров, созданных с лимитом `Max<ui64>()`).
 
-<<<<<<< HEAD
-=======
 - Go
 
     ```go
@@ -565,7 +551,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -588,8 +573,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Go
 
     ```go
@@ -660,7 +643,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 Этот вызов не требует захвата семафора и не приводит к нему. Если требуется, чтобы данные обновлял только один конкретный клиент, то это необходимо явным образом обеспечить, например, захватив семафор, обновив данные и отпустив семафор обратно.
@@ -706,8 +688,6 @@
     - `Count` - запрошенное в `AcquireSemaphore` значение.
     - `Data` - данные, которые были указаны в `AcquireSemaphore`.
 
-<<<<<<< HEAD
-=======
 - Go
 
     ```go
@@ -791,7 +771,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 ### Освобождение семафора {#release-semaphore}
@@ -809,8 +788,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Go
 
     Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`.
@@ -886,7 +863,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 {% endlist %}
 
 ## Важные особенности

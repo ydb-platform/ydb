@@ -25,44 +25,6 @@
     Метод принимает лямбда-функцию, которая получает объект сессии и возвращает результат запроса.
     {{ ydb-short-name }} C++ SDK автоматически анализирует ошибки и выполняет повторные попытки в соответствии с их типом.
 
-<<<<<<< HEAD
-  void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              SELECT series_id, title
-              FROM series
-              WHERE series_id = 1;
-          )";
-          
-          auto result = session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).GetValueSync();
-          
-          if (!result.IsSuccess()) {
-              return result;
-          }
-          
-          // Обработка результата запроса
-          auto resultSet = result.GetResultSet(0);
-          NYdb::TResultSetParser parser(resultSet);
-          while (parser.TryNextRow()) {
-              std::cout << "Series"
-                  << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                  << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                  << std::endl;
-          }
-          
-          return result;
-      });
-      
-      if (!result.IsSuccess()) {
-          // Обработка ошибки после всех попыток
-          std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
-=======
     Пример кода, использующего `RetryQuerySync`:
 
     ```c++
@@ -94,7 +56,6 @@
                     << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
                     << std::endl;
             }
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
             return result;
         });
@@ -113,46 +74,6 @@
     Для асинхронного выполнения запросов с автоматическими повторными попытками используется метод `RetryQuery`.
     Метод возвращает `NThreading::TFuture`, что позволяет выполнять операции асинхронно.
 
-<<<<<<< HEAD
-  void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
-      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
-          auto query = R"(
-              SELECT series_id, title, release_date
-              FROM series
-              WHERE series_id = 1;
-          )";
-          
-          return session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
-              auto result = asyncResult.GetValue();
-              if (!result.IsSuccess()) {
-                  return result;
-              }
-              
-              // Обработка результата запроса
-              auto resultSet = result.GetResultSet(0);
-              NYdb::TResultSetParser parser(resultSet);
-              while (parser.TryNextRow()) {
-                  std::cout << "Series"
-                      << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
-                      << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
-                      << std::endl;
-              }
-              
-              return result;
-          });
-      });
-      
-      // Ожидание завершения
-      auto status = future.GetValueSync();
-      if (!status.IsSuccess()) {
-          std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
-=======
     Пример кода, использующего `RetryQuery`:
 
     ```c++
@@ -184,7 +105,6 @@
                         << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
                         << std::endl;
                 }
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
                 return result;
             });
@@ -205,25 +125,10 @@
     Для выполнения стриминговых запросов с автоматическими повторными попытками используется метод `StreamExecuteQuery`.
     Стриминговые запросы позволяют обрабатывать большие объемы данных, получая результаты частями.
 
-<<<<<<< HEAD
-  void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              SELECT series_id, title, release_date
-              FROM series
-              WHERE series_id > 0;
-          )";
-          
-          auto resultStreamQuery = session.StreamExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::NoTx()
-          ).GetValueSync();
-=======
     Пример кода, использующего `RetryQuerySync` со `StreamExecuteQuery`:
 
     ```c++
     #include <ydb-cpp-sdk/client/query/client.h>
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
     void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
         auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
@@ -233,20 +138,6 @@
                 WHERE series_id > 0;
             )";
 
-<<<<<<< HEAD
-          // Обработка результатов по частям
-          bool eos = false;
-          while (!eos) {
-              auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
-              
-              if (!streamPart.IsSuccess()) {
-                  eos = true;
-                  if (!streamPart.EOS()) {
-                      return streamPart;
-                  }
-                  continue;
-              }
-=======
             auto resultStreamQuery = session.StreamExecuteQuery(
                 query,
                 NYdb::NQuery::TTxControl::NoTx()
@@ -255,23 +146,12 @@
             if (!resultStreamQuery.IsSuccess()) {
                 return resultStreamQuery;
             }
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
             // Обработка результатов по частям
             bool eos = false;
             while (!eos) {
                 auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
 
-<<<<<<< HEAD
-          return resultStreamQuery;
-      });
-      
-      if (!result.IsSuccess()) {
-          std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
-=======
                 if (!streamPart.IsSuccess()) {
                     eos = true;
                     if (!streamPart.EOS()) {
@@ -291,7 +171,6 @@
                     }
                 }
             }
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
             return resultStreamQuery;
         });
@@ -315,39 +194,6 @@
     * `FastBackoffSettings(TBackoffSettings)` - настройки быстрых повторов
     * `SlowBackoffSettings(TBackoffSettings)` - настройки медленных повторов
 
-<<<<<<< HEAD
-  void ExecuteWithCustomRetry(NYdb::NQuery::TQueryClient client) {
-      auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
-          .Idempotent(true)
-          .MaxRetries(20)
-          .MaxTimeout(TDuration::Seconds(30));
-      
-      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-          auto query = R"(
-              UPSERT INTO series (series_id, title)
-              VALUES (10, "New Series");
-          )";
-          
-          auto result = session.ExecuteQuery(
-              query,
-              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
-          ).GetValueSync();
-          
-          if (!result.IsSuccess()) {
-              return result;
-          }
-          
-          // Обработка результата запроса
-          std::cout << "Query executed successfully" << std::endl;
-          return result;
-      }, retrySettings);
-      
-      if (!result.IsSuccess()) {
-          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
-      }
-  }
-  ```
-=======
     Пример использования настроек повторных попыток:
 
     ```c++
@@ -374,7 +220,6 @@
             if (!result.IsSuccess()) {
                 return result;
             }
->>>>>>> 4f6e994d0d4 (feat docs: added code snippets for C++ (#38111))
 
             // Обработка результата запроса
             std::cout << "Query executed successfully" << std::endl;

@@ -272,7 +272,7 @@ TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     // NB: If Arcadia protobuf is used, the cast is no-op `const TYPath&` -> `const TYPath&`.
-    // If vanilla protobuf is used, the cast is `std::string` -> `TString`.
+    // If vanilla protobuf is used, the cast is `std::string` -> `std::string`.
     // So in both cases the cast is correct and the most effective possible.
     return TYPathMaybeRef(ypathExt.target_path());
 }
@@ -477,7 +477,7 @@ std::string SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
     auto future = ExecuteVerb(service, request);
     auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
-    return FromProto<TString>(optionalResult->ValueOrThrow()->value());
+    return FromProto<std::string>(optionalResult->ValueOrThrow()->value());
 }
 
 TYsonString SyncYPathGet(
@@ -645,14 +645,14 @@ void SetNodeByYPath(
 
     NYPath::TTokenizer tokenizer(path);
 
-    TString currentToken;
-    TString currentLiteralValue;
+    std::string currentToken;
+    std::string currentLiteralValue;
     auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();
         tokenizer.Expect(NYPath::ETokenType::Literal);
-        currentToken = TString(tokenizer.GetToken());
+        currentToken = std::string(tokenizer.GetToken());
         currentLiteralValue = tokenizer.GetLiteralValue();
     };
 
@@ -746,14 +746,14 @@ void ForceYPath(
 
     NYPath::TTokenizer tokenizer(path);
 
-    TString currentToken;
-    TString currentLiteralValue;
+    std::string currentToken;
+    std::string currentLiteralValue;
     auto nextSegment = [&] {
         tokenizer.Skip(NYPath::ETokenType::Ampersand);
         tokenizer.Expect(NYPath::ETokenType::Slash);
         tokenizer.Advance();
         tokenizer.Expect(NYPath::ETokenType::Literal);
-        currentToken = TString(tokenizer.GetToken());
+        currentToken = std::string(tokenizer.GetToken());
         currentLiteralValue = tokenizer.GetLiteralValue();
     };
 

@@ -743,6 +743,7 @@ message TReqSelectRows
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
     optional int32 optimization_level = 35; // EOptimizationLevel
     optional int32 hyper_log_log_precision = 36;
+    optional bool enable_parallelize_unordered_group_by = 37;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 

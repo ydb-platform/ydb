@@ -9,6 +9,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/table_data_service/discovery/interface
     yt/yql/providers/yt/fmr/vanilla/common
     yt/yql/providers/yt/fmr/vanilla/peer_tracker
+    yql/essentials/utils
     yql/essentials/utils/log
 )
 

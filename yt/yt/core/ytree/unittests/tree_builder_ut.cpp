@@ -25,7 +25,7 @@ public:
     StrictMock<TMockYsonConsumer> Mock;
 };
 
-TString NodeToYsonString(const INodePtr& node)
+std::string NodeToYsonString(const INodePtr& node)
 {
     TStringStream stringStream;
     TYsonWriter writer(&stringStream, EYsonFormat::Text);

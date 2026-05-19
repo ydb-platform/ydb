@@ -1,7 +1,8 @@
 * `bloom_filter`
-  * `false_positive_probability`: Target false-positive rate of the filter (range `(0, 1)`). If omitted, the default is `0.1` for column-oriented tables and `0.0001` for row-oriented tables.
-  * Indexed column: YQL types that support equality comparison, except `Yson`, `Json`, and `JsonDocument` (see [comparison operators](../expressions.md#comparison-operators)).
-* `bloom_ngram_filter` (for String and Utf8 columns)
+  * `false_positive_probability`: Target [false-positive rate](https://en.wikipedia.org/wiki/Bloom_filter#Probability_of_false_positives) of the filter: the fraction of fragments that are not skipped even though the requested value is not there (range `(0, 1)`). A lower value reduces extra reads but increases index size.
+    * If omitted, the default is `0.0001` for [row-oriented tables](../../../../concepts/glossary.md#row-oriented-table) and `0.1` for [column-oriented tables](../../../../concepts/glossary.md#column-oriented-table). The stricter default on row-oriented tables matches OLTP point lookups; on column-oriented tables it reflects analytical scans, where a larger trade-off between index size and fragment skipping is acceptable.
+  * Indexed columns: YQL types that support equality comparison, except `Yson`, `Json`, and `JsonDocument` (see [comparison operators](../expressions.md#comparison-operators)). One column in a column-oriented table; multiple columns in a row-oriented table.
+* `bloom_ngram_filter` (`String` and `Utf8` columns; [column-oriented tables](../../../../concepts/glossary.md#column-oriented-table) only)
   * `ngram_size`: N-gram length, an integer from `3` to `8` (default `3`).
-  * `false_positive_probability`: Target false-positive rate (range `(0, 1)`; default `0.1`).
+  * `false_positive_probability`: Target [false-positive rate](https://en.wikipedia.org/wiki/Bloom_filter#Probability_of_false_positives) (range `(0, 1)`; default `0.1`).
   * `case_sensitive`: Whether n-grams respect character case: `true` or `false` (default `true`).

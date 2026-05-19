@@ -1,6 +1,6 @@
 # Bloom skip index
 
-{% if backend_name == 'YDB' %}[Bloom skip indexes](../../../../dev/bloom-skip-indexes.md){% else %}Bloom skip indexes{% endif %} are defined only as local (`LOCAL`) indexes using `bloom_filter` or `bloom_ngram_filter` in the `INDEX` clause when you create a table (similar to a [secondary index](secondary_index.md), but with `LOCAL` and the matching `USING` type).
+{% if backend_name == 'YDB' %}[Bloom skip indexes](../../../../dev/bloom-skip-indexes.md){% else %}Bloom skip indexes{% endif %} are [local indexes](../../../../concepts/glossary.md#local-index) and must be declared with `LOCAL`. In the `INDEX` clause use `bloom_filter` or `bloom_ngram_filter` (similar to a [secondary index](secondary_index.md), but with `LOCAL` and the matching `USING` type). See also [local indexes](../../../../concepts/query_execution/bloom_skip_indexes.md).
 
 ```yql
 CREATE TABLE `<table_name>` (
@@ -19,7 +19,7 @@ Where:
 * `<index_name>`: Index name.
 * `LOCAL`: Required keyword for Bloom skip indexes.
 * `<index_columns>`: List of columns used to build the index; the number of columns depends on the table type and index type.
-* `COVER (...)` and data columns are **not supported** for Bloom skip indexes.
+* `COVER (...)` and data columns are not supported for Bloom skip indexes.
 
 `WITH (...)` parameters:
 

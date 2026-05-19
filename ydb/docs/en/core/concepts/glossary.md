@@ -198,9 +198,13 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
+#### Local index {#local-index}
+
+A **local index** is an auxiliary structure stored together with table data (unlike a [global secondary index](#secondary-index), which materializes a separate index table). A local index is not selected in queries with `VIEW` and is applied while reading the main table in storage. {{ ydb-short-name }} currently implements local [Bloom skip indexes](#local-bloom-skip-index); other kinds are planned.
+
 #### Local Bloom skip index {#local-bloom-skip-index}
 
-Local Bloom skip index is a local probabilistic value filter that speeds up selective queries by skipping irrelevant data fragments. {{ ydb-short-name }} supports the `bloom_filter` and `bloom_ngram_filter` types. For details, see [Bloom skip indexes](../dev/bloom-skip-indexes.md).
+A **local Bloom skip index** is a kind of [local index](#local-index): a probabilistic column-value filter based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments that cannot contain the requested value. Supported types are `bloom_filter` and `bloom_ngram_filter`. See [Bloom skip indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/bloom_skip_indexes.md).
 
 #### Column family {#column-family}
 

@@ -1,23 +1,23 @@
 # Bloom skip indexes
 
-Bloom skip indexes are local auxiliary structures that speed up selective queries by skipping data fragments that very likely do not contain the requested values. Unlike global [secondary indexes](../concepts/glossary.md#secondary-index), they work as local read-time filters and reduce the amount of data that must be actually read.
+Bloom skip indexes are [local](../concepts/glossary.md#local-index) auxiliary structures based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speed up selective queries by skipping data fragments that cannot contain the requested value. Unlike global [secondary indexes](../concepts/glossary.md#secondary-index), they act as read-time filters on the main table and reduce the amount of data that must be actually read.
 
 ## Types {#types}
 
-{{ ydb-short-name }} supports two local Bloom skip index types:
+[Local Bloom skip indexes](../concepts/glossary.md#local-bloom-skip-index) are a kind of [local index](../concepts/glossary.md#local-index). {{ ydb-short-name }} supports two types:
 
-* `bloom_filter`: A Bloom filter over exact values of the indexed column (useful for equality and point lookups).
-* `bloom_ngram_filter`: A Bloom filter over n-grams of a string column.
+* `bloom_filter`: a filter over exact values of the indexed column; use for equality and `IN` (see [when to use which](../concepts/query_execution/bloom_skip_indexes.md#bloom-skip-indexes)).
+* `bloom_ngram_filter`: a filter over n-grams of a string column (`String`, `Utf8`); use for substring and `LIKE` pattern search on [column-oriented tables](../concepts/glossary.md#column-oriented-table).
 
-Creation syntax and parameters are documented in [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md) and in [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
+For type differences and comparison with global indexes, see [local indexes](../concepts/query_execution/bloom_skip_indexes.md).
 
 ## Parameters and defaults {#parameters}
 
-Summary of `WITH (...)` parameters and defaults:
+Full list of `WITH (...)` parameters and defaults:
 
 {% include [bloom_skip_index_parameters.md](../yql/reference/syntax/_includes/bloom_skip_index_parameters.md) %}
 
-Detailed parameter description for index creation: [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
+Creation syntax: [CREATE TABLE](../yql/reference/syntax/create_table/bloom_skip_index.md), [ALTER TABLE ADD INDEX](../yql/reference/syntax/alter_table/indexes.md#local-bloom).
 
 To change parameters after creation, use [`ALTER INDEX`](../yql/reference/syntax/alter_table/indexes.md#alter-index).
 

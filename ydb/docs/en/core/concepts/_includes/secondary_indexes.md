@@ -35,7 +35,7 @@ Unlike traditional secondary indexes, which optimize equality or range searches,
 
 ## Bloom skip index
 
-A [Bloom skip index](../../dev/bloom-skip-indexes.md) is a special kind of local filter index.
+A [Bloom skip index](../../dev/bloom-skip-indexes.md) is a kind of [local index](../glossary.md#local-index).
 
 Unlike global secondary and fulltext indexes, it is not specified with `VIEW` in a query: `VIEW` is how KQP plans access to a separate index structure, whereas a local Bloom skip index is not expanded that way—fragment skipping happens in the storage layer while reading the main table. See also: [Bloom skip indexes and filtering](../query_execution/bloom_skip_indexes.md).
 

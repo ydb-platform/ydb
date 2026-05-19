@@ -18,7 +18,9 @@ WITH (
 );
 ```
 
-For string columns, use `bloom_ngram_filter`:
+## Extending the example: n-gram index
+
+You can add `bloom_ngram_filter` on a string column to the same table from the example above (column-oriented tables):
 
 ```yql
 ALTER TABLE `/Root/events`
@@ -33,7 +35,7 @@ ALTER TABLE `/Root/events`
 
 ## Queries and the effect
 
-After you load data, selective queries that filter on indexed columns may read less data: while scanning storage, the Bloom skip index can skip fragments that very likely do not contain the requested values (compared to reading the full column without this filter).
+After you load data, selective queries that filter on indexed columns may read less data: while scanning storage, the Bloom skip index skips fragments that cannot contain the requested value (compared to reading the full column without this filter).
 
 Sample data and queries for the table above:
 

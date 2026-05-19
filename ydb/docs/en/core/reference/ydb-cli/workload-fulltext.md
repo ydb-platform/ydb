@@ -36,7 +36,7 @@ All commands support the following option:
 Create the tables for the workload:
 
 ```bash
-{{ ydb-cli }} workload fulltext --path fulltext init
+{{ ydb-cli }} workload fulltext init
 ```
 
 ### Available options {#init-options}
@@ -52,7 +52,7 @@ Create the tables for the workload:
 
 After initialization, load data into the table and build the fulltext index. There are two subcommands: `files` to import from an existing dataset and `generator` to generate synthetic data.
 
-After import is complete, a fulltext index is automatically built on the `text` column.
+After import is complete, a fulltext index named `index` is automatically built on the `text` column.
 
 ### Importing from files {#load-files}
 
@@ -153,6 +153,8 @@ Before using the generator or the `run upsert` / `run select` modes with generat
 | `--output <path>` or `-o <path>` | Output file path for the model dictionary. | `markov_dict.tsv.gz` |
 | `--order <value>` or `-n <value>` | Order of the Markov chain (n-gram context size). Order 1 uses unigram context, order 2 uses bigram context, etc. Must be between 1 and 5. | `1` |
 
+Parameters order means number of previous words that used to predict next word. Typically have values between 1 and 5, lower values means more noise, higher values means more similarity with source text. The size of Markov model grows exponentially with the order parameter.
+
 ## Cleaning up {#cleanup}
 
 Drop all tables created during initialization:
@@ -161,33 +163,30 @@ Drop all tables created during initialization:
 {{ ydb-cli }} workload fulltext clean
 ```
 
-The command has no additional parameters.
-
 ## Usage examples {#examples}
 
 ### Example with a generated dataset
 
-1a. Download a Markov chain model from S3:
+1. Download or train Markov chain model:
+   - Download the model from S3:
+     ```bash
+     wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
+     ```
+   - Train the model from Wikipedia dataset:
+     ```python
+     from datasets import load_dataset
 
-    ```bash
-    wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
-    ```
+     ds = load_dataset(
+        "rumbleFTW/wikipedia-20220301-en-raw",
+        split="train[:1000000]",
+        streaming=False,
+        )
+     ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
+     ```
 
-1b. Build a Markov chain model from a Wikipedia sample:
-    ```python
-    from datasets import load_dataset
-
-    ds = load_dataset(
-       "rumbleFTW/wikipedia-20220301-en-raw",
-       split="train[:1000000]",
-       streaming=False,
-       )
-    ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
-    ```
-
-    ```bash
-    {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
-    ```
+     ```bash
+     {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
+     ```
 
 2. Initialize the workload table:
 

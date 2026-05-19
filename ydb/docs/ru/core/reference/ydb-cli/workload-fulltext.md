@@ -52,7 +52,7 @@ fulltext            YDB fulltext workload
 
 После инициализации загрузите данные в таблицы и постройте полнотекстовый индекс. Доступны две подкоманды: `files` — для импорта из готового датасета, и `generator` — для генерации синтетических данных.
 
-После завершения импорта автоматически строится полнотекстовый индекс по столбцу `text`.
+После завершения импорта автоматически строится полнотекстовый индекс с именем `index` по столбцу `text`.
 
 ### Импорт из файлов {#load-files}
 
@@ -153,6 +153,8 @@ fulltext            YDB fulltext workload
 | `--output <путь>` или `-o <путь>` | Путь к выходному файлу словаря модели. | `markov_dict.tsv.gz` |
 | `--order <значение>` или `-n <значение>` | Порядок цепи Маркова (размер контекста n-граммы). Порядок 1 использует юниграммный контекст, порядок 2 — биграммный. Допустимые значения: от 1 до 5. | `1` |
 
+Параметр order означает количество предыдущих слов на основании которых принимается решение о том какое слово выбрать следующим. Обычно этот параметр принимает значения от 1 до 5, меньшие значения приводят к более случайным текстам, большие значения означают больше похожести на исходный текст. Размер Марковской модели растет экспоненциально с ростом параметра order.
+
 ## Очистка данных {#cleanup}
 
 Удаление всех таблиц, созданных в процессе инициализации:
@@ -165,27 +167,26 @@ fulltext            YDB fulltext workload
 
 ### Пример с генерируемым датасетом
 
-1a. Скачать модель цепи Маркова из S3:
+1. Скачать либо обучить Марковскую модель:
+   - Скачать модель из S3:
+     ```bash
+     wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
+     ```
+   - Обучение модели на данных с Wikipedia:
+     ```python
+     from datasets import load_dataset
 
-    ```bash
-    wget https://storage.yandexcloud.net/ydb-public/markov_dict.tsv.gz
-    ```
+     ds = load_dataset(
+        "rumbleFTW/wikipedia-20220301-en-raw",
+        split="train[:1000000]",
+        streaming=False,
+        )
+     ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
+     ```
 
-1b. Обучение модели цепи Маркова из данных с Wikipedia:
-    ```python
-    from datasets import load_dataset
-
-    ds = load_dataset(
-       "rumbleFTW/wikipedia-20220301-en-raw",
-       split="train[:1000000]",
-       streaming=False,
-       )
-    ds.to_csv('wikipedia_sample.csv.gz', compression='gzip', index=False)
-    ```
-
-    ```bash
-    {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
-    ```
+     ```bash
+     {{ ydb-cli }} workload fulltext model --input wikipedia_sample.csv.gz --output markov_dict.tsv.gz --order 3
+     ```
 
 2. Инициализируйте таблицы для нагрузочного тестирования:
 

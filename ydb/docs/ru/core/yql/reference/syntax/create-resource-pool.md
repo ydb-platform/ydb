@@ -35,7 +35,6 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 ```yql
 GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 ```
-## Примеры {#examples}
 
 ```yql
 CREATE RESOURCE POOL olap WITH (

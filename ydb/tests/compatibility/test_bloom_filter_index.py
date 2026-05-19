@@ -39,7 +39,22 @@ class TestBloomFilterIndex(RestartToAnotherVersionFixture):
 
         # The bloom filter index definition should survive version change
         schema_after = self._execute(f"SHOW CREATE TABLE `{self.table_name}`;")
-        assert "idx_bloom" in str(schema_after)
+
+        # Extract the CREATE TABLE query from the result set
+        if not (schema_after and schema_after[0].rows and schema_after[0].rows[0]):
+            raise AssertionError(f"SHOW CREATE TABLE `{self.table_name}` returned no data.")
+
+        create_query_column_index = -1
+        for i, col in enumerate(schema_after[0].columns):
+            if col.name == "CreateQuery":
+                create_query_column_index = i
+                break
+
+        if create_query_column_index == -1:
+            raise AssertionError(f"Column 'CreateQuery' not found in SHOW CREATE TABLE result for {self.table_name}.")
+
+        create_query = schema_after[0].rows[0][create_query_column_index]
+        assert "idx_bloom" in create_query, f"Bloom filter index 'idx_bloom' not found in CREATE TABLE query: {create_query}"
 
         # Data should survive version change, point lookup should work
         result_after = self._execute(f"SELECT * FROM `{self.table_name}` WHERE key1 = 1;")

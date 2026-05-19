@@ -48,17 +48,19 @@ public:
     virtual void Run() = 0;
 
 protected:
+    void LogOnReply(const NProto::TError& error) const;
     void Reply(NProto::TError error);
 
     void SendWriteRequest(THostIndex host);
 
-    void OnWriteResponse(
+    virtual void OnWriteResponse(
         THostIndex host,
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
     void ScheduleRequestTimeoutCallback();
     void RequestTimeoutCallback();
+    [[nodiscard]] bool ShouldReplyOk() const;
 
     TVector<THostIndex> GetAvailableHandOffHosts() const;
 

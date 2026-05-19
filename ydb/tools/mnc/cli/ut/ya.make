@@ -6,7 +6,12 @@ TEST_SRCS(
     test_disks.py
     test_install.py
     test_main.py
+    test_output.py
+    test_progress.py
+    test_service.py
     test_uninstall.py
+    test_verbose.py
+    test_tui.py
 )
 
 PY_SRCS(

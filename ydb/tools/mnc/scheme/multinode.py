@@ -5,7 +5,6 @@ scheme = {
     "__type__": dict,
     "__name__": "multinode",
     "hosts": c.list_with(str),
-    "exclude_hosts": c.optional(c.list_with(str)),
     "disks": c.with_default(c.list_with(c.object_with(
         hosts=c.list_with(str),
         disks_for_split=c.with_default(c.list_with(c.object_with(partlabel=str, device=str)), []),
@@ -15,7 +14,6 @@ scheme = {
     "disk_size": c.with_default(int, 100),
     "user": c.with_default(str, 'ydb'),
     "nodes_per_host": c.with_default(int, 1),
-    "freehost": c.optional(str),
     "erasure": c.erasure_type,
     'pile_count': c.with_default(int, 1),
     "device_type": c.with_default(c.device_type, default="SSD"),

@@ -3,10 +3,13 @@
 Functional tests for YDB CLI AI interactive mode.
 """
 
+import io
 import json
 import logging
 import os
 import pexpect
+import re
+import sys
 import threading
 import time
 import yaml
@@ -1677,6 +1680,260 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         finally:
             self.mock_server.clear()
             child.close()
+
+    # -- audit log (YDB_CLI_AI_AUDIT_LOG) ------------------------------------
+
+    AUDIT_TAG = "[AUDIT]"
+
+    def _spawn_with_audit_env(self, audit_enabled, api_type="openai"):
+        """Spawn the AI CLI with optional audit logging.
+
+        When *audit_enabled* is True, sets the YDB_CLI_AI_AUDIT_LOG env var and
+        bumps verbosity to Info (``-v -v``) so the audit log lines reach
+        stderr — both conditions are required for [AUDIT] entries to appear.
+        """
+        profile_path = self._create_ai_profile(api_type)
+        env = os.environ.copy()
+        if audit_enabled:
+            env["YDB_CLI_AI_AUDIT_LOG"] = "1"
+        return self.spawn_interactive(
+            timeout=15,
+            extra_args=["-v", "-v"],
+            profile_path=profile_path,
+            env=env,
+        )
+
+    @staticmethod
+    def _tee_output(child):
+        """Attach a tee to ``child.logfile_read`` and return a buffer with all
+        bytes the parent sees from the child PTY."""
+        buf = io.StringIO()
+
+        class _Tee:
+            def write(self_inner, data):
+                sys.stdout.write(data)
+                buf.write(data)
+
+            def flush(self_inner):
+                sys.stdout.flush()
+
+        child.logfile_read = _Tee()
+        return buf
+
+    def test_audit_log_disabled_by_default(self):
+        """Without ``YDB_CLI_AI_AUDIT_LOG`` no ``[AUDIT]`` line is emitted,
+        even with ``-v -v`` verbose logging that would otherwise expose Info
+        entries."""
+        self.mock_server.set_openai_response("plain response")
+        child = self._spawn_with_audit_env(audit_enabled=False)
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "say hi")
+            child.expect("plain response", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+        assert self.AUDIT_TAG not in buf.getvalue(), \
+            "Audit lines must not appear when YDB_CLI_AI_AUDIT_LOG is unset"
+
+    def test_audit_log_model_usage_emitted(self):
+        """Every model round-trip emits an ``[AUDIT] model_usage`` line that
+        carries the token-usage fields produced by the model. The line is
+        written *before* the response text is rendered."""
+        self.mock_server.set_openai_response("hello back")
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(
+                r"\[AUDIT\] model_usage[^\n]*input_tokens[^\n]*output_tokens",
+                timeout=15,
+            )
+            child.expect("hello back", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_audit_log_agent_response_emitted(self):
+        """The model's text response is recorded verbatim in an
+        ``[AUDIT] agent_response`` line so the conversation can be audited."""
+        self.mock_server.set_openai_response("audit-response-marker")
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(
+                r"\[AUDIT\] agent_response[^\n]*audit-response-marker",
+                timeout=15,
+            )
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_audit_log_tool_call_emitted(self):
+        """A tool invocation produces an ``[AUDIT] tool_call`` line that
+        carries the tool name."""
+        call_count = [0]
+
+        def handler(request):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "id": "call_audit_test",
+                                "type": "function",
+                                "function": {
+                                    "name": "list_directory",
+                                    "arguments": json.dumps({"directory": ""}),
+                                },
+                            }],
+                        }
+                    }]
+                }
+            return {"choices": [{"message": {"role": "assistant", "content": "Done."}}]}
+
+        self.mock_server.set_openai_handler(handler)
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "list root")
+            child.expect(r"\[AUDIT\] tool_call[^\n]*list_directory", timeout=30)
+            child.expect("Done.", timeout=30)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_audit_log_seq_increments(self):
+        """Successive audit entries carry strictly increasing ``seq``
+        counters so the log can be ordered."""
+        self.mock_server.set_openai_response("ack")
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            for _ in range(2):
+                self._send_query(child, "ping")
+                child.expect("ack", timeout=15)
+                self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+        seqs = [int(m) for m in re.findall(r'\[AUDIT\][^\n]*?"seq":(\d+)', buf.getvalue())]
+        assert len(seqs) >= 4, \
+            "Expected at least 4 audit entries across two round-trips, got: {}".format(seqs)
+        assert seqs == sorted(seqs), "seq values must be monotonically non-decreasing: {}".format(seqs)
+        assert len(set(seqs)) == len(seqs), "seq values must be unique: {}".format(seqs)
+
+    @staticmethod
+    def _extract_model_usage(output):
+        """Return the parsed JSON of the first ``[AUDIT] model_usage`` entry
+        in *output*. Strips ANSI escape sequences so JSON survives intact."""
+        cleaned = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
+        match = re.search(r'\[AUDIT\] model_usage (\{[^\n]*\})', cleaned)
+        assert match, "No [AUDIT] model_usage line in output:\n{}".format(cleaned)
+        return json.loads(match.group(1))
+
+    def test_audit_log_token_usage_openai_extraction(self):
+        """OpenAI ``usage`` block (``prompt_tokens`` / ``completion_tokens`` /
+        ``prompt_tokens_details.cached_tokens``) is mapped onto the audit log
+        with cached tokens subtracted from the input count."""
+        def handler(request):
+            return {
+                "choices": [{
+                    "message": {"role": "assistant", "content": "with usage"}
+                }],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "prompt_tokens_details": {"cached_tokens": 30},
+                },
+            }
+
+        self.mock_server.set_openai_handler(handler)
+        child = self._spawn_with_audit_env(audit_enabled=True, api_type="openai")
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(r"\[AUDIT\] model_usage", timeout=15)
+            child.expect("with usage", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+        usage = self._extract_model_usage(buf.getvalue())
+        assert usage["input_tokens"] == 70, usage  # prompt_tokens - cached_tokens
+        assert usage["output_tokens"] == 50, usage
+        assert usage["cached_input_tokens"] == 30, usage
+
+    def test_audit_log_token_usage_anthropic_extraction(self):
+        """Anthropic ``usage`` block (``input_tokens`` / ``output_tokens`` /
+        ``cache_read_input_tokens``) is mapped onto the audit log without
+        further arithmetic — Anthropic already reports input tokens excluding
+        the cached portion."""
+        def handler(request):
+            return {
+                "content": [{"type": "text", "text": "with usage"}],
+                "usage": {
+                    "input_tokens": 42,
+                    "output_tokens": 17,
+                    "cache_read_input_tokens": 8,
+                },
+            }
+
+        self.mock_server.set_anthropic_handler(handler)
+        child = self._spawn_with_audit_env(audit_enabled=True, api_type="anthropic")
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(r"\[AUDIT\] model_usage", timeout=15)
+            child.expect("with usage", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+        usage = self._extract_model_usage(buf.getvalue())
+        assert usage["input_tokens"] == 42, usage
+        assert usage["output_tokens"] == 17, usage
+        assert usage["cached_input_tokens"] == 8, usage
 
     # -- multiple queries in a single session --------------------------------
 

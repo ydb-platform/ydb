@@ -141,6 +141,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
 TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
+    THostIndex coordinatorHostIndex,
     TVector<THostIndex> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
@@ -150,6 +151,7 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
 {
     return WriteBlocksToManyPBuffersHandler(
         vChunkIndex,
+        coordinatorHostIndex,
         std::move(hostIndexes),
         lsn,
         range,

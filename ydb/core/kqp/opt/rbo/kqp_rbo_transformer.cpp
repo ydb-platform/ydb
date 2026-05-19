@@ -215,7 +215,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
     for (const auto& column : colNames) {
         const auto it = mapping.find(column.GetFullName());
-        if (it != mapping.end()) {
+        if (it != mapping.end() && it->second.TableName != "") {
             const auto& tableName = it->second.TableName;
             const auto& colName = it->second.ColumnName;
             CMColumnsByTableName[tableName].insert(colName);

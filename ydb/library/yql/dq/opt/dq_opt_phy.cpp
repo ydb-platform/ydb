@@ -3739,4 +3739,45 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         .Done();
 }
 
+TExprBase DqPushWatermarkGeneratorToStage(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap
+) {
+    const auto maybeWatermarkGenerator = node.Maybe<TDqPhyWatermarkGenerator>();
+    if (!maybeWatermarkGenerator) {
+        return node;
+    }
+    const auto watermarkGenerator = maybeWatermarkGenerator.Cast();
+
+    const auto maybeConnection = watermarkGenerator.Input().Maybe<TDqCnUnionAll>();
+    if (!maybeConnection) {
+        return node;
+    }
+    const auto connection = maybeConnection.Cast();
+
+    if (!IsSingleConsumerConnection(connection, parentsMap)) {
+        return node;
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, watermarkGenerator.Pos())
+            .Args({"arg"})
+            .Body<TCoToFlow>()
+                .Input<TDqPhyWatermarkGenerator>()
+                    .InitFrom(watermarkGenerator)
+                    .Input<TCoFromFlow>()
+                        .Input("arg")
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(connection, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+    return result.Cast();
+}
+
 } // namespace NYql::NDq

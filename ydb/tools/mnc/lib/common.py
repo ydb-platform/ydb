@@ -106,15 +106,11 @@ class Memory:
 
 async def get_machines(config: dict):
     hosts = config.get('hosts', None)
-    exclude_hosts = config.get('exclude_hosts', None)
 
     if hosts is None:
         raise CliError("expected -H")
     if not hosts and hosts is not None:
         raise CliError("-H shouldn't be empty")
-
-    if exclude_hosts:
-        hosts = [x for x in hosts if x not in exclude_hosts]
 
     if not hosts:
         raise CliError("hosts weren't found")
@@ -135,19 +131,11 @@ async def for_each_host(hosts: list[str], expected_disks: list, action):
     return await asyncio.gather(*res)
 
 
-def calculate_node_count(hosts: list[str], nodes_per_host: int, freehost: str = None):
-    node_count = nodes_per_host * len(hosts)
-    if freehost and freehost in hosts:
-        node_count -= nodes_per_host - 1
-    elif freehost:
-        node_count += 1
-    return node_count
+def calculate_node_count(hosts: list[str], nodes_per_host: int):
+    return nodes_per_host * len(hosts)
 
 
-def get_node_location(node_id: int, hosts: list[str], nodes_per_host: int, freehost: str = None):
-    hosts = [host for host in hosts if host != freehost]
-    if freehost:
-        hosts.append(freehost)
+def get_node_location(node_id: int, hosts: list[str], nodes_per_host: int):
     host_idx = (node_id - 1) // nodes_per_host
     ydb_node_idx = (node_id - 1) % nodes_per_host + 1
     if host_idx >= len(hosts):
@@ -159,11 +147,10 @@ def get_node_location(node_id: int, hosts: list[str], nodes_per_host: int, freeh
 def get_node_locations_by_host(
     hosts: list[str],
     nodes_per_host: int = 1,
-    freehost: str = None,
     nodes: list[str] = None,
     exclude_nodes: list[str] = None,
 ):
-    node_count = calculate_node_count(hosts, nodes_per_host, freehost)
+    node_count = calculate_node_count(hosts, nodes_per_host)
     if nodes is None:
         nodes = list(range(1, node_count + 1))
     else:
@@ -173,7 +160,7 @@ def get_node_locations_by_host(
         nodes = [node for node in nodes if node not in exclude_nodes]
     locations_by_host = collections.defaultdict(list)
     for node in nodes:
-        location = get_node_location(node, hosts, nodes_per_host, freehost)
+        location = get_node_location(node, hosts, nodes_per_host)
         if location is None:
             logger.error('Failed on calculating a location for {0}'.format(node))
             return None
@@ -187,17 +174,15 @@ def add_argument_breaker(parser):
 
 
 def add_common_options(parser):
-    parser.add_argument('--config-path', '--config_path', dest='config_path', type=str, default=None)
-    parser.add_argument('--config', dest='config_name', type=str, default=None)
+    group = parser.add_argument_group('Common options')
+    group.add_argument('--config-path', dest='config_path', type=str, default=None)
+    group.add_argument('--config', dest='config_name', type=str, default=None)
 
-    parser.add_argument('--exclude-hosts', '--exclude_hosts', '-X', dest='exclude_hosts', nargs='*', default=None)
-    parser.add_argument('--freehost', dest='freehost', type=str, default=None)
+    group.add_argument('--wd', '--work-directory', dest='work_directory', type=str)
 
-    parser.add_argument('--wd', '--work-directory', '--work_directory', dest='work_directory', type=str)
+    group.add_argument('--deploy-flags', nargs='*', help=f'Deploy flags: {scheme.common.deploy_flags}')
 
-    parser.add_argument('--deploy-flags', '--deploy_flags', nargs='*', help=f'Deploy flags: {scheme.common.deploy_flags}')
-
-    add_argument_breaker(parser)
+    add_argument_breaker(group)
 
 
 def get_host_disks(config):

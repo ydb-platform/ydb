@@ -8,7 +8,6 @@ SRCS(
     dq_compute_actor_checkpoints.cpp
     dq_compute_actor_metrics.cpp
     dq_compute_actor_stats.cpp
-    dq_compute_actor_watermarks.cpp
     dq_compute_actor.cpp
     dq_compute_issues_buffer.cpp
     dq_request_context.h
@@ -21,10 +20,12 @@ PEERDIR(
     ydb/library/services
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/actors/common
+    ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
+    ydb/library/yql/dq/runtime/streaming
     ydb/library/yql/dq/tasks
     yql/essentials/minikql
     yql/essentials/minikql/comp_nodes

@@ -1,6 +1,7 @@
 * Added CPU Time statistics to benchmarks run commands.
 * `ydb sql`: add `--resource-pool` option
 * `ydb` interactive mode add `SET resource_pool` command
+* Added `ydb workload fulltext` command to make load testing and measure quality of fulltext indexes.
 
 ## 2.31.0 ##
 

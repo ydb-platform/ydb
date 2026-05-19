@@ -392,7 +392,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     void CreateExplainPlanTestTables(TKikimrRunner& kikimr) {
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto sessionResult = db.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
         auto result = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
                 a Int64	NOT NULL,
@@ -408,6 +410,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 primary key(a)
             ) WITH (STORE = column);
         )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void BulkUpsertExplainPlanTestRows(TKikimrRunner& kikimr) {
+        auto db = kikimr.GetTableClient();
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (i64 i = 1; i <= 12; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i * 10)
+                .AddMember("c").Int64(i * 100)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto result = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
@@ -429,6 +450,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         NYdb::NQuery::TSession& GetSession() {
             return Session;
+        }
+
+        TKikimrRunner& GetKikimr() {
+            return Kikimr;
         }
 
     private:
@@ -527,6 +552,41 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+    }
+
+    Y_UNIT_TEST(ExplainRangePushdown) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t1.a, t1.b FROM `/Root/t1` AS t1 WHERE t1.a > 5;
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(readOp, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Table"), "t1", plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), plan);
+    }
+
+    Y_UNIT_TEST(ExplainAnalyzeRangePushdown) {
+        TExplainPlanTestContext testContext;
+        BulkUpsertExplainPlanTestRows(testContext.GetKikimr());
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplainAnalyze(session, R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT count(*) FROM `/Root/t1` AS t1 WHERE t1.a > 5;
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(readOp, plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Rows"), plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Size"), plan);
+        UNIT_ASSERT_C(readOp->GetMapSafe().at("A-Size").GetDoubleSafe() > 0, plan);
     }
 
     Y_UNIT_TEST(ExplainAggregate) {

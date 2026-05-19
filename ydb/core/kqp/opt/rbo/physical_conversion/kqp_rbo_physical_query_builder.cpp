@@ -81,6 +81,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
                     .Done().Ptr();
                     // clang-format on
                     stage = ctx.ReplaceNode(std::move(stage), read.Ref(), newRead);
+                    phyStages.back() = stage;
                 }
             }
         }

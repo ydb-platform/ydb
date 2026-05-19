@@ -140,7 +140,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     }
 
     void DoAddPortion(typename TPortion::TConstPtr p) override {
-        Portions.insert(p);
+        AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
         TotalBlobBytes += p->GetTotalBlobBytes();
         this->Counters.Portions->SetHeight(Portions.size());
     }
@@ -178,7 +178,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         return std::max(portionPriority, bytestPriority);
     }
 
-    TSet<typename TPortion::TConstPtr> Portions;
+    TSet<typename TPortion::TConstPtr, TPortionByIdComparator<TPortion>> Portions;
     ui64 TotalBlobBytes = 0;
 
     /// DEBUG: portion must live here before accumulator counters are adjusted.

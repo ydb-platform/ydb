@@ -15,6 +15,23 @@ struct CompactionTask {
     ui8 TargetLevel;
 };
 
+template <typename TPortion>
+struct TPortionByIdComparator {
+    using is_transparent = void;
+
+    bool operator()(const typename TPortion::TConstPtr& left, const typename TPortion::TConstPtr& right) const {
+        return left->GetPortionId() < right->GetPortionId();
+    }
+
+    bool operator()(const typename TPortion::TConstPtr& left, const ui64 right) const {
+        return left->GetPortionId() < right;
+    }
+
+    bool operator()(const ui64 left, const typename TPortion::TConstPtr& right) const {
+        return left < right->GetPortionId();
+    }
+};
+
 template <std::totally_ordered TKey, typename TPortion>
 struct ICompactionUnit {
     using TLevelCounters = NTiling::TLevelCounters;

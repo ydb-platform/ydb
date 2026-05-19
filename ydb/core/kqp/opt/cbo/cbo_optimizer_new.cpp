@@ -329,6 +329,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     } else if (rightKeyColumns) {
         keyColumns = rightStats.KeyColumns;
     } else {
+        // FIXME: the correct thing to do is to append the keys in case of non-PK join, however this
+        // needs to be done more efficiently, otherwise it severily slows down the optimizer
+        /*
         if (leftStats.KeyColumns && leftStats.KeyColumns->Data.size() && rightStats.KeyColumns && rightStats.KeyColumns->Data.size()) {
             TVector<TString> cols = leftStats.KeyColumns->Data;
             cols.insert(cols.begin(), rightStats.KeyColumns->Data.begin(), rightStats.KeyColumns->Data.end());
@@ -336,6 +339,8 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         } else {
             keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>();
         }
+        */
+        keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>();
     }
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost, keyColumns);

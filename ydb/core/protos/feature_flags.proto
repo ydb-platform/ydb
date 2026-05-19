@@ -225,7 +225,7 @@ message TFeatureFlags {
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
     optional bool EnableMirroredTopicSplitMerge = 200 [default = true];
-    optional bool EnableFulltextIndex = 201 [default = false];
+    optional bool EnableFulltextIndex = 201 [default = true];
     optional bool EnableSetColumnConstraint = 202 [default = false];
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
@@ -249,7 +249,7 @@ message TFeatureFlags {
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
-    optional bool EnableTruncateTable = 225 [default = false];
+    optional bool EnableTruncateTable = 225 [default = true];
     optional bool EnableTopicsSqlIoOperations = 226 [default = true];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];

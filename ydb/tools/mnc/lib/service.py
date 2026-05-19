@@ -2,7 +2,7 @@ import asyncio
 import logging
 import aiohttp
 
-from ydb.tools.mnc.lib import common, deploy_ctx, progress, term, tools
+from ydb.tools.mnc.lib import agent_client, common, deploy_ctx, progress, term, tools
 
 
 logger = logging.getLogger(__name__)
@@ -19,9 +19,10 @@ async def cmd(command: str, host: str, processes: list[str], force=False, has_ag
     if not check_correct_cmd(command):
         logger.error(f'Command was not allowed; command: {command} allowed commands: {allowed_commands}')
         return False
-    if has_agent:
-        return await cmd_agent_ydb_operation(host, command, processes)
-    return await cmd_custom(command, host, processes, force=force)
+    if not has_agent:
+        logger.error(f'Agent is not available on {host}')
+        return False
+    return await cmd_agent_ydb_operation(host, command, processes)
 
 
 def check_correct_cmd(command: str):
@@ -58,59 +59,21 @@ async def cmd_custom_stop(host: str, process: str, bin_name: str, force=False):
     return ok
 
 
-async def cmd_custom_ydb_start(host: str, process: str):
-    if process.startswith(static_prefix):
-        node_idx = process[len(static_prefix) :]
-        cfg_name = f'ydb-{node_idx}.cfg'
-    else:
-        node_idx = process[len(dynamic_prefix) :]
-        cfg_name = f'dynamic_server_{node_idx}.cfg'
-    if deploy_ctx.affinity:
-        affinity_cmd = f'taskset -c {deploy_ctx.affinity}'
-    else:
-        affinity_cmd = ''
-    return await cmd_custom_start(
-        host,
-        process,
-        run_command=f'{affinity_cmd} sudo {deploy_ctx.deploy_path}/ydb/bin/ydb ${{ydb_arg}}',
-        prepare_command=f'. {deploy_ctx.deploy_path}/{process}/cfg/{cfg_name}'
-    )
-
-
-async def cmd_custom_ydb_stop(host: str, process: str, force=False):
-    return await cmd_custom_stop(host, process, 'ydb', force=force)
-
-
-async def cmd_custom_ydb_restart(host: str, process: str):
-    return await tools.chain_async(cmd_custom_ydb_stop(host, process), cmd_custom_ydb_start(host, process))
-
-
-custom_cmd_func_dict = {
-    'start': cmd_custom_ydb_start,
-    'stop': cmd_custom_ydb_stop,
-    'restart': cmd_custom_ydb_restart,
-}
-
-
 async def cmd_agent_ydb_operation(host: str, operation: str, processes: list[str]):
-    async with aiohttp.ClientSession() as session:
-        args = '&'.join([f'node={process}' for process in processes])
-        async with session.get(f'http://{host}:8999/nodes/{operation}?{args}') as response:
-            if response.status != 200:
-                logger.error(f'Failed to {operation} nodes {processes} on {host}: response status {response.status}')
-                return False
-            result = await response.json()
-            for operation in result['operations']:
-                if not operation['success']:
-                    logger.error(f'Failed to {operation["operation"]} node {operation["node"]}: {operation["message"]}')
-            return all(operation['success'] for operation in result['operations'])
-
-
-async def cmd_custom(command: str, host: str, processes: list[str], force=False):
-    cmd_func = custom_cmd_func_dict[command]
-    if command == 'stop':
-        return await tools.parallel_async(*(cmd_func(host, process, force=force) for process in processes))
-    return await tools.parallel_async(*(cmd_func(host, process) for process in processes))
+    payload = {
+        "nodes": processes,
+        "wait": True,
+    }
+    if operation == "uninstall":
+        payload["stop"] = True
+    result = await agent_client.post_json_and_wait(host, f"/nodes/{operation}", payload)
+    if result is None:
+        logger.error(f'Failed to {operation} nodes {processes} on {host}')
+        return False
+    for operation in result['operations']:
+        if not operation['success']:
+            logger.error(f'Failed to {operation["operation"]} node {operation["node"]}: {operation["message"]}')
+    return all(operation['success'] for operation in result['operations'])
 
 
 async def check_agent(host: str):
@@ -139,14 +102,13 @@ async def one_host(command: str, host: str, ydb_node_ids: list[int] = None, node
         prefix = 'ydb_node_dynamic'
     if node_type == "static":
         prefix = 'ydb_node_static'
-    if ydb_node_ids is None and has_agent:
+    if not has_agent:
+        logger.error(f'Agent is not available on {host}')
+        return False
+
+    if ydb_node_ids is None:
         processes = await get_processes(host)
         processes = [proc for proc in processes if proc.startswith(prefix)]
-    elif ydb_node_ids is None:
-        processes = (
-            await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep {prefix}')
-        ).stdout.split()
-        processes = [proc for proc in processes if proc]
     else:
         processes = ['{1}_{0}'.format(id, prefix) for id in ydb_node_ids]
 
@@ -223,9 +185,10 @@ async def rolling_restart_static(
 
 
 async def get_dynamic_nodes_from_host(host: str):
-    processes = (
-        await term.ssh_run(host, f'cd {deploy_ctx.deploy_path}; ls | grep ydb_node_dynamic_')
-    ).stdout.split()
+    if not await check_agent(host):
+        logger.error(f'Agent is not available on {host}')
+        return []
+    processes = await get_processes(host)
     return [x for x in processes if x.startswith('ydb_node_dynamic_')]
 
 
@@ -268,9 +231,8 @@ async def act_nodes(
     parent_task: progress.TaskNode = None,
 ):
     nodes_per_host = config['nodes_per_host']
-    freehost = config['freehost']
     locations_by_host = common.get_node_locations_by_host(
-        hosts, nodes_per_host, freehost, nodes, exclude_nodes
+        hosts, nodes_per_host, nodes, exclude_nodes
     )
     if command == 'rolling_restart':
         if (nodes or exclude_nodes) and type != 'static':

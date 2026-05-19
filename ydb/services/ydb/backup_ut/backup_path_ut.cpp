@@ -5,11 +5,10 @@
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 
-#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-// #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
+
+#include <parquet/arrow/reader.h>
 
 #include <fmt/format.h>
 
@@ -38,6 +37,7 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
     TExportSettings MakeExportParquetSettings(TS3BackupTestFixture& f, const TString& sourcePath) {
         return f.MakeExportSettings(sourcePath, "Prefix")
             .DataFormat(NYdb::NExport::TExportToS3Settings::EDataFormat::PARQUET);
+        
     }
 
     TImportSettings MakeImportSettings(TS3BackupTestFixture& f, const TString& dstPath) {
@@ -445,20 +445,38 @@ void ExportWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
-void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {    
-    Y_UNUSED(isOlap);
-    
-    TBackupTraits<TExportSettings> traits;
-    const TString prefix = traits.FilePrefix();
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableParquetForS3Export(true);
+void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
+  Y_UNUSED(isOlap);
 
-    auto exportSettings = traits.MakeExportParquetSettings(f, "");
+  {
+    auto res = f.YdbQueryClient()
+                   .ExecuteQuery(R"sql(
+            INSERT INTO `/Root/RecursiveFolderProcessing/Table0` (key, value) VALUES
+                (1, "rhl8q6u2"),
+                (2, "yah6v01e"),
+                (3, "3i91khlz");
+        )sql",
+                                 NQuery::TTxControl::NoTx())
+                   .GetValueSync();
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+  }
 
-    {
-        auto res = traits.Export(f, exportSettings);
-        f.WaitOpSuccess(res);
+  TBackupTraits<TExportSettings> traits;
+  const TString prefix = traits.FilePrefix();
+  f.Server()
+      .GetRuntime()
+      ->GetAppData()
+      .FeatureFlags.SetEnableParquetForS3Export(true);
 
-        traits.ValidateFileList(f, {
+  auto exportSettings = traits.MakeExportParquetSettings(f, "");
+
+  {
+    auto res = traits.Export(f, exportSettings);
+    f.WaitOpSuccess(res);
+
+    traits.ValidateFileList(
+        f,
+        {
             prefix + "metadata.json",
             prefix + "SchemaMapping/metadata.json",
             prefix + "SchemaMapping/mapping.json",
@@ -472,8 +490,10 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
-            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
-            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet",
+            prefix +
+                "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
+            prefix +
+                "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet",
 
             prefix + "metadata.json.sha256",
             prefix + "SchemaMapping/metadata.json.sha256",
@@ -482,90 +502,67 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "RecursiveFolderProcessing/Table0/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/Table0/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/Table0/data_00.parquet.sha256",
-            prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
+            prefix +
+                "RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
             prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
-            prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
-            prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet.sha256",
-            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
-            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
-            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
-            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet.sha256",
+            prefix +
+                "RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
+            prefix +
+                "RecursiveFolderProcessing/dir1/Table1/data_00.parquet.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/"
+                     "metadata.json.sha256",
+            prefix +
+                "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/"
+                     "permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/"
+                     "data_00.parquet.sha256",
         });
-    }
+  }
 
-    {
-        // std::cerr << "[Diseaz] Test Parquet Reading" << std::endl;
+  {
+    auto path = prefix + "RecursiveFolderProcessing/Table0/data_00.parquet";
+    auto s3Data = f.GetS3Data();
+    auto dataIt = s3Data.find(path);
+    UNIT_ASSERT_C(dataIt != s3Data.end(), "data_00.parquet not found");
 
-        const TString externalDataSourceName = "/Root/external_data_source";
-        const TString externalTableName = "/Root/external_table0_data";
-        const TString bucket = "test_bucket";
-        const TString object = "Prefix/RecursiveFolderProcessing/Table0/data_00.parquet";
+    auto value = dataIt->second;
+    auto input = std::make_shared<arrow::io::BufferReader>(
+        (const uint8_t *)(value.data()), int64_t(value.size()));
 
-        auto kikimr = NKikimr::NKqp::NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory(), NKikimr::NKqp::NFederatedQueryTest::TKikimrRunnerOptions{});
+    parquet::arrow::FileReaderBuilder reader_builder;
+    arrow::Status status;
+    status = reader_builder.Open(input);
+    UNIT_ASSERT_C(status.ok(), status.message());
 
-        auto bucketUrl = TString(TStringBuilder() << exportSettings.Endpoint_ << "/" << exportSettings.Bucket_);
-        // std::cerr << "[Diseaz] BucketUrl: " << bucketUrl << std::endl;
+    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+    status = reader_builder.Build(&arrow_reader);
+    UNIT_ASSERT_C(status.ok(), status.message());
 
-        auto tc = kikimr->GetTableClient();
-        auto session = tc.CreateSession().GetValueSync().GetSession();
-        const TString query = fmt::format(R"(
-            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
-                SOURCE_TYPE="ObjectStorage",
-                LOCATION="{location}",
-                AUTH_METHOD="NONE"
-            );
-            CREATE EXTERNAL TABLE `{external_table}` (
-                key Uint32 NOT NULL,
-                value String NOT NULL
-            ) WITH (
-                DATA_SOURCE="{external_source}",
-                LOCATION="{object}",
-                FORMAT="parquet"
-            );)",
-            "external_source"_a = externalDataSourceName,
-            "external_table"_a = externalTableName,
-            "location"_a = bucketUrl,
-            "object"_a = object
-            );
-        // std::cerr << "[Diseaz] Query: " << query << std::endl;
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    std::shared_ptr<arrow::Table> table;
+    status = arrow_reader->ReadTable(&table);
+    UNIT_ASSERT_C(status.ok(), status.message());
+    UNIT_ASSERT_EQUAL(3, table->num_rows());
 
-        const TString sql = fmt::format(R"(
-                SELECT * FROM `{external_table}`
-            )", "external_table"_a=externalTableName);
+    auto schema = arrow::schema({
+        arrow::field("key", arrow::int64()),
+        arrow::field("value", arrow::utf8()),
+    });
 
-        auto db = kikimr->GetQueryClient();
-        auto executeQueryIterator = db.StreamExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        // std::cerr << "[Diseaz] Got iterator for SQL: " << sql << std::endl;
+    auto kBuilder = arrow::Int64Builder();
+    status = kBuilder.AppendValues({1, 2, 3});
+    UNIT_ASSERT_C(status.ok(), status.message());
 
-        size_t currentRow = 0;
-        while (true) {
-            // std::cerr << "[Diseaz] Reading next part" << std::endl;
-            auto part = executeQueryIterator.ReadNext().ExtractValueSync();
-            if (!part.IsSuccess()) {
-                // std::cerr << "[Diseaz] Got error: " << part.GetIssues().ToString() << std::endl;
-                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
-                break;
-            }
+    auto vBuilder = arrow::StringBuilder();
+    status = vBuilder.AppendValues({"rhl8q6u2", "yah6v01e", "3i91khlz"});
+    UNIT_ASSERT_C(status.ok(), status.message());
 
-            if (!part.HasResultSet()) {
-                // std::cerr << "[Diseaz] No result set" << std::endl;
-                continue;
-            }
+    auto expectedTable =
+        arrow::Table::Make(schema, {kBuilder.Finish().ValueOrDie(),
+                                    vBuilder.Finish().ValueOrDie()});
 
-            auto result = part.GetResultSet();
-
-            // std::cerr << "[Diseaz] Got " << result.RowsCount() << " rows" << std::endl;
-
-            TResultSetParser resultSet(result);
-            while (resultSet.TryNextRow()) {
-               ++currentRow;
-            }
-            UNIT_ASSERT_GE(currentRow, 1);
-        }
-        // std::cerr << "[Diseaz] Finally got " << currentRow << " rows" << std::endl;
-    }
+    UNIT_ASSERT(expectedTable->Equals(*table));
+  }
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>

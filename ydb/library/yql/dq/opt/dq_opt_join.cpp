@@ -1568,13 +1568,13 @@ TExprBase DqBuildHashJoin(
     std::transform(leftJoinKeys.cbegin(), leftJoinKeys.cend(), std::back_inserter(leftKeys), [&](const std::string_view& name) { return leftNames[name]; });
     std::transform(rightJoinKeys.cbegin(), rightJoinKeys.cend(), std::back_inserter(rightKeys), [&](const std::string_view& name) { return rightNames[name]; });
 
-    const auto buildShuffle = [&ctx, &join](const TDqOutput& input, const TVector<TCoAtom>& keys) {
+    const auto buildShuffle = [&ctx, &join, useBlockHashJoin](const TDqOutput& input, const TVector<TCoAtom>& keys) {
         return Build<TDqCnHashShuffle>(ctx, join.Pos())
                 .Output(input)
                 .KeyColumns()
                     .Add(keys)
                     .Build()
-                .UseSpilling().Build(true)
+                .UseSpilling().Build(!useBlockHashJoin)
                 .Done().Ptr();
     };
 
@@ -2101,7 +2101,7 @@ bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
             if (auto maybeForceStreamLookupOption = inner.Maybe<TCoAtom>()) {
                 if (maybeForceStreamLookupOption.Cast().StringValue() == "forceStreamLookup") {
                     return true;
-                } 
+                }
             }
         }
     }
@@ -2183,7 +2183,7 @@ ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEqui
     return idx + 1;
 }
 
-} // anonymous namespace 
+} // anonymous namespace
 
 TExprBase DqRewriteStreamEquiJoinWithLookup(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
     const auto equiJoin = node.Cast<TCoEquiJoin>();

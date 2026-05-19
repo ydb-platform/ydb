@@ -96,7 +96,9 @@ common:
   - from: /devops/manual/maintenance-without-downtime.md
     to: /devops/concepts/maintenance-without-downtime.md
   - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
   - from: /devops/manual/static-group-move.md
     to: /devops/configuration-management/configuration-v1/static-group-move.md
   - from: /devops/manual/system-views.md
@@ -144,7 +146,9 @@ common:
 
   # Redirect for backup-and-recovery
   - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
 
   # Redirect for deprecated instructions
   - from: /devops/manual/state-storage-move.md

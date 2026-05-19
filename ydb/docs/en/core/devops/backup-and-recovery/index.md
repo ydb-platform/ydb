@@ -65,8 +65,12 @@ For step-by-step instructions on setting up and using backup collections, see:
 
 ## Backup of system tablets {#system-tablet-backup}
 
-The system tablet backup mechanism provides incremental copying of cluster metadata to the local file system of the cluster hosts.
+The system tablet backup mechanism for tablets such as [Hive](../../concepts/glossary.md#hive), [BSController](../../concepts/glossary.md#ds-controller), and [SchemeShard](../../concepts/glossary.md#scheme-shard) provides incremental copying of cluster metadata to the cluster hosts' local file systems.
+
+This mechanism is intended to restore cluster metadata when other recovery methods are unavailable — for example, when a database backup is missing or the database is too large to restore from a backup within an acceptable time. It lets you restore metadata in an existing cluster without recreating the cluster and restoring databases from backups.
+
+If you can restore the cluster using [export/import](#s3) or [dump/restore](#files), prefer those methods.
 
 For conceptual information and how it works, see [Backup concepts](../../concepts/backup.md#system-tablet-backup).
 
-For step-by-step instructions on enabling and restoring, see [Recipes for backing up system tablets](../../recipes/system-tablet-backup/index.md).
+For detailed information, including a recovery guide, see [{#T}](./system-tablet-backup.md).

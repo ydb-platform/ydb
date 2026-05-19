@@ -8,6 +8,6 @@ Main resources:
 - [{#T}](../../../maintenance/manual/index.md)
 - [{#T}](../../observability/monitoring.md)
 - [{#T}](../../observability/logging.md)
-- [{#T}](../../backup-and-recovery.md)
+- [{#T}](../../backup-and-recovery/index.md)
 - [{#T}](../../../reference/embedded-ui/index.md)
 - [{#T}](../../observability/system-views.md)

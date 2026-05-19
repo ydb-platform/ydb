@@ -4,7 +4,6 @@ The [system tablet backup](../../concepts/backup.md#system-tablet-backup) mechan
 
 ## Syntax
 
-
 ```yaml
 system_tablet_backup_config:
     filesystem:
@@ -13,7 +12,6 @@ system_tablet_backup_config:
         - 72057594037968897
     max_backups_limit: 3
 ```
-
 
 ## Parameters
 

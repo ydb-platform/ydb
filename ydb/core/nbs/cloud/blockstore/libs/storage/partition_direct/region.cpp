@@ -49,8 +49,14 @@ TRegion::TRegion(
             syncRequestsBatchSize,
             vChunkSize,
             vChunkCounters);
-        vChunk->Start();
         VChunks.push_back(std::move(vChunk));
+    }
+}
+
+void TRegion::Run()
+{
+    for (const auto& vChunk: VChunks) {
+        vChunk->Start();
     }
 }
 

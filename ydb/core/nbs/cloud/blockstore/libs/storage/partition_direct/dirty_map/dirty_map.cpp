@@ -712,6 +712,16 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
     }
 }
 
+bool TBlocksDirtyMap::NeedFlush() const
+{
+    return !ReadyToFlush.empty();
+}
+
+bool TBlocksDirtyMap::NeedErase() const
+{
+    return !ReadyToErase.empty();
+}
+
 TString TBlocksDirtyMap::DebugPrintPBuffers()
 {
     TInstant now = TInstant::Now();

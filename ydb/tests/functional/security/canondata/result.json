@@ -1,8 +1,0 @@
-{
-    "test_mon_viewer_access_controls.test_viewer_access_controls": {
-        "uri": "file://test_mon_viewer_access_controls.test_viewer_access_controls/viewer_access_controls.json"
-    },
-    "test_mon_viewer_access_controls.test_viewer_access_controls_with_config_sids_flag": {
-        "uri": "file://test_mon_viewer_access_controls.test_viewer_access_controls_with_config_sids_flag/viewer_access_controls_config_sids.json"
-    }
-}

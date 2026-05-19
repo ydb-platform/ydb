@@ -21,6 +21,7 @@ class TestViewer(object):
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
+            'enable_extra_sids_control_for_http_viewer': True,
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
@@ -1638,6 +1639,14 @@ class TestViewer(object):
         )
 
     @classmethod
+    def assert_database_required(cls, response, path, case_name):
+        expected_text = f'`database` is required for {path}'
+        assert response.get('status_code') == 403, f"{case_name}: expected status_code=403, got {response}"
+        assert response.get('text') == expected_text, (
+            f"{case_name}: expected missing database message {expected_text!r}, got {response}"
+        )
+
+    @classmethod
     def assert_force_retry_possible(cls, response, expected, case_name):
         has_force_retry_possible = 'forceRetryPossible' in response
         assert has_force_retry_possible == expected, (
@@ -1647,6 +1656,121 @@ class TestViewer(object):
             assert response.get('forceRetryPossible') is True, (
                 f"{case_name}: expected forceRetryPossible=true, got {response}"
             )
+
+    @classmethod
+    def assert_access_allowed(cls, response, case_name):
+        assert response.get('status_code') != 403, f"{case_name}: expected access to be allowed, got {response}"
+
+    @classmethod
+    def test_viewer_external_http_access_controls(cls):
+        result = {}
+
+        result['viewer_simple_counter_root'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['viewer_simple_counter_monitoring'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['viewer_simple_counter_viewer'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['viewer_simple_counter_database'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['administration_bscontrollerinfo_root'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['administration_bscontrollerinfo_monitoring'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['administration_bscontrollerinfo_viewer'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['administration_bscontrollerinfo_database'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['viewer_config_root'] = cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['viewer_config_monitoring'] = cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['viewer_config_viewer'] = cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['viewer_config_database'] = cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+        result['database_nodes_missing_database_database'] = cls.get_viewer("/viewer/nodes", params={
+            'fields_required': 'NodeId',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        # Viewer-level endpoints allow viewer, monitoring and administration users, but deny database-only users.
+        cls.assert_access_allowed(result['viewer_simple_counter_root'], 'viewer_simple_counter_root')
+        cls.assert_access_allowed(result['viewer_simple_counter_monitoring'], 'viewer_simple_counter_monitoring')
+        cls.assert_access_allowed(result['viewer_simple_counter_viewer'], 'viewer_simple_counter_viewer')
+        cls.assert_access_denied(result['viewer_simple_counter_database'], 'viewer_simple_counter_database')
+
+        # Config endpoints are viewer-level under external HTTP access controls.
+        cls.assert_access_allowed(result['viewer_config_root'], 'viewer_config_root')
+        cls.assert_access_allowed(result['viewer_config_monitoring'], 'viewer_config_monitoring')
+        cls.assert_access_allowed(result['viewer_config_viewer'], 'viewer_config_viewer')
+        cls.assert_access_denied(result['viewer_config_database'], 'viewer_config_database')
+
+        # Administration-level endpoints allow only administration users.
+        cls.assert_access_allowed(result['administration_bscontrollerinfo_root'], 'administration_bscontrollerinfo_root')
+        cls.assert_access_denied(result['administration_bscontrollerinfo_monitoring'], 'administration_bscontrollerinfo_monitoring')
+        cls.assert_access_denied(result['administration_bscontrollerinfo_viewer'], 'administration_bscontrollerinfo_viewer')
+        cls.assert_access_denied(result['administration_bscontrollerinfo_database'], 'administration_bscontrollerinfo_database')
+
+        # Database-only users must pass ?database= for database-scoped /viewer/nodes.
+        cls.assert_access_allowed(result['database_nodes_root'], 'database_nodes_root')
+        cls.assert_access_allowed(result['database_nodes_monitoring'], 'database_nodes_monitoring')
+        cls.assert_access_allowed(result['database_nodes_viewer'], 'database_nodes_viewer')
+        cls.assert_access_allowed(result['database_nodes_database'], 'database_nodes_database')
+
+        cls.assert_database_required(
+            result['database_nodes_missing_database_database'],
+            '/viewer/nodes',
+            'database_nodes_missing_database_database',
+        )
 
     @classmethod
     def test_security(cls):

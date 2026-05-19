@@ -215,7 +215,7 @@ def ydb_cluster_with_external_access_controls(certificates):
     configurator = create_ydb_configurator(
         certificates,
         enforce_user_token_requirement=True,
-        extra_feature_flags=['enable_viewer_external_http_access_controls'],
+        extra_feature_flags=['enable_extra_sids_control_for_http_viewer'],
     )
     cluster = KiKiMR(configurator)
     cluster.start()
@@ -223,17 +223,3 @@ def ydb_cluster_with_external_access_controls(certificates):
     cluster.stop()
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_with_config_sids_flag(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        extra_feature_flags=[
-            'enable_viewer_external_http_access_controls',
-            'enable_viewer_allowed_sids_for_config_and_legacy_sysinfo',
-        ],
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()

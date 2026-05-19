@@ -582,7 +582,7 @@
     "test.TestViewer.test_security": {
         "cluster_nodes_database": {
             "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "text": "`database` is required for /viewer/nodes"
         },
         "cluster_nodes_monitoring": {
             "FieldsAvailable": "0000010000000000000000000110100000011",

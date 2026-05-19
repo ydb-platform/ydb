@@ -301,8 +301,5 @@ message TFeatureFlags {
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
     optional bool DisableOnlineRO = 263 [default = false];
     optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
-    // Viewer HTTP: remap routes to Viewer/Administration SIDs and enforce database/path/topic query rules (mon + proxy).
-    optional bool EnableViewerExternalHttpAccessControls = 265 [default = false];
-    // Also restrict /viewer/config, /viewer/json/config, /viewer/json/sysinfo to ViewerAllowedSIDs (needs ACL setup).
-    optional bool EnableViewerAllowedSidsForConfigAndLegacySysinfo = 266 [default = false];
+    optional bool EnableExtraSidsControlForHttpViewer = 265 [default = false];
 }

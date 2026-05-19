@@ -42,16 +42,21 @@ using namespace NNodeWhiteboard;
 
 namespace {
 
-enum class EViewerEndpointAccess {
-    Database,
+enum class EViewerEndpointAccessType {
+    Administration,
     Viewer,
-    Administration
+    Database
+};
+
+struct TEndpointAccessSettings {
+    EViewerEndpointAccessType AccessType = EViewerEndpointAccessType::Database;
+    bool RequireDatabaseParam = false;
 };
 
 struct TEndpointAccessRule {
     TStringBuf Path;
-    EViewerEndpointAccess Access = EViewerEndpointAccess::Database;
-    bool RequireDatabase = false;
+    EViewerEndpointAccessType AccessType = EViewerEndpointAccessType::Database;
+    bool RequireDatabaseParam = false;
 };
 
 }
@@ -218,24 +223,11 @@ public:
                 JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
             }
 
-            // TODO: redirect of very old paths
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/config"] = JsonHandlers.JsonHandlersIndex["/viewer/config"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/sysinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/sysinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/pdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/pdiskinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/vdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/vdiskinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/storage"] = JsonHandlers.JsonHandlersIndex["/viewer/storage"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
-
-            EndpointAccess.clear();
-            RequireDatabaseEndpoints.clear();
-
             auto applyAccessRule = [this](const TEndpointAccessRule& rule) {
-                EndpointAccess[TString(rule.Path)] = rule.Access;
-                if (rule.RequireDatabase) {
-                    RequireDatabaseEndpoints.insert(TString(rule.Path));
-                }
+                EndpointAccess[TString(rule.Path)] = TEndpointAccessSettings{
+                    .AccessType = rule.AccessType,
+                    .RequireDatabaseParam = rule.RequireDatabaseParam,
+                };
             };
 
             auto applyAccessRules = [&](std::initializer_list<TEndpointAccessRule> rules) {
@@ -244,105 +236,110 @@ public:
                 }
             };
 
-            if (AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
+            if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
                 applyAccessRules({
                     // Viewer-level endpoints.
-                    {"/viewer/hiveinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/hiveinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/hivestats", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/hivestats", EViewerEndpointAccess::Viewer},
-                    {"/viewer/counters", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/counters", EViewerEndpointAccess::Viewer},
-                    {"/viewer/graph", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/graph", EViewerEndpointAccess::Viewer},
-                    {"/viewer/tenants", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/tenants", EViewerEndpointAccess::Viewer},
-                    {"/viewer/storage", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/storage", EViewerEndpointAccess::Viewer},
-                    {"/viewer/peers", EViewerEndpointAccess::Viewer},
-                    {"/viewer/nodeinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/nodeinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/pdiskinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/pdiskinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/vdiskinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/vdiskinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/bsgroupinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/bsgroupinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/multipart_counter", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/multipart_counter", EViewerEndpointAccess::Viewer},
-                    {"/viewer/simple_counter", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/simple_counter", EViewerEndpointAccess::Viewer},
-                    {"/viewer/sse_counter", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/sse_counter", EViewerEndpointAccess::Viewer},
-                    {"/viewer/feature_flags", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/feature_flags", EViewerEndpointAccess::Viewer},
-                    {"/viewer/groups", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/groups", EViewerEndpointAccess::Viewer},
-                    {"/viewer/render", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/render", EViewerEndpointAccess::Viewer},
-                    {"/viewer/cluster", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/cluster", EViewerEndpointAccess::Viewer},
-                    {"/viewer/sysinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/compute", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/compute", EViewerEndpointAccess::Viewer},
-                    {"/viewer/netinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/netinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/topicinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/topicinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/storage_usage", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/storage_usage", EViewerEndpointAccess::Viewer},
-                    {"/viewer/pqconsumerinfo", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/pqconsumerinfo", EViewerEndpointAccess::Viewer},
+                    {"/viewer/hiveinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/hiveinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/hivestats", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/hivestats", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/counters", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/counters", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/graph", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/graph", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/tenants", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/tenants", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/storage", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/storage", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/peers", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/peers", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/nodeinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/nodeinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/pdiskinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/pdiskinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/vdiskinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/vdiskinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/bsgroupinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/bsgroupinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/multipart_counter", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/multipart_counter", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/simple_counter", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/simple_counter", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/sse_counter", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/sse_counter", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/feature_flags", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/feature_flags", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/groups", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/groups", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/render", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/render", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/cluster", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/cluster", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/sysinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/config", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/config", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/sysinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/compute", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/compute", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/netinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/netinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/topicinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/topicinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/storage_usage", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/storage_usage", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/pqconsumerinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/json/pqconsumerinfo", EViewerEndpointAccessType::Viewer},
 
                     // Administration-level endpoints.
-                    {"/viewer/bscontrollerinfo", EViewerEndpointAccess::Administration},
-                    {"/viewer/json/bscontrollerinfo", EViewerEndpointAccess::Administration},
-                    {"/viewer/topic_data", EViewerEndpointAccess::Administration},
-                    {"/viewer/json/topic_data", EViewerEndpointAccess::Administration},
+                    {"/viewer/bscontrollerinfo", EViewerEndpointAccessType::Administration},
+                    {"/viewer/json/bscontrollerinfo", EViewerEndpointAccessType::Administration},
+                    {"/viewer/topic_data", EViewerEndpointAccessType::Administration},
+                    {"/viewer/json/topic_data", EViewerEndpointAccessType::Administration},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
-                    {"/viewer/autocomplete", EViewerEndpointAccess::Database, true},
-                    {"/viewer/json/autocomplete", EViewerEndpointAccess::Database, true},
-                    {"/viewer/nodelist", EViewerEndpointAccess::Database, true},
-                    {"/viewer/json/nodelist", EViewerEndpointAccess::Database, true},
-                    {"/viewer/nodes", EViewerEndpointAccess::Database, true},
-                    {"/viewer/json/nodes", EViewerEndpointAccess::Database, true},
-                    {"/viewer/tabletinfo", EViewerEndpointAccess::Database, true},
-                    {"/viewer/json/tabletinfo", EViewerEndpointAccess::Database, true},
-                    {"/storage/groups", EViewerEndpointAccess::Database, true},
+                    {"/viewer/autocomplete", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/json/autocomplete", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/nodelist", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/json/nodelist", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/nodes", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/json/nodes", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/tabletinfo", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/json/tabletinfo", EViewerEndpointAccessType::Database, true},
+                    {"/storage/groups", EViewerEndpointAccessType::Database, true},
                 });
             }
 
-            if (AppData()->FeatureFlags.GetEnableViewerAllowedSidsForConfigAndLegacySysinfo()) {
-                applyAccessRules({
-                    {"/viewer/config", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/config", EViewerEndpointAccess::Viewer},
-                    {"/viewer/json/sysinfo", EViewerEndpointAccess::Viewer},
-                });
-            }
-
-            for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
-                TStringBuf v2prefix = "/viewer/v2/json/";
-                if (!TStringBuf(name).StartsWith(v2prefix)) {
-                    continue;
-                }
-                // v2 aliases inherit only access level; database-parameter restrictions are intentionally not copied.
-                TString canonical = "/viewer/" + name.substr(v2prefix.size());
-                auto it = EndpointAccess.find(canonical);
+            auto addV2JsonAlias = [&](TStringBuf aliasPath, TStringBuf canonicalPath) {
+                JsonHandlers.JsonHandlersIndex[TString(aliasPath)] = JsonHandlers.JsonHandlersIndex[TString(canonicalPath)];
+                const auto it = EndpointAccess.find(canonicalPath);
                 if (it != EndpointAccess.end()) {
-                    EndpointAccess[name] = it->second;
+                    EndpointAccess[TString(aliasPath)] = TEndpointAccessSettings{
+                        .AccessType = it->second.AccessType,
+                    };
                 }
-            }
+            };
+
+            // TODO: redirect of very old paths
+            addV2JsonAlias("/viewer/v2/json/config", "/viewer/config");
+            addV2JsonAlias("/viewer/v2/json/sysinfo", "/viewer/sysinfo");
+            addV2JsonAlias("/viewer/v2/json/pdiskinfo", "/viewer/pdiskinfo");
+            addV2JsonAlias("/viewer/v2/json/vdiskinfo", "/viewer/vdiskinfo");
+            addV2JsonAlias("/viewer/v2/json/storage", "/viewer/storage");
+            addV2JsonAlias("/viewer/v2/json/nodelist", "/viewer/nodelist");
+            addV2JsonAlias("/viewer/v2/json/tabletinfo", "/viewer/tabletinfo");
+            addV2JsonAlias("/viewer/v2/json/nodeinfo", "/viewer/nodeinfo");
 
             auto resolveAllowedSids = [&](const TString& path) -> const TVector<TString>& {
-                auto itAccess = EndpointAccess.find(path);
-                auto access = itAccess != EndpointAccess.end() ? itAccess->second : EViewerEndpointAccess::Database;
-                switch (access) {
-                    case EViewerEndpointAccess::Viewer:
-                        return viewerAllowedSIDs;
-                    case EViewerEndpointAccess::Administration:
+                const auto itAccess = EndpointAccess.find(path);
+                auto accessType = itAccess != EndpointAccess.end()
+                    ? itAccess->second.AccessType
+                    : EViewerEndpointAccessType::Database;
+                switch (accessType) {
+                    case EViewerEndpointAccessType::Administration:
                         return administrationAllowedSIDs;
-                    case EViewerEndpointAccess::Database:
+                    case EViewerEndpointAccessType::Viewer:
+                        return viewerAllowedSIDs;
+                    case EViewerEndpointAccessType::Database:
                     default:
                         return databaseAllowedSIDs;
                 }
@@ -590,8 +587,7 @@ private:
     TJsonHandlers JsonHandlers;
     std::mutex JsonHandlersMutex;
     std::unordered_map<TString, TString> Redirect307;
-    THashMap<TString, EViewerEndpointAccess> EndpointAccess;
-    THashSet<TString> RequireDatabaseEndpoints;
+    THashMap<TString, TEndpointAccessSettings> EndpointAccess;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
@@ -601,33 +597,36 @@ private:
     NProtobufJson::TProto2JsonConfig Proto2JsonConfig;
 
     bool IsDatabaseAccessEndpoint(const TString& path) const {
-        auto itAccess = EndpointAccess.find(path);
-        auto access = itAccess != EndpointAccess.end() ? itAccess->second : EViewerEndpointAccess::Database;
-        return access == EViewerEndpointAccess::Database;
+        const auto itAccess = EndpointAccess.find(path);
+        auto accessType = itAccess != EndpointAccess.end()
+            ? itAccess->second.AccessType
+            : EViewerEndpointAccessType::Database;
+        return accessType == EViewerEndpointAccessType::Database;
     }
 
     // Returns true if the token has sufficient access for the endpoint's required access level.
     // Used for old-style (non-IsHttpEvent) handlers where per-endpoint SID enforcement is not
     // done at the monitoring layer.
     bool CheckEndpointAccess(const TString& path, const TString& serializedToken) const {
-        if (!AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
+        if (!AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
             return true;
         }
-        auto itAccess = EndpointAccess.find(path);
+        const auto itAccess = EndpointAccess.find(path);
         if (itAccess == EndpointAccess.end()) {
             return true; // no specific access requirement
         }
         const auto& sec = AppData()->DomainsConfig.GetSecurityConfig();
-        switch (itAccess->second) {
-            case EViewerEndpointAccess::Administration:
+        switch (itAccess->second.AccessType) {
+            case EViewerEndpointAccessType::Administration:
                 return IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
-            case EViewerEndpointAccess::Viewer:
+            case EViewerEndpointAccessType::Viewer:
                 return IsTokenAllowed(serializedToken, sec.GetViewerAllowedSIDs())
                     || IsTokenAllowed(serializedToken, sec.GetMonitoringAllowedSIDs())
                     || IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
-            case EViewerEndpointAccess::Database:
+            case EViewerEndpointAccessType::Database:
             default:
-                return true;
+                Y_ENSURE(false, "Database-level access must not be checked by TViewer::CheckEndpointAccess");
+                return false;
         }
     }
 
@@ -648,26 +647,32 @@ private:
         return true;
     }
 
-    // Result of ValidateDatabaseScopedRequest:
-    //   Ok          — request is allowed
-    //   RoleDenied  — token type is not permitted to call this endpoint without required database param → 403
-    enum class EValidationResult { Ok, RoleDenied };
+    enum class EDatabaseScopedRequestValidationResult {
+        Ok,
+        DatabaseRequired,
+    };
 
-    EValidationResult ValidateDatabaseScopedRequest(const TString& path, const TCgiParameters& params, TString& error, const TString& serializedToken) const {
-        if (!AppData()->FeatureFlags.GetEnableViewerExternalHttpAccessControls()) {
-            return EValidationResult::Ok;
+    EDatabaseScopedRequestValidationResult ValidateDatabaseScopedRequest(
+        const TString& path,
+        const TCgiParameters& params,
+        const TString& serializedToken,
+        TString& error) const
+    {
+        if (!AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
+            return EDatabaseScopedRequestValidationResult::Ok;
         }
         if (!IsDatabaseAccessEndpoint(path)) {
-            return EValidationResult::Ok;
+            return EDatabaseScopedRequestValidationResult::Ok;
         }
         if (!IsStrictDatabaseOnlyToken(serializedToken)) {
-            return EValidationResult::Ok;
+            return EDatabaseScopedRequestValidationResult::Ok;
         }
-        if (RequireDatabaseEndpoints.contains(path) && params.Get("database").empty()) {
+        const auto itAccess = EndpointAccess.find(path);
+        if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam && params.Get("database").empty()) {
             error = TStringBuilder() << "`database` is required for " << path;
-            return EValidationResult::RoleDenied;
+            return EDatabaseScopedRequestValidationResult::DatabaseRequired;
         }
-        return EValidationResult::Ok;
+        return EDatabaseScopedRequestValidationResult::Ok;
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
@@ -893,11 +898,11 @@ private:
                 return;
             }
             TString scopeError;
-            switch (ValidateDatabaseScopedRequest(path, msg->Request.GetParams(), scopeError, msg->UserToken)) {
-                case EValidationResult::RoleDenied:
+            switch (ValidateDatabaseScopedRequest(path, msg->Request.GetParams(), msg->UserToken, scopeError)) {
+                case EDatabaseScopedRequestValidationResult::DatabaseRequired:
                     Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                     return;
-                case EValidationResult::Ok:
+                case EDatabaseScopedRequestValidationResult::Ok:
                     break;
             }
             auto sender(ev->Sender);
@@ -989,12 +994,12 @@ private:
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
             TString scopeError;
-            switch (ValidateDatabaseScopedRequest(path, proxyParams, scopeError, ev->Get()->UserToken)) {
-                case EValidationResult::RoleDenied:
+            switch (ValidateDatabaseScopedRequest(path, proxyParams, ev->Get()->UserToken, scopeError)) {
+                case EDatabaseScopedRequestValidationResult::DatabaseRequired:
                     Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
                         ev->Get()->Request->CreateResponseString(GETHTTPACCESSDENIED(ev->Get(), "text/plain", scopeError))));
                     return;
-                case EValidationResult::Ok:
+                case EDatabaseScopedRequestValidationResult::Ok:
                     break;
             }
             auto sender(ev->Sender);

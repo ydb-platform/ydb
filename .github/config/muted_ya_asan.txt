@@ -222,6 +222,7 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BadRequest
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToPosting
@@ -278,6 +279,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePart
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.DirectWriteWithoutDescribeResourcesPermission
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_27_Query
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
+ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_ComplexLambdaInsideUsingReplace
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath

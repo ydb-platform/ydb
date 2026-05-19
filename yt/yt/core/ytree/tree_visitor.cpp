@@ -48,7 +48,7 @@ private:
     {
         node->WriteAttributes(Consumer, AttributeFilter_, Stable_);
 
-        static const TString opaqueAttributeName("opaque");
+        static const std::string opaqueAttributeName("opaque");
         if (!isRoot &&
             node->Attributes().Get<bool>(opaqueAttributeName, false))
         {

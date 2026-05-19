@@ -7,16 +7,16 @@
 #include <yt/yt/core/bus/tcp/client.h>
 #include <yt/yt/core/bus/tcp/server.h>
 
-namespace NYT::NBus::NTests {
+namespace NYT::NBus::NTcp::NTests {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTcpBusTraits::TTcpBusTraits()
+TBusTraits::TBusTraits()
     : Port(NTesting::GetFreePort())
     , Address(Format("localhost:%v", Port))
 { }
 
-IBusServerPtr TTcpBusTraits::StartServer(IMessageHandlerPtr handler)
+IBusServerPtr TBusTraits::StartServer(IMessageHandlerPtr handler)
 {
     auto config = TBusServerConfig::CreateTcp(Port);
     auto server = CreateBusServer(config);
@@ -24,12 +24,12 @@ IBusServerPtr TTcpBusTraits::StartServer(IMessageHandlerPtr handler)
     return server;
 }
 
-IBusClientPtr TTcpBusTraits::CreateClient()
+IBusClientPtr TBusTraits::CreateClient()
 {
     return CreateBusClient(TBusClientConfig::CreateTcp(Address));
 }
 
-IBusClientPtr TTcpBusTraits::CreateUnreachableClient()
+IBusClientPtr TBusTraits::CreateUnreachableClient()
 {
     auto unreachablePort = NTesting::GetFreePort();
     return CreateBusClient(TBusClientConfig::CreateTcp(
@@ -38,4 +38,4 @@ IBusClientPtr TTcpBusTraits::CreateUnreachableClient()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus::NTests
+} // namespace NYT::NBus::NTcp::NTests

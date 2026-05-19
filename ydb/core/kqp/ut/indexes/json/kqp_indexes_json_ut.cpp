@@ -59,7 +59,7 @@ TResultSet ReadIndex(TQueryClient& db, const char* table = "indexImplTable") {
     return result.GetResultSet(0);
 }
 
-void TestAddJsonIndex(const std::string& type, bool nullable, bool covered) {
+void TestAddJsonIndex(const std::string& type, bool nullable) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -94,89 +94,52 @@ void TestAddJsonIndex(const std::string& type, bool nullable, bool covered) {
         auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
+
     {
         std::string query = R"(
             ALTER TABLE `/Root/TestTable` ADD INDEX json_idx
                 GLOBAL USING json ON (Text)
-        )" + std::string(covered ? " COVER (Data)" : "");
+        )";
 
         auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
-    auto index = ReadIndex(db);
-    if (covered) {
-        CompareYson(R"([
-            [["d1"];[10u];""];
-            [["data 2"];[11u];""];
-            [["very long unit test data 3"];[12u];""];
-            [["data 4"];[13u];""];
-            [["data 5"];[14u];""];
-            [["array data 6"];[15u];""];
-            [["object data 7"];[16u];""];
-            [["data 4"];[13u];"\0\0"];
-            [["array data 6"];[15u];"\0\0"];
-            [["very long unit test data 3"];[12u];"\0\1"];
-            [["data 5"];[14u];"\0\2"];
-            [["array data 6"];[15u];"\0\3item 1"];
-            [["d1"];[10u];"\0\3literal string"];
-            [["array data 6"];[15u];"\0\4\0\0\0\0\0\200F@"];
-            [["data 2"];[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
-            [["object data 7"];[16u];"\3id"];
-            [["object data 7"];[16u];"\3id\0\4\0\0\0\0@\x87\xE4@"];
-            [["object data 7"];[16u];"\6brand"];
-            [["object data 7"];[16u];"\6brand\0\3bricks"];
-            [["object data 7"];[16u];"\6parts"];
-            [["object data 7"];[16u];"\6parts\3id"];
-            [["object data 7"];[16u];"\6parts\3id\0\4\0\0\0\0\x80\xC3\xDF@"];
-            [["object data 7"];[16u];"\6parts\3id\0\4\0\0\0\0\xC0\xC2\xDF@"];
-            [["object data 7"];[16u];"\6parts\5name"];
-            [["object data 7"];[16u];"\6parts\5name\0\0031x3"];
-            [["object data 7"];[16u];"\6parts\5name\0\0033x5"];
-            [["object data 7"];[16u];"\6parts\6count"];
-            [["object data 7"];[16u];"\6parts\6count\0\4\0\0\0\0\0\0\x1C@"];
-            [["object data 7"];[16u];"\6parts\6count\0\4\0\0\0\0\0\0001@"];
-            [["object data 7"];[16u];"\6price"];
-            [["object data 7"];[16u];"\6price\0\2"];
-            [["object data 7"];[16u];"\x0bpart_count"];
-            [["object data 7"];[16u];"\x0bpart_count\0\4\0\0\0\0\0\xE4\x95@"]
-        ])", FormatResultSetYson(index));
-    } else {
-        CompareYson(R"([
-            [[10u];""];
-            [[11u];""];
-            [[12u];""];
-            [[13u];""];
-            [[14u];""];
-            [[15u];""];
-            [[16u];""];
-            [[13u];"\0\0"];
-            [[15u];"\0\0"];
-            [[12u];"\0\1"];
-            [[14u];"\0\2"];
-            [[15u];"\0\3item 1"];
-            [[10u];"\0\3literal string"];
-            [[15u];"\0\4\0\0\0\0\0\200F@"];
-            [[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
-            [[16u];"\3id"];
-            [[16u];"\3id\0\4\0\0\0\0@\x87\xE4@"];
-            [[16u];"\6brand"];
-            [[16u];"\6brand\0\3bricks"];
-            [[16u];"\6parts"];
-            [[16u];"\6parts\3id"];
-            [[16u];"\6parts\3id\0\4\0\0\0\0\x80\xC3\xDF@"];
-            [[16u];"\6parts\3id\0\4\0\0\0\0\xC0\xC2\xDF@"];
-            [[16u];"\6parts\5name"];
-            [[16u];"\6parts\5name\0\0031x3"];
-            [[16u];"\6parts\5name\0\0033x5"];
-            [[16u];"\6parts\6count"];
-            [[16u];"\6parts\6count\0\4\0\0\0\0\0\0\x1C@"];
-            [[16u];"\6parts\6count\0\4\0\0\0\0\0\0001@"];
-            [[16u];"\6price"];
-            [[16u];"\6price\0\2"];
-            [[16u];"\x0bpart_count"];
-            [[16u];"\x0bpart_count\0\4\0\0\0\0\0\xE4\x95@"]
-        ])", FormatResultSetYson(index));
-    }
+
+    CompareYson(R"([
+        [[10u];""];
+        [[11u];""];
+        [[12u];""];
+        [[13u];""];
+        [[14u];""];
+        [[15u];""];
+        [[16u];""];
+        [[13u];"\0\0"];
+        [[15u];"\0\0"];
+        [[12u];"\0\1"];
+        [[14u];"\0\2"];
+        [[15u];"\0\3item 1"];
+        [[10u];"\0\3literal string"];
+        [[15u];"\0\4\0\0\0\0\0\200F@"];
+        [[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
+        [[16u];"\3id"];
+        [[16u];"\3id\0\4\0\0\0\0@\x87\xE4@"];
+        [[16u];"\6brand"];
+        [[16u];"\6brand\0\3bricks"];
+        [[16u];"\6parts"];
+        [[16u];"\6parts\3id"];
+        [[16u];"\6parts\3id\0\4\0\0\0\0\x80\xC3\xDF@"];
+        [[16u];"\6parts\3id\0\4\0\0\0\0\xC0\xC2\xDF@"];
+        [[16u];"\6parts\5name"];
+        [[16u];"\6parts\5name\0\0031x3"];
+        [[16u];"\6parts\5name\0\0033x5"];
+        [[16u];"\6parts\6count"];
+        [[16u];"\6parts\6count\0\4\0\0\0\0\0\0\x1C@"];
+        [[16u];"\6parts\6count\0\4\0\0\0\0\0\0001@"];
+        [[16u];"\6price"];
+        [[16u];"\6price\0\2"];
+        [[16u];"\x0bpart_count"];
+        [[16u];"\x0bpart_count\0\4\0\0\0\0\0\xE4\x95@"]
+    ])", FormatResultSetYson(ReadIndex(db)));
 }
 
 void FillTestTable(TQueryClient& db, const std::string& tableName, const std::string& jsonType) {
@@ -401,47 +364,87 @@ TExecuteQueryResult WriteJsonIndexWithKeys(TQueryClient& db, const std::string& 
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(AddJsonIndexJson) {
-        TestAddJsonIndex("Json", true, false);
+        TestAddJsonIndex("Json", true);
     }
 
     Y_UNIT_TEST(AddJsonIndexJsonDocument) {
-        TestAddJsonIndex("JsonDocument", true, false);
+        TestAddJsonIndex("JsonDocument", true);
     }
 
     Y_UNIT_TEST(AddJsonIndexJsonNotNull) {
-        TestAddJsonIndex("Json", false, false);
+        TestAddJsonIndex("Json", false);
     }
 
     Y_UNIT_TEST(AddJsonIndexJsonDocumentNotNull) {
-        TestAddJsonIndex("JsonDocument", false, false);
+        TestAddJsonIndex("JsonDocument", false);
     }
 
-    Y_UNIT_TEST(AddJsonIndexCoveringJson) {
-        TestAddJsonIndex("Json", true, true);
-    }
-
-    Y_UNIT_TEST(AddJsonIndexCoveringJsonDocument) {
-        TestAddJsonIndex("JsonDocument", true, true);
-    }
-
-    Y_UNIT_TEST(AddJsonIndexCoveringJsonNotNull) {
-        TestAddJsonIndex("Json", false, true);
-    }
-
-    Y_UNIT_TEST(AddJsonIndexCoveringJsonDocumentNotNull) {
-        TestAddJsonIndex("JsonDocument", false, true);
-    }
-
-    Y_UNIT_TEST(OnCreate) {
+    Y_UNIT_TEST(CoverColumnsNotAllowed) {
         auto kikimr = Kikimr();
         auto db = kikimr.GetQueryClient();
 
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        {
+            const std::string query = R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    Text Json,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text) COVER (Data)
+                );
+            )";
 
-        CreateTestTable(db, "Json", true);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index does not support COVER columns");
+        }
 
-        // TODO: Test it with update after implementing update
+        CreateTestTable(db, "Json");
+
+        {
+            const std::string query = R"(
+                ALTER TABLE TestTable ADD INDEX json_idx
+                    GLOBAL USING json ON (Text) COVER (Data)
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index does not support COVER columns");
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            auto desc = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", NYdb::EPrimitiveType::Uint64)
+                .AddNullableColumn("Text", NYdb::EPrimitiveType::Json)
+                .AddNullableColumn("Data", NYdb::EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("Key")
+                .AddSecondaryIndex("json_idx", NYdb::NTable::EIndexType::GlobalJson, {"Text"}, {"Data"})
+                .Build();
+
+            auto result = session.CreateTable("/Root/TestTableSdkCover", std::move(desc)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index does not support COVER columns");
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            NYdb::NTable::TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes(NYdb::NTable::TIndexDescription(
+                "json_idx_sdk",
+                NYdb::NTable::EIndexType::GlobalJson,
+                {"Text"},
+                {"Data"}
+            ));
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index does not support COVER columns");
+        }
     }
 
     Y_UNIT_TEST(UnsupportedType) {
@@ -565,6 +568,23 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
         }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            NYdb::NTable::TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes(NYdb::NTable::TIndexDescription(
+                "json_idx_sdk",
+                NYdb::NTable::EIndexType::GlobalJson,
+                {"Text"},
+                {"Data"}
+            ));
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index support is disabled");
+        }
     }
 
     Y_UNIT_TEST(DisabledFlagRejectCreate) {
@@ -583,6 +603,23 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.GetSession().GetValueSync().GetSession();
+
+            auto desc = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", NYdb::EPrimitiveType::Uint64)
+                .AddNullableColumn("Text", NYdb::EPrimitiveType::Json)
+                .AddNullableColumn("Data", NYdb::EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("Key")
+                .AddSecondaryIndex("json_idx", NYdb::NTable::EIndexType::GlobalJson, {"Text"}, {"Data"})
+                .Build();
+
+            auto result = session.CreateTable("/Root/TestTable", std::move(desc)).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index support is disabled");
         }
     }
 

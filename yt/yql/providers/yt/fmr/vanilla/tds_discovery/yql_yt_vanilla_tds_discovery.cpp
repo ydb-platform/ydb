@@ -2,6 +2,10 @@
 
 #include <yt/yql/providers/yt/fmr/vanilla/common/yql_yt_vanilla_common.h>
 
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/log_component.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
 #include <util/generic/string.h>
@@ -9,9 +13,6 @@
 #include <util/system/thread.h>
 #include <util/string/builder.h>
 #include <util/system/guard.h>
-
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/log/log_component.h>
 
 namespace NYql::NFmr {
 
@@ -47,7 +48,9 @@ TVanillaTdsDiscovery::TVanillaTdsDiscovery(const IVanillaExternalPeerTracker& pe
     : PeerTracker_(peerTracker)
     , Settings_(std::move(settings))
 {
-    Hosts_.resize(PeerTracker_.GetPeerCount(), {TString(), Settings_.TdsPort});
+    // at least one peer is needed
+    YQL_ENSURE(Settings_.MinIndex < PeerTracker_.GetPeerCount());
+    Hosts_.resize(PeerTracker_.GetPeerCount() - Settings_.MinIndex, {TString(), Settings_.TdsPort});
 }
 
 void TVanillaTdsDiscovery::Start() {
@@ -64,7 +67,7 @@ void TVanillaTdsDiscovery::Stop() {
 }
 
 ui64 TVanillaTdsDiscovery::GetHostCount() const {
-    return PeerTracker_.GetPeerCount();
+    return Hosts_.size();
 }
 
 TTableDataServiceServerConnection TVanillaTdsDiscovery::GetHost(ui64 index) const {
@@ -92,11 +95,11 @@ void TVanillaTdsDiscovery::Refresh() {
     YQL_CLOG(TRACE, FastMapReduce) << "scan jobs";
     try {
         std::vector<TTableDataServiceServerConnection> newHosts(
-            PeerTracker_.GetPeerCount(), {TString(), Settings_.TdsPort});
+            PeerTracker_.GetPeerCount() - Settings_.MinIndex, {TString(), Settings_.TdsPort});
 
         auto ips = PeerTracker_.GetPeerAddresses();
-        for (ui32 i = 0; i < ips.size(); ++i) {
-            newHosts[i].Host = ips[i];
+        for (ui32 i = Settings_.MinIndex; i < ips.size(); ++i) {
+            newHosts[i - Settings_.MinIndex].Host = ips[i];
         }
 
         TGuard guard(Mutex_);

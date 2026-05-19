@@ -11,6 +11,9 @@
 
 #include <ydb/library/login/hashes_checker/hashes_checker.h>
 #include <ydb/library/login/sasl/saslprep.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SASL_AUTH
 
 namespace NKikimr::NSasl {
 
@@ -39,10 +42,10 @@ public:
     virtual void Bootstrap(const TActorContext &ctx) override final {
         if (!AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
             std::string error = "Login authentication is disabled";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_INFO(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
@@ -51,10 +54,10 @@ public:
         auto parsingRes = ParseFirstClientMsg(ClientFirstMsg, parsedFirstClientMsg);
         if (parsingRes != EParseMsgReturnCodes::Success) {
             std::string error = "Malformed SASL SCRAM first client message";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_WARN(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
 
             EScramServerError serverError;
             switch (parsingRes) {
@@ -75,10 +78,10 @@ public:
         GS2Header = parsedFirstClientMsg.GS2Header;
         if (GS2Header.ChannelBindingFlag == EClientChannelBindingFlag::Required) {
             std::string error = "Channel binding isn't supported by server";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_WARN(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::ChannelBindingNotSupported);
             return CleanupAndDie(ctx);
         }
@@ -93,10 +96,10 @@ public:
             auto saslPrepRC = SaslPrep(GS2Header.AuthzId, prepAuthzId);
             if (saslPrepRC != ESaslPrepReturnCodes::Success) {
                 std::string error = "Unsupported characters in the authorization identity";
-                LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                    ActorName << "# " << ctx.SelfID.ToString() <<
-                    ", " << error
-                );
+                YDB_LOG_CTX_INFO(ctx, "",
+                    {"ActorName", ActorName},
+                    {"ctx.SelfID", ctx.SelfID.ToString()},
+                    {"error", error});
                 SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::InvalidUsernameEncoding);
                 return CleanupAndDie(ctx);
             }
@@ -106,10 +109,10 @@ public:
 
         if (!parsedFirstClientMsg.Mext.empty()) {
             std::string error = "Unsupported extensions in SASL SCRAM first client message";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_INFO(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::ExtensionsNoSupported);
             return CleanupAndDie(ctx);
         }
@@ -118,10 +121,10 @@ public:
         auto saslPrepRC = SaslPrep(AuthcId, prepAuthcId);
         if (saslPrepRC != ESaslPrepReturnCodes::Success) {
             std::string error = "Unsupported characters in the authentication identity";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_INFO(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::InvalidUsernameEncoding);
             return CleanupAndDie(ctx);
         }
@@ -135,10 +138,10 @@ public:
         auto parsingRes = ParseFinalClientMsg(ev->Get()->Msg, parsedFinalClientMsg);
         if (parsingRes != EParseMsgReturnCodes::Success) {
             std::string error = "Malformed SASL SCRAM final client message";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_WARN(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
 
             EScramServerError serverError;
             switch (parsingRes) {
@@ -160,10 +163,10 @@ public:
             || parsedFinalClientMsg.GS2Header.RequestedChannelBinding != GS2Header.RequestedChannelBinding)
         {
             std::string error = "Client channel bindings don't match";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_WARN(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::ChannelBindingsDontMatch);
             return CleanupAndDie(ctx);
         }
@@ -173,10 +176,10 @@ public:
             auto saslPrepRC = SaslPrep(GS2Header.AuthzId, prepAuthzId);
             if (saslPrepRC != ESaslPrepReturnCodes::Success) {
                 std::string error = "Unsupported characters in the authorization identity";
-                LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                    ActorName << "# " << ctx.SelfID.ToString() <<
-                    ", " << error
-                );
+                YDB_LOG_CTX_INFO(ctx, "",
+                    {"ActorName", ActorName},
+                    {"ctx.SelfID", ctx.SelfID.ToString()},
+                    {"error", error});
                 SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error, EScramServerError::InvalidUsernameEncoding);
                 return CleanupAndDie(ctx);
             }
@@ -186,20 +189,20 @@ public:
 
         if (parsedFinalClientMsg.GS2Header.AuthzId != GS2Header.AuthzId) {
             std::string error = "Authorization identities don't match";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_WARN(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
 
         if (parsedFinalClientMsg.Nonce != Nonce) {
             std::string error = "Nonces don't match";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_WARN(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
             return CleanupAndDie(ctx);
         }
@@ -218,10 +221,10 @@ private:
         if (itUser == domainInfo->Users.end()) {
             std::stringstream error;
             error << "Cannot find user '" << AuthcId << "'";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " << error.str();
-            );
+            YDB_LOG_CTX_INFO(ctx, "Authentication",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"failed", error.str()});
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error.str(), EScramServerError::UnknownUser);
             return CleanupAndDie(ctx);
         }
@@ -232,10 +235,10 @@ private:
         // in this case we didn't have any user hashes in scram format
         if (userHashInitParams.empty()) {
             std::string error = "SchemeShard works on old version and doesn't support SASL SCRAM";
-            LOG_WARN_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << error
-            );
+            YDB_LOG_CTX_WARN(ctx, "",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"error", error});
             SendError(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             return CleanupAndDie(ctx);
         }
@@ -244,10 +247,10 @@ private:
         if (itHashesInitParams == userHashInitParams.end()) {
             std::stringstream error;
             error << "Missing hash value for specified hash type";
-            LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " << error.str();
-            );
+            YDB_LOG_CTX_INFO(ctx, "Authentication",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"failed", error.str()});
             error << ". Needed password change to use SASL SCRAM";
             SendError(NKikimrIssues::TIssuesIds::WARNING, error.str());
             return CleanupAndDie(ctx);
@@ -255,11 +258,10 @@ private:
 
         const auto scramInitParams = NLogin::ParseScramHashInitParams(itHashesInitParams->second);
         if (scramInitParams.IterationsCount.empty() || scramInitParams.Salt.empty()) {
-            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
-                ActorName << "# " << ctx.SelfID.ToString() <<
-                ", " << "Authentication failed: " <<
-                "'" << AuthcId << "' has broken Scram hash";
-            );
+            YDB_LOG_CTX_ERROR(ctx, "Authentication failed: has broken Scram hash",
+                {"ActorName", ActorName},
+                {"ctx.SelfID", ctx.SelfID.ToString()},
+                {"AuthcId", AuthcId});
             SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
             return CleanupAndDie(ctx);
         }

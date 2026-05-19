@@ -37,6 +37,8 @@ public:
     template<typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
     template<> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
     template<> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
+    template<> struct TOptionalTraits<const void*> { static constexpr bool HasOptionalValue = false; };
+    template<> struct TOptionalTraits<void*> { static constexpr bool HasOptionalValue = false; };
     template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
     template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
     template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };

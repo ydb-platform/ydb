@@ -211,6 +211,15 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
+
+        int i = 0;
+        auto ptr = static_cast<void*>(&i);
+
+        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << ptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", ptr})));
+
+        ptr = nullptr;
+        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << ptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", ptr})));
+        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << nullptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", nullptr})));
     }
 
     Y_UNIT_TEST(CreateMessageOptionalTypes) {

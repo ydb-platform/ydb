@@ -322,12 +322,9 @@ void TFastPathService::ScheduleAfterDelay(
 
 void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
 {
-    ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig proto;
-    ToProto(cfg, &proto);
     ActorSystem->Send(
         PartitionActorId,
-        new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(
-            std::move(proto)));
+        new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(cfg));
 }
 
 ui64 TFastPathService::GenerateSequenceNumber()

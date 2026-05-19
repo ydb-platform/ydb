@@ -42,10 +42,9 @@ TRegion::TRegion(
         NMonitoring::TDynamicCounterPtr vChunkCounters =
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
-        const auto it = vChunkConfigs.find(vChunkIndex);
-        const auto vChunkConfig = it != vChunkConfigs.end()
-                                      ? it->second
-                                      : TVChunkConfig::Make(vChunkIndex);
+        const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
+        const auto vChunkConfig =
+            persisted ? *persisted : TVChunkConfig::Make(vChunkIndex);
         Y_ABORT_UNLESS(vChunkConfig.IsValid());
         Y_ABORT_UNLESS(vChunkConfig.VChunkIndex == vChunkIndex);
 

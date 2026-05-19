@@ -58,16 +58,13 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
     // whose layout was explicitly updated have a row here.
     struct VChunkConfigs: public TTableSchema<2>
     {
-        struct VChunkIndex
-            : public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        struct VChunkIndex: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
         {
         };
 
-        struct Config
-            : public Column<2, NKikimr::NScheme::NTypeIds::String>
+        struct Config: public Column<2, NKikimr::NScheme::NTypeIds::String>
         {
-            using Type =
-                ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
+            using Type = ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
         };
 
         using TKey = TableKey<VChunkIndex>;

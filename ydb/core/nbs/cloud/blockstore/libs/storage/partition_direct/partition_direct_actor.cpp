@@ -3,12 +3,12 @@
 #include "direct_block_group_impl.h"
 #include "fast_path_service.h"
 #include "load_actor_adapter.h"
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -240,7 +240,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
     TDirectBlockGroupsConnections directBlockGroupsConnections,
-    TVector<TVChunkConfigProto> vChunkProtoConfigs)
+    TVector<TVChunkConfig> vChunkConfigs)
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
@@ -256,11 +256,10 @@ void TPartitionActor::Start(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
-    TVChunkConfigByIndex vChunkConfigs;
-    vChunkConfigs.reserve(vChunkProtoConfigs.size());
-    for (const auto& proto: vChunkProtoConfigs) {
-        auto cfg = FromProto(proto);
-        vChunkConfigs[cfg.VChunkIndex] = std::move(cfg);
+    TVChunkConfigByIndex vChunkConfigsByIndex;
+    vChunkConfigsByIndex.reserve(vChunkConfigs.size());
+    for (const auto& cfg: vChunkConfigs) {
+        vChunkConfigsByIndex[cfg.VChunkIndex] = cfg;
     }
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
@@ -272,7 +271,7 @@ void TPartitionActor::Start(
         blockCount,
         VolumeConfig.GetBlockSize(),
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
-        std::move(vChunkConfigs),
+        std::move(vChunkConfigsByIndex),
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,
@@ -432,13 +431,10 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     LOG_DEBUG_S(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Handle UpdateVChunkConfig"
-            << ", tabletId: " << TabletID()
-            << ", vChunkIndex: " << cfg.GetVChunkIndex());
+        LogTitle.GetWithTime().c_str()
+            << " Handle UpdateVChunkConfig, vChunkIndex: " << cfg.VChunkIndex);
 
-    ExecuteTx(
-        ctx,
-        CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
+    ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

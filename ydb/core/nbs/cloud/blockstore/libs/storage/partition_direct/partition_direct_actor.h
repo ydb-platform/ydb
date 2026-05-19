@@ -31,8 +31,6 @@ class TPartitionActor
 {
     using TDirectBlockGroupsConnections =
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
-    using TVChunkConfigProto =
-        ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
 
     enum EState
     {
@@ -113,7 +111,7 @@ private:
     void Start(
         const NActors::TActorContext& ctx,
         TDirectBlockGroupsConnections directBlockGroupsConnections,
-        TVector<TVChunkConfigProto> vChunkProtoConfigs = {});
+        TVector<TVChunkConfig> vChunkConfigs);
 
     TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(
         TDirectBlockGroupsConnections directBlockGroupsConnections);

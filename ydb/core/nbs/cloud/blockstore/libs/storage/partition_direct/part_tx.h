@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
@@ -27,8 +28,6 @@ struct TTxPartition
 {
     using TDirectBlockGroupsConnections =
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
-    using TVChunkConfigProto =
-        ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
 
     //
     // InitSchema
@@ -51,7 +50,7 @@ struct TTxPartition
     {
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
-        TVector<TVChunkConfigProto> VChunkConfigs;
+        TVector<TVChunkConfig> VChunkConfigs;
 
         explicit TLoadState()
         {}
@@ -107,9 +106,9 @@ struct TTxPartition
     //
     struct TUpdateVChunkConfig
     {
-        const TVChunkConfigProto VChunkConfig;
+        const TVChunkConfig VChunkConfig;
 
-        explicit TUpdateVChunkConfig(TVChunkConfigProto vChunkConfig)
+        explicit TUpdateVChunkConfig(TVChunkConfig vChunkConfig)
             : VChunkConfig(std::move(vChunkConfig))
         {}
 

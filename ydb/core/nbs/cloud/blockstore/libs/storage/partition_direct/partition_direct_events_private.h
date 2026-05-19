@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/base/events.h>
 
@@ -28,12 +28,12 @@ struct TEvPartitionDirectPrivate
     };
 
     struct TEvUpdateVChunkConfig
-        : public NActors::TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
+        : public NActors::
+              TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
-        ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig VChunkConfig;
+        TVChunkConfig VChunkConfig;
 
-        explicit TEvUpdateVChunkConfig(
-            ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig cfg)
+        explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
         {}
     };

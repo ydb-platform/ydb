@@ -34,7 +34,7 @@ public:
 
     TVacuumLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic);
 
-    bool TryStartVacuum(ui64 vacuumGeneration, const TActorContext& ctx);
+    bool TryStartVacuum(TVacuumTag tag, const TActorContext& ctx);
     void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
     void WaitCompaction();
     void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
@@ -48,6 +48,7 @@ public:
 private:
     void CompleteVacuum(const TActorContext& ctx);
     void ChangeState(EVacuumState to);
+    bool UpdateMaxGeneration(TVacuumTag tag);
 
 private:
     IOps* Ops;
@@ -56,8 +57,14 @@ private:
     NUtil::ILogger* const Logger;
     TExecutorGCLogic* const GcLogic;
 
-    ui64 CurrentVacuumGeneration = 0;
-    ui64 NextVacuumGeneration = 0;
+    /**
+     * There are 2 types of requests - requests with generation tag and requests with no tag.
+     * A request with generation is only processed if there wasn't already a request with a greater generation.
+     * A request with no tag is always processed.
+     */
+    TVacuumGeneration MaxVacuumGeneration = 0; // maximum seen generation, including past, current and planned vacuum runs
+    TVacuumTag CurrentVacuumTag; // tag of the current run, only stored for logging
+    std::optional<TVacuumTag> NextVacuumTag; // nullopt if there is no next run scheduled
     EVacuumState State = EVacuumState::Idle;
     THashMap<ui32, TVacuumTableInfo> CompactingTables; // tracks statuses of compaction
 

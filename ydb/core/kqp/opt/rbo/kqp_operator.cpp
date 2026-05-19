@@ -89,7 +89,8 @@ TOpRead::TOpRead(TExprNode::TPtr node)
 
 TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
                  const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
-                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos)
+                 const std::optional<TExpression>& originalPredicate, const ESortDir sortDir, const TPhysicalOpProps& props, TPositionHandle pos,
+                 std::optional<TRangeInfo> rangeInfo)
     : IOperator(EOperator::Source, pos, props)
     , Alias(alias)
     , Columns(columns)
@@ -100,7 +101,8 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , Limit(limit)
     , Ranges(ranges)
     , OriginalPredicate(originalPredicate)
-    , SortDir(sortDir) {
+    , SortDir(sortDir)
+    , RangeInfo(std::move(rangeInfo)) {
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {

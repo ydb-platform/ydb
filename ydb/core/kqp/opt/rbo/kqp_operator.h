@@ -262,7 +262,8 @@ public:
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TExprNode::TPtr& ranges,
-            const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos);
+            const std::optional<TExpression>& originalPredicate, const ESortDir sortDireciont, const TPhysicalOpProps& props, TPositionHandle pos,
+            std::optional<TRangeInfo> rangeInfo = std::nullopt);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;

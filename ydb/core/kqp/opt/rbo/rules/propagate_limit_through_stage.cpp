@@ -75,10 +75,8 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
     } else if (CanPushLimitToRead(limit, limitInput)) {
         auto read = CastOperator<TOpRead>(limitInput);
         const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
-        auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
-                                             read->GetRanges(), read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
-        newRead->RangeInfo = read->RangeInfo;
-        return newRead;
+        return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
+                                      read->GetRanges(), read->OriginalPredicate, read->SortDir, read->Props, read->Pos, read->RangeInfo);
     }
 
     return input;

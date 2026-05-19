@@ -535,7 +535,7 @@ private:
                     SetParsingError(error, jsonValue, "extract json value", status);
                     return false;
                 }
-                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " <<dataTypeName << ", please use Json type for nested values");
+                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " << dataTypeName << ", please use Json type for nested values");
                 return false;
             }
 

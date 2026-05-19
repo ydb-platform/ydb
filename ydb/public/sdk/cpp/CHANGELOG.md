@@ -1,3 +1,5 @@
+* Added a helper to detect specific issue codes within a TStatus (including nested sub-issues) and introduces the CONSTRAINT_VIOLATION issue code constant, intended to make it easier for SDK users to detect primary key / unique index conflicts.
+
 ## v3.18.0
 
 * Fixed self thread join core dump in IAM credentials provider

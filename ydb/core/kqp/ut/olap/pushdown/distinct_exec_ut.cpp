@@ -242,6 +242,19 @@ void AssertQueryPlanContains(
     UNIT_ASSERT_C(ast.find(needle) != TString::npos, ast);
 }
 
+void AssertQueryPlanNotContains(
+    NYdb::NTable::TTableClient& tableClient,
+    const TString& query,
+    TStringBuf needle)
+{
+    auto res = StreamExplainQuery(query, tableClient);
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    const auto planRes = CollectStreamResult(res);
+    UNIT_ASSERT(planRes.QueryStats.Defined());
+    const TString ast = TString(planRes.QueryStats->Getquery_ast());
+    UNIT_ASSERT_C(ast.find(needle) == TString::npos, ast);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
@@ -903,6 +916,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = ")" << kCap << R"(";
             SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT )" << kCap;
 
+        AssertQueryPlanNotContains(tableClient, qOn, "KqpOlapDistinct");
+
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
         auto itOff = tableClient.StreamExecuteScanQuery(qOff).GetValueSync();
         UNIT_ASSERT_C(itOff.IsSuccess(), itOff.GetIssues().ToString());
         auto resOff = CollectStreamResult(itOff);
@@ -910,6 +926,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         auto itOn = tableClient.StreamExecuteScanQuery(qOn).GetValueSync();
         UNIT_ASSERT_C(itOn.IsSuccess(), itOn.GetIssues().ToString());
         auto resOn = CollectStreamResult(itOn);
+        const i64 syncAfter = ReadDistinctLimitSyncPointInvocations(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(syncAfter, syncBefore);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);

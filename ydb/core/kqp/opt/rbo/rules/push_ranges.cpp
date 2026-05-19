@@ -215,8 +215,16 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Extracted ranges: " << KqpExprToPrettyString(*ranges, ctx);
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Pruned lambda: " << KqpExprToPrettyString(*buildResult.PrunedLambda, ctx);
 
+    TOpRead::TRangeInfo rangeInfo{
+        .KeyColumns = keyColumns,
+        .UsedPrefixLen = buildResult.UsedPrefixLen,
+        .PointPrefixLen = buildResult.PointPrefixLen,
+        .ExpectedMaxRanges = buildResult.ExpectedMaxRanges
+            ? TMaybe<size_t>(*buildResult.ExpectedMaxRanges)
+            : TMaybe<size_t>(),
+    };
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, read->OlapFilterLambda,
-                                          read->Limit, ranges, TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos);
+                                          read->Limit, ranges, TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos, std::move(rangeInfo));
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(buildResult.PrunedLambda, &ctx, &props));
 }
 } // namespace NKqp

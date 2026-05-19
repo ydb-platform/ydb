@@ -171,7 +171,7 @@ TDirectReadSessionManager::~TDirectReadSessionManager() {
 }
 
 TStringBuilder TDirectReadSessionManager::GetLogPrefix() const {
-    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " ";
+    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " TraceId=" << ReadSessionSettings.TraceId_ << " ";
 }
 
 TDirectReadSessionContextPtr TDirectReadSessionManager::CreateDirectReadSession(TNodeId nodeId) {
@@ -830,7 +830,7 @@ void TDirectReadSession::ReadFromProcessorImpl(TDeferredActions<false>& deferred
 }
 
 TStringBuilder TDirectReadSession::GetLogPrefix() const {
-    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSession ServerSessionId=" << ServerSessionId << " NodeId=" << NodeId << " ";
+    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSession ServerSessionId=" << ServerSessionId << " NodeId=" << NodeId << " TraceId=" << ReadSessionSettings.TraceId_ << " ";
 }
 
 void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {

@@ -89,6 +89,32 @@ static void SerializeSuppressableAccessTrackingOptions(TNode* node, const TSuppr
     }
 }
 
+template <typename T>
+static void SerializePrerequisiteOptions(TNode* node, const TPrerequisiteOptions<T>& options)
+{
+    if (!options.PrerequisiteTransactionIds_.empty()) {
+        auto& txIds = (*node)["prerequisite_transaction_ids"] = TNode::CreateList();
+        for (const auto& txId : options.PrerequisiteTransactionIds_) {
+            txIds.Add(GetGuidAsString(txId));
+        }
+    }
+
+    if (!options.PrerequisiteRevisions_.empty()) {
+        auto& revisions = (*node)["prerequisite_revisions"] = TNode::CreateList();
+        for (const auto& revisionConfig : options.PrerequisiteRevisions_) {
+            if (!revisionConfig.Path_) {
+                ythrow TApiUsageError() << "Path for TPrerequisiteRevisionOptions must be explicitly specified";
+            }
+            if (!revisionConfig.Revision_) {
+                ythrow TApiUsageError() << "Revision for TPrerequisiteRevisionOptions must be explicitly specified";
+            }
+            revisions.Add(TNode()
+                ("path", *revisionConfig.Path_)
+                ("revision", *revisionConfig.Revision_));
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TNode SerializeParamsForCreate(
@@ -151,6 +177,7 @@ TNode SerializeParamsForGet(
     SetPathParam(&result, pathPrefix, path);
     SerializeMasterReadOptions(&result, options);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    SerializePrerequisiteOptions(&result, options);
     if (options.AttributeFilter_) {
         result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
     }

@@ -4,7 +4,7 @@ This section contains code recipes in different programming languages for [vecto
 
 The following operations are covered in detail:
 
-  - [Vector search](#vector-search)
+- [Vector search](#vector-search)
   - [Connecting to {{ ydb-short-name }}](#connect-ydb)
   - [Creating a table](#create-table)
   - [Inserting vectors](#insert-vectors)

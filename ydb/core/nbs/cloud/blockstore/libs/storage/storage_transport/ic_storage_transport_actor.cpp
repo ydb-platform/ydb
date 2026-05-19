@@ -198,7 +198,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "
-        "acquire data. Aborting.",
+        "acquire data. Returning an immediate error.",
         requestId);
 
     auto errorResponse =
@@ -378,7 +378,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "Sent HandleWriteToDDisk with requestId# %lu was failed - can't "
-        "acquire data. Immediate error's returning.",
+        "acquire data. Returning an immediate error.",
         requestId);
 
     auto errorResponse = std::make_unique<NKikimr::NDDisk::TEvWriteResult>();

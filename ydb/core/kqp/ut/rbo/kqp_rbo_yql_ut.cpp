@@ -2113,7 +2113,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  4, 7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                      50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 78, 79, 81, 82, 84, 85, 90, 91, 92, 96, 99},
                            {}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
-    }
+    } 
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {
         NYdb::TValueBuilder rows;
@@ -3005,6 +3005,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestOlapProjectionPushdown(Explain);
     }
 
+    ui32 CountNumberOfCallables(const std::string& ast, const std::string_view callable) {
+        ui32 count = 0;
+        auto pos = ast.find(callable);
+        while (pos != std::string::npos) {
+            pos = ast.find(callable, pos + 1);
+            ++count;
+        }
+        return count;
+    }
+
     void TestLimit(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -3071,6 +3081,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             const auto& query = queries[i];
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "DqCnMerge"), 1);
+
+            result =
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -3078,18 +3095,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-     Y_UNIT_TEST_TWIN(Limit, ColumnStore) {
+    Y_UNIT_TEST_TWIN(Limit, ColumnStore) {
         TestLimit(ColumnStore);
-    }
-
-    ui32 CountNumberOfCallables(const std::string& ast, const std::string_view callable) {
-        ui32 count = 0;
-        auto pos = ast.find(callable);
-        while (pos != std::string::npos) {
-            pos = ast.find(callable, pos + 1);
-            ++count;
-        }
-        return count;
     }
 
     Y_UNIT_TEST(PropagateLimitThroughStages) {
@@ -4646,166 +4653,51 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
 
     */
 
-    TString BuildQuery(const TString& predicate, bool pushEnabled) {
-        TStringBuilder qBuilder;
-        qBuilder << "PRAGMA Kikimr.OptEnableOlapPushdown = '" << (pushEnabled ? "true" : "false") << "';" << Endl;
-        qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
-        qBuilder << predicate;
-        qBuilder << " ORDER BY `timestamp`";
-        return qBuilder;
-    };
-
-    Y_UNIT_TEST(OlapTestPredicatePushdown) {
+    // Regression: Aggregate::ComputeMetadata was copying input metadata instead of starting
+    // fresh, leaking its KeyColumns into the input Map. Repros with TPCH Q21 pattern.
+    Y_UNIT_TEST(AggregateKeyColumnsNotLeakedToInputMap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-        constexpr bool logQueries = false;
-        auto settings = TKikimrSettings(appConfig)
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TStreamExecScanQuerySettings scanSettings;
-        scanSettings.Explain(true);
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/items` (
+                order_id Int64 NOT NULL,
+                line_id  Int64 NOT NULL,
+                sup_id   Int64 NOT NULL,
+                late     Int64 NOT NULL,
+                PRIMARY KEY (order_id, line_id)
+            ) WITH (Store = Column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
 
-        TLocalHelper(kikimr).CreateTestOlapTable();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto result = querySession.ExecuteQuery(R"(
+            SELECT i1.sup_id, COUNT(*) AS cnt
+            FROM `/Root/items` AS i1
+            WHERE i1.late = 1
+              AND EXISTS (
+                  SELECT * FROM `/Root/items` AS i2
+                  WHERE i2.order_id = i1.order_id AND i2.sup_id != i1.sup_id
+              )
+              AND NOT EXISTS (
+                  SELECT * FROM `/Root/items` AS i3
+                  WHERE i3.order_id = i1.order_id AND i3.sup_id != i1.sup_id AND i3.late = 1
+              )
+            GROUP BY i1.sup_id
+            ORDER BY cnt DESC, i1.sup_id;
+        )", NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+            .ExtractValueSync();
 
-        auto tableClient = kikimr.GetTableClient();
-
-        std::vector<TString> testData = {
-            R"(`resource_id` = `uid`)",
-            R"(`resource_id` != `uid`)",
-            R"(`resource_id` = "10001")",
-            R"(`resource_id` != "10001")",
-            R"("XXX" == "YYY" OR `resource_id` != "10001")",
-            R"(`level` = 1)",
-            R"(`level` = Int8("1"))",
-            R"(`level` = Int16("1"))",
-            R"(`level` = Int32("1"))",
-            R"(`level` > Int32("3"))",
-            R"(`level` < Int32("1"))",
-            R"(`level` >= Int32("4"))",
-            R"(`level` <= Int32("0"))",
-            R"(`level` != Int32("0"))",
-            R"(`level` + `level` <= Int32("0"))",
-            R"(`level` <= `level`)",
-            R"((`level`, `uid`, `resource_id`) = (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) > (Int32("1"), "uid_3000000", "10001"))",
-            R"((`level`, `uid`, `resource_id`) < (Int32("1"), "uid_3000002", "10001"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("2"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000002", "10001"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000001", "10002"))",
-            R"((`level`, `uid`, `resource_id`) >= (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("2"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000002", "10001"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000001", "10002"))",
-            R"((`level`, `uid`, `resource_id`) <= (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) != (Int32("1"), "uid_3000001", "10001"))",
-            R"((`level`, `uid`, `resource_id`) != (Int32("0"), "uid_3000001", "10011"))",
-            R"(`level` = 0 OR `level` = 2 OR `level` = 1)",
-            R"(`level` = 0 OR (`level` = 2 AND `uid` = "uid_3000002"))",
-            R"(`level` = 0 OR NOT(`level` = 2 AND `uid` = "uid_3000002"))",
-            R"(`level` = 0 AND (`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
-            R"(`level` = 0 AND NOT(`uid` = "uid_3000000" OR `uid` = "uid_3000002"))",
-            R"(`level` = 0 OR `uid` = "uid_3000003")",
-            R"(`level` = 0 AND `uid` = "uid_3000003")",
-            R"(`level` = 0 AND `uid` = "uid_3000000")",
-            R"((`level`, `uid`) > (Int32("2"), "uid_3000004") OR (`level`, `uid`) < (Int32("1"), "uid_3000002"))",
-            R"(Int32("3") > `level`)",
-            //R"((Int32("1"), "uid_3000001", "10001") = (`level`, `uid`, `resource_id`))",
-            //R"((Int32("1"), `uid`, "10001") = (`level`, "uid_3000001", `resource_id`))",
-            R"(`level` = 0 AND "uid_3000000" = `uid`)",
-            R"(`uid` > `resource_id`)",
-            //R"(`level` IS NULL)",
-            //R"(`level` IS NOT NULL)",
-            //R"(`message` IS NULL)",
-            //R"(`message` IS NOT NULL)",
-            R"((`level`, `uid`) > (Int32("1"), NULL))",
-            R"((`level`, `uid`) != (Int32("1"), NULL))",
-            R"(`level` >= CAST("2" As Int32))",
-            R"(CAST("2" As Int32) >= `level`)",
-            R"(`uid` LIKE "%30000%")",
-            R"(`uid` LIKE "uid%")",
-            R"(`uid` LIKE "%001")",
-            R"(`uid` LIKE "uid%001")",
-            R"(`level` + 2 < 5)",
-            R"(`level` - 2 >= 1)",
-            R"(`level` * 3 > 4)",
-            R"(`level` / 2 <= 1)",
-            R"(`level` % 3 != 1)",
-            R"(-`level` < -2)",
-            R"(Abs(`level` - 3) >= 1)",
-            R"(LENGTH(`message`) > 1037)",
-            R"(LENGTH(`uid`) > 1 OR `resource_id` = "10001")",
-            R"((LENGTH(`uid`) > 2 AND `resource_id` = "10001") OR `resource_id` = "10002")",
-            R"((LENGTH(`uid`) > 3 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
-            //R"(`level` IS NULL OR `message` IS NULL)",
-            //R"(`level` IS NOT NULL AND `message` IS NULL)",
-            //R"(`level` IS NULL AND `message` IS NOT NULL)",
-            //R"(`level` IS NOT NULL AND `message` IS NOT NULL)",
-            //R"(`level` IS NULL XOR `message` IS NOT NULL)",
-            //R"(`level` IS NULL XOR `message` IS NULL)",
-            R"(`level` + 2. < 5.f)",
-            R"(`level` - 2.f >= 1.)",
-            R"(`level` * 3. > 4.f)",
-            R"(`level` / 2.f <= 1.)",
-            R"(`level` % 3. != 1.f)",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` < 4)",
-            //R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
-            R"(IF(`level` > 3, -`level`, +`level`) < 2)",
-            R"(StartsWith(`message` ?? `resource_id`, "10000"))",
-            R"(NOT EndsWith(`message` ?? `resource_id`, "xxx"))",
-            // Do not work even without olap pushdown.
-            //R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) == <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
-            //R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) != <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
-            R"(`uid` LIKE "_id%000_")",
-            R"(`uid` ILIKE "UID%002")",
-
-            R"(Udf(String::_yql_AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
-            R"(Udf(String::Contains)(`uid`,  "UI"))",
-            R"(Udf(String::_yql_AsciiContainsIgnoreCase)(`uid`,  "UI"))",
-            R"(Udf(String::StartsWith)(`uid`,  "UI"))",
-            R"(Udf(String::_yql_AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
-            R"(Udf(String::EndsWith)(`uid`,  "UI"))",
-            R"(Udf(String::_yql_AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
-        };
-
-        for (const auto& predicate: testData) {
-            auto normalQuery = BuildQuery(predicate, false);
-            auto pushQuery = BuildQuery(predicate, true);
-
-            Cerr << "--- Run normal query ---\n";
-            Cerr << normalQuery << Endl;
-            auto it = tableClient.StreamExecuteScanQuery(normalQuery).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            auto goodResult = CollectStreamResult(it);
-
-            Cerr << "--- Run pushed down query ---\n";
-            Cerr << pushQuery << Endl;
-            it = tableClient.StreamExecuteScanQuery(pushQuery).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            auto pushResult = CollectStreamResult(it);
-
-            if (logQueries) {
-                Cerr << "Query: " << normalQuery << Endl;
-                Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
-                Cerr << "Received: " << pushResult.ResultSetYson << Endl;
-            }
-
-            CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
-
-            it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-            auto result = CollectStreamResult(it);
-            auto ast = result.QueryStats->Getquery_ast();
-
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
-                          TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
-        }
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 

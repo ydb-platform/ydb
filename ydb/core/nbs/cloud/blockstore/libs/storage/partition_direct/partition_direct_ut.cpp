@@ -657,7 +657,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             GetLoadActorAdapterActorId(env, partition, edge);
 
         bool alreadyOnce{};
-        ui8 singleWriteRequestsCounter{};
+        size_t singleWriteRequestsCounter{};
         runtime->FilterFunction =
             [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
         {

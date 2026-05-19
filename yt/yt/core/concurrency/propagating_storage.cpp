@@ -209,7 +209,7 @@ public:
 
     const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
     {
-        return PropagatingStorageSlot().TryGet(fls);
+        return PropagatingStorageSlot().Get(fls);
     }
 
     void InstallGlobalSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)

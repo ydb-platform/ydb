@@ -1,24 +1,19 @@
-
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
-
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
-
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/url/url.h>
-
-#include <format>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
+#include <format>
 
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;

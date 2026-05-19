@@ -1010,11 +1010,19 @@ InitPlan(QueryDesc *queryDesc, int eflags)
  * Generally the parser and/or planner should have noticed any such mistake
  * already, but let's make sure.
  *
+ * For INSERT ON CONFLICT, the result relation is required to support the
+ * onConflictAction, regardless of whether a conflict actually occurs.
+ *
+ * For MERGE, mergeActions is the list of actions that may be performed.  The
+ * result relation is required to support every action, regardless of whether
+ * or not they are all executed.
+ *
  * Note: when changing this function, you probably also need to look at
  * CheckValidRowMarkRel.
  */
 void
-CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
+CheckValidResultRelNew(ResultRelInfo *resultRelInfo, CmdType operation,
+					   OnConflictAction onConflictAction, List *mergeActions)
 {
 	Relation	resultRel = resultRelInfo->ri_RelationDesc;
 	TriggerDesc *trigDesc = resultRel->trigdesc;
@@ -1028,7 +1036,31 @@ CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
 	{
 		case RELKIND_RELATION:
 		case RELKIND_PARTITIONED_TABLE:
-			CheckCmdReplicaIdentity(resultRel, operation);
+
+			/*
+			 * For MERGE, check that the target relation supports each action.
+			 * For other operations, just check the operation itself.
+			 */
+			if (operation == CMD_MERGE)
+			{
+				ListCell   *lc;
+
+				foreach(lc, mergeActions)
+				{
+					MergeAction *action = (MergeAction *) lfirst(lc);
+
+					CheckCmdReplicaIdentity(resultRel, action->commandType);
+				}
+			}
+			else
+				CheckCmdReplicaIdentity(resultRel, operation);
+
+			/*
+			 * For INSERT ON CONFLICT DO UPDATE, additionally check that the
+			 * target relation supports UPDATE.
+			 */
+			if (onConflictAction == ONCONFLICT_UPDATE)
+				CheckCmdReplicaIdentity(resultRel, CMD_UPDATE);
 			break;
 		case RELKIND_SEQUENCE:
 			ereport(ERROR,
@@ -1145,6 +1177,16 @@ CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
 							RelationGetRelationName(resultRel))));
 			break;
 	}
+}
+
+/*
+ * ABI-compatible wrapper to emulate old version of the above function.
+ * Do not call this version in new code.
+ */
+void
+CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
+{
+	CheckValidResultRelNew(resultRelInfo, operation, ONCONFLICT_NONE, NIL);
 }
 
 /*
@@ -1301,10 +1343,9 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
  *		Get a ResultRelInfo for a trigger target relation.
  *
  * Most of the time, triggers are fired on one of the result relations of the
- * query, and so we can just return a member of the es_result_relations array,
- * or the es_tuple_routing_result_relations list (if any). (Note: in self-join
- * situations there might be multiple members with the same OID; if so it
- * doesn't matter which one we pick.)
+ * query, and so we can just return a suitable one we already made and stored
+ * in the es_opened_result_relations or es_tuple_routing_result_relations
+ * Lists.
  *
  * However, it is sometimes necessary to fire triggers on other relations;
  * this happens mainly when an RI update trigger queues additional triggers
@@ -1324,11 +1365,20 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	Relation	rel;
 	MemoryContext oldcontext;
 
+	/*
+	 * Before creating a new ResultRelInfo, check if we've already made and
+	 * cached one for this relation.  We must ensure that the given
+	 * 'rootRelInfo' matches the one stored in the cached ResultRelInfo as
+	 * trigger handling for partitions can result in mixed requirements for
+	 * what ri_RootResultRelInfo is set to.
+	 */
+
 	/* Search through the query result relations */
 	foreach(l, estate->es_opened_result_relations)
 	{
 		rInfo = lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 
@@ -1339,7 +1389,8 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	foreach(l, estate->es_tuple_routing_result_relations)
 	{
 		rInfo = (ResultRelInfo *) lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 
@@ -1347,7 +1398,8 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	foreach(l, estate->es_trig_target_relations)
 	{
 		rInfo = (ResultRelInfo *) lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 	/* Nope, so we need a new one */

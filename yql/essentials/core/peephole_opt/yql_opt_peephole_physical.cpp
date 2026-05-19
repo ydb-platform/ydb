@@ -2999,7 +2999,7 @@ TExprNode::TPtr DropDependsOnFromEmptyIterator(const TExprNode::TPtr& input, TEx
     if (input->ChildrenSize() > 1) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop DependsOn from " << input->Content();
         TExprNode::TListType newChildren;
-        newChildren.push_back(input->Child(0));
+        newChildren.emplace_back(input->Child(0));
         return ctx.ChangeChildren(*input, std::move(newChildren));
     }
     return input;

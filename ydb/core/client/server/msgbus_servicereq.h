@@ -11,18 +11,20 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 template<typename TDerived, NKikimrServices::TActivity::EType Activity>
-class TMessageBusLocalServiceRequest : public TActorBootstrapped<TDerived>, public TMessageBusSessionIdentHolder {
+class TMessageBusLocalServiceRequest : public TMessageBusCancellableRequest<TDerived> {
+    using TActorBase = TMessageBusCancellableRequest<TDerived>;
+
 protected:
     TActorId  ServiceID;
     const TDuration Timeout;
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
-        SendReplyMove(reply);
+        this->SendReplyMove(reply);
         return this->Die(ctx);
     }
 
     TMessageBusLocalServiceRequest(TBusMessageContext &msg, const TDuration& timeout)
-        : TMessageBusSessionIdentHolder(msg)
+        : TActorBase(msg)
         , ServiceID()
         , Timeout(timeout)
     {}

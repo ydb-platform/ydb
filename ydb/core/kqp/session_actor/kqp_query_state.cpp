@@ -287,7 +287,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.UsePessimisticLocks = (GetIsolationLevel(txCtx) == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
     bool keepInCache = false;
-    bool perStatementResult = (settings.UsePessimisticLocks || HasImplicitTx());
+    bool perStatementResult = HasImplicitTx();
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
     switch (GetAction()) {
@@ -625,9 +625,13 @@ NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionCont
                 isolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
                 break;
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                isolationLevel = txSettings.online_read_only().allow_inconsistent_reads()
-                    ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
-                    : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
+                    isolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                } else {
+                    isolationLevel = txSettings.online_read_only().allow_inconsistent_reads()
+                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                }
                 break;
             case Ydb::Table::TransactionSettings::kStaleReadOnly:
                 isolationLevel = NKqpProto::ISOLATION_LEVEL_READ_STALE;

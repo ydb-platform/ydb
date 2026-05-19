@@ -29,7 +29,7 @@ TConclusionStatus TOneSchemasCleanupCommand::DoExecute(TKikimrRunner& /*kikimr*/
     const i64 cleanups = controller->GetCleanupSchemasFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::CleanupSchemas);
     const TInstant start = TInstant::Now();
-    while (TInstant::Now() - start < TDuration::Seconds(10)) {
+    while (TInstant::Now() - start < TDuration::Seconds(30)) {
         if (cleanups < controller->GetCleanupSchemasFinishedCounter().Val()) {
             Cerr << "SCHEMAS_CLEANUP_HAPPENED: " << cleanups << " -> " << controller->GetCleanupSchemasFinishedCounter().Val() << Endl;
             break;

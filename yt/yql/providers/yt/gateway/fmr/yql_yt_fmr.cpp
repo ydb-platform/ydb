@@ -527,7 +527,7 @@ public:
             TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(tableInfo->Cluster, tablePath), sessionId);
             NYT::TNode spec;
             if (tableInfo->RowSpec) {
-                spec = FillAttrSpecNode(*tableInfo->RowSpec);
+                spec = FillAttrSpecNode(*tableInfo->RowSpec, TRunOptions(options), tableInfo->Cluster);
             }
             addFmrTable(tableInfo->Cluster, tablePath, spec, GetColumnGroupSpec(fmrTableId, sessionId));
         };
@@ -796,7 +796,7 @@ public:
                     TFmrTableRef inputTable = GetFmrTableRef(inputFmrId, sessionId);
                     SetTableSortingSpec(fmrOutputTableId, inputTable.SortColumns, inputTable.SortOrder, sessionId);
 
-                    auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0]);
+                    auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0], TPublishOptions(options), cluster);
                     MarkForDeferredUpload(inputFmrId, deferredSpec, sessionId);
                     MarkForDeferredUpload(fmrOutputTableId, deferredSpec, sessionId);
 
@@ -840,7 +840,7 @@ public:
                 future = ExecMerge(inputTablesInfo, outputTable, cluster, sessionId, config);
             }
 
-            auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0]);
+            auto deferredSpec = FillAttrSpecNode(inputTablesRowSpec[0], TPublishOptions(options), cluster);
             return future.Apply([this, sessionId, fmrOutputTableId, pos = nodePos, deferredSpec = std::move(deferredSpec)] (const auto& f) {
                 TFmrOperationResult anonTablesMergeResult = f.GetValue();
                 TPublishResult publishResult;
@@ -884,7 +884,7 @@ public:
                 continue;
             }
             outputTableInfo.Path = outputPath;
-            outputTableInfo.Spec = FillAttrSpecNode(inputTablesRowSpec[i]);
+            outputTableInfo.Spec = FillAttrSpecNode(inputTablesRowSpec[i], TPublishOptions(options), outputCluster);
             outputTablesByCluster[outputCluster].emplace_back(outputTableInfo);
         }
 
@@ -1169,7 +1169,7 @@ public:
                 }
                 TOutputInfo outputTableInfo;
                 outputTableInfo.Path = tablePath;
-                outputTableInfo.Spec = FillAttrSpecNode(*(tableInfo->RowSpec));
+                outputTableInfo.Spec = FillAttrSpecNode(*(tableInfo->RowSpec), TResOrPullOptions(options), tableInfo->Cluster);
                 outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
 
                 outputFmrTablesByCluster[tableInfo->Cluster].emplace_back(outputTableInfo);
@@ -1264,7 +1264,7 @@ public:
                 TOutputInfo outputTableInfo;
                 outputTableInfo.Path = ref.Path;
                 if (ref.TableInfo->RowSpec) {
-                    outputTableInfo.Spec = FillAttrSpecNode(*ref.TableInfo->RowSpec);
+                    outputTableInfo.Spec = FillAttrSpecNode(*ref.TableInfo->RowSpec, TCalcOptions(options), ref.Cluster);
                 }
                 outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
                 outputFmrTablesByCluster[ref.Cluster].emplace_back(outputTableInfo);
@@ -1903,9 +1903,11 @@ private:
         return sortOrders;
     }
 
-    NYT::TNode FillAttrSpecNode(const TYqlRowSpecInfo yqlRowSpecInfo) {
+    template<class TOptions>
+    NYT::TNode FillAttrSpecNode(const TYqlRowSpecInfo yqlRowSpecInfo, TOptions&& options, const TString& cluster) {
         NYT::TNode res = NYT::TNode::CreateMap();
-        yqlRowSpecInfo.FillAttrNode(res[YqlRowSpecAttribute], false);
+        const auto nativeTypeCompat = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+        yqlRowSpecInfo.FillAttrNode(res[YqlRowSpecAttribute], nativeTypeCompat, false);
         return res;
     }
 

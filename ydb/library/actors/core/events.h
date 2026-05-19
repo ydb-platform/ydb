@@ -30,6 +30,7 @@ namespace NActors {
             ES_HTTP = 11,
             ES_PGWIRE = 12,
             ES_INTERCONNECT_RDMA = 13,
+            ES_RETRO_TRACING = 14,
 
             ES_USERSPACE = 4096,
 

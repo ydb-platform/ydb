@@ -4,6 +4,8 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 
+#include <ydb/core/util/backoff.h>
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TS3Manager {
@@ -68,6 +70,7 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr ui32 MaxDeletesInFlight = 3;
         static constexpr size_t MaxObjectsToDeleteAtOnce = 10;
+        static constexpr ui32 SuccessesPerConcurrencyStepUp = 3;
 
         // items we are definitely going to delete (must be present in TrashS3)
         std::deque<TS3Locator> DeleteQueue;
@@ -76,8 +79,16 @@ namespace NKikimr::NBlobDepot {
         ui64 TotalS3TrashObjects = 0;
         ui64 TotalS3TrashSize = 0;
 
+        // Throttling state for S3 SlowDown responses on delete requests.
+        TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
+        TMonotonic DeleteThrottleUntil;
+        bool DeleteWakeupScheduled = false;
+        ui32 CurrentMaxDeletesInFlight = MaxDeletesInFlight;
+        ui32 ConsecutiveSuccessfulDeleteBatches = 0;
+
         void RunDeletersIfNeeded();
         void HandleDeleter(TAutoPtr<IEventHandle> ev);
+        void HandleDeleteThrottleWakeup();
     };
 
 } // NKikimr::NBlobDepot

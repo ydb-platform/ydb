@@ -526,7 +526,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
         return nullptr;
     }
 
-    auto& [workingDir, name] = wdAndPath;
+    const auto& [workingDir, name] = wdAndPath;
 
     auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;

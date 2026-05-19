@@ -24,7 +24,7 @@ inline void SplitTableName(const TStringBuf& fullName, TStringBuf& table, TStrin
 }
 
 struct TJoinLabel {
-    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct);
+    TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct, const TStreamingConstraintNode* streaming);
     TMaybe<TIssue> ValidateLabel(TExprContext& ctx, const NNodes::TCoAtom& label);
     TString FullName(const TStringBuf& column) const;
     TVector<TString> AllNames(const TStringBuf& column) const;
@@ -41,10 +41,11 @@ struct TJoinLabel {
     TVector<TStringBuf> Tables;
     const TUniqueConstraintNode* Unique = nullptr;
     const TDistinctConstraintNode* Distinct = nullptr;
+    const TStreamingConstraintNode* Streaming = nullptr;
 };
 
 struct TJoinLabels {
-    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique = nullptr, const TDistinctConstraintNode* distinct = nullptr);
+    TMaybe<TIssue> Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique = nullptr, const TDistinctConstraintNode* distinct = nullptr, const TStreamingConstraintNode* streaming = nullptr);
     TMaybe<const TJoinLabel*> FindInput(const TStringBuf& table) const;
     TMaybe<ui32> FindInputIndex(const TStringBuf& table) const;
     TMaybe<const TTypeAnnotationNode*> FindColumn(const TStringBuf& table, const TStringBuf& column) const;
@@ -83,6 +84,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     TPositionHandle positionHandle,
     const TUniqueConstraintNode*& unique,
     const TDistinctConstraintNode*& distinct,
+    const TStreamingConstraintNode*& streaming,
     const TJoinLabels& labels,
     TExprNode& joins,
     TExprContext& ctx

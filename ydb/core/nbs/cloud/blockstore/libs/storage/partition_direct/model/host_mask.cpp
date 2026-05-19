@@ -1,6 +1,5 @@
 #include "host_mask.h"
 
-#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 #include <bit>
@@ -63,6 +62,11 @@ bool THostMask::Empty() const
 size_t THostMask::Count() const
 {
     return std::bitset<32>(Bits).count();
+}
+
+THostMask THostMask::LogicalNot() const
+{
+    return THostMask(~Bits);
 }
 
 THostMask THostMask::LogicalAnd(THostMask other) const
@@ -158,21 +162,11 @@ TString THostMask::Print() const
         if (!first) {
             result << ",";
         }
-        result << "H" << ui32(host);
+        result << PrintHostIndex(host);
         first = false;
     }
     result << "]";
     return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool THostRoute::operator<(const THostRoute& other) const
-{
-    if (SourceHostIndex != other.SourceHostIndex) {
-        return SourceHostIndex < other.SourceHostIndex;
-    }
-    return DestinationHostIndex < other.DestinationHostIndex;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

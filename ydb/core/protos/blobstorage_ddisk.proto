@@ -49,6 +49,7 @@ message TReplyStatus {
         // The I/O subsystem cannot fulfill the request right now. Possible causes:
         // - io_uring submission queue pressure (EAGAIN / EWOULDBLOCK)
         // - out of disk space (ENOSPC) or memory (ENOMEM)
+        // - pending events queue overfill
         // The caller should retry after a back-off.
         OVERLOADED = 9;
 

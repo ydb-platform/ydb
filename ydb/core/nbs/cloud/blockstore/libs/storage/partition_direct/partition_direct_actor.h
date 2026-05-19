@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -40,6 +41,7 @@ class TPartitionActor
     };
 
 private:
+    TLogTitle LogTitle;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;

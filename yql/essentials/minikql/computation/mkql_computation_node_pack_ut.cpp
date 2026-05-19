@@ -173,12 +173,12 @@ protected:
         TType* tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
 
         TUnboxedValueVector tupleElemens;
-        tupleElemens.push_back(MakeString("01234567890123456789"));
-        tupleElemens.push_back(MakeString("01234567890"));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(MakeString("01234567890123456789"));
+        tupleElemens.emplace_back(MakeString("01234567890"));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
 
         const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(tupleElemens);
         const auto uValue = TestPackUnpack(tupleType, value, "Type:Tuple");
@@ -222,12 +222,12 @@ protected:
         TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
 
         TUnboxedValueVector structElemens;
-        structElemens.push_back(MakeString("01234567890123456789"));
-        structElemens.push_back(MakeString("01234567890"));
-        structElemens.push_back(NUdf::TUnboxedValuePod());
-        structElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
-        structElemens.push_back(NUdf::TUnboxedValuePod());
-        structElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        structElemens.emplace_back(MakeString("01234567890123456789"));
+        structElemens.emplace_back(MakeString("01234567890"));
+        structElemens.emplace_back(NUdf::TUnboxedValuePod());
+        structElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        structElemens.emplace_back(NUdf::TUnboxedValuePod());
+        structElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
 
         const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(structElemens);
         const auto uValue = TestPackUnpack(structType, value, "Type:Struct");
@@ -528,17 +528,17 @@ protected:
         auto dec2 = NYql::NDecimal::FromString("-9781555555.99", 35, 2);
 
         TUnboxedValueVector tupleElemens;
-        tupleElemens.push_back(MakeString("01234567890123456789"));
-        tupleElemens.push_back(MakeString("01234567890"));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod());
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(MakeString("01234567890123456789"));
+        tupleElemens.emplace_back(MakeString("01234567890"));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui64(12345)));
         if (!forPerf) {
-            tupleElemens.push_back(NUdf::TUnboxedValuePod(inf));
-            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec1));
-            tupleElemens.push_back(NUdf::TUnboxedValuePod(dec2));
-            tupleElemens.push_back(NUdf::TUnboxedValuePod());
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod(inf));
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod(dec1));
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod(dec2));
+            tupleElemens.emplace_back(NUdf::TUnboxedValuePod());
         }
 
         return HolderFactory_.VectorAsArray(tupleElemens);
@@ -577,8 +577,8 @@ protected:
         TType* tupleType = PgmBuilder_.NewTupleType(tupleElemenTypes);
 
         TUnboxedValueVector tupleElemens;
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui32(12345)));
-        tupleElemens.push_back(NUdf::TUnboxedValuePod(ui32(67890)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui32(12345)));
+        tupleElemens.emplace_back(NUdf::TUnboxedValuePod(ui32(67890)));
 
         const NUdf::TUnboxedValue value = HolderFactory_.VectorAsArray(tupleElemens);
         TestPackPerformance(tupleType, value);

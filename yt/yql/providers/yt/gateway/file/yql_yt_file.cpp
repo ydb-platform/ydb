@@ -921,7 +921,7 @@ public:
 
                 const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
                 const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
+                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
                 NYT::TNode columnGroupsSpec;
                 if (options.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
                     if (auto setting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::ColumnGroups)) {
@@ -1120,7 +1120,7 @@ public:
             }
             const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(TString{cluster}).GetOrElse(NTCF_LEGACY);
             const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
+            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             options.OutTable().RowSpec->FillCodecNode(rowSpecYson);
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility).ToNode();
@@ -1517,7 +1517,7 @@ private:
             const auto nativeYtTypeCompatibility = config->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
             const bool rowSpecCompactForm = config->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
             const bool optimizeForScan = config->OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
-            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
+            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             outTableInfo.RowSpec->FillCodecNode(rowSpecYson);
 

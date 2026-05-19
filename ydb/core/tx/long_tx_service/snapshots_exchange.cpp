@@ -25,6 +25,12 @@ namespace NKikimr {
 namespace NLongTxService {
 
 namespace {
+    struct TReverseComparatorBySnapshotAndSessionId {
+        bool operator()(const TRemoteSnapshotInfo& lhs, const TRemoteSnapshotInfo& rhs) const {
+            return std::tie(lhs.Snapshot, lhs.SessionActorId) < std::tie(rhs.Snapshot, rhs.SessionActorId);
+        }
+    };
+
     class TSubtreeSplitter {
     public:
         TSubtreeSplitter(const ui64 insideDCFanOut, const THashMap<TActorId, TString>& exchangeActorIdToDataCenterId)
@@ -311,12 +317,6 @@ namespace {
         }
 
     private:
-        struct TReverseComparatorBySnapshotAndSessionId {
-            bool operator()(const TRemoteSnapshotInfo& lhs, const TRemoteSnapshotInfo& rhs) const {
-                return std::tie(lhs.Snapshot, lhs.SessionActorId) < std::tie(rhs.Snapshot, rhs.SessionActorId);
-            }
-        };
-
         void AddToCollectedSnapshots(const TRemoteSnapshotInfo& snapshot) {
             AFL_ENSURE(CollectedSnapshots.insert(snapshot).second);
 
@@ -554,7 +554,6 @@ private:
         UpdateNodes(ev->Get()->InfoEntries);
 
         if (CurrentStateFunc() == &TThis::StatePrepare) {
-            Cerr << "TEST >> " << PublisherIdToExchangeActorId.size() << Endl;
             if (!PublisherIdToExchangeActorId.empty()) {
                 StartPrefill();
             } else {
@@ -569,7 +568,6 @@ private:
             return;
         }
         UpdateNodes(ev->Get()->Updates);
-        Cerr << "UPDATED >> " << PublisherIdToExchangeActorId.size() << Endl;
     }
 
     void UpdateNodes(const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infos) {
@@ -705,9 +703,32 @@ private:
 
         auto resultEvent = std::make_unique<TEvLongTxService::TEvRemoteSnapshotsPrefillResult>();
 
-        const auto& remoteView = RemoteSnapshotsStorage->View();
+        TSet<TRemoteSnapshotInfo, TReverseComparatorBySnapshotAndSessionId> collectedSnapshots;
+        TRowVersion snapshotBorder = TRowVersion::Max();
 
-        for (const auto& remoteSnapshot : remoteView) {
+        auto addToCollectedSnapshots = [&collectedSnapshots, &snapshotBorder](const TRemoteSnapshotInfo& snapshot) {
+            AFL_ENSURE(collectedSnapshots.insert(snapshot).second);
+            if (collectedSnapshots.size() >= AppData()->LongTxServiceConfig.GetMaxRemoteSnapshots()) {
+                auto lastSnapshotIter = collectedSnapshots.begin();
+                snapshotBorder = std::min(snapshotBorder, lastSnapshotIter->Snapshot);
+                collectedSnapshots.erase(lastSnapshotIter);
+            }
+        };
+    
+        for (const auto& remoteSnapshot : RemoteSnapshotsStorage->View()) {
+            addToCollectedSnapshots(remoteSnapshot);
+        }
+
+        for (const auto& localSnapshot : LocalSnapshotsStorage->View()) {
+            TRemoteSnapshotInfo remoteSnapshot(
+                localSnapshot.Snapshot,
+                localSnapshot.SessionActorId,
+                localSnapshot.TableIds);
+
+            addToCollectedSnapshots(remoteSnapshot);
+        }
+
+        for (const auto& remoteSnapshot : collectedSnapshots) {
             auto* snapshotProto = resultEvent->Record.MutableSnapshots()->AddSnapshots();
             snapshotProto->SetSnapshotStep(remoteSnapshot.Snapshot.Step);
             snapshotProto->SetSnapshotTxId(remoteSnapshot.Snapshot.TxId);
@@ -720,11 +741,11 @@ private:
             }
         }
 
-        resultEvent->Record.MutableSnapshots()->SetBorderStep(RemoteSnapshotsStorage->GetBorder().Step);
-        resultEvent->Record.MutableSnapshots()->SetBorderTxId(RemoteSnapshotsStorage->GetBorder().TxId);
+        resultEvent->Record.MutableSnapshots()->SetBorderStep(snapshotBorder.Step);
+        resultEvent->Record.MutableSnapshots()->SetBorderTxId(snapshotBorder.TxId);
 
         TXLOG_DEBUG("Sending TEvRemoteSnapshotsPrefillResult to " << ev->Sender
-            << " with " << resultEvent->Record.GetSnapshots().GetSnapshots().size() << " local snapshots");
+            << " with " << resultEvent->Record.GetSnapshots().GetSnapshots().size() << " snapshots");
         Send(ev->Sender, resultEvent.release());
     }
 

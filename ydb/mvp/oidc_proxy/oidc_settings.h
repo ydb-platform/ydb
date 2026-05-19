@@ -21,6 +21,7 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
     static constexpr inline TDuration DEFAULT_REQUEST_TIMEOUT = TDuration::Seconds(120);
+    static constexpr inline TDuration DEFAULT_AUTH_STATE_LIFETIME = TDuration::Minutes(10);
 
     static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
     static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;

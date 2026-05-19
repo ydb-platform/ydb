@@ -25,10 +25,9 @@ TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
 {}
 
 TString TContext::GetState(const TString& key) const {
-    static const TDuration STATE_LIFE_TIME = TDuration::Minutes(10);
     TState payload;
     payload.AntiForgeryToken = State;
-    payload.ExpirationTime = TInstant::Now() + STATE_LIFE_TIME;
+    payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME;
     if (!NavigationRequest) {
         payload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
     }
@@ -44,11 +43,10 @@ TString TContext::GetRequestedAddress() const {
 }
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
-    static constexpr size_t COOKIE_MAX_AGE_SEC = 3600;
     return TStringBuilder() << CreateNameYdbOidcCookie(NavigationRequest ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX) << "="
                             << GenerateCookie(secret) << ";"
                             " Path=" << GetAuthCallbackUrl() << ";"
-                            " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"
+                            " Max-Age=" << TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME.Seconds() << ";"
                             " SameSite=None; Secure";
 }
 

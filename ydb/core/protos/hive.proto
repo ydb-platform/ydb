@@ -686,6 +686,7 @@ message TEvShrinkStoragePoolReply {
     optional string Error = 3;
     repeated uint32 GroupsToRemove = 4;
     optional uint64 Version = 5;
+    optional NKikimrSubDomains.TDomainKey SubDomain = 6;
 }
 
 message TEvShrinkStoragePoolDone {

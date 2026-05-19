@@ -3835,7 +3835,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
         }
     }
 
-    Execute(CreateShrinkPool(ev));
+    Execute(CreateShrinkPool(std::move(ev)));
 }
 
 void THive::Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev) {

@@ -319,7 +319,7 @@ protected:
     ITransaction* CreateUpdatePiles();
     ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
     ITransaction* CreateProcessTabletMetrics();
-    ITransaction* CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr& event);
+    ITransaction* CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr event);
     ITransaction* CreateShrinkPoolReply(TEvHive::TEvShrinkStoragePoolReply::TPtr event);
 
 public:

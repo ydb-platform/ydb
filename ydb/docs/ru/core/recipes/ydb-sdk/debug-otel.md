@@ -243,7 +243,7 @@ SDK автоматически прокидывает заголовок W3C `tr
   Подключите заголовок трассировки OpenTelemetry из {{ ydb-short-name }} C++ SDK и добавьте зависимость на OTel C++ SDK:
 
   ```cpp
-  #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/client/driver/driver.h>
   #include <ydb-cpp-sdk/open_telemetry/trace.h>
 
   #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>

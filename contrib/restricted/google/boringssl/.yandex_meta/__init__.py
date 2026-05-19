@@ -48,7 +48,9 @@ boringssl = NixProject(
         "libdecrepit": "decrepit",
     },
     disable_includes=[
+        "lib/rng/trusty_rng.h",
         "machine/armreg.h",
+        "uapi/err.h",
         "zircon/features.h",
         "zircon/syscalls.h",
         "zircon/types.h",
@@ -57,6 +59,7 @@ boringssl = NixProject(
         "include/openssl/*",
         "crypto/*.h",
         "third_party/fiat/*.h",
+        "third_party/fiat/*.inc",
         "include/boringssl_prefix_symbols*",
     ],
     post_install=post_install,

@@ -63,7 +63,7 @@ namespace NKikimr::NDDisk {
     }
 
     ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin) {
-        Y_ABORT_UNLESS(PersistentBufferUniqueId != Max<ui64>());
+        Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
 
         XXH3_state_t state;
         XXH3_64bits_reset(&state);

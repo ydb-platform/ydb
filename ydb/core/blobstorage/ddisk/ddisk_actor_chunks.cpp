@@ -143,6 +143,7 @@ namespace NKikimr::NDDisk {
             record.AddChunkIdxs(chunkIdx);
         }
         record.SetUniqueId(PersistentBufferUniqueId);
+        Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
         return record;
     }
 

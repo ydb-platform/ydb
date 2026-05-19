@@ -50,7 +50,7 @@ namespace NKikimr::NDDisk {
             TBarrier Barrier;
         };
 
-        ui32 Reserved[47];
+        ui32 Reserved[45];
     };
 
     static_assert(sizeof(TPersistentBufferHeader) == 4096);

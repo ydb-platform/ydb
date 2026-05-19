@@ -111,7 +111,7 @@ namespace NKikimr::NDDisk {
         auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;
         });
-        if (PersistentBufferUniqueId == Max<ui64>()) {
+        if (PersistentBufferUniqueId == 0) {
             PersistentBufferUniqueId = RandomNumber<ui64>();
         }
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),

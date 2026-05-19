@@ -86,9 +86,6 @@ public:
             for (size_t i = 0; i < tasks; ++i) {
                 NPq::NProto::TDqReadTaskParams params;
                 size_t partitionsPerTask = (predicatePartitions.size() - allocatedPartitions) / (tasks - i);
-                if (i == tasks - 1) { // last task
-                    partitionsPerTask = predicatePartitions.size() - allocatedPartitions;
-                }
                 for (size_t k = 0; k < partitionsPerTask; ++k) {
                     auto* partitioningParams = params.AddPartitioningParams();
                     partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);

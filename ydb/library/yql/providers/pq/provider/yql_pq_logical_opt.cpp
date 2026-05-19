@@ -545,15 +545,32 @@ private:
     }
 
     TExprNode::TPtr ReplaceCompareNodesToEvaluate(const TExprNode::TPtr& lambda, TExprNode::TPtr&& originalLambdaBody, TExprContext& ctx) const {
-
-        auto containsMember = [](const TExprNode::TPtr& root) -> bool {
-            return !!FindNode(root, [](const TExprNode::TPtr& n) {
-                return TCoMember::Match(n.Get());
-            });
+        // Pre-compute containsMember for all nodes into a cache to avoid
+        // quadratic complexity when the same large expression subtree appears
+        // in many comparisons (e.g. 1k comparisons sharing a 1k-node expr).
+        TNodeMap<bool> containsMemberCache;
+        std::function<bool(const TExprNode::TPtr&)> containsMemberCached = [&](const TExprNode::TPtr& root) -> bool {
+            auto it = containsMemberCache.find(root.Get());
+            if (it != containsMemberCache.end()) {
+                return it->second;
+            }
+            bool result = false;
+            if (TCoMember::Match(root.Get())) {
+                result = true;
+            } else {
+                for (const auto& child : root->Children()) {
+                    if (containsMemberCached(child)) {
+                        result = true;
+                        break;
+                    }
+                }
+            }
+            containsMemberCache[root.Get()] = result;
+            return result;
         };
 
         auto isConstant = [](const TExprNode::TPtr& node) -> bool {
-            auto isLiteral = [](const TExprNode::TPtr& node) -> bool { 
+            auto isLiteral = [](const TExprNode::TPtr& node) -> bool {
                 return TCoIntegralCtor::Match(node.Get()) || TCoDataCtor::Match(node.Get()) || TCoDateBase::Match(node.Get());
             };
             if (isLiteral(node)) {
@@ -567,8 +584,8 @@ private:
             return false;
         };
 
-        TExprNode::TPtr result = originalLambdaBody;
-        bool anyChanges = false;
+        // Collect all replacements first, then apply them in a single pass.
+        TNodeOnNodeOwnedMap replaces;
 
         VisitExpr(lambda, [&](const TExprNode::TPtr& exprNode) {
             if (!TCoCompare::Match(exprNode.Get())) {
@@ -578,31 +595,27 @@ private:
             auto left = compare.Left().Ptr();
             auto right = compare.Right().Ptr();
 
-            if (!containsMember(right) && !isConstant(right)) {
-                 auto evaluate = ctx.Builder(exprNode->Pos())
+            if (!containsMemberCached(right) && !isConstant(right) && !replaces.contains(right.Get())) {
+                replaces[right.Get()] = ctx.Builder(exprNode->Pos())
                     .Callable("EvaluateExpr")
                         .Add(0, right)
                     .Seal()
                     .Build();
-               result = ctx.ReplaceNode(std::move(result), *right, evaluate);
-               anyChanges = true;
             }
             
-            if (!containsMember(left) && !isConstant(left)) {
-                auto evaluate = ctx.Builder(exprNode->Pos())
+            if (!containsMemberCached(left) && !isConstant(left) && !replaces.contains(left.Get())) {
+                replaces[left.Get()] = ctx.Builder(exprNode->Pos())
                     .Callable("EvaluateExpr")
                         .Add(0, left)
                     .Seal()
                     .Build();
-                result = ctx.ReplaceNode(std::move(result), *left, evaluate);
-                anyChanges = true;
             }
             return false; // don't descend into compare children
         });
-        if (!anyChanges) {
+        if (replaces.empty()) {
             return {};
         }
-        return result;
+        return ctx.ReplaceNodes(std::move(originalLambdaBody), replaces);
     }
 
     std::pair<TString, bool> SerializePredicate(

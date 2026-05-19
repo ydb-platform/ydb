@@ -137,3 +137,39 @@ jobs:
           provenance: false
           cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
           cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max
+
+  notify-failure:
+    needs: build
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout CODEOWNERS and scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/CODEOWNERS
+            .github/scripts/resolve_codeowners.py
+            .github/scripts/notify_workflow_failure.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Install codeowners resolver
+        run: pip install codeowners
+
+      - name: Resolve owners for this workflow
+        id: owners
+        run: |
+          OWNERS=$(python3 .github/scripts/resolve_codeowners.py .github/workflows/docker_publish.yml | paste -sd ' ' -)
+          echo "owners=${OWNERS:-@ydb-platform/appteam}" >> "$GITHUB_OUTPUT"
+          echo "Resolved owners: ${OWNERS:-@ydb-platform/appteam (fallback)}"
+
+      - name: Open or update failure issue
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: |
+          bash .github/scripts/notify_workflow_failure.sh \
+            "docker-publish-fail" \
+            "docker_publish.yml workflow is failing" \
+            "${{ steps.owners.outputs.owners }}"

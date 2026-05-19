@@ -10,6 +10,7 @@
 
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
 /.github/docker @ydb-platform/appteam
+/.github/workflows/docker_publish.yml @ydb-platform/appteam
 
 /build @ydb-platform/ci
 /certs @ydb-platform/ci

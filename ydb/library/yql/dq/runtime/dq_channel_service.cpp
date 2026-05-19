@@ -514,7 +514,7 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, bool memoryLimit, TNodeState*
             return;
         }
         RemotePopBytes.store(bytes);
-        // YellowLevel.store(memoryLimit);
+        YellowLevel.store(memoryLimit);
 
         auto maxInflightBytes = memoryLimit ? YellowInflightBytes : MaxGreenInflightBytes;
         while (PushBytes.load() < RemotePopBytes.load() + maxInflightBytes && !SpilledChunkBytes.empty()) {
@@ -622,7 +622,8 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool memor
             PushDataChunk(TDataChunk(false, true), nodeState, self);
         }
         if (popBytes) {
-            UpdatePopBytes(popBytes, memoryLimit, nodeState, self);
+            Y_UNUSED(memoryLimit);
+            UpdatePopBytes(popBytes, false, nodeState, self);
         }
     }
 }

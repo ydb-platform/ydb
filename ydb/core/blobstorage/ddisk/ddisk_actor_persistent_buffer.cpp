@@ -205,7 +205,7 @@ namespace NKikimr::NDDisk {
                 header->HeaderChecksum = 0;
                 ui64 sectorChecksum = CalculateChecksum(dataPos);
                 if (headerChecksum != sectorChecksum) {
-                    STLOG_E("TDDiskActor::StartRestorePersistentBuffer header checksum failed", (TabletId, header->Record.TabletId), (VChunkIndex, header->Record.VChunkIndex), (Lsn, header->Record.Lsn));
+                    STLOG_D("TDDiskActor::StartRestorePersistentBuffer header checksum failed", (TabletId, header->Record.TabletId), (VChunkIndex, header->Record.VChunkIndex), (Lsn, header->Record.Lsn));
                     continue;
                 }
                 if (PersistentBufferBarriersManager.AddBarrier(header, chunkIdx, sectorIdx)) {
@@ -214,7 +214,7 @@ namespace NKikimr::NDDisk {
                 auto& buffer = PersistentBuffers[{header->Record.TabletId, header->Record.Generation}];
                 auto [it, inserted] = buffer.Records.try_emplace(header->Record.Lsn);
                 if (!inserted) {
-                    STLOG_E("TDDiskActor::StartRestorePersistentBuffer duplicated lsn for tablet in persistent buffer", (TabletId, header->Record.TabletId), (VChunkIndex, header->Record.VChunkIndex), (Lsn, header->Record.Lsn));
+                    STLOG_D("TDDiskActor::StartRestorePersistentBuffer duplicated lsn for tablet in persistent buffer", (TabletId, header->Record.TabletId), (VChunkIndex, header->Record.VChunkIndex), (Lsn, header->Record.Lsn));
                 }
                 TPersistentBuffer::TRecord& pr = it->second;
                 pr = {

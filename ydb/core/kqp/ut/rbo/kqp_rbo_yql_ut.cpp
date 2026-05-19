@@ -2016,8 +2016,72 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
     static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
 
+    bool PlanHasJoin(const NJson::TJsonValue& planNode) {
+        if (!planNode.IsMap()) {
+            return false;
+        }
+
+        const auto& planMap = planNode.GetMapSafe();
+        if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+            for (const auto& opNode : operators->second.GetArraySafe()) {
+                const auto& op = opNode.GetMapSafe();
+                if (auto opName = op.find("Name"); opName != op.end() && opName->second.GetStringSafe().Contains("Join")) {
+                    return true;
+                }
+            }
+        }
+
+        if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+            for (const auto& child : plans->second.GetArraySafe()) {
+                if (PlanHasJoin(child)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    void AssertNewRBOCboOptimizedAllTrees(const EBenchType type, const ui32 queryId, const TString& plan) {
+        const TString benchmarkName = type == EBenchType::TPCH ? "TPCH" : "TPCDS";
+        const TString context = TStringBuilder()
+            << benchmarkName << " query " << queryId
+            << "\nPlan:\n" << plan;
+
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+        const auto& planRootMap = planRoot.GetMapSafe();
+        auto simplifiedPlanIt = planRootMap.find("SimplifiedPlan");
+        UNIT_ASSERT_C(simplifiedPlanIt != planRootMap.end(), "Missing SimplifiedPlan. " << context);
+
+        const auto& simplifiedPlan = simplifiedPlanIt->second;
+        const auto& simplifiedPlanMap = simplifiedPlan.GetMapSafe();
+        auto optimizerStatsIt = simplifiedPlanMap.find("OptimizerStats");
+        UNIT_ASSERT_C(optimizerStatsIt != simplifiedPlanMap.end(), "Missing OptimizerStats. " << context);
+
+        const auto& optimizerStats = optimizerStatsIt->second;
+        const auto& optimizerStatsMap = optimizerStats.GetMapSafe();
+        const auto getStat = [&](const TString& name) {
+            auto it = optimizerStatsMap.find(name);
+            UNIT_ASSERT_C(it != optimizerStatsMap.end(), "Missing optimizer stat " << name << ". " << context);
+            return it->second.GetUIntegerSafe();
+        };
+
+        const ui64 total = getStat("CBOTreesTotal");
+        const ui64 optimized = getStat("CBOTreesOptimized");
+        const TString statsContext = TStringBuilder()
+            << "Stats: " << optimizerStats.GetStringRobust()
+            << "\n" << context;
+
+        if (PlanHasJoin(simplifiedPlan)) {
+            UNIT_ASSERT_C(total > 0, TStringBuilder() << "Expected CBO to see at least one tree. " << statsContext);
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(optimized, total, statsContext);
+    }
+
     void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
-                             const bool printStatus = false, const bool compareResults = false) {
+                             const bool printStatus = false, const bool compareResults = false, const bool checkNewRBOCbo = false,
+                             std::set<ui32>&& queriesWithoutCboCheck = {}) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -2058,6 +2122,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                               .ExtractValueSync();
             queriesCurrentStatus.insert({qId, result.IsSuccess()});
             errors.emplace_back(result.GetIssues().ToString());
+            if (checkNewRBOCbo && result.IsSuccess() && !queriesWithoutCboCheck.contains(qId)) {
+                UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan for query: " << qId);
+                AssertNewRBOCboOptimizedAllTrees(type, qId, TString{*result.GetStats()->GetPlan()});
+            }
         }
 
         if (printStatus) {
@@ -2104,16 +2172,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
+        // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
         RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
-                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true);
+                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
     }
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  4, 7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  4,  7,  11, 13, 15, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                      50, 52, 55, 56, 59, 60, 61, 62, 64, 65, 66, 68, 71, 72, 73, 74, 78, 79, 81, 82, 84, 85, 90, 91, 92, 96, 99},
-                           {}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
-    } 
+                           {}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+                           // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
+                           /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
+    }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {
         NYdb::TValueBuilder rows;

@@ -116,7 +116,8 @@ void PathLink(IOutputStream& str, const TPathId& pathId) {
 }
 
 void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId,
-    ETabletAppPath tabletAppPath) {
+        ETabletAppPath tabletAppPath)
+{
     const TStringBuf tabletAppRelPath = TabletAppRelativePath(tabletAppPath);
 
     auto path = TStringBuilder() << tabletAppRelPath

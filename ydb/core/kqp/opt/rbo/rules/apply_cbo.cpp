@@ -389,11 +389,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        auto status = IOptimizerNew::EJoinSearchStatus::NotOptimized;
-        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints(), &status);
-        if (status == IOptimizerNew::EJoinSearchStatus::Optimized) {
-            ++cboStats.TreesOptimized;
-        }
+        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints(), &cboStats);
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

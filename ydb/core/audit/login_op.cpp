@@ -2,6 +2,8 @@
 
 #include <ydb/core/util/address_classifier.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
 namespace NKikimr::NAudit {
 
 void LogLoginOperationResult(const TString& сomponentName, const TString& peerName, const TString& database,

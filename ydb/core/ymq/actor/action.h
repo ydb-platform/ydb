@@ -32,6 +32,7 @@
 #include <util/string/ascii.h>
 #include <util/string/join.h>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 namespace NKikimr::NSQS {
 
 class TMigrationFeatureFlags

@@ -162,7 +162,11 @@ message ExportToS3Settings {
     // - Object is excluded from export operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
 
+    // Data format to use for exports.
     DataFormat data_format = 18;
+
+    // Size of the row group to use with Parquet data format.
+    uint32 row_group_size = 19;
 }
 
 message ExportToS3Result {

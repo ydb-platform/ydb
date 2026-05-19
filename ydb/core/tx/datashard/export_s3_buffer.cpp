@@ -510,6 +510,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
             buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
             break;
         }
+        bufferSettings.WithRowGroupSize(Task.GetS3Settings().GetLimits().GetRowGroupSize())
     }
     if (!buffer) {
         buffer = CreateS3ExportBuffer(std::move(bufferSettings));

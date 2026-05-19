@@ -102,6 +102,11 @@ struct TS3ExportBufferSettings {
         return *this;
     }
 
+    TS3ExportBufferSettings& WithRowGroupSize(ui64 rowGroupSize) {
+        RowGroupSize = rowGroupSize;
+        return *this;
+    }
+
     TS3ExportBufferSettings& WithChecksum(TChecksumSettings settings) {
         ChecksumSettings.ConstructInPlace(std::move(settings));
         return *this;
@@ -122,6 +127,7 @@ struct TS3ExportBufferSettings {
     ui64 MaxRows = 0;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
+    ui64 RowGroupSize = 0;
 
     // Data processing
     TMaybe<TChecksumSettings> ChecksumSettings;

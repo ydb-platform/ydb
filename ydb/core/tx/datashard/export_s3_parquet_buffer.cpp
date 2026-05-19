@@ -108,8 +108,7 @@ private:
 TS3ParquetExportBuffer::TS3ParquetExportBuffer(
     TS3ExportBufferSettings &&settings)
     : Columns(std::move(settings.Columns)),
-      RowGroupSize(100) // TODO(diseaz): make tunable via settings
-      ,
+      RowGroupSize(settings.RowGroupSize),
       RowsLimit(settings.MaxRows), MaxBytes(settings.MaxBytes),
       MinBytes(settings.MinBytes),
       Checksum(CreateChecksum(settings.ChecksumSettings)),

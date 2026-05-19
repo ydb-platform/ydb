@@ -10,6 +10,7 @@ TRUNCATE TABLE <table_name>;
 
 ## Limitations
 
+* Supported only for [row-oriented tables](../../../concepts/glossary.md#row-oriented-table).
 * While the operation runs, the table is locked for reads and writes.
 * The operation cannot be interrupted or rolled back after it has started.
 * The operation cannot run if the table has:

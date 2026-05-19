@@ -1,6 +1,8 @@
 #include "change_sender.h"
 #include "change_sender_monitoring.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -511,7 +513,9 @@ void TChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr&
             }
         });
 
-        SimplePanel(html, "Partition senders", [this, tabletId](IOutputStream& html) {
+        SimplePanel(html, "Partition senders", [this, tabletId, &ctx](IOutputStream& html) {
+            const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
+            const auto tabletAppPath = securePathMode ? ETabletAppPath::Secure : ETabletAppPath::Plain;
             HTML(html) {
                 TABLE_CLASS("table table-hover") {
                     TABLEHEAD() {
@@ -535,7 +539,7 @@ void TChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr&
                                 TABLED() { html << sender.Pending.size(); }
                                 TABLED() { html << sender.Prepared.size(); }
                                 TABLED() { html << sender.Broadcasting.size(); }
-                                TABLED() { ActorLink(html, tabletId, Identity->GetChangeSenderIdentity(), partitionId, ETabletAppPath::Plain); }
+                                TABLED() { ActorLink(html, tabletId, Identity->GetChangeSenderIdentity(), partitionId, tabletAppPath); }
                             }
                         }
                     }

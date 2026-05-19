@@ -101,7 +101,7 @@ class Operation {
             for (var rs of info.InputData.InputRS) {
                 var trHtml = `
                     <tr class="ds-info">
-                      <td class="ds-info"><a href="app?TabletID=${rs.From}">${rs.From}</td>
+                      <td class="ds-info"><a href="${makeTabletDevUiUrl(`TabletID=${rs.From}`)}">${rs.From}</td>
                       <td class="ds-info">${rs.Received} received</td>
                     </tr>
                 `;
@@ -527,7 +527,7 @@ class Operation {
 
         var res = '';
         for (var shard of shards) {
-            res += `<a href="app?TabletID=${shard.Id}#page=ds-op&op=${this.id}">${shard.Id}</a><br>`;
+            res += `<a href="${makeTabletDevUiUrl(`TabletID=${shard.Id}`)}#page=ds-op&op=${this.id}">${shard.Id}</a><br>`;
         }
 
         return res;
@@ -539,7 +539,7 @@ class Operation {
 
         var res = '';
         for (var quota of quotas) {
-            res += `<a href="app?TabletID=${quota.ShardId}#page=ds-op&op=${this.id}">${quota.ShardId} (${quota.Quota})</a><br>`;
+            res += `<a href="${makeTabletDevUiUrl(`TabletID=${quota.ShardId}`)}#page=ds-op&op=${this.id}">${quota.ShardId} (${quota.Quota})</a><br>`;
         }
 
         return res;

@@ -31,7 +31,7 @@ function onDataShardInfoLoaded(data) {
                     </tr>
                     <tr class="ds-info">
                       <td class="ds-info">PathId</td>
-                      <td class="ds-info"><a href="app?TabletID=${info.SchemeShard}&Page=PathInfo&PathId=${table.PathId}">${table.PathId}</a></td>
+                      <td class="ds-info"><a href="${makeTabletDevUiUrl(`TabletID=${info.SchemeShard}&Page=PathInfo&PathId=${table.PathId}`)}">${table.PathId}</a></td>
                     </tr>
                     <tr class="ds-info">
                       <td class="ds-info">LocalId</td>
@@ -105,8 +105,8 @@ function onDataShardInfoLoaded(data) {
     $('#tablet-info-follower-id').text(info.FollowerId);
     $('#tablet-info-state').text(info.State + (info.IsActive ? ' (active)' : ' (inactive)'));
     $('#tablet-info-shared-blobs').text(info.HasSharedBlobs);
-    $('#tablet-info-change-sender').html('<a href="app?TabletID=' + TabletId + '&page=change-sender">Viewer</a>');
-    $('#tablet-info-volatile-txs').html(`<a href="app?TabletID=${TabletId}&page=volatile-txs">Viewer</a>`);
+    $('#tablet-info-change-sender').html(`<a href="${makeTabletDevUiUrl(`TabletID=${TabletId}&page=change-sender`)}">Viewer</a>`);
+    $('#tablet-info-volatile-txs').html(`<a href="${makeTabletDevUiUrl(`TabletID=${TabletId}&page=volatile-txs`)}">Viewer</a>`);
 
     var activities = data.Activities;
     if (activities) {

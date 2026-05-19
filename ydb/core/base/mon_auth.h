@@ -3,10 +3,13 @@
 #include <util/generic/strbuf.h>
 
 namespace NActors {
+
 struct TActorContext;
 
 namespace NMon {
+
 struct TEvRemoteHttpInfo;
+
 } // namespace NMon
 
 } // namespace NActors
@@ -27,7 +30,5 @@ inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure
 
 // True if `pathInfo` is exactly `/app/secure` or starts with `/app/secure/`.
 bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
-
-bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg);
 
 } // namespace NKikimr

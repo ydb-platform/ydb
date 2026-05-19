@@ -2,6 +2,8 @@
 import pytest
 import requests
 
+from security_test_helpers import _test_endpoints, _test_endpoints_via_node_proxy
+
 
 EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
     '/counters': {
@@ -239,38 +241,6 @@ assert len(EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN) == len(
 ), "Handlers list must be the same"
 
 
-def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
-    headers = {}
-    if token is not None:
-        headers['Authorization'] = token
-    response = requests.get(endpoint_url, headers=headers, verify=False)
-    token_desc = token if token is not None else "null"
-    assert (
-        response.status_code == expected_status
-    ), f"Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}"
-
-
-def _test_endpoints_via_node_proxy(cluster, node_index, path_suffix, expected_statuses_by_token):
-    node = cluster.nodes[node_index]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    node_id = node.node_id
-    full_path = f'/node/{node_id}{path_suffix}'
-    endpoint_url = f'{base_url}{full_path}'
-    for token, expected_status in expected_statuses_by_token.items():
-        _test_endpoint(endpoint_url, full_path, token, expected_status)
-
-
-def _test_endpoints(cluster, expected_results):
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
-    base_url = f'https://{host}:{mon_port}'
-
-    for endpoint_path, expected_statuses in expected_results.items():
-        endpoint_url = f'{base_url}{endpoint_path}'
-        for token, expected_status in expected_statuses.items():
-            _test_endpoint(endpoint_url, endpoint_path, token, expected_status)
-
-
 def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
     _test_endpoints(ydb_cluster_with_enforce_user_token, EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN)
 
@@ -287,8 +257,23 @@ def test_tablets_app_secure_prefix_forbids_non_admins(ydb_cluster_with_enforce_u
         'database@builtin': 403,
         'viewer@builtin': 403,
         'monitoring@builtin': 403,
+        'root@builtin': 200,
     }
     _test_endpoints(ydb_cluster_with_enforce_user_token, {f'/tablets/app/secure?{q}': expected})
+
+
+def test_viewer_capabilities_expose_tablet_devui_secure_path_flag(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+    node = cluster.nodes[1]
+    endpoint_url = f'https://{node.host}:{node.mon_port}/viewer/capabilities'
+    response = requests.get(endpoint_url, verify=False)
+    assert response.status_code == 200, response.text
+
+    payload = response.json()
+    features = payload.get('Settings', {}).get('Features', {})
+    assert features.get('EnableTabletDevUiSecurePath') is True, payload
 
 
 def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):

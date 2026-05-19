@@ -6,8 +6,24 @@
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/string/split.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NChangeExchange {
+
+namespace {
+
+TStringBuf TabletAppRelativePath(ETabletAppPath tabletAppPath) {
+    switch (tabletAppPath) {
+        case ETabletAppPath::Plain:
+            return "app";
+        case ETabletAppPath::Secure:
+            return TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
+    }
+
+    Y_ABORT("Unknown ETabletAppPath value");
+}
+
+} // namespace
 
 void Panel(IOutputStream& str, std::function<void(IOutputStream&)> title, std::function<void(IOutputStream&)> body) {
     HTML(str) {
@@ -101,9 +117,7 @@ void PathLink(IOutputStream& str, const TPathId& pathId) {
 
 void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId,
     ETabletAppPath tabletAppPath) {
-    const TStringBuf tabletAppRelPath = tabletAppPath == ETabletAppPath::Secure
-        ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
-        : TStringBuf("app");
+    const TStringBuf tabletAppRelPath = TabletAppRelativePath(tabletAppPath);
 
     auto path = TStringBuilder() << tabletAppRelPath
         << "?TabletID=" << tabletId

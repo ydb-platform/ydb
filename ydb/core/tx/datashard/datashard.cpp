@@ -5,6 +5,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
@@ -2355,7 +2356,15 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
 
     auto cgi = ev->Get()->Cgi();
-    if (IsTabletDevUiSecurePath(ev->Get()->PathInfo()) && HasAdminAccessToTabletMon(ctx, ev->Get())) {
+    const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
+    if (securePathMode) {
+        if (!(IsTabletDevUiSecurePath(ev->Get()->PathInfo()) && IsAdministrator(AppData(ctx), ev->Get()->GetUserToken()))) {
+            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+            return true;
+        }
+    }
+
+    {
         if (const auto& action = cgi.Get("action")) {
             if (action == "cleanup-borrowed-parts") {
                 HandleMonCleanupBorrowedParts(ev);
@@ -2379,9 +2388,7 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         }
 
         if (const auto& page = cgi.Get("page")) {
-            if (page == "main") {
-                // fallthrough
-            } else if (page == "change-sender") {
+            if (page == "change-sender") {
                 if (OutChangeSender) {
                     ctx.Send(ev->Forward(OutChangeSender));
                     return true;
@@ -2392,7 +2399,7 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
             } else if (page == "volatile-txs") {
                 HandleMonVolatileTxs(ev);
                 return true;
-            } else {
+            } else if (page != "main") {
                 ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
                 return true;
             }
@@ -2401,9 +2408,6 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         HandleMonIndexPage(ev);
         return true;
     }
-
-    ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-    return true;
 }
 
 ui64 TDataShard::GetMemoryUsage() const {

@@ -1,6 +1,6 @@
-#include "appdata.h"
-#include "auth.h"
 #include "mon_auth.h"
+
+#include <util/string/builder.h>
 
 namespace NKikimr {
 
@@ -15,15 +15,6 @@ bool IsTabletDevUiSecurePath(TStringBuf pathInfo) {
         return true;
     }
     return pathInfo.StartsWith(TABLET_DEV_UI_SECURE_PATH_INFO_PREFIX + "/");
-}
-
-bool HasAdminAccessToTabletMon(const NActors::TActorContext& ctx, const NActors::NMon::TEvRemoteHttpInfo* msg) {
-    const TString userToken = msg->GetUserToken();
-    if (userToken.empty()) {
-        return false;
-    }
-
-    return IsAdministrator(AppData(ctx), userToken);
 }
 
 } // namespace NKikimr

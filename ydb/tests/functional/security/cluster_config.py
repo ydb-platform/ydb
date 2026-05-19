@@ -9,6 +9,7 @@ def create_ydb_configurator(
     enforce_user_token_requirement=True,
     require_counters_authentication=None,
     require_healthcheck_authentication=None,
+    enable_tablet_dev_ui_secure_path=None,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
@@ -47,5 +48,12 @@ def create_ydb_configurator(
             config_generator.yaml_config['monitoring_config'][
                 'require_healthcheck_authentication'
             ] = require_healthcheck_authentication
+
+    if enable_tablet_dev_ui_secure_path is not None:
+        if 'feature_flags' not in config_generator.yaml_config:
+            config_generator.yaml_config['feature_flags'] = {}
+        config_generator.yaml_config['feature_flags'][
+            'enable_tablet_dev_ui_secure_path'
+        ] = enable_tablet_dev_ui_secure_path
 
     return config_generator

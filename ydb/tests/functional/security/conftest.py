@@ -159,3 +159,16 @@ def ydb_cluster_with_require_healthcheck_auth(certificates):
     cluster.start()
     yield cluster
     cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        enable_tablet_dev_ui_secure_path=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()

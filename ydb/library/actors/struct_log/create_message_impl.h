@@ -76,7 +76,7 @@ public:
     static void OutputParam(IOutputStream& s, const TValue& value) {
         using Tx = std::decay_t<TValue>;
 
-        // Firstly, it is necc to cnverty protobuf enums and messages into string
+        // Firstly, it is required to convert protobuf enums and messages into string
         if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
             const google::protobuf::EnumDescriptor* e = google::protobuf::GetEnumDescriptor<Tx>();
             OutputProtobufEnum(s, static_cast<int>(value), e);
@@ -84,17 +84,14 @@ public:
             OutputProtobufMessage(s, value);
         } else if constexpr (std::is_same_v<Tx, bool>) {
             // It is better to write "true/false" strings into log (instead of "1/0")
-
             s << (value ? "true" : "false");
         } else if constexpr (THasToStringMethod<Tx>::value) {
             // By default, Out<T> can't write classes with ToString() method. (see TStateStorageInfo as example)
-            // Bease of this, Output param must be able to process various standard containers, veariants, tuples, etc...
-
+            // Because of this, OutputParam must be able to process various standard containers, variants, tuples, etc...
             s << value.ToString();
         } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
             // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
-            // So, it is neccesary to process optional data using this OutputParam<TValue> (instead of Out<T>).
-
+            // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).
             if (value) {
                 OutputParam(s, *value);
             } else {
@@ -103,7 +100,6 @@ public:
         } else if constexpr (TIsIterable<Tx>::value) {
             // It is unable to use JoinSeq(value) because of container item must be processed by OutputParam<TValue> (instead of Out<T>).
             // As example - std::vector<NKikimr::NBlobDepot::TS3Locator>, where TS3Locator has ToString
-
             auto begin = std::begin(value);
             auto end = std::end(value);
             bool first = true;
@@ -118,9 +114,8 @@ public:
             }
             s << "]";
         } else if constexpr (TIsIterableKV<Tx>::value) {
-            // It is necc to use self-made code because of container item must be processed by OutputParam<TValue> (instead of Out<T>).
-            // As example - std::vector<NKikimr::NBlobDepot::TS3Locator>, where TS3Locator has ToString()
-
+            // It is required to use self-made code because of container item must be processed by OutputParam<TValue> (instead of Out<T>).
+            // As example - std::vector<NKikimr::NBlobDepot::TS3Locator>, where TS3Locator has ToString() method
             s << '{';
             for (bool first = true; const auto& [k, v] : value) {
                 if (first) {
@@ -134,20 +129,17 @@ public:
             }
             s << '}';
         } else if constexpr (TIsVariant<Tx>::value) {
-            // It is necc to use self-made code because of variant item must be processed by OutputParam<TValue> (instead of Out<T>).
-            // as example - NKikimr::NStorage::TDistributedConfigKeeper::TBinding is used in as variant item in distconf_scatter_gather.cpp
-
+            // It is required to use self-made code because of variant item must be processed by OutputParam<TValue> (instead of Out<T>).
+            // as example - NKikimr::NStorage::TDistributedConfigKeeper::TBinding is used as variant item in distconf_scatter_gather.cpp
             std::visit([&](auto& x) { OutputParam(s, x); }, value);
         } else if constexpr (TIsTuple<Tx>::value) {
-            // It is necc to use self-made code because of tuple items must be processed by OutputParam<TValue> (instead of Out<T>).
+            // It is required to use self-made code because of tuple items must be processed by OutputParam<TValue> (instead of Out<T>).
             // See  distconf_binding.cpp as example. Is uses TNodeLocation inside tuple, and TNodeLocation has ToString method
-
             s << '[';
             std::apply([&](const auto&... args) { OutputParam(s, args...); }, value);
             s << ']';
         } else {
             // Finally, OutputParam<T> uses Out<T> to process simple standard types
-
             s << value;
         }
     }

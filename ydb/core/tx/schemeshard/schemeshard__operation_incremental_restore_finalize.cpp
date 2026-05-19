@@ -113,8 +113,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 // which runs after coordinator confirmation, ensuring consistency if datashard proposals fail.
 
                 // Add all shards of this table to txState
-                for (const auto& shard : table->GetPartitions()) {
-                    auto shardIdx = shard.ShardIdx;
+                for (const auto* shard : table->GetPartitions()) {
+                    auto shardIdx = shard->ShardIdx;
                     if (!txState->ShardsInProgress.contains(shardIdx)) {
                         txState->Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
                         txState->ShardsInProgress.insert(shardIdx);
@@ -141,8 +141,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 TPathId tablePathId;
                 for (const auto& pathId : implTablesToUpdate) {
                     auto table = context.SS->Tables.at(pathId);
-                    for (const auto& partition : table->GetPartitions()) {
-                        if (partition.ShardIdx == shardIdx) {
+                    for (const auto* partition : table->GetPartitions()) {
+                        if (partition->ShardIdx == shardIdx) {
                             tablePathId = pathId;
                             break;
                         }

@@ -282,18 +282,6 @@ SDK автоматически прокидывает заголовок W3C `tr
 
 - JavaScript
 
-  Установите пакеты `@opentelemetry/sdk-node` и `@ydbjs/telemetry`:
-
-  ```bash
-  npm install @opentelemetry/sdk-node @ydbjs/telemetry
-  ```
-
-  Подключите инструментацию через флаги `--import` при запуске приложения — никаких изменений в коде не требуется:
-
-  ```bash
-  node --import @opentelemetry/sdk-node/register \
-       --import @ydbjs/telemetry/register \
-       your-app.js
-  ```
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

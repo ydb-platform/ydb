@@ -3,6 +3,14 @@
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+bool CanBuildCBOTreeFromJoin(const TIntrusivePtr<TOpJoin>& join) {
+    return join->JoinFilters.empty();
+}
+
+} // namespace
+
 /**
  * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
  * There could be an intermediate filter in between, we also check that
@@ -21,7 +29,7 @@ TIntrusivePtr<IOperator> TBuildInitialCBOTreeRule::SimpleMatchAndApply(const TIn
 
     if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
-        if (!containsJoins(join->GetLeftInput()) && !containsJoins(join->GetRightInput())) {
+        if (CanBuildCBOTreeFromJoin(join) && !containsJoins(join->GetLeftInput()) && !containsJoins(join->GetRightInput())) {
             return MakeIntrusive<TOpCBOTree>(input, input->Pos);
         }
     }

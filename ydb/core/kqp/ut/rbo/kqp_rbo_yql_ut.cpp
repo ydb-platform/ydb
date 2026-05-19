@@ -2185,6 +2185,177 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(GetFullPath("../join/data/", "stats/tpch1000s.json"));
+        return statsSetting;
+    }
+
+    TString LoadTPCHYqlQuery(ui32 queryId) {
+        const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+        const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+        return toDecimal + "\n" + toDecimalMax + "\n"
+            + GetFullPath(BenchmarkQueryPath[EBenchType::TPCH], ToString(queryId) + ".yql");
+    }
+
+    Y_UNIT_TEST(CorrelatedScalarSubqueryCBO4KeepsOuterJoinKey) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(R"({
+            "/Root/lineitem": {"n_rows": 4, "byte_size": 128},
+            "/Root/part": {"n_rows": 2, "byte_size": 64}
+        })");
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({statsSetting});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/lineitem` (
+                id Int64 NOT NULL,
+                l_partkey Int64 NOT NULL,
+                l_quantity Double,
+                l_extendedprice Int64,
+                PRIMARY KEY(id)
+            ) WITH (STORE = COLUMN);
+
+            CREATE TABLE `/Root/part` (
+                p_partkey Int64 NOT NULL,
+                p_brand String,
+                p_container String,
+                PRIMARY KEY(p_partkey)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder lineitemRows;
+        lineitemRows.BeginList();
+        lineitemRows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(1)
+            .AddMember("l_partkey").Int64(1)
+            .AddMember("l_quantity").Double(10.0)
+            .AddMember("l_extendedprice").Int64(100)
+            .EndStruct();
+        lineitemRows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(2)
+            .AddMember("l_partkey").Int64(1)
+            .AddMember("l_quantity").Double(20.0)
+            .AddMember("l_extendedprice").Int64(200)
+            .EndStruct();
+        lineitemRows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(3)
+            .AddMember("l_partkey").Int64(2)
+            .AddMember("l_quantity").Double(100.0)
+            .AddMember("l_extendedprice").Int64(1000)
+            .EndStruct();
+        lineitemRows.AddListItem().BeginStruct()
+            .AddMember("id").Int64(4)
+            .AddMember("l_partkey").Int64(2)
+            .AddMember("l_quantity").Double(200.0)
+            .AddMember("l_extendedprice").Int64(2000)
+            .EndStruct();
+        lineitemRows.EndList();
+
+        auto upsertResult = tableClient.BulkUpsert("/Root/lineitem", lineitemRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder partRows;
+        partRows.BeginList();
+        for (const auto partKey : {1, 2}) {
+            partRows.AddListItem().BeginStruct()
+                .AddMember("p_partkey").Int64(partKey)
+                .AddMember("p_brand").String("Brand#23")
+                .AddMember("p_container").String("MED BOX")
+                .EndStruct();
+        }
+        partRows.EndList();
+
+        upsertResult = tableClient.BulkUpsert("/Root/part", partRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        const TString query = R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT
+                SUM(l_extendedprice) AS total
+            FROM
+                `/Root/lineitem` AS lineitem,
+                `/Root/part` AS part
+            WHERE
+                p_partkey == l_partkey
+                AND p_brand == 'Brand#23'
+                AND p_container == 'MED BOX'
+                AND l_quantity < (
+                    SELECT
+                        AVG(l_quantity)
+                    FROM
+                        `/Root/lineitem` AS lineitem
+                    WHERE
+                        l_partkey == p_partkey
+                );
+        )";
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto explainResult = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+        const auto plan = TString{*explainResult.GetStats()->GetPlan()};
+        UNIT_ASSERT_C(!plan.Contains("CrossJoin"), plan);
+
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[[1100]]])");
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_CBO4_ColumnLineageMapping) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.SetKqpSettings({MakeTPCHStatsSetting()});
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(tableSession, BenchmarkSchemaPathPrefix[EBenchType::TPCH], BenchmarkSchemaPath[EBenchType::TPCH], /*useColumnStore*/ true);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        for (const ui32 queryId : {2, 3, 10}) {
+            auto result = querySession.ExecuteQuery(LoadTPCHYqlQuery(queryId),
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), "Expected TPCH q" << queryId << " explain to succeed: " << result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
@@ -4292,14 +4463,16 @@ PRAGMA ydb.OptShuffleElimination = "true";
         const auto hashShuffles = CollectHashShuffleDescriptions(plan);
         // Preorder traversal: the left subtree keeps ColumnShard-preserved
         // id=k joins for several levels, then switches to default HashV2 k=k joins.
-        // The final join re-shuffles the whole right subtree on e.k.
+        // The right subtree also switches to HashV2 on e.k. At the final join both
+        // sides have compatible one-column HashV2 partitioning, so CBO preserves the
+        // larger right subtree and reshuffles the smaller left subtree on a.k.
         const TVector<TString> expectedHashShuffles = {
             "HashV2(a.k)",
             "ColumnShardHashV1(b.k)",
             "ColumnShardHashV1(c.k)",
             "ColumnShardHashV1(i.k)",
             "HashV2(d.k)",
-            "HashV2(e.k)",
+            "HashV2(a.k)",
             "HashV2(e.k)",
             "ColumnShardHashV1(f.k)",
             "HashV2(g.k)",

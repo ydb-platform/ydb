@@ -265,17 +265,6 @@ SELECT -- эти выражения всегда true для любых тайм
 
 #### Типы даты и времени
 
-<<<<<<< HEAD
-| Тип | Date | Datetime | Timestamp | Interval | TzDate | TzDatetime | TzTimestamp |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **Date** | — | — | — | `Date` | — | — | — |
-| **Datetime** | — | — | — | `Datetime` | — | — | — |
-| **Timestamp** | — | — | — | `Timestamp` | — | — | — |
-| **Interval** | `Date` | `Datetime` | `Timestamp` | — | `TzDate` | `TzDatetime` | `TzTimestamp` |
-| **TzDate** | — | — | — | `TzDate` | — | — | — |
-| **TzDatetime** | — | — | — | `TzDatetime` | — | — | — |
-| **TzTimestamp**  | — | — | — | `TzTimestamp` | — | — | — |
-=======
 | Тип               | Date | Datetime   | Timestamp   | Interval | TzDate   | TzDatetime   | TzTimestamp   | Date32   | Datetime64   | Timestamp64   | Interval64 | TzDate32   | TzDatetime64   | TzTimestamp64   |
 | ----------------- | ---- | ---------- | ----------- | -------- | -------- | ------------ | ------------- | -------- | ------------ | ------------- | ---------- | ---------- | -------------- | --------------- |
 | **Date**          | —    | `DateTime` | `Timestamp` | —        | `TzDate` | `TzDatetime` | `TzTimestamp` | `Date32` | `DateTime64` | `Timestamp64` | —          | `TzDate32` | `TzDatetime64` | `TzTimestamp64` |
@@ -292,4 +281,3 @@ SELECT -- эти выражения всегда true для любых тайм
 | **TzDate32**      | —    | —          | —           | —        | —        | —            | —             | —        | —            | —             | —          | —          | `TzDatetime64` | `TzTimestamp64` |
 | **TzDatetime64**  | —    | —          | —           | —        | —        | —            | —             | —        | —            | —             | —          | —          | —              | `TzTimestamp64` |
 | **TzTimestamp64** | —    | —          | —           | —        | —        | —            | —             | —        | —            | —             | —          | —          | —              | —               |
->>>>>>> c294689d3cf (Add Interval data type features and limitations (#38383))

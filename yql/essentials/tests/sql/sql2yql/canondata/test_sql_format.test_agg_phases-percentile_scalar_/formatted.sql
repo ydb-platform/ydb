@@ -4,13 +4,13 @@ $t = (
     SELECT
         *
     FROM
-        AS_TABLE([<|key: 1, value: NULL|>, <|key: 1, value: NULL|>])
+        AS_TABLE([<|key: 1, value: 2|>, <|key: 1, value: 3|>])
 );
 
 $p = (
     SELECT
         key,
-        percentile(value, 0.1) AS a
+        percentile(value) AS a
     FROM
         $t
     GROUP BY
@@ -32,7 +32,7 @@ FROM
 $p = (
     SELECT
         key,
-        percentile(a, 0.1) AS a
+        percentile(a) AS a
     FROM
         $p
     GROUP BY
@@ -54,7 +54,7 @@ FROM
 $p = (
     SELECT
         key,
-        percentile(a, 0.1) AS a
+        percentile(a) AS a
     FROM
         $p
     GROUP BY

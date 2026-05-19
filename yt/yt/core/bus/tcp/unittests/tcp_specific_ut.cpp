@@ -17,21 +17,22 @@
 
 #include <library/cpp/testing/common/network.h>
 
-namespace NYT::NBus::NTests {
+namespace NYT::NBus::NTcp::NTests {
 namespace {
 
 using namespace NConcurrency;
+using namespace NYT::NBus::NTests;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTcpBusTest
+class TBusTest
     : public ::testing::Test
 {
 protected:
     NTesting::TPortHolder Port_;
     std::string Address_;
 
-    TTcpBusTest()
+    TBusTest()
         : Port_(NTesting::GetFreePort())
         , Address_(Format("localhost:%v", Port_))
     { }
@@ -39,34 +40,34 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(TTcpBusTest, ClientConfigDefaultConstructor)
+TEST_F(TBusTest, ClientConfigDefaultConstructor)
 {
     auto config = New<TBusClientConfig>();
     EXPECT_FALSE(config->Address);
     EXPECT_FALSE(config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, ServerConfigDefaultConstructor)
+TEST_F(TBusTest, ServerConfigDefaultConstructor)
 {
     auto config = New<TBusServerConfig>();
     EXPECT_FALSE(config->Port);
     EXPECT_FALSE(config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, CreateBusClientConfig)
+TEST_F(TBusTest, CreateBusClientConfig)
 {
     auto config = TBusClientConfig::CreateTcp(Address_);
     EXPECT_EQ(Address_, *config->Address);
     EXPECT_FALSE(config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, CreateUdsBusClientConfig)
+TEST_F(TBusTest, CreateUdsBusClientConfig)
 {
     auto config = TBusClientConfig::CreateUds("unix-socket");
     EXPECT_EQ("unix-socket", *config->UnixDomainSocketPath);
 }
 
-TEST_F(TTcpBusTest, TerminateBeforeAccept)
+TEST_F(TBusTest, TerminateBeforeAccept)
 {
     auto serverSocket = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
     EXPECT_NE(serverSocket, INVALID_SOCKET);
@@ -95,7 +96,7 @@ TEST_F(TTcpBusTest, TerminateBeforeAccept)
     NNet::CloseSocket(serverSocket);
 }
 
-TEST_F(TTcpBusTest, BlackHole)
+TEST_F(TBusTest, BlackHole)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port_);
     auto server = CreateBusServer(serverConfig);
@@ -124,4 +125,4 @@ TEST_F(TTcpBusTest, BlackHole)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NBus::NTests
+} // namespace NYT::NBus::NTcp::NTests

@@ -167,6 +167,20 @@
             "uri": "https://{canondata_backend}/1942671/d2c52b40b9b65d562a014f1192c6a7678cc156c6/resource.tar.gz#test.test_agg_phases-max-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-percentile_struct-default.txt-Debug]": [
+        {
+            "checksum": "4fee96d69a727e70d45d959114fd74b2",
+            "size": 4271,
+            "uri": "https://{canondata_backend}/1689644/e7e8656d51c8353574ea9e0d31bed85e82093f92/resource.tar.gz#test.test_agg_phases-percentile_struct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-percentile_struct-default.txt-Results]": [
+        {
+            "checksum": "8f1ec5c8677fed6054443059702672c9",
+            "size": 9851,
+            "uri": "https://{canondata_backend}/1689644/d306eb3c3ed3b880d74562a852d33636b270bee7/resource.tar.gz#test.test_agg_phases-percentile_struct-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-random_sample_opt-default.txt-Debug]": [
         {
             "checksum": "3b28712b0fccce53b0ea295b277d037d",

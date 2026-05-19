@@ -125,32 +125,18 @@
             "uri": "https://{canondata_backend}/1942671/66b5192b409070a010aa73475f6d089e692de2a0/resource.tar.gz#test.test_agg_phases-min_opt-default.txt-Results_/results.txt"
         }
     ],
-    "test.test[agg_phases-percentile-default.txt-Debug]": [
-        {
-            "checksum": "20cf1a2e492df4723ff94bdb19aee144",
-            "size": 3466,
-            "uri": "https://{canondata_backend}/1942671/66b5192b409070a010aa73475f6d089e692de2a0/resource.tar.gz#test.test_agg_phases-percentile-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[agg_phases-percentile-default.txt-Results]": [
-        {
-            "checksum": "331646a826fdb4cef8d80d1fd129f4e0",
-            "size": 6269,
-            "uri": "https://{canondata_backend}/1942671/66b5192b409070a010aa73475f6d089e692de2a0/resource.tar.gz#test.test_agg_phases-percentile-default.txt-Results_/results.txt"
-        }
-    ],
-    "test.test[agg_phases-percentile_null-default.txt-Debug]": [
+    "test.test[agg_phases-percentile_struct_null-default.txt-Debug]": [
         {
             "checksum": "84aba9c04747c8ef792601a19818a79b",
             "size": 1906,
-            "uri": "https://{canondata_backend}/1942671/66b5192b409070a010aa73475f6d089e692de2a0/resource.tar.gz#test.test_agg_phases-percentile_null-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1689644/10e87c90281982afa1557dc7e406a24a1ab611aa/resource.tar.gz#test.test_agg_phases-percentile_struct_null-default.txt-Debug_/opt.yql"
         }
     ],
-    "test.test[agg_phases-percentile_null-default.txt-Results]": [
+    "test.test[agg_phases-percentile_struct_null-default.txt-Results]": [
         {
             "checksum": "200ff2930124c82a55e22120feee5388",
             "size": 5576,
-            "uri": "https://{canondata_backend}/1942671/66b5192b409070a010aa73475f6d089e692de2a0/resource.tar.gz#test.test_agg_phases-percentile_null-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1689644/10e87c90281982afa1557dc7e406a24a1ab611aa/resource.tar.gz#test.test_agg_phases-percentile_struct_null-default.txt-Results_/results.txt"
         }
     ],
     "test.test[agg_phases_agg_apply-sum-default.txt-Debug]": [

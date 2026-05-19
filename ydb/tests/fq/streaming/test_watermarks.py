@@ -13,12 +13,13 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
+    @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])
+    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool, enable_watermarks_advanced: bool) -> None:
         if local_topics and shared_reading:
             pytest.skip("Shared reading is not supported for local topics: YQ-5036")
 
         endpoint = self.get_endpoint(kikimr, local_topics)
-        query_name = f"test_watermarks_{shared_reading}{tasks}{local_topics}"
+        query_name = f"test_watermarks_{shared_reading}{tasks}{local_topics}{enable_watermarks_advanced}"
         source_name = entity_name(query_name)
         self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
         self.create_source(kikimr, source_name, shared_reading)

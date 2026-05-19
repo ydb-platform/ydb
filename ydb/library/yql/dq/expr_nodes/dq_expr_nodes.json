@@ -359,6 +359,17 @@
         {"Index": 4, "Name": "UpdateHandler", "Type": "TCoLambda"},
         {"Index": 5, "Name": "FinishHandler", "Type": "TCoLambda"}
       ]
+    },
+    {
+      "Name": "TDqPhyWatermarkGenerator",
+      "Base": "TCallable",
+      "Match": {"Type": "Callable", "Name": "DqPhyWatermarkGenerator"},
+      "Children": [
+        {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
+        {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"},
+        {"Index": 2, "Name": "PartitionIdExtractor", "Type": "TCoLambda"},
+        {"Index": 3, "Name": "WatermarkSettings",    "Type": "TCoNameValueTupleList"}
+      ]
     }
     ]
 }

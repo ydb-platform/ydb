@@ -1,6 +1,7 @@
 RECURSE(
     compatibility
     datashard
+    docker_local_ydb
     example
     fq
     functional

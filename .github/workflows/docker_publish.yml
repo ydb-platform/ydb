@@ -107,6 +107,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
           provenance: false
+          build-args: |
+            BUILD_MODE=full
           cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
           cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max
 
@@ -135,5 +137,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
           provenance: false
+          build-args: |
+            BUILD_MODE=full
           cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
           cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max

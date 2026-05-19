@@ -42,6 +42,10 @@ class KikimrNodePortAllocatorInterface(object):
     def public_http_port(self):
         pass
 
+    @abc.abstractproperty
+    def kafka_api_port(self):
+        pass
+
 
 class KikimrPortAllocatorInterface(object):
     __metaclass__ = abc.ABCMeta

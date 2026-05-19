@@ -1968,6 +1968,84 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     return res;
 }
 
+TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Cast<TCoFlatMap>();
+    if (!flatMap.Input().Maybe<TKqlReadTableRanges>()) {
+        return node;
+    }
+
+    auto read = flatMap.Input().Cast<TKqlReadTableRanges>();
+    auto readSettings = TKqpReadTableSettings::Parse(read.Settings());
+    if (readSettings.ForcePrimary) {
+        return node;
+    }
+
+    const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    if (mainTableDesc.Metadata->Kind == EKikimrTableKind::Olap) {
+        return node;
+    }
+
+    if (!read.Ranges().Maybe<TCoVoid>()) {
+        return node;
+    }
+
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx);
+    if (!expectedSettings.has_value()) {
+        return node;
+    }
+
+    const TString& columnName = expectedSettings->ColumnName;
+
+    TString selectedIndex;
+    for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson) {
+            continue;
+        }
+
+        if (indexInfo.State != TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        for (const auto& keyCol : indexInfo.KeyColumns) {
+            if (keyCol == columnName) {
+                selectedIndex = indexInfo.Name;
+                break;
+            }
+        }
+
+        if (!selectedIndex.empty()) {
+            break;
+        }
+    }
+
+    if (selectedIndex.empty()) {
+        return node;
+    }
+
+    const auto& jsonIndexSettings = expectedSettings.value();
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings.ColumnName).Done())
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(Build<TCoAtom>(ctx, read.Pos()).Value(selectedIndex).Done())
+        .Columns(read.Columns())
+        .Query<TExprList>().Build()
+        .QueryColumns(searchColumns.Ptr())
+        .Settings(jsonIndexSettings.Settings.BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TCoFlatMap>(ctx, node.Pos())
+        .Input(newInput)
+        .Lambda(flatMap.Lambda())
+        .Done();
+}
+
 TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoFlatMap>()) {
         return node;

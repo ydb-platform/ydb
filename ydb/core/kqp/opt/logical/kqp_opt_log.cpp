@@ -72,6 +72,7 @@ public:
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(SelectJsonIndex));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverJsonRead));
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
@@ -271,6 +272,16 @@ protected:
         }
 
         DumpAppliedRule("RewriteFlatMapOverFullTextMatch", node.Ptr(), output.Cast().Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> SelectJsonIndex(TExprBase node, TExprContext& ctx) {
+        auto output = KqpSelectJsonIndex(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("SelectJsonIndex", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 

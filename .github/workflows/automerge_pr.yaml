@@ -10,7 +10,7 @@ env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 jobs:
   check-pr:
-    runs-on: [self-hosted, tiny-worker]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     timeout-minutes: 70
     steps:
       - name: checkout

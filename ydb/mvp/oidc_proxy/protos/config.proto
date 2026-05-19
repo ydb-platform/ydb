@@ -4,6 +4,18 @@ package NMvp.NOidcProxy;
 
 import "ydb/mvp/core/protos/mvp.proto";
 
+// Controls how browser-based OIDC authentication is started.
+enum EAuthenticationFlowMode {
+    // Legacy behavior: browser is redirected directly to the authorization server.
+    direct_to_authorization_server = 1;
+    // Browser first goes through local /auth/start.
+    // This keeps authentication context in /auth-scoped cookies instead of sending
+    // context cookie on every proxied request, and allows the proxy to keep
+    // multiple requested addresses in authentication context instead of
+    // overwriting a single callback cookie.
+    local_auth_start = 2;
+}
+
 message TOidcProxyConfig {
     optional string SecretName = 1;
     optional string ClientId = 2;
@@ -16,6 +28,7 @@ message TOidcProxyConfig {
     optional string ImpersonateUrlPath = 9;
     optional string WhoamiExtendedInfoEndpoint = 10;
     repeated string AllowedProxyHosts = 11;
+    optional EAuthenticationFlowMode AuthenticationFlowMode = 12 [default = direct_to_authorization_server];
 }
 
 message TOidcProxyAppConfig {

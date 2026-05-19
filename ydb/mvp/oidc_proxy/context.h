@@ -17,7 +17,6 @@ public:
     struct TInitializer {
         TString State;
         TString RequestedAddress;
-        bool NavigationRequest = true;
     };
 
 private:
@@ -31,6 +30,7 @@ public:
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
     TString GetState(const TString& key) const;
+    TString GetStateWithFlowId(const TString& key) const;
     bool IsNavigationRequest() const;
     TString GetRequestedAddress() const;
 

@@ -104,6 +104,21 @@ def assert_cookie_is_cleared(response, expected_status, cookie_marker):
     assert "Max-Age=0" in set_cookie
 
 
+def assert_redirect_target(response, expected_target):
+    assert response.status_code == 302, response.text
+    redirect_url = response.headers["Location"]
+    parsed_redirect = urlparse(redirect_url)
+    if parsed_redirect.netloc:
+        assert parsed_redirect.scheme in ("http", "https"), response.headers
+        assert parsed_redirect.netloc == "oidcproxy.net", response.headers
+    else:
+        assert parsed_redirect.scheme == "", response.headers
+    actual_target = parsed_redirect.path
+    if parsed_redirect.query:
+        actual_target += f"?{parsed_redirect.query}"
+    assert actual_target == expected_target, response.headers
+
+
 def assert_successful_multipart_counter_response(response):
     assert response.status_code == 200, response.text
     content_type = response.headers["Content-Type"]
@@ -124,6 +139,21 @@ def get_auth_callback(env, headers=None, **kwargs):
         allow_redirects=False,
         headers=headers,
         **kwargs,
+    )
+
+
+def finish_auth_callback(env, state, oidc_cookies):
+    return env.get(
+        "/auth/callback",
+        params={
+            "code": "code_template#",
+            "state": state,
+        },
+        allow_redirects=False,
+        headers={
+            "Host": "oidcproxy.net",
+            "Cookie": "; ".join(oidc_cookies),
+        },
     )
 
 
@@ -183,12 +213,27 @@ def authenticate_session(oidc_proxy_full_flow_env, start_path):
     )
 
     assert start_response.status_code == 302
-    assert "Set-Cookie" in start_response.headers
     redirect_url = start_response.headers["Location"]
+    if oidc_proxy_full_flow_env.use_local_auth_start:
+        parsed_start_redirect = urlparse(redirect_url)
+        assert parsed_start_redirect.path == "/auth/start", redirect_url
+        assert parse_qs(parsed_start_redirect.query)["return_to"] == [start_path], redirect_url
+        auth_start_response = oidc_proxy_full_flow_env.get(
+            redirect_url,
+            allow_redirects=False,
+            headers={"Host": "oidcproxy.net"},
+        )
+        assert auth_start_response.status_code == 302, auth_start_response.text
+        assert "Set-Cookie" in auth_start_response.headers, auth_start_response.headers
+        redirect_url = auth_start_response.headers["Location"]
+        oidc_cookie = auth_start_response.headers["Set-Cookie"].split(";", 1)[0]
+    else:
+        assert "Set-Cookie" in start_response.headers, start_response.headers
+        oidc_cookie = start_response.headers["Set-Cookie"].split(";", 1)[0]
+
     parsed_redirect = urlparse(redirect_url)
     assert redirect_url.startswith(oidc_proxy_full_flow_env.auth_service.endpoint + "/oauth/authorize"), redirect_url
     state = parse_qs(parsed_redirect.query)["state"][0]
-    oidc_cookie = start_response.headers["Set-Cookie"].split(";", 1)[0]
 
     callback_response = oidc_proxy_full_flow_env.get(
         f"/auth/callback?code=code_template%23&state={state}",
@@ -199,8 +244,7 @@ def authenticate_session(oidc_proxy_full_flow_env, start_path):
         },
     )
 
-    assert callback_response.status_code == 302, callback_response.text
-    assert callback_response.headers["Location"] == start_path, callback_response.headers
+    assert_redirect_target(callback_response, start_path)
     assert "__Host_session_cookie_" in callback_response.headers["Set-Cookie"], callback_response.headers["Set-Cookie"]
 
     return callback_response.headers["Set-Cookie"].split(";", 1)[0]

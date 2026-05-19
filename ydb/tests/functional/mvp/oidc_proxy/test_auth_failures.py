@@ -3,7 +3,9 @@ from urllib.parse import parse_qs, urlparse
 
 from oidc_proxy_testlib import (
     CALLBACK_PATH,
+    assert_redirect_target,
     assert_nc_auth_not_started,
+    finish_auth_callback,
     get_auth_callback,
     protected_host,
     session_cookie_header,
@@ -137,21 +139,6 @@ def start_navigation_auth_flow(env, start_path):
     return state, oidc_cookie
 
 
-def finish_auth_callback(env, state, oidc_cookies):
-    return env.get(
-        "/auth/callback",
-        params={
-            "code": "code_template#",
-            "state": state,
-        },
-        allow_redirects=False,
-        headers={
-            "Host": "oidcproxy.net",
-            "Cookie": "; ".join(oidc_cookies),
-        },
-    )
-
-
 def test_background_request_returns_json_401_with_auth_url(oidc_proxy_full_flow_env):
     response = start_background_auth_challenge_request(oidc_proxy_full_flow_env)
     assert_background_auth_challenge(response)
@@ -162,17 +149,27 @@ def test_navigation_request_returns_oidc_redirect(oidc_proxy_full_flow_env):
     assert_navigation_auth_redirect(oidc_proxy_full_flow_env, response)
 
 
-def test_navigation_callback_uses_cookie_from_state_when_background_cookie_exists(oidc_proxy_full_flow_env):
+def test_callback_uses_latest_cookie_without_local_auth_start(oidc_proxy_full_flow_env):
     env = oidc_proxy_full_flow_env
     host = protected_host(env)
-    navigation_target = f"/{host}{LANDING_DATA_PATH}&from=navigation"
+    first_target = f"/{host}{LANDING_DATA_PATH}&from=first"
+    second_target = f"/{host}{LANDING_DATA_PATH}&from=second"
 
-    navigation_state, navigation_oidc_cookie = start_navigation_auth_flow(env, navigation_target)
-    background_response = start_background_auth_challenge_request(env)
-    assert_background_auth_challenge(background_response)
-    background_oidc_cookie = background_response.headers["Set-Cookie"].split(";", 1)[0]
+    first_state, first_oidc_cookie = start_navigation_auth_flow(env, first_target)
+    second_response = env.get(
+        second_target,
+        allow_redirects=False,
+        headers={"Host": "oidcproxy.net"},
+    )
+    assert_navigation_auth_redirect(env, second_response)
+    second_oidc_cookie = second_response.headers["Set-Cookie"].split(";", 1)[0]
 
-    callback_response = finish_auth_callback(env, navigation_state, [navigation_oidc_cookie, background_oidc_cookie])
+    assert first_oidc_cookie.split("=", 1)[0] == second_oidc_cookie.split("=", 1)[0]
 
-    assert callback_response.status_code == 302, callback_response.text
-    assert callback_response.headers["Location"] == navigation_target, callback_response.headers
+    callback_response = finish_auth_callback(
+        env,
+        first_state,
+        [second_oidc_cookie],
+    )
+
+    assert_redirect_target(callback_response, second_target)

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/oidc_proxy/protos/config.pb.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
@@ -9,8 +10,8 @@
 namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings {
-    static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
-    static const inline TStringBuf YDB_OIDC_COOKIE_BACKGROUND_SUFFIX = "_background";
+    static const inline TString OIDC_COOKIE = "ydb_oidc_cookie";
+    static const inline TString SHARED_OIDC_COOKIE = "ydb_oidc_shared_cookie";
     static const inline TString SESSION_COOKIE = "session_cookie";
     static const inline TString IMPERSONATED_COOKIE = "impersonated_cookie";
 
@@ -20,7 +21,9 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
+    static constexpr inline ui32 MAX_AUTH_FLOW_COOKIE_VALUE_SIZE = 3700;
     static constexpr inline TDuration DEFAULT_REQUEST_TIMEOUT = TDuration::Seconds(120);
+    static constexpr inline TDuration DEFAULT_OIDC_FLOW_LIFETIME = TDuration::Minutes(10);
 
     static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
     static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;
@@ -38,12 +41,16 @@ struct TOpenIdConnectSettings {
     THashMap<TStringBuf, TDuration> RequestTimeoutsByPath;
 
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
+    NMvp::NOidcProxy::EAuthenticationFlowMode AuthenticationFlowMode = NMvp::NOidcProxy::direct_to_authorization_server;
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;
     TString TokenUrlPath = DEFAULT_TOKEN_URL_PATH;
     TString ExchangeUrlPath = DEFAULT_EXCHANGE_URL_PATH;
     TString ImpersonateUrlPath = DEFAULT_IMPERSONATE_URL_PATH;
 
     bool EnabledExtensionWhoami() const;
+    bool UseLocalAuthStart() const;
+    bool UseSharedAuthenticationContext() const;
+    bool UseFlowIdInState() const;
     void InitRequestTimeoutsByPath();
 
     TString GetAuthorizationString() const;

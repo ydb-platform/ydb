@@ -1,4 +1,5 @@
 #include "context.h"
+#include "oidc_cookie.h"
 #include "oidc_settings.h"
 #include "openid_connect.h"
 
@@ -14,7 +15,6 @@ namespace NMVP::NOIDC {
 
 TContext::TContext(const TInitializer& initializer)
     : State(initializer.State)
-    , NavigationRequest(initializer.NavigationRequest)
     , RequestedAddress(initializer.RequestedAddress)
 {}
 
@@ -25,13 +25,17 @@ TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
 {}
 
 TString TContext::GetState(const TString& key) const {
-    static const TDuration STATE_LIFE_TIME = TDuration::Minutes(10);
     TState payload;
     payload.AntiForgeryToken = State;
-    payload.ExpirationTime = TInstant::Now() + STATE_LIFE_TIME;
-    if (!NavigationRequest) {
-        payload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
-    }
+    payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_OIDC_FLOW_LIFETIME;
+    return EncodeState(payload, key);
+}
+
+TString TContext::GetStateWithFlowId(const TString& key) const {
+    TState payload;
+    payload.AntiForgeryToken = State;
+    payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_OIDC_FLOW_LIFETIME;
+    payload.FlowId = CreateFlowId(key, RequestedAddress);
     return EncodeState(payload, key);
 }
 
@@ -45,10 +49,10 @@ TString TContext::GetRequestedAddress() const {
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
     static constexpr size_t COOKIE_MAX_AGE_SEC = 3600;
-    return TStringBuilder() << CreateNameYdbOidcCookie(NavigationRequest ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX) << "="
+    return TStringBuilder() << CreateNameYdbOidcCookie() << "="
                             << GenerateCookie(secret) << ";"
-                            " Path=" << GetAuthCallbackUrl() << ";"
-                            " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"
+                            << " Path=" << GetAuthCallbackUrl() << ";"
+                            << " Max-Age=" << COOKIE_MAX_AGE_SEC << ";"
                             " SameSite=None; Secure";
 }
 
@@ -57,11 +61,9 @@ TString TContext::GenerateCookie(const TString& key) const {
     json["requested_address"] = RequestedAddress;
     const TString requestedAddressContext = NJson::WriteJson(json, false);
 
-    TString digest = HmacSHA256(key, requestedAddressContext);
-
     NJson::TJsonValue root(NJson::JSON_MAP);
     root["requested_address_context"] = Base64Encode(requestedAddressContext);
-    root["digest"] = Base64Encode(digest);
+    root["digest"] = Base64Encode(HmacSHA256(key, requestedAddressContext));
     return Base64Encode(NJson::WriteJson(root, false));
 }
 

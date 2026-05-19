@@ -51,12 +51,12 @@ struct TCheckStateResult;
 
 struct TState {
     TString AntiForgeryToken;
-    TString CookieSuffix;
+    TString FlowId;
     TMaybe<TInstant> ExpirationTime;
 
     bool operator==(const TState& other) const {
         return AntiForgeryToken == other.AntiForgeryToken
-            && CookieSuffix == other.CookieSuffix
+            && FlowId == other.FlowId
             && ExpirationTime == other.ExpirationTime;
     }
 };
@@ -75,27 +75,32 @@ struct TDecodeStateResult {
 struct TCheckStateResult {
     bool Ok = true;
     TString ErrorMessage;
-    TString CookieSuffix;
+    TString FlowId;
 
-    static TCheckStateResult Error(const TString& errorMessage, const TString& cookieSuffix = "");
-    static TCheckStateResult Success(const TString& cookieSuffix = "");
+    static TCheckStateResult Error(const TString& errorMessage, const TString& flowId = "");
+    static TCheckStateResult Success(const TString& flowId = "");
 
 private:
-    TCheckStateResult(bool ok, const TString& cookieSuffix, const TString& errorMessage);
+    TCheckStateResult(bool ok, const TString& flowId, const TString& errorMessage);
 };
 
-TString HmacSHA256(TStringBuf key, TStringBuf data);
-TString HmacSHA1(TStringBuf key, TStringBuf data);
 void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId);
-TString CreateNameYdbOidcCookie(TStringBuf suffix = "");
+NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtrForAuthStart(const NHttp::THttpIncomingRequestPtr& request,
+                                                                       const TOpenIdConnectSettings& settings,
+                                                                       const TContext& context,
+                                                                       TStringBuf currentCookieValue,
+                                                                       TStringBuf requestId);
 TString CreateNameSessionCookie(TStringBuf key);
 TString CreateNameImpersonatedCookie(TStringBuf key);
+const TString& GetAuthStartUrl();
 const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds);
 TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
-TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf cookieSuffix = "");
+TString HmacSHA256(TStringBuf key, TStringBuf data);
+TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
+TRestoreOidcContextResult RestoreSharedOidcContext(const NHttp::TCookies& cookies, const TString& key, TStringBuf flowId = "");
 TString EncodeState(const TState& payload, TStringBuf signingKey);
 TDecodeStateResult DecodeState(TStringBuf encodedState);
 TCheckStateResult CheckState(const TString& state, const TString& key);
@@ -103,6 +108,7 @@ TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 TString GetAddressWithoutPort(const TString& address);
 TString GenerateRandomBase64(size_t byteNumber = 32);
+TString CreateNameYdbOidcCookie(TStringBuf suffix = "");
 
 
 struct TProxiedRequestParams {

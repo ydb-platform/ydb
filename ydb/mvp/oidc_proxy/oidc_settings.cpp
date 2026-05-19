@@ -37,6 +37,18 @@ bool TOpenIdConnectSettings::EnabledExtensionWhoami() const {
     return AccessServiceType == NMvp::nebius_v1 && !WhoamiExtendedInfoEndpoint.empty();
 }
 
+bool TOpenIdConnectSettings::UseLocalAuthStart() const {
+    return AuthenticationFlowMode == NMvp::NOidcProxy::local_auth_start;
+}
+
+bool TOpenIdConnectSettings::UseSharedAuthenticationContext() const {
+    return UseLocalAuthStart();
+}
+
+bool TOpenIdConnectSettings::UseFlowIdInState() const {
+    return UseSharedAuthenticationContext();
+}
+
 void TOpenIdConnectSettings::InitRequestTimeoutsByPath() {
     RequestTimeoutsByPath.clear();
 

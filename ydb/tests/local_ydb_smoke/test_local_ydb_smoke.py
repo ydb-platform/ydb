@@ -30,7 +30,7 @@ TCP_CHECK_PORTS = ["GRPC_PORT", "MON_PORT", "IC_PORT", "YDB_KAFKA_PROXY_PORT"]
 
 # Health table is created and dropped on every retry, idempotent, just like
 # .github/docker/files/health_check does inside the container.
-HEALTH_TABLE = "`/local/.sys_health/test`"
+HEALTH_TABLE = "`/local/test_table`"
 HEALTH_QUERIES = [
     f"create table if not exists {HEALTH_TABLE} (key int32, value utf8, primary key(key))",
     f"drop table {HEALTH_TABLE}",
@@ -38,6 +38,8 @@ HEALTH_QUERIES = [
 
 
 def _run_query(ydb_cli: str, endpoint: str, sql: str) -> subprocess.CompletedProcess:
+    # Shell out to the ydb CLI (not the Python SDK) to match the health probe
+    # path that the docker image uses in .github/docker/files/health_check.
     return subprocess.run(
         [
             ydb_cli,

@@ -1,13 +1,13 @@
 #include "kqp_opt_hash_func_propagate_transformer.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <yql/essentials/utils/log/log.h>
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-
 #include <yql/essentials/core/yql_expr_optimize.h>
-
-#include <ydb/library/yql/dq/common/dq_common.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
 

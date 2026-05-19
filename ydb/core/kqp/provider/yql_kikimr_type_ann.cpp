@@ -602,7 +602,7 @@ public:
         : Gateway(gateway)
         , SessionCtx(sessionCtx)
         , Types(types)
-        , DqsTypeAnn(NDq::CreateDqTypeAnnotationTransformer())
+        , DqTypeAnn(NDq::CreateDqTypeAnnotationTransformer())
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -610,8 +610,8 @@ public:
             if (extendedTypeAnn->CanParse(*input)) {
                 return extendedTypeAnn->DoTransform(input, output, ctx);
             }
-            if (DqsTypeAnn->CanParse(*input)) {
-                return DqsTypeAnn->DoTransform(input, output, ctx);
+            if (DqTypeAnn->CanParse(*input)) {
+                return DqTypeAnn->DoTransform(input, output, ctx);
             }
         }
         return TKiSinkVisitorTransformer::DoTransform(input, output, ctx);
@@ -3016,7 +3016,7 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TTypeAnnotationContext& Types;
-    const THolder<TVisitorTransformerBase> DqsTypeAnn;
+    const THolder<TVisitorTransformerBase> DqTypeAnn;
 };
 
 } // namespace

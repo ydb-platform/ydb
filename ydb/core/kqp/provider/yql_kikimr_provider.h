@@ -573,7 +573,7 @@ public:
         InternalTypeAnnTransformer = std::move(transformer);
     }
 
-    TVisitorTransformerBase* GetInternalTypeAnnTransformer() {
+    TVisitorTransformerBase* GetInternalTypeAnnTransformer() const {
         return InternalTypeAnnTransformer.Get();
     }
 

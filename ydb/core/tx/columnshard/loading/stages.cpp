@@ -1,5 +1,6 @@
 #include "stages.h"
 
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -137,13 +138,23 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
     }
 
-    TString serializedLastCompletedBackupTransaction;
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedBackupTransaction, serializedLastCompletedBackupTransaction)) {
+    auto rowset = db.Table<Schema::TableInfoV1>().Range().Select();
+    if (!rowset.IsReady()) {
         return false;
     }
-
-    if (serializedLastCompletedBackupTransaction) {
-        Y_VERIFY(Self->LastCompletedBackupTransaction.ParseFromString(serializedLastCompletedBackupTransaction));
+    
+    while (!rowset.EndOfSet()) {
+        auto pathId = rowset.GetValue<Schema::TableInfoV1::PathId>();
+        auto serializedBackupTx = rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>();
+        if (serializedBackupTx) {
+            NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
+            if (backupTx.ParseFromString(serializedBackupTx)) {
+                Self->LastCompletedBackupTransactions[pathId] = backupTx;
+            }
+        }
+        if (!rowset.Next()) {
+            return false;
+        }
     }
 
     return true;

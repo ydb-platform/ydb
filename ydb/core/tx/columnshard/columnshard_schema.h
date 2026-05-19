@@ -236,8 +236,10 @@ struct Schema: NIceDb::Schema {
 
         struct IsReadOnly: Column<7, NScheme::NTypeIds::Bool> {};
 
+        struct LastCompletedBackupTransaction: Column<8, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<PathId, SchemeShardLocalPathId>;
-        using TColumns = TableColumns<PathId, SchemeShardLocalPathId, DropStep, DropTxId, CopyStep, CopyTxId, IsReadOnly>;
+        using TColumns = TableColumns<PathId, SchemeShardLocalPathId, DropStep, DropTxId, CopyStep, CopyTxId, IsReadOnly, LastCompletedBackupTransaction>;
     };
 
     struct TableVersionInfo: Table<(ui32)ECommonTables::TableVersionInfo> {

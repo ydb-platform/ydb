@@ -533,7 +533,7 @@ private:
     ui64 LastPlannedTxId = 0;
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
-    NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;
+    THashMap<ui64, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactions; // PathId -> BackupTransaction
 
     ui64 StatsReportRound = 0;
     TString OwnerPath;

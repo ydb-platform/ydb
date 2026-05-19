@@ -1,5 +1,6 @@
 #include "restore.h"
 
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
@@ -53,13 +54,25 @@ bool TRestoreTransactionOperator::ProgressOnExecute(
     AFL_VERIFY(!TxRemove);
     auto status =
         owner.GetBackgroundSessionsManager()->GetStatus(ImportTask->GetClassName(), ::ToString(ImportTask->GetRestoreTask().GetTableId()));
-    owner.LastCompletedBackupTransaction.SetTxId(GetTxId());
-    auto& opResult = *owner.LastCompletedBackupTransaction.MutableOpResult();
+    
+    NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
+    backupTx.SetTxId(GetTxId());
+    auto& opResult = *backupTx.MutableOpResult();
     opResult.SetSuccess(status.Success);
     opResult.SetExplain(status.ErrorMessage);
+    
     TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ImportTask->GetClassName(), ::ToString(ImportTask->GetRestoreTask().GetTableId()));
     NIceDb::TNiceDb db(txc.DB);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedBackupTransaction, owner.LastCompletedBackupTransaction.SerializeAsString());
+
+    auto tableId = ImportTask->GetRestoreTask().GetTableId();
+    auto schemeShardLocalPathId = owner.TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId.GetRawValue();
+
+    owner.LastCompletedBackupTransactions[tableId] = backupTx;
+
+    db.Table<Schema::TableInfoV1>().Key(tableId, schemeShardLocalPathId).Update(
+        NIceDb::TUpdate<Schema::TableInfoV1::LastCompletedBackupTransaction>(backupTx.SerializeAsString())
+    );
+    
     return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 

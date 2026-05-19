@@ -4,7 +4,6 @@ This section contains code recipes in different programming languages for [vecto
 
 The following operations are covered in detail:
 
-<<<<<<< HEAD
 - [Vector search](#vector-search)
   - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
   - [Creating a table {#create-table}](#creating-a-table-create-table)
@@ -12,15 +11,6 @@ The following operations are covered in detail:
   - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
   - [Vector search {#search-by-vector}](#vector-search-search-by-vector)
   - [Full example {#full-example}](#full-example-full-example)
-=======
-  - [Vector search](#vector-search)
-  - [Connecting to {{ ydb-short-name }}](#connect-ydb)
-  - [Creating a table](#create-table)
-  - [Inserting vectors](#insert-vectors)
-  - [Adding an index](#add-vector-index)
-  - [Search by vector](#search-by-vector)
-  - [Full example](#full-example)
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
 This recipe creates a text store with the following structure:
 
@@ -906,35 +896,8 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 
     - Native SDK
 
-<<<<<<< HEAD
-    async def add_vector_index(
-        pool: ydb.aio.QuerySessionPool,
-        driver: ydb.aio.Driver,
-        table_name: str,
-        index_name: str,
-        strategy: str,
-        dimension: int,
-        levels: int = 2,
-        clusters: int = 128,
-    ):
-        temp_index_name = f"{index_name}__temp"
-        query = f"""
-        ALTER TABLE `{table_name}`
-        ADD INDEX {temp_index_name}
-        GLOBAL USING vector_kmeans_tree
-        ON (embedding)
-        WITH (
-            {strategy},
-            vector_type="Float",
-            vector_dimension={dimension},
-            levels={levels},
-            clusters={clusters}
-        );
-        """
-=======
       ```python
       import ydb
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
       def add_vector_index(
           pool: ydb.QuerySessionPool,
@@ -1274,75 +1237,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
           return items
       ```
 
-<<<<<<< HEAD
-    ```python
-    import ydb
-
-    async def search_items_vector_as_bytes(
-        pool: ydb.aio.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-
-        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-        query = f"""
-        DECLARE $embedding as String;
-
-        SELECT
-            id,
-            document,
-            Knn::{strategy}(embedding, $embedding) as score
-        FROM {table_name} {view_index}
-        ORDER BY score {sort_order}
-        LIMIT {limit};
-        """
-
-        result = await pool.execute_with_retries(
-            query,
-            {
-                "$embedding": (
-                    convert_vector_to_bytes(embedding),
-                    ydb.PrimitiveType.String,
-                ),
-            },
-        )
-
-        items = []
-
-        for result_set in result:
-            for row in result_set.rows:
-                items.append(
-                    {
-                        "id": row["id"],
-                        "document": row["document"],
-                        "score": row["score"],
-                    }
-                )
-
-        return items
-    ```
-
-    {% endcut %}
-
-    ```python
-    def search_items_vector_as_bytes(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-        top_clusters: int = 10,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
     - Native SDK (Asyncio)
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
       ```python
       import ydb
@@ -1665,75 +1560,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
           return items
       ```
 
-<<<<<<< HEAD
-    ```python
-    import ydb
-
-    async def search_items_vector_as_float_list(
-        pool: ydb.aio.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-
-        sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-        query = f"""
-        DECLARE $embedding as List<Float>;
-
-        $target_embedding = Knn::ToBinaryStringFloat($embedding);
-
-        SELECT
-            id,
-            document,
-            Knn::{strategy}(embedding, $target_embedding) as score
-        FROM {table_name} {view_index}
-        ORDER BY score
-        {sort_order}
-        LIMIT {limit};
-        """
-
-        result = await pool.execute_with_retries(
-            query,
-            {
-                "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-            },
-        )
-
-        items = []
-
-        for result_set in result:
-            for row in result_set.rows:
-                items.append(
-                    {
-                        "id": row["id"],
-                        "document": row["document"],
-                        "score": row["score"],
-                    }
-                )
-
-        return items
-    ```
-
-    {% endcut %}
-
-    ```python
-    def search_items_vector_as_float_list(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-        top_clusters: int = 10,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-=======
     - Native SDK (Asyncio)
->>>>>>> 949957c6ed2 (DOCORG-9067-Translation (#38509))
 
       ```python
       import ydb

@@ -39,6 +39,7 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -457,7 +458,11 @@ protected:
                 for (auto channelId : output.Channels) {
                     auto& channel = TasksGraph.GetChannel(channelId);
                     if (!channel.DstTask) {
-                        Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
+                        if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
+                            ReadResultFromInputBuffer(channelId, it->second);
+                            continue;
+                        }
+                        Y_ENSURE(ChannelService);
                         auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
                             NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
                         ReadResultFromInputBuffer(channelId, inputBuffer);
@@ -648,6 +653,44 @@ protected:
         this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channelId);
     }
 
+    bool TaskProducesQueryResult(ui64 taskId) const {
+        const auto& task = TasksGraph.GetTask(taskId);
+        for (auto&& output : task.Outputs) {
+            for (auto&& channelId : output.Channels) {
+                if (!TasksGraph.GetChannel(channelId).DstTask) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    void CancelRemainingComputeTasks() {
+        YQL_ENSURE(Planner);
+
+        const bool hasRemaining = !Planner->GetPendingComputeActors().empty() || !Planner->GetPendingComputeTasks().empty();
+        if (!hasRemaining) {
+            return;
+        }
+
+        KQP_STLOG_D(KQPEX, "Cancel remaining compute tasks after OLAP result is ready",
+            (pending_compute_actors, Planner->GetPendingComputeActors().size()),
+            (pending_compute_tasks, Planner->GetPendingComputeTasks().size()),
+            (trace_id, TraceId()));
+
+        NYql::TIssues issues;
+        issues.AddIssue("Cancelled: query result is ready");
+
+        for (auto&& [actorId, _] : Planner->GetPendingComputeActors()) {
+            this->Send(actorId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::SUCCESS, issues));
+        }
+
+        while (!Planner->GetPendingComputeTasks().empty()) {
+            Planner->TaskNotStarted(*Planner->GetPendingComputeTasks().begin());
+        }
+    }
+
     bool HandleComputeStats(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
         TActorId computeActor = ev->Sender;
         auto& state = ev->Get()->Record;
@@ -728,6 +771,10 @@ protected:
                     );
                     StatFinishInflightBytes = collectBytes;
                     Counters->Counters->QueryStatCpuFinishUs->Add(deltaCpuTime * 1'000'000);
+
+                    if (HasOlapTable && TaskProducesQueryResult(taskId)) {
+                        CancelRemainingComputeTasks();
+                    }
                 }
             default:
                 ; // ignore all other states.
@@ -751,13 +798,17 @@ protected:
 
             case NYql::NDqProto::COMPUTE_STATE_EXECUTING:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
+                auto& task = TasksGraph.GetTask(taskId);
                 if (populateChannels) {
-                    auto& task = TasksGraph.GetTask(taskId);
                     THashMap<TActorId, THashSet<ui64>> updates;
                     Planner->CollectTaskChannelsUpdates(task, updates);
                     Planner->PropagateChannelsUpdates(updates);
+                }
+
+                if (populateChannels || state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
                     ReadResultFromTaskOutputs(task);
                 }
+
                 break;
             }
 

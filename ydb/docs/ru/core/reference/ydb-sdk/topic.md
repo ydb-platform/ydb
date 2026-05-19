@@ -2798,10 +2798,8 @@
     
       // Confirm that session can be closed
       event.confirm();
-
-  }
-  ```
-
+    }
+    ```
 
   {% endlist %}
 
@@ -2890,10 +2888,9 @@
     @Override
     public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
+    }
+    ```
 
-  }
-  ```
-  
   {% endlist %}
 
 - JavaScript

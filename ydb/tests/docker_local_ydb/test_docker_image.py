@@ -62,7 +62,7 @@ def test_docker_image_starts_healthy():
         # the unused `builder-full` stage that references `ydbd/`, `cli/` and
         # `local_ydb/` from the context. BuildKit lazily skips unused stages,
         # so we shell out to `docker build` with DOCKER_BUILDKIT=1.
-        subprocess.run(
+        build = subprocess.run(
             [
                 "docker", "build",
                 "--build-arg", "BUILD_MODE=prebuilt",
@@ -72,8 +72,15 @@ def test_docker_image_starts_healthy():
             ],
             cwd=ctx,
             env={**os.environ, "DOCKER_BUILDKIT": "1"},
-            check=True,
+            capture_output=True,
+            text=True,
         )
+        if build.returncode != 0:
+            pytest.fail(
+                f"docker build exited with {build.returncode}\n"
+                f"--- stdout ---\n{build.stdout}\n"
+                f"--- stderr ---\n{build.stderr}"
+            )
 
         container = client.containers.run(
             image=image_tag,

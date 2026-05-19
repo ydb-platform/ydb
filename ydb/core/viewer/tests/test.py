@@ -327,6 +327,10 @@ class TestViewer(object):
         print('Wait for cluster to be ready took %s seconds' % wait_time)
 
     @classmethod
+    def test_waiting_for_cluster_ready(cls):
+        return {}
+
+    @classmethod
     def test_whoami_root(cls):
         return cls.get_viewer_normalized("/viewer/whoami")
 
@@ -820,6 +824,20 @@ class TestViewer(object):
                 'database': cls.dedicated_db,
                 'path': cls.dedicated_db
             })]
+
+    @classmethod
+    def test_viewer_acl_write_invalid(cls):
+        return cls.post_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }, headers={
+            'Cookie': 'ydb_session_id=XXX',
+        }, body={
+            'AddAccess': [{
+                'Subject': 'userX',
+                'AccessRights': ['Full']
+            }]
+        })
 
     @classmethod
     def test_viewer_autocomplete(cls):

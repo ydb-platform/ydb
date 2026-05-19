@@ -5304,8 +5304,8 @@ void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
 
 void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
     if (!Stats->IsFollower()) {
-        StartVacuum(TNoTag());
         MoveDataSubscribers.insert(ev->Sender);
+        StartVacuum(TNoTag());
     }
 }
 

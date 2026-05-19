@@ -57,9 +57,14 @@ private:
     NUtil::ILogger* const Logger;
     TExecutorGCLogic* const GcLogic;
 
-    TVacuumGeneration MaxVacuumGeneration = 0;
-    TVacuumTag CurrentVacuumTag;
-    std::optional<TVacuumTag> NextVacuumTag;
+    /**
+     * There are 2 types of requests - requests with generation tag and requests with no tag.
+     * A request with generation is only processed if there wasn't already a request with a greater generation.
+     * A request with no tag is always processed.
+     */
+    TVacuumGeneration MaxVacuumGeneration = 0; // maximum seen generation, including past, current and planned vacuum runs
+    TVacuumTag CurrentVacuumTag; // tag of the current run, only stored for logging
+    std::optional<TVacuumTag> NextVacuumTag; // nullopt if there is no next run scheduled
     EVacuumState State = EVacuumState::Idle;
     THashMap<ui32, TVacuumTableInfo> CompactingTables; // tracks statuses of compaction
 

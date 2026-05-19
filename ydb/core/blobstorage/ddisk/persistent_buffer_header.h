@@ -25,9 +25,8 @@ namespace NKikimr::NDDisk {
                 ui64 TabletId;
                 ui64 Lsn;
             };
-            
+
             ui32 BarrierIdx;
-            ui64 BarrierLsn;
             TBarrierRecord Barriers[MaxBarriersPerHeader];
         };
 
@@ -39,13 +38,19 @@ namespace NKikimr::NDDisk {
         ui8 Signature[16];
         ui64 HeaderChecksum;
         ui64 Flags;
+        ui64 RecordLsn;
+
+        ui64 PersistentBufferUniqueId;
+        ui32 NodeId;
+        ui32 PDiskId;
+        ui32 SlotId;
 
         union {
             TRecord Record;
             TBarrier Barrier;
         };
 
-        ui64 Reserved[26];
+        ui32 Reserved[47];
     };
 
     static_assert(sizeof(TPersistentBufferHeader) == 4096);

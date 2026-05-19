@@ -230,7 +230,7 @@ private:
             }
 
             NKikimrSysView::TGroupInfo groupInfo;
-            CalculateGroupUsageStats(&groupInfo, disks, erasureType);
+            CalculateGroupUsageStats(&groupInfo, disks, erasureType, 1u);
             groupSizes.push_back(groupInfo.GetAvailableSize());
 
             group.clear();

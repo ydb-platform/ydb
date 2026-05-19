@@ -11,6 +11,7 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 from ydb.core.protos import msgbus_pb2
 from ydb.tests.library.common.wait_for import retry_assertions
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,16 @@ class TestPDiskSlotSizeInUnits(object):
             assert len(g.VSlotId) == 1
             assert g.VSlotId[0].PDiskId == self.pdisk_id
 
+        self.driver = ydb.Driver(
+            endpoint=self.cluster.nodes[1].endpoint,
+            database='/Root',
+        )
+        self.driver.wait(timeout=20, fail_fast=True)
+        self.session_pool = ydb.QuerySessionPool(self.driver)
+
         yield
+        self.session_pool.stop()
+        self.driver.stop()
         self.cluster.stop()
 
     def change_group_size_in_units(self, new_size, group_id=None):
@@ -126,7 +136,21 @@ class TestPDiskSlotSizeInUnits(object):
         if expected_slot_size_in_units is not None:
             assert pdisk['SlotSizeInUnits'] == expected_slot_size_in_units
 
+    def query_sysview_ds_groups(self):
+        return self.session_pool.execute_with_retries(
+            """SELECT * FROM `.sys/ds_groups` WHERE StoragePoolId = 1""",
+        )[0].rows
+
     def test_change_group_size_in_units(self):
+        groups_old = []
+
+        def check_sysview_populated():
+            nonlocal groups_old
+            groups_old = self.query_sysview_ds_groups()
+            logger.info(json.dumps(groups_old))
+            assert len(groups_old) == 2
+        retry_assertions(check_sysview_populated)
+
         self.change_group_size_in_units(new_size=2, group_id=self.groups[0].GroupId)
 
         def check_whiteboard_updated():
@@ -142,6 +166,18 @@ class TestPDiskSlotSizeInUnits(object):
             self.check_pdisk(pdisk_info['Whiteboard']['PDisk'], expected_num_active_slots=3)
             self.check_pdisk(pdisk_info['BSC']['PDisk'], expected_num_active_slots=3, expected_slot_size_in_units=0)
         retry_assertions(check_pdisk_info_updated)
+
+        def check_sysview_updated():
+            groups_new = self.query_sysview_ds_groups()
+            logger.info(json.dumps(groups_new))
+
+            assert len(groups_new) == 2
+            total_size_old = int(groups_old[0]['AllocatedSize']) + int(groups_old[0]['AvailableSize'])
+            total_size_new = int(groups_new[0]['AllocatedSize']) + int(groups_new[0]['AvailableSize'])
+
+            assert int(groups_new[0]['GroupSizeInUnits']) == 2
+            assert total_size_new == 2 * total_size_old
+        retry_assertions(check_sysview_updated)
 
     def test_change_pdisk_slot_size_in_units(self):
         self.change_pdisk_slot_size_in_units(slot_size_in_units=2)

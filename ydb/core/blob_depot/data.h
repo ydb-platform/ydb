@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "blob_depot_tablet.h"
 #include "closed_interval_set.h"
+#include "coro_tx.h"
 
 #include <util/generic/hash_multi_map.h>
 
@@ -388,6 +389,24 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
+        enum class ETrashLoadState {
+            Complete,
+            NeedMore,
+            Loading,
+        };
+
+        static constexpr const char *TrashLoadStateToString(ETrashLoadState state) {
+            switch (state) {
+                case ETrashLoadState::Complete:
+                    return "complete";
+                case ETrashLoadState::NeedMore:
+                    return "need more";
+                case ETrashLoadState::Loading:
+                    return "loading";
+            }
+            return "unknown";
+        }
+
         enum EScanFlags : ui32 {
             INCLUDE_BEGIN = 1,
             INCLUDE_END = 2,
@@ -474,6 +493,10 @@ namespace NKikimr::NBlobDepot {
         ui64 LoadRestartTxCycles = 0;
         ui64 LoadRunSuccessorTxCycles = 0;
         ui64 LoadTotalCycles = 0;
+        ui64 LoadedTrashRecords = 0;
+
+        ETrashLoadState TrashLoadState = ETrashLoadState::Loading;
+        TString TrashLoadFrom;
 
         friend class TGroupAssimilator;
 
@@ -740,12 +763,22 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        enum class ELoadTrashResult {
+            NotReady,
+            BatchFull,
+            Complete,
+        };
+
         void StartLoad();
-        bool LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
+        ELoadTrashResult LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
         bool LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress);
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
+        bool IsTrashFullyLoaded() const;
+
+        ETrashLoadState GetTrashLoadState() const;
+        ui64 GetLoadedTrashRecords() const;
 
         bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress = nullptr);
 
@@ -801,6 +834,15 @@ namespace NKikimr::NBlobDepot {
             TGenStep confirmedGenStep);
 
         void ExecuteHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep);
+
+        bool IssueLoadTrashBatch();
+        void OnLoadTrashBatchComplete(ELoadTrashResult result);
+
+        class TLoadCycleAccounting;
+
+        void FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
+        void RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress);
+        ELoadTrashResult RunLoadTrashLoop(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, TString& from);
     };
 
     Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags);

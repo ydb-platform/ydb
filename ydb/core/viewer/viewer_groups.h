@@ -194,7 +194,6 @@ public:
         TInstant StatusChangeTimestamp;
         ui64 EnforcedDynamicSlotSize = 0;
         ui32 SlotCount = 0;
-        ui32 SlotSizeInUnits = 0;
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
@@ -230,12 +229,6 @@ public:
             //}
         }
 
-        static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 pdiskSlotSizeInUnits) {
-            const ui32 vdiskUnits = groupSizeInUnits ? groupSizeInUnits : 1;
-            const ui32 pdiskUnits = pdiskSlotSizeInUnits ? pdiskSlotSizeInUnits : 1;
-            return (vdiskUnits + pdiskUnits - 1) / pdiskUnits;
-        }
-
         float GetDiskSpaceUsage() const {
             return TotalSize ? 100.0 * (TotalSize - AvailableSize) / TotalSize : 0;
         }
@@ -260,7 +253,6 @@ public:
         bool Present = false;
         float VDiskSlotUsage = 0;
         float VDiskRawUsage = 0;
-        bool HasVDiskRawUsage = false;
         float NormalizedOccupancy = 0;
         NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlert = {};
 
@@ -288,7 +280,6 @@ public:
         TString State;
         ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
-        ui32 GroupSizeInUnits = 0;
         std::optional<ui64> AllocationUnits;
         float Usage = 0;
         ui64 Used = 0;
@@ -483,22 +474,16 @@ public:
             ui64 allocated = 0;
             ui64 available = 0;
             ui64 limit = 0;
-            float usage = 0;
             DiskSpace = NKikimrViewer::EFlag::Grey;
             DiskSpaceUsage = 0;
             MaxPDiskUsage = 0;
             for (TVDisk& vdisk : VDisks) {
-                ui64 vdiskSlotSize = 0;
-                auto itPDisk = pDisks.empty() ? pDisks.end() : pDisks.find(vdisk.VSlotId);
+                auto itPDisk = pDisks.find(vdisk.VSlotId);
                 if (itPDisk != pDisks.end()) {
-                    const TPDisk& pdisk = itPDisk->second;
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
-                    DiskSpaceUsage = std::max(DiskSpaceUsage, pdisk.GetDiskSpaceUsage());
-                    MaxPDiskUsage = std::max(MaxPDiskUsage, pdisk.PDiskUsage);
-                    if (pdisk.EnforcedDynamicSlotSize > 0) {
-                        vdiskSlotSize = pdisk.EnforcedDynamicSlotSize * pdisk.GetOwnerWeight(GroupSizeInUnits, pdisk.SlotSizeInUnits);
-                    }
-                    ui64 slotSize = vdiskSlotSize ? vdiskSlotSize : pdisk.GetSlotTotalSize();
+                    DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
+                    MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
+                    ui64 slotSize = itPDisk->second.GetSlotTotalSize();
                     ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;
                     if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
                         vdisk.AvailableSize = slotAvailable;
@@ -506,23 +491,12 @@ public:
                     limit += slotSize ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
                     available += vdisk.AvailableSize;
                 }
-                // VDiskRawUsage metric was added in 26.1.1. For older versions we
-                // calculate it in viewer. Formula matches
-                // blobstorage_pdisk_keeper.h GetVDiskRawUsage():
-                //   VDiskRawUsage = 100.0 * (used / hardLimit)
-                // Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(),
-                // EnforcedDynamicSlotSize is calculated as min(HardLimit / Weight)
-                // across all owners.
-                if (!vdisk.HasVDiskRawUsage && vdiskSlotSize > 0) {
-                    vdisk.VDiskRawUsage = 100.0 * static_cast<float>(vdisk.AllocatedSize) / vdiskSlotSize;
-                }
-                usage = std::max<float>(usage, vdisk.VDiskRawUsage);
                 allocated += vdisk.AllocatedSize;
             }
             Available = available;
             Used = allocated;
             Limit = limit;
-            Usage = usage;
+            Usage = Limit ? 100.0 * Used / Limit : 0;
             if (Usage >= 95) {
                 DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Red);
             } else if (Usage >= 90) {
@@ -1514,7 +1488,6 @@ public:
                     group.GroupGeneration = info.GetGeneration();
                     group.BoxId = info.GetBoxId();
                     group.PoolId = info.GetStoragePoolId();
-                    group.GroupSizeInUnits = info.GetGroupSizeInUnits();
                     group.Erasure = info.GetErasureSpeciesV2();
                     group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
                     //group.Used = info.GetAllocatedSize();
@@ -1634,7 +1607,6 @@ public:
                     pDisk.StatusChangeTimestamp = TInstant::MicroSeconds(info.GetStatusChangeTimestamp());
                     pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
                     pDisk.SlotCount = info.GetExpectedSlotCount();
-                    pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
@@ -1884,7 +1856,6 @@ public:
                 TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();
-                group.GroupSizeInUnits = info->GetGroupSizeInUnits();
                 group.Erasure = info->GetErasureSpecies();
                 group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
                 group.PoolName = info->GetStoragePoolName();
@@ -1957,10 +1928,7 @@ public:
         vDisk.Present = true;
         vDisk.VDiskSlotUsage = info.GetVDiskSlotUsage();
         vDisk.NormalizedOccupancy = info.GetNormalizedOccupancy();
-        vDisk.HasVDiskRawUsage = info.HasVDiskRawUsage();
-        if (vDisk.HasVDiskRawUsage) {
-            vDisk.VDiskRawUsage = info.GetVDiskRawUsage();
-        }
+        vDisk.VDiskRawUsage = info.GetVDiskRawUsage();
         vDisk.CapacityAlert = info.GetCapacityAlert();
     }
 
@@ -2015,9 +1983,6 @@ public:
                     }
                     if (pDisk.SlotCount < info.GetExpectedSlotCount()) {
                         pDisk.SlotCount = info.GetExpectedSlotCount();
-                    }
-                    if (pDisk.SlotSizeInUnits < info.GetSlotSizeInUnits()) {
-                        pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     }
                     if (pDisk.NumActiveSlots < info.GetNumActiveSlots()) {
                         pDisk.NumActiveSlots = info.GetNumActiveSlots();

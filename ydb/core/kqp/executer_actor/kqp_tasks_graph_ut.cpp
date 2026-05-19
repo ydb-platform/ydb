@@ -1430,6 +1430,569 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
     }
 
+    Y_UNIT_TEST_F(TpchQuery14, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $z100_35 = cast(100 as decimal(35,2));
+            $z0_12 = cast(0 as decimal(12,2));
+            $z1_12 = cast(1 as decimal(12,2));
+            $border = Date("1995-09-01");
+            select
+                $z100_35 * sum(case
+                    when p.p_type like 'PROMO%'
+                        then l.l_extendedprice * ($z1_12 - l.l_discount)
+                    else $z0_12
+                end) / sum(l.l_extendedprice * ($z1_12 - l.l_discount)) as promo_revenue
+            from
+                `/Root/lineitem` as l
+            join
+                `/Root/part` as p
+            on
+                l.l_partkey = p.p_partkey
+            where
+                l.l_shipdate >= $border
+                and l.l_shipdate < ($border + Interval("P30D"));
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery15, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $z1_12 = cast(1 as decimal(12,2));
+            $round = ($x,$y) -> {return $x;};
+            $border = Date("1996-01-01");
+            $revenue0 = (
+                select
+                    l_suppkey as supplier_no,
+                    $round(sum(l_extendedprice * ($z1_12 - l_discount)), -8) as total_revenue
+                from
+                    `/Root/lineitem`
+                where
+                    l_shipdate  >= $border
+                    and l_shipdate < ($border + Interval("P91D"))
+                group by
+                    l_suppkey
+            );
+            $max_revenue = (
+            select
+                max(total_revenue) as max_revenue
+            from
+                $revenue0
+            );
+            $join1 = (
+            select
+                s.s_suppkey as s_suppkey,
+                s.s_name as s_name,
+                s.s_address as s_address,
+                s.s_phone as s_phone,
+                r.total_revenue as total_revenue
+            from
+                `/Root/supplier` as s
+            join
+                $revenue0 as r
+            on
+                s.s_suppkey = r.supplier_no
+            );
+            select
+                j.s_suppkey as s_suppkey,
+                j.s_name as s_name,
+                j.s_address as s_address,
+                j.s_phone as s_phone,
+                j.total_revenue as total_revenue
+            from
+                $join1 as j
+            join
+                $max_revenue as m
+            on
+                j.total_revenue = m.max_revenue
+            order by
+                s_suppkey;
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery16, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $p = (
+            select
+                p.p_brand as p_brand,
+                p.p_type as p_type,
+                p.p_size as p_size,
+                ps.ps_suppkey as ps_suppkey
+            from
+                `/Root/part` as p
+            join
+                `/Root/partsupp` as ps
+            on
+                p.p_partkey = ps.ps_partkey
+            where
+                p.p_brand <> 'Brand#45'
+                and p.p_type not like 'MEDIUM POLISHED%'
+                and (p.p_size = 49 or p.p_size = 14 or p.p_size = 23 or p.p_size = 45 or p.p_size = 19 or p.p_size = 3 or p.p_size = 36 or p.p_size = 9)
+            );
+            $s = (
+            select
+                s_suppkey
+            from
+                `/Root/supplier`
+            where
+                s_comment like "%Customer%Complaints%"
+            );
+            $j = (
+            select
+                p.p_brand as p_brand,
+                p.p_type as p_type,
+                p.p_size as p_size,
+                p.ps_suppkey as ps_suppkey
+            from
+                $p as p
+            left only join
+                $s as s
+            on
+                p.ps_suppkey = s.s_suppkey
+            );
+            select
+                j.p_brand as p_brand,
+                j.p_type as p_type,
+                j.p_size as p_size,
+                count(distinct j.ps_suppkey) as supplier_cnt
+            from
+                $j as j
+            group by
+                j.p_brand,
+                j.p_type,
+                j.p_size
+            order by
+                supplier_cnt desc,
+                p_brand,
+                p_type,
+                p_size
+            ;
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery17, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $z7_35 = cast("7." as decimal(35,2));
+            $z0_2_12 = cast("0.2" as decimal(12,2));
+            $p = select p_partkey from `/Root/part`
+            where
+                p_brand = 'Brand#23'
+                and p_container = 'MED BOX'
+            ;
+            $threshold = (
+            select
+                $z0_2_12 * avg(l_quantity) as threshold,
+                l.l_partkey as l_partkey
+            from
+                `/Root/lineitem` as l
+            left semi join
+                $p as p
+            on
+                p.p_partkey = l.l_partkey
+            group by
+                l.l_partkey
+            );
+            $l = select l.l_partkey as l_partkey, l.l_quantity as l_quantity, l.l_extendedprice as l_extendedprice
+            from
+                `/Root/lineitem` as l
+            join
+                $p as p
+            on
+                p.p_partkey = l.l_partkey;
+            select
+                sum(l.l_extendedprice) / $z7_35 as avg_yearly
+            from
+                $l as l
+            join
+                $threshold as t
+            on
+                t.l_partkey = l.l_partkey
+            where
+                l.l_quantity < t.threshold;
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery18, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $in = (
+            select
+                l_orderkey,
+                sum(l_quantity) as sum_l_quantity
+            from
+                `/Root/lineitem`
+            group by
+                l_orderkey having
+                    sum(l_quantity) > 300
+            );
+            $join1 = (
+            select
+                c.c_name as c_name,
+                c.c_custkey as c_custkey,
+                o.o_orderkey as o_orderkey,
+                o.o_orderdate as o_orderdate,
+                o.o_totalprice as o_totalprice
+            from
+                `/Root/customer` as c
+            join
+                `/Root/orders` as o
+            on
+                c.c_custkey = o.o_custkey
+            );
+            select
+                j.c_name as c_name,
+                j.c_custkey as c_custkey,
+                j.o_orderkey as o_orderkey,
+                j.o_orderdate as o_orderdate,
+                j.o_totalprice as o_totalprice,
+                sum(i.sum_l_quantity) as sum_l_quantity
+            from
+                $join1 as j
+            join
+                $in as i
+            on
+                i.l_orderkey = j.o_orderkey
+            group by
+                j.c_name,
+                j.c_custkey,
+                j.o_orderkey,
+                j.o_orderdate,
+                j.o_totalprice
+            order by
+                o_totalprice desc,
+                o_orderdate,
+                o_orderkey
+            limit 100;
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery19, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $z1_12 = cast(1 as decimal(12,2));
+            select
+                sum(l.l_extendedprice* ($z1_12 - l.l_discount)) as revenue
+            from
+                `/Root/lineitem` as l
+            join
+                `/Root/part` as p
+            on
+                p.p_partkey = l.l_partkey
+            where
+                (
+                    p.p_brand = 'Brand#12'
+                    and (p.p_container = 'SM CASE' or p.p_container = 'SM BOX' or p.p_container = 'SM PACK' or p.p_container = 'SM PKG')
+                    and l.l_quantity >= 1 and l.l_quantity <= 1 + 10
+                    and p.p_size between 1 and 5
+                    and (l.l_shipmode = 'AIR' or l.l_shipmode = 'AIR REG')
+                    and l.l_shipinstruct = 'DELIVER IN PERSON'
+                )
+                or
+                (
+                    p.p_brand = 'Brand#23'
+                    and (p.p_container = 'MED BAG' or p.p_container = 'MED BOX' or p.p_container = 'MED PKG' or p.p_container = 'MED PACK')
+                    and l.l_quantity >= 10 and l.l_quantity <= 10 + 10
+                    and p.p_size between 1 and 10
+                    and (l.l_shipmode = 'AIR' or l.l_shipmode = 'AIR REG')
+                    and l.l_shipinstruct = 'DELIVER IN PERSON'
+                )
+                or
+                (
+                    p.p_brand = 'Brand#34'
+                    and (p.p_container = 'LG CASE' or p.p_container = 'LG BOX' or p.p_container = 'LG PACK' or p.p_container = 'LG PKG')
+                    and l.l_quantity >= 20 and l.l_quantity <= 20 + 10
+                    and p.p_size between 1 and 15
+                    and (l.l_shipmode = 'AIR' or l.l_shipmode = 'AIR REG')
+                    and l.l_shipinstruct = 'DELIVER IN PERSON'
+                );
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery20, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $z0_5_35 = cast("0.5" as decimal(35,2));
+            $border = Date("1994-01-01");
+            $threshold = (
+            select
+                $z0_5_35 * sum(l_quantity) as threshold,
+                l_partkey as l_partkey,
+                l_suppkey as l_suppkey
+            from
+                `/Root/lineitem`
+            where
+                l_shipdate >= $border
+                and l_shipdate < ($border + Interval("P365D"))
+            group by
+                l_partkey, l_suppkey
+            );
+            $parts = (
+            select
+                p_partkey
+            from
+                `/Root/part`
+            where
+                p_name like 'forest%'
+            );
+            $join1 = (
+            select
+                ps.ps_suppkey as ps_suppkey,
+                ps.ps_availqty as ps_availqty,
+                ps.ps_partkey as ps_partkey
+            from
+                `/Root/partsupp` as ps
+            join any
+                $parts as p
+            on
+                ps.ps_partkey = p.p_partkey
+            );
+            $join2 = (
+            select
+                distinct(j.ps_suppkey) as ps_suppkey
+            from
+                $join1 as j
+            join any
+                $threshold as t
+            on
+                j.ps_partkey = t.l_partkey and j.ps_suppkey = t.l_suppkey
+            where
+                j.ps_availqty > t.threshold
+            );
+            $join3 = (
+            select
+                j.ps_suppkey as ps_suppkey,
+                s.s_name as s_name,
+                s.s_address as s_address,
+                s.s_nationkey as s_nationkey
+            from
+                $join2 as j
+            join any
+                `/Root/supplier` as s
+            on
+                j.ps_suppkey = s.s_suppkey
+            );
+            select
+                j.s_name as s_name,
+                j.s_address as s_address
+            from
+                $join3 as j
+            join
+                `/Root/nation` as n
+            on
+                j.s_nationkey = n.n_nationkey
+            where
+                n.n_name = 'CANADA'
+            order by
+                s_name;
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 76);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 76);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 76);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 76);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 76);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery21, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $n = select n_nationkey from `/Root/nation`
+            where n_name = 'SAUDI ARABIA';
+            $s = select s_name, s_suppkey from `/Root/supplier` as supplier
+            join $n as nation
+            on supplier.s_nationkey = nation.n_nationkey;
+            $l = select l_suppkey, l_orderkey from `/Root/lineitem`
+            where l_receiptdate > l_commitdate;
+            $j1 = select s_name, l_suppkey, l_orderkey from $l as l1
+            join $s as supplier
+            on l1.l_suppkey = supplier.s_suppkey;
+            $j2 = select l1.l_orderkey as l_orderkey, l1.l_suppkey as l_suppkey, l1.s_name as s_name, l2.l_receiptdate as l_receiptdate, l2.l_commitdate as l_commitdate from $j1 as l1
+            join `/Root/lineitem` as l2
+            on l1.l_orderkey = l2.l_orderkey
+            where l2.l_suppkey <> l1.l_suppkey;
+            $j2_1 = select s_name, l1.l_suppkey as l_suppkey, l1.l_orderkey as l_orderkey from $j1 as l1
+            left semi join $j2 as l2
+            on l1.l_orderkey = l2.l_orderkey;
+            $j2_2 = select l_orderkey from $j2 where l_receiptdate > l_commitdate;
+            $j3 = select s_name, l_suppkey, l_orderkey from $j2_1 as l1
+            left only join $j2_2 as l3
+            on l1.l_orderkey = l3.l_orderkey;
+            $j4 = select s_name from $j3 as l1
+            join `/Root/orders` as orders
+            on orders.o_orderkey = l1.l_orderkey
+            where o_orderstatus = 'F';
+            select s_name,
+                count(*) as numwait from $j4
+            group by
+                s_name
+            order by
+                numwait desc,
+                s_name
+            limit 100;
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 152);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 2);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 228);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 1);
+    }
+
+    Y_UNIT_TEST_F(TpchQuery22, TKqpTasksGraphTpchFixture) {
+        const TString& queryText = R"(
+            $z0_12 = cast(0 as decimal(12,2));
+            $customers = (
+            select
+                c_acctbal,
+                c_custkey,
+                Substring(CAST(c_phone AS STRING), 0u, 2u) as cntrycode
+            from
+                `/Root/customer`
+            );
+            $c = (
+            select
+                c_acctbal,
+                c_custkey,
+                cntrycode
+            from
+                $customers
+            where
+                cntrycode = '13' or cntrycode = '31' or cntrycode = '23' or cntrycode = '29' or cntrycode = '30' or cntrycode = '18' or cntrycode = '17'
+            );
+            $avg = (
+            select
+                avg(c_acctbal) as a
+            from
+                $c
+            where
+                c_acctbal > $z0_12
+            );
+            $join1 = (
+            select
+                c.c_acctbal as c_acctbal,
+                c.c_custkey as c_custkey,
+                c.cntrycode as cntrycode
+            from
+                $c as c
+            cross join
+                $avg as a
+            where
+                c.c_acctbal > a.a
+            );
+            $join2 = (
+            select
+                j.cntrycode as cntrycode,
+                c_custkey,
+                j.c_acctbal as c_acctbal
+            from
+                $join1 as j
+            left only join
+                `/Root/orders` as o
+            on
+                o.o_custkey = j.c_custkey
+            );
+            select
+                cntrycode,
+                count(*) as numcust,
+                sum(c_acctbal) as totacctbal
+            from
+                $join2 as custsale
+            group by
+                cntrycode
+            order by
+                cntrycode;
+        )";
+
+        auto dist = BuildTasks(queryText);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 304);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 1);
+    }
+
     Y_UNIT_TEST_F(CustomQuery01, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
             $step1 = (
@@ -1439,7 +2002,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
                     l.l_partkey   AS l_partkey,
                     SUM(CAST(l.l_extendedprice AS Double) * (1.0 - CAST(l.l_discount AS Double))) AS line_revenue,
                     SUM(CAST(l.l_quantity AS Double)) AS line_qty
-                FROM `lineitem` AS l
+                FROM `/Root/lineitem` AS l
                 WHERE l.l_shipdate >= Date("1993-01-01")
                 AND l.l_shipdate <  Date("1997-01-01")
                 GROUP BY l.l_orderkey, l.l_suppkey, l.l_partkey
@@ -1453,7 +2016,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
                     SUM(s1.line_revenue) AS supp_cust_revenue,
                     COUNT(DISTINCT s1.l_orderkey) AS supp_cust_orders
                 FROM $step1 AS s1
-                INNER JOIN `orders` AS o
+                INNER JOIN `/Root/orders` AS o
                     ON s1.l_orderkey = o.o_orderkey
                 GROUP BY s1.l_suppkey, s1.l_partkey, o.o_custkey
             );
@@ -1466,7 +2029,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
                     SUM(CAST(s2.supp_cust_orders AS Int64)) AS supp_nation_orders,
                     COUNT(DISTINCT c.c_custkey)    AS unique_customers
                 FROM $step2 AS s2
-                INNER JOIN `customer` AS c
+                INNER JOIN `/Root/customer` AS c
                     ON s2.o_custkey = c.c_custkey
                 GROUP BY s2.l_suppkey, c.c_nationkey
             );
@@ -1479,7 +2042,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
                     SUM(CAST(s3.unique_customers AS Int64)) AS bilateral_customers,
                     COUNT(DISTINCT s.s_suppkey)        AS bilateral_suppliers
                 FROM $step3 AS s3
-                INNER JOIN `supplier` AS s
+                INNER JOIN `/Root/supplier` AS s
                     ON s3.l_suppkey = s.s_suppkey
                 GROUP BY s.s_nationkey, s3.cust_nationkey
             );
@@ -1518,13 +2081,13 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
                 ON s4.supp_nationkey = s5s.supp_nationkey
             INNER JOIN $step5_cust AS s5c
                 ON s4.cust_nationkey = s5c.cust_nationkey
-            INNER JOIN `nation` AS sn
+            INNER JOIN `/Root/nation` AS sn
                 ON s4.supp_nationkey = sn.n_nationkey
-            INNER JOIN `region` AS sr
+            INNER JOIN `/Root/region` AS sr
                 ON sn.n_regionkey = sr.r_regionkey
-            INNER JOIN `nation` AS cn
+            INNER JOIN `/Root/nation` AS cn
                 ON s4.cust_nationkey = cn.n_nationkey
-            INNER JOIN `region` AS cr
+            INNER JOIN `/Root/region` AS cr
                 ON cn.n_regionkey = cr.r_regionkey
             ORDER BY s4.bilateral_revenue DESC
             LIMIT 100;

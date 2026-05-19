@@ -68,7 +68,7 @@ class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
  */
 class TInlineJoinFiltersRule : public ISimplifiedRule {
   public:
-    TInlineJoinFiltersRule() : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents) {}
+    TInlineJoinFiltersRule() : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

@@ -167,12 +167,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
             childAliases.push_back("#fake_alias" + std::to_string(fakeAliasId++));
         }
 
-        TVector<TInfoUnit> mappedKeyColumns;
-        for (const auto& col : child->Props.Metadata->KeyColumns) {
-            mappedKeyColumns.push_back(cboTree->TreeRoot->Props.Metadata->MapColumn(col));
-        }
-
-        auto stats = BuildOptimizerStatistics(child->Props, true, mappedKeyColumns);
+        auto stats = BuildOptimizerStatistics(child->Props, true);
         auto relNode = std::make_shared<TRBORelOptimizerNode>(childAliases, stats, child);
         rels.push_back(relNode);
         nodeMap.insert({child.get(), relNode});

@@ -1522,10 +1522,23 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 hints = *tmp;
             }
 
+            TNodePtr watermarkLambda;
+            if (auto it = hints.find("watermark"); it != hints.end()) {
+                auto& exprs = it->second;
+                YQL_ENSURE(exprs.size() == 1);
+                watermarkLambda = std::move(exprs[0]);
+                hints.erase(it);
+            }
+
             if (hints || contextHints) {
                 if (!ret->SetTableHints(Ctx_, Ctx_.Pos(), hints, contextHints)) {
                     return false;
                 }
+            }
+
+            if (watermarkLambda) {
+                auto pos = watermarkLambda->GetPos();
+                ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda));
             }
 
             result.Source = ret;
@@ -5110,7 +5123,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
 
         winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
-        if (Ctx_.AnsiCurrentRow) {
+        if (Ctx_.AnsiCurrentRow && ordered) {
             // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             winSpecPtr->Frame->FrameType = EFrameType::FrameByRange;
             winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;

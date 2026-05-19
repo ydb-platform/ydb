@@ -7,18 +7,166 @@ import rich
 import rich.traceback
 import rich.rule
 import traceback
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from ydb.tools.mnc.lib import output as _output
+
+
+# ---------------------------------------------------------------------------
+# Backend abstraction (3.1)
+# ---------------------------------------------------------------------------
+
+class ProgressBackend(ABC):
+    """Protocol for progress rendering backends."""
+
+    @abstractmethod
+    def add_task(self, description: str, total: Optional[float] = None, **kwargs) -> TaskID:
+        pass
+
+    @abstractmethod
+    def update(self, task_id: TaskID, *, advance: Optional[float] = None,
+               completed: Optional[float] = None, total: Optional[float] = None,
+               visible: Optional[bool] = None, **kwargs) -> None:
+        pass
+
+    @abstractmethod
+    def get_task_total(self, task_id: TaskID) -> Optional[float]:
+        pass
+
+    @abstractmethod
+    def get_task_completed(self, task_id: TaskID) -> float:
+        pass
+
+    @abstractmethod
+    def console(self) -> "rich.console.Console":
+        pass
+
+    @abstractmethod
+    def __enter__(self) -> "ProgressBackend":
+        pass
+
+    @abstractmethod
+    def __exit__(self, exc_type, exc_value, tb) -> None:
+        pass
+
+
+class RichProgressBackend(ProgressBackend):
+    """Backend that wraps rich.progress.Progress."""
+
+    def __init__(self, *args, **kwargs):
+        if not args:
+            args = (
+                rich.progress.TextColumn("[progress.description]{task.description}"),
+                rich.progress.SpinnerColumn(),
+                rich.progress.BarColumn(),
+                rich.progress.TaskProgressColumn(),
+                rich.progress.TimeElapsedColumn(),
+                rich.progress.TimeRemainingColumn(compact=True),
+            )
+        self._progress = Progress(*args, **kwargs)
+
+    def add_task(self, description: str, total: Optional[float] = None, **kwargs) -> TaskID:
+        return self._progress.add_task(description, total=total, **kwargs)
+
+    def update(self, task_id: TaskID, *, advance: Optional[float] = None,
+               completed: Optional[float] = None, total: Optional[float] = None,
+               visible: Optional[bool] = None, **kwargs) -> None:
+        update_kwargs = {}
+        if advance is not None:
+            update_kwargs['advance'] = advance
+        if completed is not None:
+            update_kwargs['completed'] = completed
+        if total is not None:
+            update_kwargs['total'] = total
+        if visible is not None:
+            update_kwargs['visible'] = visible
+        if update_kwargs:
+            self._progress.update(task_id, **update_kwargs)
+
+    def get_task_total(self, task_id: TaskID) -> Optional[float]:
+        return self._progress.tasks[task_id].total
+
+    def get_task_completed(self, task_id: TaskID) -> float:
+        return float(self._progress.tasks[task_id].completed or 0)
+
+    def console(self) -> "rich.console.Console":
+        return self._progress.console
+
+    def __enter__(self) -> "RichProgressBackend":
+        self._progress.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb) -> None:
+        self._progress.__exit__(exc_type, exc_value, tb)
+
+
+class PlainBackend(ProgressBackend):
+    """Backend for verbose mode: prints steps sequentially without ANSI redraws."""
+
+    def __init__(self, console: "rich.console.Console" = None):
+        import rich.console as _rc
+        self._console = console or _rc.Console()
+        self._tasks: Dict[int, Dict[str, Any]] = {}
+        self._next_id: int = 0
+
+    def add_task(self, description: str, total: Optional[float] = None, **kwargs) -> TaskID:
+        task_id = self._next_id
+        self._next_id += 1
+        self._tasks[task_id] = {"description": description, "total": total, "completed": 0.0}
+        # Print task start only if it is visible (not hidden by parent=... indentation tricks)
+        if kwargs.get("visible", True) is not False:
+            self._console.log(f"→ {description}")
+        return task_id
+
+    def update(self, task_id: TaskID, *, advance: Optional[float] = None,
+               completed: Optional[float] = None, total: Optional[float] = None,
+               visible: Optional[bool] = None, **kwargs) -> None:
+        if task_id not in self._tasks:
+            return
+        task = self._tasks[task_id]
+        if total is not None:
+            task["total"] = total
+        if advance is not None:
+            task["completed"] = task["completed"] + advance
+        if completed is not None:
+            task["completed"] = completed
+
+    def get_task_total(self, task_id: TaskID) -> Optional[float]:
+        if task_id not in self._tasks:
+            return None
+        return self._tasks[task_id]["total"]
+
+    def get_task_completed(self, task_id: TaskID) -> float:
+        if task_id not in self._tasks:
+            return 0.0
+        return float(self._tasks[task_id]["completed"] or 0)
+
+    def console(self) -> "rich.console.Console":
+        return self._console
+
+    def __enter__(self) -> "PlainBackend":
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb) -> None:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# TaskNode
+# ---------------------------------------------------------------------------
 
 class TaskNode:
-    def __init__(self, progress: 'MyProgress', task_id: TaskID, parent: Optional['TaskNode'] = None, add_level: int = 0, is_cutted: bool = False):
+    def __init__(self, progress: 'MyProgress', task_id: TaskID, title: str, parent: Optional['TaskNode'] = None, add_level: int = 0, is_cutted: bool = False):
         self._progress = progress
         self.task_id: TaskID = task_id
         self.parent: Optional['TaskNode'] = parent
         self.children: List['TaskNode'] = []
         self.add_level: int = add_level
         self._is_cutted: bool = is_cutted
+        self._title: str = title
+        self.step_id: str = str(uuid.uuid4())
 
     def add_child(self, child: 'TaskNode') -> None:
         self.children.append(child)
@@ -28,16 +176,13 @@ class TaskNode:
 
     async def update(self, advance: Optional[float] = None, *, completed: Optional[float] = None, total: Optional[float] = None, visible: bool = None) -> None:
         async with self._progress._mutex:
-            if advance is not None or visible is not None:
-                self._progress._progress.update(self.task_id, advance=advance, visible=visible)
-            else:
-                kwargs = {}
-                if completed is not None:
-                    kwargs['completed'] = completed
-                if total is not None:
-                    kwargs['total'] = total
-                if kwargs:
-                    self._progress._progress.update(self.task_id, **kwargs)
+            self._progress._backend.update(
+                self.task_id,
+                advance=advance,
+                completed=completed,
+                total=total,
+                visible=visible,
+            )
             await self._progress._recalculate_upwards(self)
 
     def level(self) -> int:
@@ -90,28 +235,33 @@ class DummyTaskNode:
         return True
 
 
+# ---------------------------------------------------------------------------
+# MyProgress (3.3: selects backend based on verbosity mode)
+# ---------------------------------------------------------------------------
+
 class MyProgress:
-    def __init__(self, *args, **kwargs):
-        if not args:
-            args = (
-                rich.progress.TextColumn("[progress.description]{task.description}"),
-                rich.progress.SpinnerColumn(),
-                rich.progress.BarColumn(),
-                rich.progress.TaskProgressColumn(),
-                rich.progress.TimeElapsedColumn(),
-                rich.progress.TimeRemainingColumn(compact=True),
-            )
-        self._progress = Progress(*args, **kwargs)
+    def __init__(self, *args, backend: ProgressBackend = None, **kwargs):
+        override_backend = _output.get_progress_backend_override()
+        if backend is not None:
+            self._backend = backend
+        elif override_backend is not None:
+            self._backend = override_backend
+        elif _output.get_mode() == _output.VerbosityMode.VERBOSE:
+            self._backend = PlainBackend()
+        else:
+            self._backend = RichProgressBackend(*args, **kwargs)
+
         self._nodes: Dict[TaskID, TaskNode] = {}
         self._mutex = asyncio.Lock()
 
     def __enter__(self):
-        # Enter underlying Rich progress context but return this wrapper
-        self._progress.__enter__()
+        self._backend.__enter__()
+        _output._set_active_progress(self)
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        return self._progress.__exit__(exc_type, exc_value, traceback)
+    def __exit__(self, exc_type, exc_value, tb):
+        _output._set_active_progress(None)
+        return self._backend.__exit__(exc_type, exc_value, tb)
 
     async def add_task(self, title: str, *args, is_hidden: bool = False, add_level: int = 0, is_cutted: bool = False, **kwargs) -> TaskNode:
         if is_hidden:
@@ -125,17 +275,16 @@ class MyProgress:
                 parent_id = parent.task_id
             else:
                 prefix = '  ' * add_level
-            task_id = self._progress.add_task(prefix + title, *args, **kwargs, parent=parent_id)
-            node = TaskNode(self, task_id, parent, add_level=add_level, is_cutted=is_cutted)
+            task_id = self._backend.add_task(prefix + title, *args, parent=parent_id, **kwargs)
+            node = TaskNode(self, task_id, title, parent, add_level=add_level, is_cutted=is_cutted)
             self._nodes[task_id] = node
             if parent is not None:
                 parent.add_child(node)
-                # Ensure parent totals reflect children from the start
                 await self._recalculate_upwards(node)
             return node
 
-    def console(self) -> rich.console.Console:
-        return self._progress.console
+    def console(self) -> "rich.console.Console":
+        return self._backend.console()
 
     # Internal helpers
     async def _recalculate_upwards(self, node: TaskNode) -> None:
@@ -144,14 +293,11 @@ class MyProgress:
             total_sum = 0.0
             completed_sum = 0.0
             for child in current.children:
-                task = self._progress.tasks[child.task_id]
-                # Rich uses None for indeterminate totals; treat None as 0 here
-                child_total = float(task.total or 0)
-                child_completed = float(task.completed or 0)
+                child_total = float(self._backend.get_task_total(child.task_id) or 0)
+                child_completed = self._backend.get_task_completed(child.task_id)
                 total_sum += child_total
                 completed_sum += child_completed
-            # If parent had no explicit total and there are children, set it to sum
-            self._progress.update(current.task_id, total=total_sum or None, completed=completed_sum)
+            self._backend.update(current.task_id, total=total_sum or None, completed=completed_sum)
             current = current.parent
 
     def get_hidden_task(self, add_level: int = 0) -> HiddenTaskNode:
@@ -206,20 +352,17 @@ class MyTraceback:
         self.word_wrap = word_wrap
         self.extra_lines = extra_lines
         self.use_panel = use_panel
-        # Common textual formats if needed elsewhere
         self.traceback = traceback.format_exception(
             type(exception), exception, exception.__traceback__
         )
         self.traceback_str = "".join(self.traceback)
 
-        # Determine sensible search roots to resolve relative filenames
         default_roots: List[Path] = []
         try:
             default_roots.append(Path.cwd())
         except Exception:
             pass
         try:
-            # Repository root (e.g. /home/user/ydb)
             repo_root = Path(__file__).resolve().parents[3]
             default_roots.append(repo_root)
         except Exception:
@@ -229,24 +372,20 @@ class MyTraceback:
             self.search_roots.extend([Path(p) for p in search_roots])
         self.search_roots.extend([p for p in default_roots if p.exists()])
 
-        # Precompute renderable for convenience
         self._renderable = self._build_renderable()
 
     def _resolve_filename(self, filename: str) -> Optional[Path]:
         path = Path(filename)
         if path.is_absolute() and path.exists():
             return path
-        # Try as-is relative to each search root
         for root in self.search_roots:
             candidate = (root / filename).resolve()
             if candidate.exists():
                 return candidate
-        # Fallback: try matching by tail (file name) within roots (first match wins)
         try:
             name = path.name
             for root in self.search_roots:
                 for cand in root.rglob(name):
-                    # Prefer paths that end with the same relative suffix if possible
                     try:
                         if str(cand).endswith(str(path)):
                             return cand
@@ -257,7 +396,7 @@ class MyTraceback:
             pass
         return None
 
-    def _frame_renderable(self, filename: str, lineno: int, name: str, id: int) -> rich.console.RenderableType:
+    def _frame_renderable(self, filename: str, lineno: int, name: str, id: int) -> "rich.console.RenderableType":
         resolved = self._resolve_filename(filename)
         header = rich.text.Text.assemble(
             (str(resolved or filename), "pygments.string"),
@@ -270,9 +409,8 @@ class MyTraceback:
         header = f"  [bold white]{id}.[/] [yellow]{filename}:[medium_purple1]{lineno} [white]in [dark_cyan bold]{name}"
         return header
 
-    def _build_renderable(self) -> rich.console.RenderableType:
-        # Walk the traceback to preserve locals if needed and to get filenames/lines
-        frames: List[tuple[str, int, str]] = []
+    def _build_renderable(self) -> "rich.console.RenderableType":
+        frames: List[tuple] = []
         tb = self.exception.__traceback__
         while tb is not None:
             frame = tb.tb_frame
@@ -280,8 +418,7 @@ class MyTraceback:
             frames.append((code.co_filename, tb.tb_lineno, code.co_name))
             tb = tb.tb_next
 
-        items: List[rich.console.RenderableType] = []
-        # Header similar to standard traceback
+        items: List["rich.console.RenderableType"] = []
         for id, (filename, lineno, name) in enumerate(frames):
             items.append(self._frame_renderable(filename, lineno, name, id + 1))
 
@@ -308,10 +445,9 @@ class MyTraceback:
             )
 
     @property
-    def renderable(self) -> rich.console.RenderableType:
+    def renderable(self) -> "rich.console.RenderableType":
         return self._renderable
 
-    # Allow printing the instance directly via rich Console
     def __rich_console__(self, console: "rich.console.Console", options: "rich.console.ConsoleOptions"):
         yield self._renderable
 
@@ -338,6 +474,8 @@ class TaskResult:
             return self.level != TaskResultLevel.ERROR
         if self.exception is not None:
             return False
+        if self.subresults is None:
+            return True
         return all(map(bool, self.subresults))
 
     def __str__(self):
@@ -364,7 +502,15 @@ class TaskResult:
                     strs.append('MISSING SUBRESULT')
         return '\n'.join(strs)
 
-    def to_rich_panel(self, show_all=False, title_prefix=None) -> rich.panel.Panel:
+    def to_rich_panel(self, show_all=False, title_prefix=None, verbose=False) -> "rich.panel.Panel":
+        """Render result as a rich Panel.
+
+        verbose=True: show all steps (including OK), expand single-child chains,
+        show more traceback context.
+        """
+        if verbose:
+            show_all = True
+
         color = 'dark_green'
         status = 'OK'
         if self.level == TaskResultLevel.OK:
@@ -386,7 +532,10 @@ class TaskResult:
         elif self.message is not None and isinstance(self.message, rich.console.RenderableType):
             items.append(self.message)
         if self.exception is not None:
-            tb_rich = MyTraceback(self.exception, use_panel=False).renderable
+            tb_kwargs = {}
+            if verbose:
+                tb_kwargs = {"show_locals": True, "context_lines": 5}
+            tb_rich = MyTraceback(self.exception, use_panel=False, **tb_kwargs).renderable
             items.append(tb_rich)
 
         subresults_count = 0
@@ -398,14 +547,15 @@ class TaskResult:
                         continue
                     subresult_for_print = subresult
                     subresults_count += 1
-                    items.append(subresult.to_rich_panel(show_all=show_all))
+                    items.append(subresult.to_rich_panel(show_all=show_all, verbose=verbose))
 
-        if subresults_count == 1:
+        # In verbose mode, don't collapse single-child chains — show full hierarchy
+        if subresults_count == 1 and not verbose:
             if title_prefix is not None:
                 title_prefix = f"{title_prefix} [yellow bold]/[/] {self.step_title}"
             else:
                 title_prefix = self.step_title
-            return subresult_for_print.to_rich_panel(show_all=show_all, title_prefix=title_prefix)
+            return subresult_for_print.to_rich_panel(show_all=show_all, title_prefix=title_prefix, verbose=verbose)
 
         if items:
             group = rich.console.Group(*items)
@@ -614,8 +764,19 @@ class StepGroup:
                     semaphore = None
                 wrap_step = self._make_wrap_step(semaphore, inner_subtasks)
                 results = await asyncio.gather(*[wrap_step(step) for step in self.steps], return_exceptions=True)
+
+                # Wrap bare exceptions in TaskResult to avoid bool(Exception) == True
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        step = self.steps[i]
+                        results[i] = TaskResult(
+                            level=TaskResultLevel.ERROR,
+                            step_title=f"{self.title}/{step.title}",
+                            exception=result
+                        )
+
                 if not all(map(bool, results)):
-                    return TaskResult(level=TaskResultLevel.ERROR, step_title=self.title, subresults=results)
+                    return TaskResult(level=TaskResultLevel.ERROR, step_title=self.title, subresults=list(results))
 
             if not self.show_tasks:
                 for subtask in inner_subtasks:

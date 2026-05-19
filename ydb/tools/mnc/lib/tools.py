@@ -1,15 +1,18 @@
 import asyncio
 import asyncio.subprocess
+import fcntl
 import os.path
 import logging
 import os
 import pty
 import re
+import struct
+import termios
 import rich.text
 import rich.console
 
 
-from ydb.tools.mnc.lib import deploy_ctx, progress, term
+from ydb.tools.mnc.lib import deploy_ctx, logs, output, progress, term
 
 
 logger = logging.getLogger(__name__)
@@ -81,24 +84,62 @@ ya_make_skip_words = [
 ]
 
 
+def _get_tui_log_window_width(step_id: str = None) -> int:
+    active_progress = output.get_active_progress()
+    active_backend = getattr(active_progress, '_backend', None)
+    if active_backend is None:
+        return None
+    if hasattr(active_backend, 'log_payload_width'):
+        return active_backend.log_payload_width(step_id)
+    if not hasattr(active_backend, 'log_window_width'):
+        return None
+    return active_backend.log_window_width()
+
+
+def _set_pty_window_size(fd: int, *, width: int = None, height: int = None) -> None:
+    if width is None and height is None:
+        return
+    height = max(int(height or 24), 1)
+    width = max(int(width or 80), 1)
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', height, width, 0, 0))
+
+
 async def runtime_action(action, task: progress.TaskNode = None):
+    step_id = getattr(task, 'step_id', None)
     master_fd, slave_fd = pty.openpty()
+    _set_pty_window_size(slave_fd, width=_get_tui_log_window_width(step_id))
 
     proc = None
     fl = 0.0
+    verbose = output.get_mode() == output.VerbosityMode.VERBOSE
+    step_title = getattr(task, '_title', None) or 'runtime_action'
+    prefix = f"[{step_id}] " if step_id else ""
+    saved_output = []
+    all_output = []
+    log_path, log_file = logs.open_log_file(step_title, step_id)
+
     try:
         proc = await action(stream=slave_fd)
         os.close(slave_fd)
-        saved_output = []
         while True:
             data = await asyncio.to_thread(os.read, master_fd, 4096)
             if not data:
                 break
             data = data.decode(errors="ignore")
+            all_output.append(data)
+            active_progress = output.get_active_progress()
+            active_backend = getattr(active_progress, '_backend', None)
+            if active_backend is not None and hasattr(active_backend, 'append_log'):
+                active_backend.append_log(data, step_id=step_id)
+            if log_file is not None:
+                log_file.write(data)
+                log_file.flush()
             match = re.search(r'[0-9]+(?:\.[0-9]+)?%', data)
             if match:
                 fl = float(match.group(0).replace('%', ''))
                 await task.update(completed=min(fl, 99.0))
+                if verbose:
+                    output.get_console().out(f"{prefix}{data.rstrip()}")
             else:
                 skip = False
                 for word in ya_make_skip_words:
@@ -106,10 +147,14 @@ async def runtime_action(action, task: progress.TaskNode = None):
                         skip = True
                         break
                 if not skip:
-                    saved_output.append(rich.text.Text.from_ansi(data))
+                    if verbose:
+                        output.get_console().out(f"{prefix}{data.rstrip()}")
+                    saved_output.append(data)
     except OSError:
         pass
     finally:
+        if log_file is not None:
+            log_file.close()
         os.close(master_fd)
         if proc is not None and proc.returncode is not None:
             try:
@@ -117,11 +162,21 @@ async def runtime_action(action, task: progress.TaskNode = None):
             except ProcessLookupError:
                 pass
     result = await term.Result.from_async_process(proc)
+    result.log_path = log_path if log_file is not None else None
     if result:
         await task.update(completed=100)
         return True
-    else:
-        return progress.TaskResult(message=rich.console.Group(*saved_output, f"[red]Return code: {result.returncode}[/]"), level=progress.TaskResultLevel.ERROR)
+    tail_text, total_lines = logs.tail_text(saved_output or all_output, max_lines=logs.DEFAULT_TAIL_LINES)
+    tail_renderable = []
+    if tail_text:
+        tail_renderable.append(rich.text.Text.from_ansi(tail_text))
+    tail_renderable.append(f"[red]Return code: {result.returncode}[/]")
+    if result.log_path:
+        omitted = max(total_lines - logs.DEFAULT_TAIL_LINES, 0)
+        if omitted > 0:
+            tail_renderable.append(f"[yellow]Output truncated:[/] omitted {omitted} line(s)")
+        tail_renderable.append(f"[bold]Full log:[/] {result.log_path}")
+    return progress.TaskResult(message=rich.console.Group(*tail_renderable), level=progress.TaskResultLevel.ERROR)
 
 
 def make_runtime_build_action(project: str, build_args: list[str], task: progress.TaskNode = None):

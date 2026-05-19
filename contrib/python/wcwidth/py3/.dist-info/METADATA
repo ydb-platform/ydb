@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.6.0
+Version: 0.7.0
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -27,6 +27,7 @@ Classifier: Topic :: Terminals
 Classifier: Typing :: Typed
 Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
+
 
 |pypi_downloads| |codecov| |license|
 
@@ -65,33 +66,42 @@ Some examples of **incorrect results**:
 Solution
 --------
 
-The lowest-level functions in this library are the POSIX.1-2001 and POSIX.1-2008 `wcwidth(3)`_ and
-`wcswidth(3)`_, which this library precisely copies by interface as `wcwidth()`_ and `wcswidth()`_.
-These functions return -1 when C0 and C1 control codes are present.
+The lowest-level functions in this library are derived from POSIX.1-2001 and POSIX.1-2008
+`wcwidth(3)`_ and `wcswidth(3)`_, which this library precisely copies by interface as `wcwidth()`_
+and `wcswidth()`_.  These functions return -1 when C0 and C1 control codes are present.
 
 An easy-to-use `width()`_ function is provided as a wrapper of `wcswidth()`_ that is also capable of
 measuring most terminal control codes and sequences, like colors, bold, tabstops, and horizontal
 cursor movement.
 
-Text-justification is solved by the grapheme and sequence-aware functions `ljust()`_,
-`rjust()`_, `center()`_, and `wrap()`_, serving as drop-in replacements to python standard functions
-of the same names.
+Text-justification is solved by the sequence-aware functions `ljust()`_, `rjust()`_, `center()`_,
+and the grapheme-aware function `wrap()`_, serving as drop-in replacements to python standard
+functions.
+
+The `clip()`_ function extracts substrings by their displayed column positions, and
+`strip_sequences()`_ removes terminal escape sequences from text altogether.
 
 The iterator functions `iter_graphemes()`_ and `iter_sequences()`_ allow for careful navigation of
-grapheme and terminal control sequence boundaries.  `iter_graphemes_reverse()`_, and
-`grapheme_boundary_before()`_ are useful for editing and searching of complex unicode.  The
-`clip()`_ function extracts substrings by display column positions, and `strip_sequences()`_ removes
-terminal escape sequences from text altogether.
+grapheme and terminal control sequence boundaries as required by editors or REPLs with cursor
+control.  `iter_graphemes_reverse()`_, and `grapheme_boundary_before()`_ are often necessary for
+backward cursor control over complex unicode.
 
 Discrepancies
 -------------
 
-You may find that support *varies* for complex unicode sequences or codepoints.
+You may find that support *varies* for complex unicode sequences or codepoints. This library may be
+considered to presume the terminal is enabled for DEC Private Mode 2027 ("Grapheme Clustering"), but
+the specification does not fully describe varying unicode versions, feature levels, or details of
+specific language support.  This library does *not* support any alternate "legacy width"
+measurement.
 
-A companion utility, `jquast/ucs-detect`_ was authored to gather and publish the results of Wide
-character, language/grapheme clustering and complex script support, emojis and zero-width joiner,
-variations, and regional indicator (flags) as a `General Tabulated Summary`_ by terminal emulator
-software and version.
+See `Grapheme Clusters and Terminal Emulators`_ and `terminal-unicode-core.tex`_, and `State of
+Terminal Emulators in 2025`_ for more details on Mode 2027 and unicode-aware terminals.
+
+The `jquast/ucs-detect`_ utility is used to gather and publish the results of compliance to our
+standard for Wide character, Languages, grapheme clustering, complex or combining scripts, emojis,
+zero-width joiner, variations, and regional indicator (flags) as a `General
+Tabulated Summary`_ by terminal emulator software and version.
 
 ========
 Overview
@@ -148,30 +158,61 @@ Use function `width()`_ to measure a string with improved handling of ``control_
     >>> # same support as wcswidth(), eg. regional indicator flag:
     >>> wcwidth.width('\U0001F1FF\U0001F1FC')
     2
-    >>> # but also supports SGR colored text, 'WARN', followed by SGR reset
+    >>> # but also supports sequences, like SGR colored text, "WARN", followed by reset
     >>> wcwidth.width('\x1b[38;2;255;150;100mWARN\x1b[0m')
     4
-    >>> # tabs,
+    >>> # tabs are measured as though the string begins at a tabstop,
     >>> wcwidth.width('\t', tabsize=4)
     4
-    >>> # or, tab and all other control characters can be ignored
-    >>> wcwidth.width('\t', control_codes='ignore')
+    >>> # or, all control characters can be ignored (including tab)
+    >>> wcwidth.width('\t\n\a\r', control_codes='ignore')
     0
-    >>> # "vertical" control characters are ignored
-    >>> wcwidth.width('\n')
-    0
-    >>> # as well as sequences with "indeterminate" effects like Home + Clear
+    >>> # sequences with "indeterminate" effects like Home + Clear are zero-width
     >>> wcwidth.width('\x1b[H\x1b[2J')
     0
+    >>> # horizontal cursor movements are parsed,
+    >>> wcwidth.width('hello\b\b\b\b\bworld')
+    5
+    >>> wcwidth.width('hello\x1b[5Dworld')
+    5
+    >>> # or ignored,
+    >>> wcwidth.width('hello\x1b[5Dworld', control_codes='ignore')
+    10
+    >>> # Measure width of text using kitty text sizing protocol (OSC 66),
+    >>> width('\x1b]66;w=2;XY\x07')
+    2
+    >>> # Scaled text sizing: each grapheme occupies 'scale' cells
+    >>> width('\x1b]66;s=2;ABC\x07')
+    6
+
+Use ``control_codes='ignore'`` when the input is known not to contain any control characters or
+terminal sequences for slightly improved performance. Note that TAB (``'\t'``) is a control
+character and is also ignored, you may want to use `str.expandtabs()`_, first.
+
+Use ``control_codes='strict'`` when input is known to contain some control sequences, such as
+SGR color, bold, hyperlinks and cursor movement. Any sequence that cannot be accurately parsed,
+such as clearing the screen, vertical, or absolute cursor movement will raise ``ValueError``:
+
+.. code-block:: python
+
     >>> # or, raise ValueError for "indeterminate" effects using control_codes='strict'
     >>> wcwidth.width('\n', control_codes='strict')
     Traceback (most recent call last):
     ...
     ValueError: Vertical movement character 0xa at position 0
 
-Use ``control_codes='ignore'`` when the input is known not to contain any control characters or
-terminal sequences for slightly improved performance. Note that TAB (``'\t'``) is a control
-character and is also ignored, you may want to use `str.expandtabs()`_, first.
+
+    >>> wcwidth.width('\x1b[H\x1b[2J', control_codes='strict')
+    Traceback (most recent call last):
+    ...
+    ValueError: Indeterminate cursor sequence at position 0, '\x1b[H'
+
+
+    >>> # cursor left movement beyond string start raises in strict mode,
+    >>> wcwidth.width('a\x1b[5Da', control_codes='strict')
+    Traceback (most recent call last):
+    ...
+    ValueError: Cursor left movement at position 1 would move 5 cells left from column 1, exceeding string start
 
 iter_sequences()
 ----------------
@@ -290,9 +331,29 @@ Use `clip()`_ to extract a substring by column positions, preserving terminal se
     >>> clip('\x1b[1;31mHello world\x1b[0m', 6, 11)
     '\x1b[1;31mworld\x1b[0m'
 
-    >>> # Disable SGR propagation to preserve original sequences as-is
-    >>> clip('\x1b[31m中文\x1b[0m', 0, 3, propagate_sgr=False)
-    '\x1b[31m中 \x1b[0m'
+    >>> # Disable SGR propagation to preserve sequence order outside of clip boundary
+    >>> clip('\x1b[31m中文\x1b[32m', 0, 3, propagate_sgr=False)
+    '\x1b[31m中 \x1b[32m'
+
+    >>> # Cursor-left overwrites previous text (painter's algorithm)
+    >>> clip('hello\x1b[2DXY', 0, 5)
+    'helXY'
+    >>> # Carriage return resets to column 0, overwriting earlier cells
+    >>> clip('abc\rXY', 0, 5)
+    'XYc'
+
+    >>> # even OSC 8 hyperlink text may be clipped, 'Click This link' -> 'is link' !
+    >>> clip('\x1b]8;;http://example.com\x07Click This link\x1b]8;;\x07', 8, 15)
+    '\x1b]8;;http://example.com\x07is link\x1b]8;;\x07'
+
+    >>> # and OSC 66 kitty text sizing, supporting width and scale, 'Look' -> '...ook'
+    >>> clip('\x1b]66;w=4:s=4;Look\x07', 1, 16, fillchar='.')
+    '...\x1b]66;s=4:w=3;ook\x07'
+
+Use ``overtyping=False`` when the input is known not to contain any cursor movement characters
+(``\b``, ``\r``, ``CSI C``, ``CSI D``, ``CSI G``) for improved performance.  When
+``overtyping=None`` (default), a slower "Painter's algorithm" may be used after testing for the
+presence of these characters. ``overtyping`` has no effect when ``control_codes='ignore'``.
 
 strip_sequences()
 -----------------
@@ -336,7 +397,7 @@ mode is to display an ambiguous character surrounded by a pair of Cursor Positio
 queries with a terminal in cooked or raw mode, and to parse the responses for their ``(y, x)``
 locations and measure the difference ``x``.
 
-This code should also be careful check whether it is attached to a terminal and be careful of
+This code should also be careful to check whether it is attached to a terminal and be careful of
 possible timeout, slow network, or non-response when working with "dumb terminals" like a CI build.
 
 `jquast/blessed`_ library provides such a helping `Terminal.detect_ambiguous_width()`_ method:
@@ -429,8 +490,17 @@ This library is used in:
 - `jquast/blessed`_: a thin, practical wrapper around terminal capabilities in
   Python.
 
+- `jquast/telix`_:  A Modern telnet client especially designed for BBSs and MUDs.
+
 - `prompt-toolkit/python-prompt-toolkit`_: a Library for building powerful
   interactive command lines in Python.
+
+- `urwid/urwid`_: Console user interface library for Python
+
+- `prettytable/prettytable`_:  Display tabular data in a visually appealing ASCII table format
+
+- `leviathan0992/Pylsy`_:  Pylsy is a simple python library draw tables in the Terminal. Just two
+  lines of code.
 
 - `dbcli/pgcli`_: Postgres CLI with autocompletion and syntax highlighting.
 
@@ -448,8 +518,8 @@ This library is used in:
 - `nbedos/termtosvg`_: Terminal recorder that renders sessions as SVG
   animations.
 
-- `peterbrittain/asciimatics`_: Package to help people create full-screen text
-  UIs.
+- `peterbrittain/asciimatics`_: A cross platform package to do curses-like operations, plus higher
+  level APIs and widgets to create text UIs and ASCII art animations
 
 - `python-cmd2/cmd2`_: A tool for building interactive command line apps
 
@@ -469,6 +539,10 @@ Other Languages
 There are similar implementations of the `wcwidth()`_ and `wcswidth()`_ functions in other
 languages.
 
+- `contour-terminal/libunicode`_: C++20
+- `ridiculousfish/widecharwidth`_: Python
+- `termux/wcwidth`_: C
+- `powerman/wcwidth-icons`_: C
 - `timoxley/wcwidth`_: JavaScript
 - `janlelis/unicode-display_width`_: Ruby
 - `alecrabbit/php-wcwidth`_: PHP
@@ -478,6 +552,9 @@ languages.
 - `grepsuzette/wcwidth`_: Haxe
 - `aperezdc/lua-wcwidth`_: Lua
 - `joachimschmidt557/zig-wcwidth`_: Zig
+- `mycoboco/wcwidth.js`_: JavaScript
+- `ainame/swift-displaywidth`_: Swift
+- `pmonks/clj-wcwidth`_: Clojure
 - `fumiyas/wcwidth-cjk`_: `LD_PRELOAD` override
 - `joshuarubin/wcwidth9`_: Unicode version 9 in C
 - `spectreconsole/wcwidth`_: C#
@@ -485,6 +562,15 @@ languages.
 =======
 History
 =======
+
+0.7.0 *2026-05-02*
+  * **New** support for `kitty text sizing protocol`_ (OSC 66) in `width()`_ and `clip()`_.
+  * **New** `clip()`_ parameter ``control_codes='parse'``, ``'ignore'``, and ``'strict'``. `clip()`_
+    is now able to clip OSC 8 hyperlinks and OSC 66 text sizing sequences.
+  * **Improved** `clip()`_ and `width()`_ to support horizontal cursor sequences (``cub``, ``cuf``,
+    ``hpa``). Cursor-left (``cub``) or backspace (``\b``) now overwrites text.  ``column_address``
+    (``hpa``) and carriage return (``\r``) are now parsed, and more values conditionally raise
+    ``ValueError`` when ``control_codes='strict'``.
 
 0.6.0 *2026-02-06*
   * **New** Parameters ``expand_tabs``, ``replace_whitespace``, ``fix_sentence_endings``,
@@ -711,6 +797,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`Issue #155`: https://github.com/jquast/wcwidth/issues/155
 .. _`Issue #190`: https://github.com/jquast/wcwidth/issues/190
 .. _`jquast/blessed`: https://github.com/jquast/blessed
+.. _`jquast/telix`: https://github.com/jquast/telix
 .. _`selectel/pyte`: https://github.com/selectel/pyte
 .. _`thomasballinger/curtsies`: https://github.com/thomasballinger/curtsies
 .. _`dbcli/pgcli`: https://github.com/dbcli/pgcli
@@ -735,10 +822,20 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`fumiyas/wcwidth-cjk`: https://github.com/fumiyas/wcwidth-cjk
 .. _`joshuarubin/wcwidth9`: https://github.com/joshuarubin/wcwidth9
 .. _`spectreconsole/wcwidth`: https://github.com/spectreconsole/wcwidth
+.. _`contour-terminal/libunicode`: https://github.com/contour-terminal/libunicode
+.. _`ridiculousfish/widecharwidth`: https://github.com/ridiculousfish/widecharwidth
+.. _`termux/wcwidth`: https://github.com/termux/wcwidth
+.. _`powerman/wcwidth-icons`: https://github.com/powerman/wcwidth-icons
+.. _`mycoboco/wcwidth.js`: https://github.com/mycoboco/wcwidth.js
+.. _`ainame/swift-displaywidth`: https://github.com/ainame/swift-displaywidth
+.. _`pmonks/clj-wcwidth`: https://github.com/pmonks/clj-wcwidth
 .. _`python-cmd2/cmd2`: https://github.com/python-cmd2/cmd2
 .. _`stratis-storage/stratis-cli`: https://github.com/stratis-storage/stratis-cli
 .. _`ihabunek/toot`: https://github.com/ihabunek/toot
 .. _`saulpw/visidata`: https://github.com/saulpw/visidata
+.. _`urwid/urwid`: https://github.com/urwid/urwid
+.. _`prettytable/prettytable`: https://github.com/urwid/urwid
+.. _`leviathan0992/Pylsy`: https://github.com/leviathan0992/Pylsy
 .. _`pip-tools`: https://pip-tools.readthedocs.io/
 .. _`sphinx`: https://www.sphinx-doc.org/
 .. _`textwrap.wrap()`: https://docs.python.org/3/library/textwrap.html#textwrap.wrap
@@ -760,11 +857,17 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`clip()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.clip
 .. _`strip_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.strip_sequences
 .. _`propagate_sgr()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.propagate_sgr
+.. _`TextSizing`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.TextSizing
+.. _`TextSizingParams`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.TextSizingParams
 .. _`iter_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_sequences
 .. _`list_versions()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.list_versions
 .. _`Unicode Standard Annex #29`: https://www.unicode.org/reports/tr29/
 .. _`Terminal.detect_ambiguous_width()`: https://blessed.readthedocs.io/en/latest/api/terminal.html#blessed.terminal.Terminal.detect_ambiguous_width
 .. _`parity padding`: https://jazcap53.github.io/pythons-eccentric-strcenter.html
+.. _`kitty text sizing protocol`: https://sw.kovidgoyal.net/kitty/text-sizing-protocol/
+.. _`Grapheme Clusters and Terminal Emulators`: https://mitchellh.com/writing/grapheme-clusters-in-terminals
+.. _`terminal-unicode-core.tex`: https://github.com/contour-terminal/terminal-unicode-core/blob/master/spec/terminal-unicode-core.tex
+.. _`State of Terminal Emulators in 2025`: https://www.jeffquast.com/post/state-of-terminal-emulation-2025/
 .. |pypi_downloads| image:: https://img.shields.io/pypi/dm/wcwidth.svg?logo=pypi
     :alt: Downloads
     :target: https://pypi.org/project/wcwidth/

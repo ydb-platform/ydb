@@ -89,7 +89,7 @@ public:
     void ListSystemAttributes(std::vector<TAttributeDescriptor>* descriptors) override;
     bool GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer) override;
 
-    TIntrusivePtr<TCompositeMapService> AddChild(const TString& key, IYPathServicePtr service);
+    TIntrusivePtr<TCompositeMapService> AddChild(const std::string& key, IYPathServicePtr service);
     TIntrusivePtr<TCompositeMapService> AddAttribute(TInternedAttributeKey key, NYson::TYsonCallback producer);
 
 private:

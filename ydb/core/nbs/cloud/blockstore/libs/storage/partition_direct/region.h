@@ -27,6 +27,8 @@ public:
         ui64 vChunkSize,
         NMonitoring::TDynamicCounterPtr counters);
 
+    void Run();
+
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,

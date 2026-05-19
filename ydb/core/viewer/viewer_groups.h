@@ -219,21 +219,13 @@ public:
         }
 
         ui64 GetSlotTotalSize() const {
-            if (SlotCount) {
+            if (EnforcedDynamicSlotSize) {
+                return EnforcedDynamicSlotSize;
+            } else if (SlotCount) {
                 return TotalSize / SlotCount;
             } else {
-                // temporary solution because EnforcedDynamicSlotSize is not reliable
                 return TotalSize / 16;
             }
-            //if (EnforcedDynamicSlotSize) {
-            //    return EnforcedDynamicSlotSize;
-            //}
-        }
-
-        static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 pdiskSlotSizeInUnits) {
-            const ui32 vdiskUnits = groupSizeInUnits ? groupSizeInUnits : 1;
-            const ui32 pdiskUnits = pdiskSlotSizeInUnits ? pdiskSlotSizeInUnits : 1;
-            return (vdiskUnits + pdiskUnits - 1) / pdiskUnits;
         }
 
         float GetDiskSpaceUsage() const {
@@ -260,7 +252,6 @@ public:
         bool Present = false;
         float VDiskSlotUsage = 0;
         float VDiskRawUsage = 0;
-        bool HasVDiskRawUsage = false;
         float NormalizedOccupancy = 0;
         NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlert = {};
 
@@ -483,22 +474,16 @@ public:
             ui64 allocated = 0;
             ui64 available = 0;
             ui64 limit = 0;
-            float usage = 0;
             DiskSpace = NKikimrViewer::EFlag::Grey;
             DiskSpaceUsage = 0;
             MaxPDiskUsage = 0;
             for (TVDisk& vdisk : VDisks) {
-                ui64 vdiskSlotSize = 0;
-                auto itPDisk = pDisks.empty() ? pDisks.end() : pDisks.find(vdisk.VSlotId);
+                auto itPDisk = pDisks.find(vdisk.VSlotId);
                 if (itPDisk != pDisks.end()) {
-                    const TPDisk& pdisk = itPDisk->second;
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
-                    DiskSpaceUsage = std::max(DiskSpaceUsage, pdisk.GetDiskSpaceUsage());
-                    MaxPDiskUsage = std::max(MaxPDiskUsage, pdisk.PDiskUsage);
-                    if (pdisk.EnforcedDynamicSlotSize > 0) {
-                        vdiskSlotSize = pdisk.EnforcedDynamicSlotSize * pdisk.GetOwnerWeight(GroupSizeInUnits, pdisk.SlotSizeInUnits);
-                    }
-                    ui64 slotSize = vdiskSlotSize ? vdiskSlotSize : pdisk.GetSlotTotalSize();
+                    DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
+                    MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
+                    ui64 slotSize = itPDisk->second.GetSlotTotalSize() * TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, itPDisk->second.SlotSizeInUnits);
                     ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;
                     if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
                         vdisk.AvailableSize = slotAvailable;
@@ -506,23 +491,12 @@ public:
                     limit += slotSize ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
                     available += vdisk.AvailableSize;
                 }
-                // VDiskRawUsage metric was added in 26.1.1. For older versions we
-                // calculate it in viewer. Formula matches
-                // blobstorage_pdisk_keeper.h GetVDiskRawUsage():
-                //   VDiskRawUsage = 100.0 * (used / hardLimit)
-                // Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(),
-                // EnforcedDynamicSlotSize is calculated as min(HardLimit / Weight)
-                // across all owners.
-                if (!vdisk.HasVDiskRawUsage && vdiskSlotSize > 0) {
-                    vdisk.VDiskRawUsage = 100.0 * static_cast<float>(vdisk.AllocatedSize) / vdiskSlotSize;
-                }
-                usage = std::max<float>(usage, vdisk.VDiskRawUsage);
                 allocated += vdisk.AllocatedSize;
             }
             Available = available;
             Used = allocated;
             Limit = limit;
-            Usage = usage;
+            Usage = Limit ? 100.0 * Used / Limit : 0;
             if (Usage >= 95) {
                 DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Red);
             } else if (Usage >= 90) {
@@ -896,6 +870,7 @@ public:
         } if (Params.Get("with") == "space") {
             With = EWith::SpaceProblems;
             FieldsRequired.set(+EGroupFields::Available);
+            FieldsRequired.set(+EGroupFields::Usage);
             NeedFilter = true;
         }
         if (Params.Has("offset")) {
@@ -1434,7 +1409,50 @@ public:
     }
 
     bool WaitingForHive() const {
-        return HiveStorageStatsInFlight != 0 && (FieldsHive.test(+SortBy) || FieldsHive.test(+GroupBy));
+        return HiveStorageStatsInFlight != 0 && ((NeedSort && FieldsHive.test(+SortBy))
+            || (NeedGroup && FieldsHive.test(+GroupBy))
+            || (NeedFilter && !FilterGroup.empty() && FieldsHive.test(+FilterGroupBy)));
+    }
+
+    bool NeedToWaitForFieldBeforeHive(EGroupFields field) const {
+        return field != EGroupFields::COUNT && FieldsRequired.test(+field) && !FieldsAvailable.test(+field) && !FieldsHive.test(+field);
+    }
+
+    bool NeedToWaitForFilterBeforeHive() const {
+        if (!NeedFilter) {
+            return false;
+        }
+        if (!DatabaseStoragePools.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PoolName)) {
+            return true;
+        }
+        if (!FilterStoragePools.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PoolName)) {
+            return true;
+        }
+        if (!FilterNodeIds.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::NodeId)) {
+            return true;
+        }
+        if (!FilterPDiskIds.empty() && NeedToWaitForFieldBeforeHive(EGroupFields::PDiskId)) {
+            return true;
+        }
+        if (With == EWith::MissingDisks && NeedToWaitForFieldBeforeHive(EGroupFields::MissingDisks)) {
+            return true;
+        }
+        if (With == EWith::SpaceProblems && NeedToWaitForFieldBeforeHive(EGroupFields::Usage)) {
+            return true;
+        }
+        if (!Filter.empty() && (NeedToWaitForFieldBeforeHive(EGroupFields::PoolName) || NeedToWaitForFieldBeforeHive(EGroupFields::GroupId))) {
+            return true;
+        }
+        if (!FilterGroup.empty() && NeedToWaitForFieldBeforeHive(FilterGroupBy)) {
+            return true;
+        }
+        return false;
+    }
+
+    bool NeedToWaitBeforeCollectingHiveData() const {
+        return NeedToWaitForFilterBeforeHive()
+            || (NeedSort && NeedToWaitForFieldBeforeHive(SortBy))
+            || (NeedGroup && NeedToWaitForFieldBeforeHive(GroupBy));
     }
 
     bool TimeToAskWhiteboard() const {
@@ -1617,7 +1635,8 @@ public:
             }
         }
         if (AreBSControllerRequestsDone()) {
-            if (FieldsNeeded(FieldsHive) && !CollectedHiveData) {
+            ApplyEverything();
+            if (FieldsNeeded(FieldsHive) && !CollectedHiveData && !NeedToWaitBeforeCollectingHiveData()) {
                 CollectHiveData();
             }
             if (FieldsAvailable.test(+EGroupFields::GroupId) && FieldsNeeded(FieldsHive) && NavigateKeySetInFlight == 0 && HiveStorageStatsInFlight == 0) {
@@ -1839,10 +1858,10 @@ public:
                 TGroup& group = GroupData.emplace_back();
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();
-                group.GroupSizeInUnits = info->GetGroupSizeInUnits();
                 group.Erasure = info->GetErasureSpecies();
                 group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
                 group.PoolName = info->GetStoragePoolName();
+                group.GroupSizeInUnits = info->GetGroupSizeInUnits();
                 group.EncryptionMode = info->GetEncryption();
                 for (auto nodeId : info->GetVDiskNodeIds()) {
                     group.VDiskNodeIds.push_back(nodeId);
@@ -1912,10 +1931,7 @@ public:
         vDisk.Present = true;
         vDisk.VDiskSlotUsage = info.GetVDiskSlotUsage();
         vDisk.NormalizedOccupancy = info.GetNormalizedOccupancy();
-        vDisk.HasVDiskRawUsage = info.HasVDiskRawUsage();
-        if (vDisk.HasVDiskRawUsage) {
-            vDisk.VDiskRawUsage = info.GetVDiskRawUsage();
-        }
+        vDisk.VDiskRawUsage = info.GetVDiskRawUsage();
         vDisk.CapacityAlert = info.GetCapacityAlert();
     }
 
@@ -1971,12 +1987,10 @@ public:
                     if (pDisk.SlotCount < info.GetExpectedSlotCount()) {
                         pDisk.SlotCount = info.GetExpectedSlotCount();
                     }
-                    if (pDisk.SlotSizeInUnits < info.GetSlotSizeInUnits()) {
-                        pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
-                    }
                     if (pDisk.NumActiveSlots < info.GetNumActiveSlots()) {
                         pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     }
+                    pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.SetCategory(info.GetCategory());
                     //pDisk.DecommitStatus = info.GetDecommitStatus();
                     float usage = pDisk.TotalSize ? 100.0 * (pDisk.TotalSize - pDisk.AvailableSize) / pDisk.TotalSize : 0;
@@ -2014,6 +2028,7 @@ public:
     void BSGroupRequestDone() {
         if (--BSGroupStateRequestsInFlight == 0) {
             ProcessWhiteboardGroups();
+            ProcessResponses();
         }
         RequestDone();
     }
@@ -2022,6 +2037,7 @@ public:
         --VDiskStateRequestsInFlight;
         if (VDiskStateRequestsInFlight == 0 && PDiskStateRequestsInFlight == 0) {
             ProcessWhiteboardDisks();
+            ProcessResponses();
         }
         RequestDone();
     }
@@ -2030,6 +2046,7 @@ public:
         --PDiskStateRequestsInFlight;
         if (VDiskStateRequestsInFlight == 0 && PDiskStateRequestsInFlight == 0) {
             ProcessWhiteboardDisks();
+            ProcessResponses();
         }
         RequestDone();
     }

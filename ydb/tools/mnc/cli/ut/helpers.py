@@ -69,8 +69,9 @@ class Console:
 
 
 class RunStepsResult:
-    def __init__(self, ok):
+    def __init__(self, ok, message=None):
         self.ok = ok
+        self.message = message
 
     def __bool__(self):
         return self.ok

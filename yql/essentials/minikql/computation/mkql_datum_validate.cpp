@@ -160,8 +160,10 @@ public:
                 }
             }
         } else {
+            auto array = datum.array();
             for (size_t i = 0; i < Children_.size(); ++i) {
-                Children_[i]->Validate(*datum.array()->child_data[i]);
+                Children_[i]->Validate(*array->child_data[i]);
+                MKQL_ENSURE(array->child_data[i]->length == array->length, "A tuple's child array must have the same size as the tuple itself.");
             }
         }
     }

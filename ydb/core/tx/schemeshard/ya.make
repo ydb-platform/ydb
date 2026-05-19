@@ -5,6 +5,7 @@ RECURSE_FOR_TESTS(
     ut_backup
     ut_backup_collection
     ut_backup_collection_reboots
+    ut_incr_backup_reboots
     ut_base
     ut_base_reboots
     ut_bsvolume
@@ -51,6 +52,7 @@ RECURSE_FOR_TESTS(
     ut_resource_pool
     ut_resource_pool_reboots
     ut_restore
+    ut_incr_restore_reboots
     ut_rtmr
     ut_rtmr_reboots
     ut_ru_calculator
@@ -168,6 +170,7 @@ SRCS(
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_secret.cpp
     schemeshard__operation_create_restore_incremental_backup.cpp
+    schemeshard__operation_incr_restore_lock_targets.cpp
     schemeshard__operation_incremental_restore_finalize.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp

@@ -1,3 +1,4 @@
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldScheduleCleanup 
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
 ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorEncryptedChunks
 ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorPlainChunks

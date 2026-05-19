@@ -14,6 +14,8 @@ items:
   href: topology.md
 - name: Transactions
   href: transactions.md
+- name: Optimizer
+  href: optimizer.md  
 - name: Secondary indexes
   href: secondary_indexes.md
 - name: Vector search
@@ -37,9 +39,9 @@ items:
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
-- name: Query optimizer
-  href: optimizer.md
+- name: Streaming queries
+  href: streaming-query.md
 - name: Federated query
   include:
     path: federated_query/toc_p.yaml
-    mode: link
+    mode: link  

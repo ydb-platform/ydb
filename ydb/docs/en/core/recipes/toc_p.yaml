@@ -12,3 +12,8 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
+- name: Streaming queries
+  href: streaming_queries/index.md
+  include:
+    mode: link
+    path: streaming_queries/toc_p.yaml

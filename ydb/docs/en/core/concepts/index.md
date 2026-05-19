@@ -19,7 +19,8 @@ The following topics provide comprehensive coverage of {{ ydb-short-name }}'s co
 - [Multi-Version Concurrency Control (MVCC)](mvcc.md)
 - [Asynchronous replication](async-replication.md)
 - [Query optimizer](optimizer.md)
-- [Federated queries](federated_query/index.md)
+- [Federated queries](./federated_query/index.md)
+- [Streaming queries](streaming-query.md)
 
 ## See Also {#see-also}
 

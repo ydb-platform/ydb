@@ -6,6 +6,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
+#include <exception>
+
 #include <util/string/cast.h>
 
 #include <functional>
@@ -144,6 +146,18 @@ void ThrowOnErrorOrPrintIssues(TStatus status) {
             std::cerr << ToString(status);
         }
     });
+}
+
+TStatus StatusFromCurrentException() {
+    try {
+        throw;
+    } catch (const TYdbErrorException& e) {
+        return e.GetStatus();
+    } catch (const std::exception& e) {
+        return TStatus(TPlainStatus::Internal(e.what()));
+    } catch (...) {
+        return TStatus(TPlainStatus::Internal("unknown exception"));
+    }
 }
 
 } // namespace NStatusHelpers

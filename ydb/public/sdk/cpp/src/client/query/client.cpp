@@ -840,6 +840,32 @@ TStatus TQueryClient::RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFu
     return NRetry::Sync::TRetryWithoutSession(*this, queryFunc, settings).Execute();
 }
 
+TStatus TQueryClient::RetryRangeQuerySync(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings) {
+    return RetryQuerySync([&queryFunc](TSession session) {
+        try {
+            return queryFunc(session);
+        } catch (...) {
+            return NStatusHelpers::StatusFromCurrentException();
+        }
+    }, settings);
+}
+
+TAsyncStatus TQueryClient::RetryRangeQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings) {
+    return RetryQuery([func = std::move(queryFunc)](TSession session) mutable -> TAsyncStatus {
+        try {
+            return func(session).Apply([](TAsyncStatus f) -> TStatus {
+                try {
+                    return f.GetValue();
+                } catch (...) {
+                    return NStatusHelpers::StatusFromCurrentException();
+                }
+            });
+        } catch (...) {
+            return NThreading::MakeFuture(NStatusHelpers::StatusFromCurrentException());
+        }
+    }, settings);
+}
+
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(const std::string& query, const TTxControl& txControl,
     TDuration timeout, bool isIndempotent)
 {

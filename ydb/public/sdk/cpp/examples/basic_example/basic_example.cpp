@@ -393,7 +393,7 @@ void ExplicitTcl(TQueryClient client) {
 void StreamQuerySelect(TQueryClient client) {
     std::cout << "> StreamQuery:" << std::endl;
 
-    ThrowOnError(client.RetryQuerySync([](TQueryClient client) -> TStatus {
+    ThrowOnError(client.RetryRangeQuerySync([](TSession session) -> TStatus {
         auto query = R"(
             DECLARE $series AS List<UInt64>;
 
@@ -417,13 +417,11 @@ void StreamQuerySelect(TQueryClient client) {
                                 .Build()
                                 .Build();
 
-        // Executes stream query
-        auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
+        auto resultStreamQuery = session.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
         if (!resultStreamQuery.IsSuccess()) {
             return resultStreamQuery;
         }
-        auto resultRange = TResultSetRange(std::move(resultStreamQuery));
-        for (auto& parser : resultRange) {
+        for (auto& parser : TResultSetRange(std::move(resultStreamQuery))) {
             std::cout << "Season" << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
                     << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
                     << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())

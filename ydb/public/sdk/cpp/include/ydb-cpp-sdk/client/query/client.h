@@ -110,6 +110,13 @@ public:
 
     TStatus RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
+    //! Like RetryQuerySync, but catches exceptions from queryFunc (e.g. TResultSetRange stream drain)
+    //! and returns them as TStatus so retry logic can handle them. Retry framework exceptions still propagate.
+    TStatus RetryRangeQuerySync(const TQuerySyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
+    //! Like RetryQuery, but catches exceptions from queryFunc and its returned future.
+    TAsyncStatus RetryRangeQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
+
     TAsyncExecuteQueryResult RetryQuery(const std::string& query, const TTxControl& txControl,
         TDuration timeout, bool isIndempotent);
 

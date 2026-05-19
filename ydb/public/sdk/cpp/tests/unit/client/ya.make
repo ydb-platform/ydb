@@ -13,6 +13,7 @@ RECURSE(
     params
     result
     result_ranges
+    status
     table
     value
 )

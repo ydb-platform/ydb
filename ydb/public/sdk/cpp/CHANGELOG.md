@@ -14,6 +14,8 @@
 
 * Fixed some data races in Producer (concurrent access to `PartitionsIndex`)
 
+* Added `TQueryClient::RetryRangeQuery` and `RetryRangeQuerySync` — retry wrappers that convert exceptions from `TResultSetRange` stream iteration into `TStatus` for the retry layer
+
 * Added interface for export of metrics and spans, supported plugin for OpenTelemetry
 
 * Supported gRPC compression option on client side

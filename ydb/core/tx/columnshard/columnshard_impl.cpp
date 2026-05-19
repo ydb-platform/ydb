@@ -198,20 +198,26 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
+void TColumnShard::PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const {
+    const auto minSnapshot = guard.GetMinSnapshotForNewReads();
+    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
+}
+
 NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
     auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
-    auto minSnapshot = guard->GetMinSnapshotForNewReads();
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
-    return minSnapshot;
+    PublishMinSnapshotForNewScans(*guard);
+    return guard->GetMinSnapshotForNewReads();
 }
 
 bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const {
     auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
+    PublishMinSnapshotForNewScans(*guard);
     return guard->MayStartScanAt(snapshot, schemeShardLocalPathId);
 }
 
 std::unique_ptr<NOlap::ISnapshotHolders> TColumnShard::GetSnapshotHolders() const {
     auto guard = CreateScanSnapshotGuard(GetOutdatedStep(), CurrentSchemeShardId, LastCleanupSnapshot, InFlightReadsTracker, TablesManager);
+    PublishMinSnapshotForNewScans(*guard);
     return guard->BuildSnapshotHolders();
 }
 

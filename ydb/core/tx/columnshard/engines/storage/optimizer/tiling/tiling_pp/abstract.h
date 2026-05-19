@@ -5,6 +5,8 @@
 
 #include <util/generic/function_ref.h>
 
+#include <optional>
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 template <std::totally_ordered TKey, typename TPortion>
@@ -42,7 +44,21 @@ struct ICompactionUnit {
         return DoGetOptimizationTasks(isLocked);
     }
 
+    std::optional<CompactionTask<TKey, TPortion>> GetNextOptimizationTask(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+        return DoGetNextOptimizationTask(isLocked);
+    }
+
     virtual std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(TFunctionRef<bool(typename TPortion::TConstPtr)>) const = 0;
+
+    virtual std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
+        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+        const auto tasks = DoGetOptimizationTasks(isLocked);
+        if (tasks.empty()) {
+            return std::nullopt;
+        }
+        return tasks.front();
+    }
+
     virtual void DoActualize() = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
 

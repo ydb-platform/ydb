@@ -297,6 +297,15 @@ public:
         return OptimizerPlanner->GetOptimizationTasks(self, locksManager);
     }
 
+    std::shared_ptr<TColumnEngineChanges> GetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+        return OptimizerPlanner->GetNextOptimizationTask(self, locksManager);
+    }
+
+    ui32 GetMaxCompactionInflight() const {
+        return OptimizerPlanner->GetMaxCompactionInflight();
+    }
+
     const NGranule::NPortionsIndex::TPortionsIndex& GetPortionsIndex() const {
         return PortionsIndex;
     }

@@ -25,6 +25,11 @@ class TTiersManager;
 }   // namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
+
+namespace NCompaction {
+class TGeneralCompactColumnEngineChanges;
+}
+
 class TInsertColumnEngineChanges;
 class TDataAccessorsRequest;
 class TCompactColumnEngineChanges;
@@ -174,6 +179,8 @@ public:
         const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions,
         const std::shared_ptr<NLWTrace::TOrbit>& orbit, ui64 txId = 0, ui64 scanId = 0) const = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> GetNextCompactionTask(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept = 0;
     virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const ISnapshotHolders& snapshotHolders,

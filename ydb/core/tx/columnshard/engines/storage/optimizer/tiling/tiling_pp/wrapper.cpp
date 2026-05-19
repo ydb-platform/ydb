@@ -198,6 +198,23 @@ protected:
         return { result };
     }
 
+    std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
+        const auto isLocked = [dataLocksManager](TPortionInfo::TConstPtr p) -> bool {
+            return dataLocksManager && dataLocksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction).has_value();
+        };
+
+        const auto task = Core.GetNextOptimizationTask(isLocked);
+        if (!task) {
+            return nullptr;
+        }
+
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task->Portions, TSaverContext(StoragesManager));
+        result->SetTargetCompactionLevel(task->TargetLevel);
+        result->SetPortionExpectedSize(PortionExpectedSize);
+        return result;
+    }
+
     TOptimizationPriority DoGetUsefulMetric() const override {
         return Core.DoGetUsefulMetric();
     }

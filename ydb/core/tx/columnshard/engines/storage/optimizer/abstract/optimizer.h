@@ -147,6 +147,13 @@ protected:
         const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    virtual ui32 DoGetMaxCompactionInflight() const {
+        return 1;
+    }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
 
@@ -289,6 +296,13 @@ public:
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    std::shared_ptr<TColumnEngineChanges> GetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    ui32 GetMaxCompactionInflight() const {
+        return DoGetMaxCompactionInflight();
+    }
 
     TOptimizationPriority GetUsefulMetric() const {
         auto result = DoGetUsefulMetric();

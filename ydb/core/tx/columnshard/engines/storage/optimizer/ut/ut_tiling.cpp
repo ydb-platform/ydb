@@ -102,6 +102,8 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         accumulator.AddPortion(p3);
 
         const auto tasks = accumulator.GetOptimizationTasks(NeverLocked());
+        const auto nextTask = accumulator.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(nextTask);
         UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[0]->GetPortionId(), 1);
@@ -166,6 +168,29 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(ids[0], 1);
         UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
         UNIT_ASSERT_VALUES_EQUAL(ids[2], 3);
+    }
+
+    Y_UNIT_TEST(GetNextOptimizationTaskMatchesGetOptimizationTasksFront) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorSettings.Trigger.Bytes = 100;
+        settings.AccumulatorSettings.Trigger.Portions = 100;
+        settings.AccumulatorSettings.Compaction.Bytes = 150;
+        settings.AccumulatorSettings.Compaction.Portions = 10;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+        tiling.AddPortion(MakePortion(1, 0, 1, 60));
+        tiling.AddPortion(MakePortion(2, 2, 3, 60));
+        tiling.AddPortion(MakePortion(3, 4, 5, 60));
+
+        const auto tasks = tiling.GetOptimizationTasks(NeverLocked());
+        const auto nextTask = tiling.GetNextOptimizationTask(NeverLocked());
+        if (tasks.empty()) {
+            UNIT_ASSERT(!nextTask);
+        } else {
+            UNIT_ASSERT(nextTask);
+            UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions.size(), tasks.front().Portions.size());
+        }
     }
 
     Y_UNIT_TEST(TilingChoosesAccumulatorMiddleAndLastLevelsIndependently) {

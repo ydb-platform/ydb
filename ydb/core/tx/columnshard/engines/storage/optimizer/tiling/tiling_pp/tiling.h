@@ -287,6 +287,21 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         return tasks;
     }
 
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
+        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+        const auto accumulatorPriority = Accumulator.DoGetUsefulMetric();
+        const auto lastLevelPriority = LastLevel.DoGetUsefulMetric();
+        const auto [middleLevelsPriority, maxMiddleLevel] = GetMiddleUsefulMetric();
+
+        if (lastLevelPriority < accumulatorPriority && middleLevelsPriority < accumulatorPriority) {
+            return Accumulator.GetNextOptimizationTask(isLocked);
+        }
+        if (lastLevelPriority < middleLevelsPriority) {
+            return MiddleLevels.at(maxMiddleLevel).GetNextOptimizationTask(isLocked);
+        }
+        return LastLevel.GetNextOptimizationTask(isLocked);
+    }
+
     TOptimizationPriority DoGetUsefulMetric() const override {
         return std::max(Accumulator.DoGetUsefulMetric(), std::max(LastLevel.DoGetUsefulMetric(), GetMiddleUsefulMetric().first));
     }

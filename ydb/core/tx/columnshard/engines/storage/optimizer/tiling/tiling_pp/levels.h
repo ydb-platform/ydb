@@ -67,7 +67,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         for (auto candidate : Candidates) {
             if (isLocked(candidate)) {
@@ -91,10 +91,10 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
                 }
             }
             if (success) {
-                return { CompactionTask<TKey, TPortion>{ result, 1 } };
+                return CompactionTask<TKey, TPortion>{ result, 1 };
             }
         }
-        return {};
+        return std::nullopt;
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -151,10 +151,10 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         if (TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
-            return {};
+            return std::nullopt;
         }
         CompactionTask<TKey, TPortion> result;
         ui64 currentBlobBytes = 0;
@@ -166,10 +166,10 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
             currentBlobBytes += it->GetTotalBlobBytes();
             if (currentBlobBytes > Settings.Compaction.Bytes || result.Portions.size() > Settings.Compaction.Portions) {
                 result.TargetLevel = 0;
-                return { result };
+                return result;
             }
         }
-        return {};
+        return std::nullopt;
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -252,7 +252,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         this->Counters.Portions->SetHeight(maxCount);
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         CompactionTask<TKey, TPortion> result;
         auto range = Intersections.GetMaxRange();
@@ -268,10 +268,10 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
             return true;
         });
         if (result.Portions.size() < 2) {
-            return {};
+            return std::nullopt;
         }
         result.TargetLevel = LevelIdx;
-        return { result };
+        return result;
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

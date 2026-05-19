@@ -48,15 +48,14 @@ struct ICompactionUnit {
         return DoGetNextOptimizationTask(isLocked);
     }
 
-    virtual std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(TFunctionRef<bool(typename TPortion::TConstPtr)>) const = 0;
-
     virtual std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
-        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
-        const auto tasks = DoGetOptimizationTasks(isLocked);
-        if (tasks.empty()) {
-            return std::nullopt;
+        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const = 0;
+
+    virtual std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+        if (const auto task = DoGetNextOptimizationTask(isLocked)) {
+            return { *task };
         }
-        return tasks.front();
+        return {};
     }
 
     virtual void DoActualize() = 0;

@@ -180,7 +180,6 @@ T ConstructYTreeConvertibleObject()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 template <class TTo>
 TTo ConvertTo(const NYTree::INodePtr& node)
 {

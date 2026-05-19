@@ -113,15 +113,17 @@ jobs:
       - name: Test docker image
         continue-on-error: false
         run: |
-          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
+          docker run -d --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
           sleep 61  # Wait for the health check to run (--start-period=60s --interval=1s)
           if [ "$(docker inspect --format='{{json .State.Health.Status}}' local-ydb-test)" != "\"healthy\"" ]; then
             echo "Container is not healthy"
             docker inspect --format='{{json .State.Health}}' local-ydb-test
             docker logs local-ydb-test
+            docker rm -f local-ydb-test
             exit 1
           fi
           docker stop local-ydb-test || true
+          docker rm -f local-ydb-test || true
 
       - name: Push docker image
         uses: docker/build-push-action@v4

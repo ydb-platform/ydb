@@ -2,30 +2,11 @@
 
 #include "level/one_layer.h"
 
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.h>
 
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
-
-namespace {
-
-std::shared_ptr<TColumnEngineChanges> BuildCompactionChange(const std::shared_ptr<TGranuleMeta>& granule,
-    const std::shared_ptr<IPortionsLevel>& level, TCompactionTaskData& data, const TSaverContext& saverContext,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<std::shared_ptr<IPortionsLevel>>& levels) {
-    auto result =
-        std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
-    result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
-    result->SetPortionExpectedSize(levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
-    auto positions = data.GetCheckPositions(primaryKeysSchema, level->GetLevelId() > 1);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
-        "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
-    result->SetCheckPoints(std::move(positions));
-    return result;
-}
-
-}   // namespace
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
     const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters,
@@ -66,7 +47,15 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
                 return results;
             }
 
-            results.push_back(BuildCompactionChange(granule, level, data, saverContext, PrimaryKeysSchema, Levels));
+            auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
+                granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
+            result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
+            result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
+            auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
+                "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
+            result->SetCheckPoints(std::move(positions));
+            results.push_back(result);
             if (!AppDataVerified().ColumnShardConfig.GetEnableParallelCompaction()) {
                 return results;
             }

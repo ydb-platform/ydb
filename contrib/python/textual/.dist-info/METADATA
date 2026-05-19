@@ -1,8 +1,7 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.3
 Name: textual
-Version: 4.0.0
+Version: 5.3.0
 Summary: Modern Text User Interface framework
-Home-page: https://github.com/Textualize/textual
 License: MIT
 Author: Will McGugan
 Author-email: will@textualize.io
@@ -26,26 +25,28 @@ Classifier: Typing :: Typed
 Provides-Extra: syntax
 Requires-Dist: markdown-it-py[linkify,plugins] (>=2.1.0)
 Requires-Dist: platformdirs (>=3.6.0,<5)
+Requires-Dist: pygments (>=2.19.2,<3.0.0)
 Requires-Dist: rich (>=13.3.3)
-Requires-Dist: tree-sitter (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-bash (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-css (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-go (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-html (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-java (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-javascript (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-json (>=0.24.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-markdown (>=0.3.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-python (>=0.23.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-regex (>=0.24.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-rust (>=0.23.0,<=0.23.2) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-sql (>=0.3.0,<0.3.8) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-toml (>=0.6.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-xml (>=0.7.0) ; (python_version >= "3.9") and (extra == "syntax")
-Requires-Dist: tree-sitter-yaml (>=0.6.0) ; (python_version >= "3.9") and (extra == "syntax")
+Requires-Dist: tree-sitter (>=0.25.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-bash (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-css (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-go (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-html (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-java (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-javascript (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-json (>=0.24.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-markdown (>=0.3.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-python (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-regex (>=0.24.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-rust (>=0.23.0,<=0.23.2) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-sql (>=0.3.0,<0.3.8) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-toml (>=0.6.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-xml (>=0.7.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-yaml (>=0.6.0) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: typing-extensions (>=4.4.0,<5.0.0)
 Project-URL: Bug Tracker, https://github.com/Textualize/textual/issues
 Project-URL: Documentation, https://textual.textualize.io/
+Project-URL: Homepage, https://github.com/Textualize/textual
 Project-URL: Repository, https://github.com/Textualize/textual
 Description-Content-Type: text/markdown
 

@@ -12,12 +12,12 @@
 namespace NYdb::inline Dev {
 
 namespace {
-    void ThrowContractViolation(const std::string& connectionString, const std::string& message) {
+    void ThrowContractViolation(std::string_view connectionString, std::string_view message) {
         ythrow TContractViolation("Failed to parse connection string: \"" + connectionString + "\", error: " + message + "\n");
     }
 }
 
-TConnectionInfo ParseConnectionString(const std::string& connectionString) {
+TConnectionInfo ParseConnectionString(std::string_view connectionString) {
     if (connectionString.empty()) {
         ThrowContractViolation(connectionString, "empty connection string");
     }

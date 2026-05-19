@@ -137,11 +137,11 @@ public:
         : Tracer_(std::move(tracer))
     {}
 
-    std::shared_ptr<ISpan> StartSpan(const std::string& name, ESpanKind kind) override {
+    std::shared_ptr<ISpan> StartSpan(std::string_view name, ESpanKind kind) override {
         return StartSpan(name, kind, /*parent*/ nullptr);
     }
 
-    std::shared_ptr<ISpan> StartSpan(const std::string& name, ESpanKind kind, ISpan* parent) override {
+    std::shared_ptr<ISpan> StartSpan(std::string_view name, ESpanKind kind, ISpan* parent) override {
         otel_trace::StartSpanOptions options;
         options.kind = MapSpanKind(kind);
         if (auto* otelParent = dynamic_cast<TOtelSpan*>(parent)) {
@@ -170,7 +170,7 @@ public:
         : TracerProvider_(std::move(tracerProvider))
     {}
 
-    std::shared_ptr<ITracer> GetTracer(const std::string& name) override {
+    std::shared_ptr<ITracer> GetTracer(std::string_view name) override {
         return std::make_shared<TOtelTracer>(TracerProvider_->GetTracer(name));
     }
 

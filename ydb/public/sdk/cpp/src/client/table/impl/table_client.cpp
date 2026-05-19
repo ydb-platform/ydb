@@ -524,7 +524,7 @@ TAsyncOperation TTableClient::TImpl::AlterTableLong(Ydb::Table::AlterTableReques
         rpcSettings);
 }
 
-TFuture<TStatus> TTableClient::TImpl::CopyTable(const TSession& session, const std::string& src, const std::string& dst, const TCopyTableSettings& settings)
+TFuture<TStatus> TTableClient::TImpl::CopyTable(const TSession& session, std::string_view src, std::string_view dst, const TCopyTableSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
         .TryUpdateDeadline(session.GetPropagatedDeadline());
@@ -582,7 +582,7 @@ TFuture<TStatus> TTableClient::TImpl::RenameTables(const TSession& session, cons
         rpcSettings);
 }
 
-TFuture<TStatus> TTableClient::TImpl::DropTable(const TSession& session, const std::string& path, const TDropTableSettings& settings) {
+TFuture<TStatus> TTableClient::TImpl::DropTable(const TSession& session, std::string_view path, const TDropTableSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
         .TryUpdateDeadline(session.GetPropagatedDeadline());
 
@@ -596,7 +596,7 @@ TFuture<TStatus> TTableClient::TImpl::DropTable(const TSession& session, const s
         rpcSettings);
 }
 
-TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TSession& session, const std::string& path, const TDescribeTableSettings& settings) {
+TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TSession& session, std::string_view path, const TDescribeTableSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
         .TryUpdateDeadline(session.GetPropagatedDeadline());
 
@@ -648,7 +648,7 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TSession& ses
 }
 
 TAsyncDescribeExternalDataSourceResult TTableClient::TImpl::DescribeExternalDataSource(const TSession& session,
-    const std::string& path, const TDescribeExternalDataSourceSettings& settings)
+    std::string_view path, const TDescribeExternalDataSourceSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
         .TryUpdateDeadline(session.GetPropagatedDeadline());
@@ -681,7 +681,7 @@ TAsyncDescribeExternalDataSourceResult TTableClient::TImpl::DescribeExternalData
 }
 
 TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(const TSession& session,
-    const std::string& path, const TDescribeExternalTableSettings& settings)
+    std::string_view path, const TDescribeExternalTableSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
         .TryUpdateDeadline(session.GetPropagatedDeadline());
@@ -713,7 +713,7 @@ TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(con
     return promise.GetFuture();
 }
 
-TAsyncDescribeSystemViewResult TTableClient::TImpl::DescribeSystemView(const TSession& session, const std::string& path, const TDescribeSystemViewSettings& settings) {
+TAsyncDescribeSystemViewResult TTableClient::TImpl::DescribeSystemView(const TSession& session, std::string_view path, const TDescribeSystemViewSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
         .TryUpdateDeadline(session.GetPropagatedDeadline());
 
@@ -744,7 +744,7 @@ TAsyncDescribeSystemViewResult TTableClient::TImpl::DescribeSystemView(const TSe
     return promise.GetFuture();
 }
 
-TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& session, const std::string& query,
+TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& session, std::string_view query,
     const TPrepareDataQuerySettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -792,7 +792,7 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
     return promise.GetFuture();
 }
 
-TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const TSession& session, const std::string& query,
+TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const TSession& session, std::string_view query,
     const TExecSchemeQuerySettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -858,7 +858,7 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
     return promise.GetFuture();
 }
 
-TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSession& session, const std::string& txId,
+TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSession& session, std::string_view txId,
     const TCommitTxSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -902,7 +902,7 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     return promise.GetFuture();
 }
 
-TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const std::string& txId,
+TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, std::string_view txId,
     const TRollbackTxSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -927,7 +927,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     });
 }
 
-TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSession& session, const std::string& query,
+TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSession& session, std::string_view query,
     const TExplainDataQuerySettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -976,7 +976,7 @@ void TTableClient::TImpl::SetTypedValue(Ydb::TypedValue* protoValue, const TValu
 
 NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStreamProcessorPtr>> TTableClient::TImpl::ReadTable(
     const TSession& session,
-    const std::string& path,
+    std::string_view path,
     const TReadTableSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
@@ -1047,7 +1047,7 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
 
 }
 
-TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings) {
+TAsyncReadRowsResult TTableClient::TImpl::ReadRows(std::string_view path, TValue&& keys, const std::vector<std::string>& columns, const TReadRowsSettings& settings) {
     auto request = MakeRequest<Ydb::Table::ReadRowsRequest>();
     request.set_path(TStringType{path});
     auto* protoKeys = request.mutable_keys();
@@ -1168,7 +1168,7 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
     OperationStatCollector_ = collector.OperationStatCollector;
 }
 
-TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
+TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(std::string_view table, TValue&& rows, const TBulkUpsertSettings& settings) {
     Ydb::Table::BulkUpsertRequest* request = nullptr;
     std::unique_ptr<Ydb::Table::BulkUpsertRequest> holder;
 
@@ -1224,8 +1224,8 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     return promise.GetFuture();
 }
 
-TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, EDataFormat format,
-    const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings)
+TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(std::string_view table, EDataFormat format,
+    std::string_view data, std::string_view schema, const TBulkUpsertSettings& settings)
 {
     auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
     request.set_table(TStringType{table});
@@ -1266,7 +1266,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     return promise.GetFuture();
 }
 
-TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TTableClient::TImpl::StreamExecuteScanQueryInternal(const std::string& query,
+TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TTableClient::TImpl::StreamExecuteScanQueryInternal(std::string_view query,
     const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
     const TStreamExecScanQuerySettings& settings)
 {
@@ -1305,7 +1305,7 @@ TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TScanQueryProcessorPtr>> TT
     return promise.GetFuture();
 }
 
-TAsyncScanQueryPartIterator TTableClient::TImpl::StreamExecuteScanQuery(const std::string& query,
+TAsyncScanQueryPartIterator TTableClient::TImpl::StreamExecuteScanQuery(std::string_view query,
     const ::google::protobuf::Map<TStringType, Ydb::TypedValue>* params,
     const TStreamExecScanQuerySettings& settings)
 {
@@ -1377,7 +1377,7 @@ void TTableClient::TImpl::CollectParams(
     }
 }
 
-void TTableClient::TImpl::CollectQuerySize(const std::string& query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram) {
+void TTableClient::TImpl::CollectQuerySize(std::string_view query, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>& querySizeHistogram) {
     if (querySizeHistogram.IsCollecting()) {
         querySizeHistogram.Record(query.size());
     }
@@ -1409,7 +1409,7 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
     }
 }
 
-void TTableClient::TImpl::SetQuery(const std::string& queryText, Ydb::Table::Query* query) {
+void TTableClient::TImpl::SetQuery(std::string_view queryText, Ydb::Table::Query* query) {
     query->set_yql_text(TStringType{queryText});
 }
 
@@ -1417,7 +1417,7 @@ void TTableClient::TImpl::SetQuery(const TDataQuery& queryData, Ydb::Table::Quer
     query->set_id(TStringType{queryData.GetId()});
 }
 
-void TTableClient::TImpl::SetQueryCachePolicy(const std::string&, const TExecDataQuerySettings& settings,
+void TTableClient::TImpl::SetQueryCachePolicy(std::string_view, const TExecDataQuerySettings& settings,
     Ydb::Table::QueryCachePolicy* queryCachePolicy)
 {
     queryCachePolicy->set_keep_in_cache(settings.KeepInQueryCache_.value_or(false));
@@ -1428,7 +1428,7 @@ void TTableClient::TImpl::SetQueryCachePolicy(const TDataQuery&, const TExecData
     queryCachePolicy->set_keep_in_cache(settings.KeepInQueryCache_.value_or(true));
 }
 
-std::optional<std::string> TTableClient::TImpl::GetQueryText(const std::string& queryText) {
+std::optional<std::string> TTableClient::TImpl::GetQueryText(std::string_view queryText) {
     return queryText;
 }
 

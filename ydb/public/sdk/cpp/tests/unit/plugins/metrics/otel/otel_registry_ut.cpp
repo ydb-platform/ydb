@@ -59,7 +59,7 @@ TFixture MakeFixture() {
     return f;
 }
 
-std::optional<double> ReadSumPointDouble(TInMemoryMetricReader* reader, const std::string& name) {
+std::optional<double> ReadSumPointDouble(TInMemoryMetricReader* reader, std::string_view name) {
     std::optional<double> result;
     reader->Collect([&](sdkmetrics::ResourceMetrics& rm) -> bool {
         for (const auto& sm : rm.scope_metric_data_) {

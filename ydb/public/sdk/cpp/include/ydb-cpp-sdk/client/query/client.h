@@ -84,16 +84,16 @@ public:
 public:
     TQueryClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());
 
-    TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryResult ExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryResult ExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryIterator StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryIterator StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryIterator StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryIterator StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
     TAsyncExecuteQueryResult RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
@@ -106,13 +106,13 @@ public:
 
     TStatus RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    TAsyncExecuteQueryResult RetryQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryResult RetryQuery(std::string_view query, const TTxControl& txControl,
         TDuration timeout, bool isIndempotent);
 
-    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(std::string_view script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());
 
-    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(std::string_view script,
         const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings());
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
@@ -140,20 +140,20 @@ class TSession {
     friend class TExecuteQueryIterator;
     friend class NRetry::TRetryDeadlineHelper<TQueryClient>;
 public:
-    const std::string& GetId() const;
+    std::string_view GetId() const;
 
     const std::optional<TDeadline>& GetPropagatedDeadline() const;
 
-    TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryResult ExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryResult ExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryIterator StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryIterator StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
-    TAsyncExecuteQueryIterator StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryIterator StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings,
@@ -198,7 +198,7 @@ public:
     void AddOnFailureCallback(TOnFailureTransactionCallback cb) override;
 
 private:
-    TTransaction(const TSession& session, const std::string& txId);
+    TTransaction(const TSession& session, std::string_view txId);
 
     TAsyncStatus Precommit() const;
     NThreading::TFuture<void> ProcessFailure() const;
@@ -221,7 +221,7 @@ public:
 
     [[deprecated("This is bug-provoking API. Use TTxControl::Tx(TTransaction) instead. "
                  "This constructor will be removed in upcomming release")]]
-    static TTxControl Tx(const std::string& txId) {
+    static TTxControl Tx(std::string_view txId) {
         return TTxControl(txId);
     }
 
@@ -247,8 +247,8 @@ private:
     TTxControl(const TTxSettings& txSettings)
         : Tx_(txSettings) {}
     
-    TTxControl(const std::string& txId)
-        : Tx_(txId) {}
+    TTxControl(std::string_view txId)
+        : Tx_(std::string(txId)) {}
 
     const std::variant<std::monostate, TTransaction, TTxSettings, std::string> Tx_;
 };

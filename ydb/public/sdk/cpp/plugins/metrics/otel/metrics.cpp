@@ -113,10 +113,10 @@ public:
         , Meter_(MeterProvider_->GetMeter(std::string(NObservability::Meter::kSdkName), GetSdkSemver()))
     {}
 
-    std::shared_ptr<ICounter> Counter(const std::string& name
+    std::shared_ptr<ICounter> Counter(std::string_view name
         , const TLabels& labels
-        , const std::string& description
-        , const std::string& unit
+        , std::string_view description
+        , std::string_view unit
     ) override {
         auto key = MakeKey(name, labels);
         std::lock_guard lock(WrappersLock_);
@@ -128,10 +128,10 @@ public:
         return cached;
     }
 
-    std::shared_ptr<IGauge> Gauge(const std::string& name
+    std::shared_ptr<IGauge> Gauge(std::string_view name
         , const TLabels& labels
-        , const std::string& description
-        , const std::string& unit
+        , std::string_view description
+        , std::string_view unit
     ) override {
         auto key = MakeKey(name, labels);
         std::lock_guard lock(WrappersLock_);
@@ -143,11 +143,11 @@ public:
         return cached;
     }
 
-    std::shared_ptr<IHistogram> Histogram(const std::string& name
+    std::shared_ptr<IHistogram> Histogram(std::string_view name
         , const std::vector<double>& buckets
         , const TLabels& labels
-        , const std::string& description
-        , const std::string& unit
+        , std::string_view description
+        , std::string_view unit
     ) override {
         ConfigureHistogramBuckets(name, unit, buckets);
         auto key = MakeKey(name, labels);
@@ -161,7 +161,7 @@ public:
     }
 
 private:
-    static std::string MakeKey(const std::string& name, const TLabels& labels) {
+    static std::string MakeKey(std::string_view name, const TLabels& labels) {
         std::string key;
         key.reserve(name.size() + labels.size() * 24);
         key.append(name);
@@ -175,7 +175,7 @@ private:
         return key;
     }
 
-    void ConfigureHistogramBuckets(const std::string& name, const std::string& unit, const std::vector<double>& buckets) {
+    void ConfigureHistogramBuckets(std::string_view name, std::string_view unit, const std::vector<double>& buckets) {
         if (buckets.empty()) {
             return;
         }

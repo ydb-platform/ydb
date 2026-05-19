@@ -81,42 +81,42 @@ private:
 
 class TBenchRegistry : public IMetricRegistry {
 public:
-    std::shared_ptr<ICounter> Counter(const std::string& name,
+    std::shared_ptr<ICounter> Counter(std::string_view name,
                                        const TLabels& labels,
-                                       const std::string&,
-                                       const std::string&) override {
+                                       std::string_view,
+                                       std::string_view) override {
         std::lock_guard<std::mutex> lock(Mu_);
         auto& slot = Counters_[Key(name, labels)];
         if (!slot) slot = std::make_shared<TBenchCounter>();
         return slot;
     }
-    std::shared_ptr<IHistogram> Histogram(const std::string& name,
+    std::shared_ptr<IHistogram> Histogram(std::string_view name,
                                            const std::vector<double>&,
                                            const TLabels& labels,
-                                           const std::string&,
-                                           const std::string&) override {
+                                           std::string_view,
+                                           std::string_view) override {
         std::lock_guard<std::mutex> lock(Mu_);
         auto& slot = Histograms_[Key(name, labels)];
         if (!slot) slot = std::make_shared<TBenchHistogram>();
         return slot;
     }
-    std::shared_ptr<IGauge> Gauge(const std::string& name,
+    std::shared_ptr<IGauge> Gauge(std::string_view name,
                                    const TLabels& labels,
-                                   const std::string&,
-                                   const std::string&) override {
+                                   std::string_view,
+                                   std::string_view) override {
         std::lock_guard<std::mutex> lock(Mu_);
         auto& slot = Gauges_[Key(name, labels)];
         if (!slot) slot = std::make_shared<TBenchGauge>();
         return slot;
     }
 
-    std::shared_ptr<TBenchCounter> GetCounter(const std::string& name,
+    std::shared_ptr<TBenchCounter> GetCounter(std::string_view name,
                                                 const TLabels& labels = {}) const {
         std::lock_guard<std::mutex> lock(Mu_);
         auto it = Counters_.find(Key(name, labels));
         return it == Counters_.end() ? nullptr : it->second;
     }
-    std::shared_ptr<TBenchHistogram> GetHistogram(const std::string& name,
+    std::shared_ptr<TBenchHistogram> GetHistogram(std::string_view name,
                                                     const TLabels& labels = {}) const {
         std::lock_guard<std::mutex> lock(Mu_);
         auto it = Histograms_.find(Key(name, labels));
@@ -124,7 +124,8 @@ public:
     }
 
 private:
-    static std::string Key(const std::string& name, const TLabels& labels) {
+    static std::string Key(std::string_view name, const TLabels& labels) {
+
         std::string k = name;
         for (const auto& [a, b] : labels) {
             k.push_back('|');
@@ -150,7 +151,7 @@ struct TResult {
     double DurationMs = 0.0;
 };
 
-TResult RunWorkload(const std::string& mode,
+TResult RunWorkload(std::string_view mode,
                      int threads,
                      std::uint64_t opsPerThread,
                      std::shared_ptr<IMetricRegistry> registry,

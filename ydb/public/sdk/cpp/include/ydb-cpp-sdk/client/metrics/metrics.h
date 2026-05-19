@@ -46,23 +46,23 @@ public:
     virtual ~IMetricRegistry() = default;
 
     virtual std::shared_ptr<ICounter> Counter(
-        const std::string& name,
+        std::string_view name,
         const TLabels& labels = {},
-        const std::string& description = {},
-        const std::string& unit = {}
+        std::string_view description = {},
+        std::string_view unit = {}
     ) = 0;
     virtual std::shared_ptr<IGauge> Gauge(
-        const std::string& name,
+        std::string_view name,
         const TLabels& labels = {},
-        const std::string& description = {},
-        const std::string& unit = {}
+        std::string_view description = {},
+        std::string_view unit = {}
     ) = 0;
     virtual std::shared_ptr<IHistogram> Histogram(
-        const std::string& name,
+        std::string_view name,
         const std::vector<double>& buckets,
         const TLabels& labels = {},
-        const std::string& description = {},
-        const std::string& unit = {}
+        std::string_view description = {},
+        std::string_view unit = {}
     ) = 0;
 };
 

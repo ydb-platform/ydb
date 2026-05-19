@@ -18,11 +18,11 @@ namespace {
 
 constexpr int DefaultGrpcPort = 2135;
 
-std::string_view YdbClientApiAttributeValue(const std::string& clientType) noexcept {
+std::string_view YdbClientApiAttributeValue(std::string_view clientType) noexcept {
     return clientType.empty() ? SpanValue::kClientApiUnspecified : std::string_view(clientType);
 }
 
-void ParseEndpoint(const std::string& endpoint, std::string& host, int& port) {
+void ParseEndpoint(std::string_view endpoint, std::string& host, int& port) {
     port = DefaultGrpcPort;
 
     if (endpoint.empty()) {
@@ -93,11 +93,11 @@ void SafeLogRequestSpanError(TLog& log, const char* message, std::exception_ptr 
 
 } // namespace
 
-std::shared_ptr<TRequestSpan> TRequestSpan::Create(const std::string& ydbClientType
+std::shared_ptr<TRequestSpan> TRequestSpan::Create(std::string_view ydbClientType
     , std::shared_ptr<NTrace::ITracer> tracer
-    , const std::string& requestName
-    , const std::string& discoveryEndpoint
-    , const std::string& database
+    , std::string_view requestName
+    , std::string_view discoveryEndpoint
+    , std::string_view database
     , const TLog& log
     , NTrace::ESpanKind kind
     , const std::shared_ptr<TRequestSpan>& parent
@@ -115,7 +115,7 @@ std::shared_ptr<TRequestSpan> TRequestSpan::Create(const std::string& ydbClientT
     ));
 }
 
-std::shared_ptr<TRequestSpan> TRequestSpan::CreateForClientRetry(const std::string& ydbClientType
+std::shared_ptr<TRequestSpan> TRequestSpan::CreateForClientRetry(std::string_view ydbClientType
     , std::shared_ptr<NTrace::ITracer> tracer
     , const std::shared_ptr<TDbDriverState>& dbDriverState
 ) {
@@ -130,7 +130,7 @@ std::shared_ptr<TRequestSpan> TRequestSpan::CreateForClientRetry(const std::stri
     );
 }
 
-std::shared_ptr<TRequestSpan> TRequestSpan::CreateForRetryAttempt(const std::string& ydbClientType
+std::shared_ptr<TRequestSpan> TRequestSpan::CreateForRetryAttempt(std::string_view ydbClientType
     , std::shared_ptr<NTrace::ITracer> tracer
     , const std::shared_ptr<TDbDriverState>& dbDriverState
     , std::uint32_t attempt
@@ -153,11 +153,11 @@ std::shared_ptr<TRequestSpan> TRequestSpan::CreateForRetryAttempt(const std::str
     return span;
 }
 
-TRequestSpan::TRequestSpan(const std::string& ydbClientType
+TRequestSpan::TRequestSpan(std::string_view ydbClientType
     , std::shared_ptr<NTrace::ITracer> tracer
-    , const std::string& requestName
-    , const std::string& discoveryEndpoint
-    , const std::string& database
+    , std::string_view requestName
+    , std::string_view discoveryEndpoint
+    , std::string_view database
     , const TLog& log
     , NTrace::ESpanKind kind
     , NTrace::ISpan* parent
@@ -191,11 +191,11 @@ TRequestSpan::~TRequestSpan() noexcept {
     End(EStatus::CLIENT_INTERNAL_ERROR);
 }
 
-void TRequestSpan::SetPeerEndpoint(const std::string& endpoint) noexcept {
+void TRequestSpan::SetPeerEndpoint(std::string_view endpoint) noexcept {
     SetPeerEndpoint(endpoint, /*nodeId=*/0, /*location=*/"");
 }
 
-void TRequestSpan::SetPeerEndpoint(const std::string& endpoint, std::uint64_t nodeId, const std::string& location) noexcept {
+void TRequestSpan::SetPeerEndpoint(std::string_view endpoint, std::uint64_t nodeId, std::string_view location) noexcept {
     if (!Span_) {
         return;
     }
@@ -262,7 +262,7 @@ void TRequestSpan::End(EStatus status) noexcept {
     }
 }
 
-void TRequestSpan::EndWithException(const std::string& exceptionType, const std::string& message) noexcept {
+void TRequestSpan::EndWithException(std::string_view exceptionType, std::string_view message) noexcept {
     if (Span_) {
         try {
             Span_->SetAttribute(SpanAttr::kErrorType, exceptionType);

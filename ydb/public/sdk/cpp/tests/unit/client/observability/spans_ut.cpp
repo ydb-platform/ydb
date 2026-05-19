@@ -32,8 +32,8 @@ protected:
     }
 
     std::shared_ptr<NYdb::NObservability::TRequestSpan> MakeRequestSpan(
-        const std::string& operationName,
-        const std::string& endpoint,
+        std::string_view operationName,
+        std::string_view endpoint,
         NTrace::ESpanKind kind = NTrace::ESpanKind::CLIENT
     ) {
         return NYdb::NObservability::TRequestSpan::Create(

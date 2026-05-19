@@ -17,13 +17,13 @@
 namespace NYdb::inline Dev {
 namespace NSdkStats {
 
-inline std::string YdbClientApiAttributeValue(const std::string& clientType) {
-    return clientType.empty() ? std::string("Unspecified") : clientType;
+inline std::string YdbClientApiAttributeValue(std::string_view clientType) {
+    return clientType.empty() ? std::string("Unspecified") : std::string(clientType);
 }
 
 // works only for case normal (foo_bar) underscore
 
-inline std::string UnderscoreToUpperCamel(const std::string& in) {
+inline std::string UnderscoreToUpperCamel(std::string_view in) {
     std::string result;
     result.reserve(in.size());
 
@@ -190,15 +190,15 @@ public:
         , ::NMonitoring::TRate* fakeSessions = nullptr
         , ::NMonitoring::TIntGauge* waiters = nullptr
         , std::shared_ptr<NMetrics::IMetricRegistry> externalRegistry = {}
-        , std::string clientType = {}
-        , std::string poolName = {}
+        , std::string_view clientType = {}
+        , std::string_view poolName = {}
     ) : ActiveSessions(activeSessions)
         , InPoolSessions(inPoolSessions)
         , FakeSessions(fakeSessions)
         , Waiters(waiters)
         , ExternalRegistry_(std::move(externalRegistry))
-        , ClientType_(std::move(clientType))
-        , PoolName_(std::move(poolName))
+        , ClientType_(clientType)
+        , PoolName_(poolName)
     {}
 
         ::NMonitoring::TIntGauge* ActiveSessions;
@@ -273,7 +273,7 @@ public:
             return static_cast<bool>(ExternalRegistry_);
         }
 
-        const std::string& GetClientType() const {
+        std::string_view GetClientType() const {
             return ClientType_;
         }
 
@@ -282,7 +282,7 @@ public:
         }
 
     private:
-        static std::string PoolMetricNamespace(const std::string& clientType) {
+        static std::string PoolMetricNamespace(std::string_view clientType) {
             if (clientType == "Query") {
                 return std::string(NObservability::MetricName::kSessionPrefixQuery);
             }
@@ -338,8 +338,8 @@ public:
         TClientRetryOperationStatCollector() : MetricRegistry_(), Database_() {}
 
         TClientRetryOperationStatCollector(::NMonitoring::TMetricRegistry* registry,
-                                           const std::string& database,
-                                           const std::string& clientType)
+                                           std::string_view database,
+                                           std::string_view clientType)
             : MetricRegistry_(registry)
             , Database_(database)
             , ClientType_(clientType)
@@ -373,8 +373,8 @@ public:
         {}
 
         TClientOperationStatCollector(::NMonitoring::TMetricRegistry* registry,
-                                      const std::string& database,
-                                      const std::string& clientType,
+                                      std::string_view database,
+                                      std::string_view clientType,
                                       std::shared_ptr<NMetrics::IMetricRegistry> externalRegistry = {},
                                       std::string serverAddress = {},
                                       std::uint16_t serverPort = 0)
@@ -386,18 +386,18 @@ public:
             , ServerPort_(serverPort)
         {}
 
-        void IncRequestCount(const std::string& operationName) {
+        void IncRequestCount(std::string_view operationName) {
             if (auto registry = MetricRegistry_.Get()) {
                 registry->Rate({
                     {"database", Database_},
                     {"ydb_client", ClientType_},
-                    {"operation", operationName},
+                    {"operation", std::string(operationName)},
                     {"sensor", "Request/Operations"}
                 })->Inc();
             }
         }
 
-        void IncErrorCount(const std::string& operationName, EStatus status) {
+        void IncErrorCount(std::string_view operationName, EStatus status) {
             if (status == EStatus::SUCCESS) {
                 return;
             }
@@ -405,7 +405,7 @@ public:
                 registry->Rate({
                     {"database", Database_},
                     {"ydb_client", ClientType_},
-                    {"operation", operationName},
+                    {"operation", std::string(operationName)},
                     {"status", TStringBuilder() << status},
                     {"sensor", "Request/OperationErrors"}
                 })->Inc();
@@ -415,7 +415,7 @@ public:
                 NMetrics::TLabels labels = {
                     {std::string(MetricLabel::kDbSystemName), std::string(MetricValue::kDbSystemYdb)},
                     {std::string(MetricLabel::kDbNamespace), Database_},
-                    {std::string(MetricLabel::kDbOperationName), operationName},
+                    {std::string(MetricLabel::kDbOperationName), std::string(operationName)},
                     {std::string(MetricLabel::kDbResponseStatusCode), TStringBuilder() << status},
                 };
                 if (!ServerAddress_.empty()) {
@@ -433,13 +433,13 @@ public:
             }
         }
 
-        void RecordLatency(const std::string& operationName, double durationSeconds, EStatus status) {
+        void RecordLatency(std::string_view operationName, double durationSeconds, EStatus status) {
             (void)status;
             if (auto registry = MetricRegistry_.Get()) {
                 registry->HistogramRate({
                     {"database", Database_},
                     {"ydb_client", ClientType_},
-                    {"operation", operationName},
+                    {"operation", std::string(operationName)},
                     {"sensor", "Request/OperationLatencyMs"}
                 }, ::NMonitoring::ExponentialHistogram(20, 2, 1))->Record(
                     static_cast<i64>(durationSeconds * 1000.0));
@@ -449,7 +449,7 @@ public:
                 NMetrics::TLabels labels = {
                     {std::string(MetricLabel::kDbSystemName), std::string(MetricValue::kDbSystemYdb)},
                     {std::string(MetricLabel::kDbNamespace), Database_},
-                    {std::string(MetricLabel::kDbOperationName), operationName},
+                    {std::string(MetricLabel::kDbOperationName), std::string(operationName)},
                 };
                 if (!ServerAddress_.empty()) {
                     labels[std::string(MetricLabel::kServerAddress)] = ServerAddress_;
@@ -503,10 +503,10 @@ public:
         TClientOperationStatCollector OperationStatCollector;
     };
 
-    TStatCollector(const std::string& database
+    TStatCollector(std::string_view database
         , TMetricRegistry* sensorsRegistry
         , std::shared_ptr<NMetrics::IMetricRegistry> externalMetricRegistry = {}
-        , const std::string& discoveryEndpoint = {}
+        , std::string_view discoveryEndpoint = {}
     ) : Database_(database)
         , DatabaseLabel_({"database", database})
         , ExternalMetricRegistry_(std::move(externalMetricRegistry))
@@ -518,11 +518,11 @@ public:
         }
     }
 
-    static std::string ResolvePoolName(const std::string& explicitPoolName,
-                                       const std::string& database,
-                                       const std::string& discoveryEndpoint) {
+    static std::string ResolvePoolName(std::string_view explicitPoolName,
+                                       std::string_view database,
+                                       std::string_view discoveryEndpoint) {
         if (!explicitPoolName.empty()) {
-            return explicitPoolName;
+            return std::string(explicitPoolName);
         }
         std::string out;
         out.reserve(database.size() + discoveryEndpoint.size() + 1);
@@ -532,7 +532,7 @@ public:
         return out;
     }
 
-    static void ParseDiscoveryEndpoint(const std::string& endpoint,
+    static void ParseDiscoveryEndpoint(std::string_view endpoint,
                                        std::string& outHost,
                                        std::uint16_t& outPort) noexcept {
         outHost.clear();
@@ -631,7 +631,7 @@ public:
         ResultSize_.Record(size);
     }
 
-    void IncCounter(const std::string& sensor) {
+    void IncCounter(std::string_view sensor) {
         if (auto registry = MetricRegistryPtr_.Get()) {
             registry->Counter({ {"database", Database_}, {"sensor", sensor} })->Inc();
         }
@@ -660,8 +660,8 @@ public:
         return TEndpointElectorStatCollector();
     }
 
-    TSessionPoolStatCollector GetSessionPoolStatCollector(const std::string& clientType
-        , const std::string& explicitPoolName = {}
+    TSessionPoolStatCollector GetSessionPoolStatCollector(std::string_view clientType
+        , std::string_view explicitPoolName = {}
     ) {
         const std::string poolName = ResolvePoolName(explicitPoolName, Database_, DiscoveryEndpoint_);
 
@@ -683,7 +683,7 @@ public:
             ExternalMetricRegistry_, clientType, poolName);
     }
 
-    TClientStatCollector GetClientStatCollector(const std::string& clientType) {
+    TClientStatCollector GetClientStatCollector(std::string_view clientType) {
         if (auto registry = MetricRegistryPtr_.Get()) {
             ::NMonitoring::TRate* cacheMiss = nullptr;
             ::NMonitoring::TRate* sessionRemovedDueBalancing = nullptr;
@@ -719,13 +719,13 @@ public:
         return MetricRegistryPtr_.Get() != nullptr;
     }
 
-    void IncSessionsOnHost(const std::string& host);
-    void DecSessionsOnHost(const std::string& host);
+    void IncSessionsOnHost(std::string_view host);
+    void DecSessionsOnHost(std::string_view host);
 
-    void IncTransportErrorsByHost(const std::string& host);
+    void IncTransportErrorsByHost(std::string_view host);
 
-    void IncGRpcInFlightByHost(const std::string& host);
-    void DecGRpcInFlightByHost(const std::string& host);
+    void IncGRpcInFlightByHost(std::string_view host);
+    void DecGRpcInFlightByHost(std::string_view host);
 
 private:
     const std::string Database_;

@@ -109,10 +109,10 @@ struct TMetricKey {
 
 class TFakeMetricRegistry : public NMetrics::IMetricRegistry {
 public:
-    std::shared_ptr<NMetrics::ICounter> Counter(const std::string& name
+    std::shared_ptr<NMetrics::ICounter> Counter(std::string_view name
         , const NMetrics::TLabels& labels
-        , const std::string& /*description*/
-        , const std::string& /*unit*/
+        , std::string_view /*description*/
+        , std::string_view /*unit*/
     ) override {
         std::lock_guard lock(Mutex_);
         auto key = TMetricKey{name, labels};
@@ -125,10 +125,10 @@ public:
         return counter;
     }
 
-    std::shared_ptr<NMetrics::IGauge> Gauge(const std::string& name
+    std::shared_ptr<NMetrics::IGauge> Gauge(std::string_view name
         , const NMetrics::TLabels& labels
-        , const std::string& /*description*/
-        , const std::string& /*unit*/
+        , std::string_view /*description*/
+        , std::string_view /*unit*/
     ) override {
         std::lock_guard lock(Mutex_);
         auto key = TMetricKey{name, labels};
@@ -141,11 +141,11 @@ public:
         return gauge;
     }
 
-    std::shared_ptr<NMetrics::IHistogram> Histogram(const std::string& name
+    std::shared_ptr<NMetrics::IHistogram> Histogram(std::string_view name
         , const std::vector<double>& /*buckets*/
         , const NMetrics::TLabels& labels
-        , const std::string& /*description*/
-        , const std::string& /*unit*/
+        , std::string_view /*description*/
+        , std::string_view /*unit*/
     ) override {
         std::lock_guard lock(Mutex_);
         auto key = TMetricKey{name, labels};
@@ -158,19 +158,19 @@ public:
         return histogram;
     }
 
-    std::shared_ptr<TFakeCounter> GetCounter(const std::string& name, const NMetrics::TLabels& labels = {}) const {
+    std::shared_ptr<TFakeCounter> GetCounter(std::string_view name, const NMetrics::TLabels& labels = {}) const {
         std::lock_guard lock(Mutex_);
         auto it = Counters_.find(TMetricKey{name, labels});
         return it != Counters_.end() ? it->second : nullptr;
     }
 
-    std::shared_ptr<TFakeHistogram> GetHistogram(const std::string& name, const NMetrics::TLabels& labels = {}) const {
+    std::shared_ptr<TFakeHistogram> GetHistogram(std::string_view name, const NMetrics::TLabels& labels = {}) const {
         std::lock_guard lock(Mutex_);
         auto it = Histograms_.find(TMetricKey{name, labels});
         return it != Histograms_.end() ? it->second : nullptr;
     }
 
-    std::shared_ptr<TFakeGauge> GetGauge(const std::string& name, const NMetrics::TLabels& labels = {}) const {
+    std::shared_ptr<TFakeGauge> GetGauge(std::string_view name, const NMetrics::TLabels& labels = {}) const {
         std::lock_guard lock(Mutex_);
         auto it = Gauges_.find(TMetricKey{name, labels});
         return it != Gauges_.end() ? it->second : nullptr;

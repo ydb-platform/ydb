@@ -34,7 +34,7 @@ protected:
             nullptr, kTestDbNamespace, "", Registry, kTestServerAddress, kTestServerPort);
     }
 
-    static TLabels FailedLabels(const std::string& op, EStatus status) {
+    static TLabels FailedLabels(std::string_view op, EStatus status) {
         return {
             {"db.system.name", "ydb"},
             {"db.namespace", kTestDbNamespace},
@@ -45,7 +45,7 @@ protected:
         };
     }
 
-    static TLabels DurationLabels(const std::string& op) {
+    static TLabels DurationLabels(std::string_view op) {
         return {
             {"db.system.name", "ydb"},
             {"db.namespace", kTestDbNamespace},
@@ -55,11 +55,11 @@ protected:
         };
     }
 
-    std::shared_ptr<TFakeCounter> FailedCounter(const std::string& op, EStatus status) {
+    std::shared_ptr<TFakeCounter> FailedCounter(std::string_view op, EStatus status) {
         return Registry->GetCounter("ydb.client.operation.failed", FailedLabels(op, status));
     }
 
-    std::shared_ptr<TFakeHistogram> DurationHistogram(const std::string& op) {
+    std::shared_ptr<TFakeHistogram> DurationHistogram(std::string_view op) {
         return Registry->GetHistogram("ydb.client.operation.duration", DurationLabels(op));
     }
 
@@ -381,19 +381,19 @@ TEST(PoolNameResolutionTest, FallsBackToDatabaseAtEndpoint) {
 // ---------------------------------------------------------------------------
 
 namespace {
-    NMetrics::TLabels QueryPoolLabels(const std::string& poolName) {
+    NMetrics::TLabels QueryPoolLabels(std::string_view poolName) {
         return {
             {"ydb.query.session.pool.name", poolName},
         };
     }
 
-    NMetrics::TLabels QueryCountLabels(const std::string& poolName, const std::string& state) {
+    NMetrics::TLabels QueryCountLabels(std::string_view poolName, std::string_view state) {
         auto labels = QueryPoolLabels(poolName);
         labels["ydb.query.session.state"] = state;
         return labels;
     }
 
-    NMetrics::TLabels TablePoolLabels(const std::string& poolName) {
+    NMetrics::TLabels TablePoolLabels(std::string_view poolName) {
         return {
             {"ydb.table.session.pool.name", poolName},
         };
@@ -594,13 +594,13 @@ struct TOpScenario {
     std::vector<EStatus> Statuses;
 };
 
-std::size_t CountSpans(const std::vector<TFakeTracer::TSpanRecord>& spans, const std::string& name) {
+std::size_t CountSpans(const std::vector<TFakeTracer::TSpanRecord>& spans, std::string_view name) {
     return std::count_if(spans.begin(), spans.end(),
         [&](const TFakeTracer::TSpanRecord& r) { return r.Name == name; });
 }
 
 std::size_t CountSpansWithException(const std::vector<TFakeTracer::TSpanRecord>& spans,
-                                    const std::string& name) {
+                                    std::string_view name) {
     return std::count_if(spans.begin(), spans.end(),
         [&](const TFakeTracer::TSpanRecord& r) {
             if (r.Name != name) {
@@ -629,7 +629,7 @@ protected:
         Endpoint = std::string(kTestServerAddress) + ":" + ToString(kTestServerPort);
     }
 
-    void EmitOperation(const std::string& op, EStatus status) {
+    void EmitOperation(std::string_view op, EStatus status) {
         auto span = NObservability::TRequestSpan::Create(
             /*ydbClientType=*/"",
             Tracer,
@@ -642,7 +642,7 @@ protected:
         span->End(status);
     }
 
-    static TLabels DurationLabels(const std::string& op) {
+    static TLabels DurationLabels(std::string_view op) {
         return {
             {"db.system.name", "ydb"},
             {"db.namespace", kTestDbNamespace},

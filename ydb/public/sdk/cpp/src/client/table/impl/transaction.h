@@ -8,13 +8,13 @@ namespace NYdb::inline Dev::NTable {
 
 class TTransaction::TImpl : public std::enable_shared_from_this<TImpl> {
 public:
-    TImpl(const TSession& session, const std::string& txId);
+    TImpl(const TSession& session, std::string_view txId);
 
     const std::string& GetId() const {
         return TxId_;
     }
 
-    const std::string& GetSessionId() const {
+    std::string_view GetSessionId() const {
         return Session_.GetId();
     }
 

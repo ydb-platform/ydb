@@ -468,16 +468,16 @@ private:
 
 class TThrowingRegistry final : public IMetricRegistry {
 public:
-    std::shared_ptr<ICounter> Counter(const std::string&, const TLabels&, const std::string&, const std::string&) override {
+    std::shared_ptr<ICounter> Counter(std::string_view, const TLabels&, std::string_view, std::string_view) override {
         if (!Counter_) {
             Counter_ = std::make_shared<TThrowingCounter>(&CounterCalls_);
         }
         return Counter_;
     }
-    std::shared_ptr<IGauge> Gauge(const std::string&, const TLabels&, const std::string&, const std::string&) override {
+    std::shared_ptr<IGauge> Gauge(std::string_view, const TLabels&, std::string_view, std::string_view) override {
         return nullptr;
     }
-    std::shared_ptr<IHistogram> Histogram(const std::string&, const std::vector<double>&, const TLabels&, const std::string&, const std::string&) override {
+    std::shared_ptr<IHistogram> Histogram(std::string_view, const std::vector<double>&, const TLabels&, std::string_view, std::string_view) override {
         if (!Histogram_) {
             Histogram_ = std::make_shared<TThrowingHistogram>(&HistogramCalls_);
         }

@@ -98,27 +98,29 @@ public:
         OperationStatCollector_ = collector.OperationStatCollector;
     }
 
-    TAsyncExecuteQueryIterator StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryIterator StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
         const std::optional<TParams>& params, const TExecuteQuerySettings& settings, const std::optional<TSession>& session = {})
     {
         CollectQuerySize(query);
         CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
+        const std::string queryText(query);
         return TExecQueryImpl::StreamExecuteQuery(
-            Connections_, DbDriverState_, query, txControl, params, settings, session);
+            Connections_, DbDriverState_, queryText, txControl, params, settings, session);
     }
 
-    TAsyncExecuteQueryResult ExecuteQuery(const std::string& query, const TTxControl& txControl,
+    TAsyncExecuteQueryResult ExecuteQuery(std::string_view query, const TTxControl& txControl,
         const std::optional<TParams>& params, const TExecuteQuerySettings& settings,
         const std::optional<TSession>& session = {})
     {
         CollectQuerySize(query);
         CollectParamsSize(params ? &params->GetProtoMap() : nullptr);
+        const std::string queryText(query);
 
         auto obs = MakeObservation("ExecuteQuery");
         std::string sessionEndpoint = session.has_value() ? session->SessionImpl_->GetEndpoint() : std::string{};
 
         return TExecQueryImpl::ExecuteQuery(
-            Connections_, DbDriverState_, query, txControl, params, settings, session)
+            Connections_, DbDriverState_, queryText, txControl, params, settings, session)
             .Apply([obs, sessionEndpoint = std::move(sessionEndpoint)](TAsyncExecuteQueryResult future) {
                 try {
                     auto result = future.GetValue();
@@ -132,7 +134,7 @@ public:
             });
     }
 
-    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script, const std::optional<TParams>& params, const TExecuteScriptSettings& settings) {
+    NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(std::string_view script, const std::optional<TParams>& params, const TExecuteScriptSettings& settings) {
         auto rpcSettings = TRpcRequestSettings::Make(settings);
 
         auto request = MakeOperationRequest<Ydb::Query::ExecuteScriptRequest>(settings);
@@ -183,7 +185,7 @@ public:
         return FetchScriptResultsImpl(std::move(request), settings);
     }
 
-    TAsyncStatus RollbackTransaction(const std::string& txId,
+    TAsyncStatus RollbackTransaction(std::string_view txId,
                                      const NYdb::NQuery::TRollbackTxSettings& settings,
                                      const TSession& session)
     {
@@ -230,7 +232,7 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncCommitTransactionResult CommitTransaction(const std::string& txId,
+    TAsyncCommitTransactionResult CommitTransaction(std::string_view txId,
                                                     const NYdb::NQuery::TCommitTxSettings& settings,
                                                     const TSession& session)
     {
@@ -410,7 +412,7 @@ public:
 
     void DoAttachSession(Ydb::Query::CreateSessionResponse* resp
         , NThreading::TPromise<TCreateSessionResult> promise
-        , const std::string& endpoint
+        , std::string_view endpoint
         , std::shared_ptr<TQueryClient::TImpl> client
         , std::chrono::steady_clock::time_point createStartTime
     ) {
@@ -418,11 +420,11 @@ public:
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
-        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client, client);
+        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, std::string(endpoint), client, client);
 
         // Do not pass client timeout here. Session must be alive
         TRpcRequestSettings rpcSettings;
-        rpcSettings.PreferredEndpoint = TEndpointKey(endpoint, GetNodeIdFromSession(sessionId));
+        rpcSettings.PreferredEndpoint = TEndpointKey(std::string(endpoint), GetNodeIdFromSession(sessionId));
 
         Connections_->StartReadStream<
             Ydb::Query::V1::QueryService,
@@ -606,7 +608,7 @@ public:
         RetryOperationStatCollector_.IncSyncRetryOperation(status);
     }
 
-    void CollectQuerySize(const std::string& query) {
+    void CollectQuerySize(std::string_view query) {
         if (QuerySizeHistogram_.IsCollecting()) {
             QuerySizeHistogram_.Record(query.size());
         }
@@ -646,12 +648,12 @@ public:
     }
 
 private:
-    std::shared_ptr<TQueryObservation> MakeObservation(const std::string& operationName) {
+    std::shared_ptr<TQueryObservation> MakeObservation(std::string_view operationName) {
         return std::make_shared<TQueryObservation>(
             "Query",
             &OperationStatCollector_,
             Tracer_,
-            operationName,
+            std::string(operationName),
             DbDriverState_
         );
     }
@@ -672,37 +674,37 @@ TQueryClient::TQueryClient(const TDriver& driver, const TClientSettings& setting
     Impl_->StartPeriodicSessionPoolTask();
 }
 
-TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TExecuteQuerySettings& settings)
 {
     return Impl_->ExecuteQuery(query, txControl, {}, settings);
 }
 
-TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TParams& params, const TExecuteQuerySettings& settings)
 {
     return Impl_->ExecuteQuery(query, txControl, params, settings);
 }
 
-TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TExecuteQuerySettings& settings)
 {
     return Impl_->StreamExecuteQuery(query, txControl, {}, settings);
 }
 
-TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TParams& params, const TExecuteQuerySettings& settings)
 {
     return Impl_->StreamExecuteQuery(query, txControl, params, settings);
 }
 
-NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const std::string& script,
+NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(std::string_view script,
     const TExecuteScriptSettings& settings)
 {
     return Impl_->ExecuteScript(script, {}, settings);
 }
 
-NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const std::string& script,
+NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(std::string_view script,
     const TParams& params, const TExecuteScriptSettings& settings)
 {
     return Impl_->ExecuteScript(script, params, settings);
@@ -755,7 +757,7 @@ TStatus TQueryClient::RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFu
     return NRetry::Sync::TRetryWithoutSession(*this, queryFunc, settings).Execute();
 }
 
-TAsyncExecuteQueryResult TQueryClient::RetryQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryResult TQueryClient::RetryQuery(std::string_view query, const TTxControl& txControl,
     TDuration timeout, bool isIndempotent)
 {
     auto settings = GetRetrySettings(timeout, isIndempotent);
@@ -804,11 +806,11 @@ void TSession::SetPropagatedDeadline(const TDeadline& deadline) {
     SessionImpl_->PropagatedDeadline_ = deadline;
 }
 
-const std::string& TSession::GetId() const {
+std::string_view TSession::GetId() const {
     return SessionImpl_->GetId();
 }
 
-TAsyncExecuteQueryResult TSession::ExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryResult TSession::ExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TExecuteQuerySettings& settings)
 {
     return NSessionPool::InjectSessionStatusInterception(
@@ -818,7 +820,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const std::string& query, const 
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
-TAsyncExecuteQueryResult TSession::ExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryResult TSession::ExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TParams& params, const TExecuteQuerySettings& settings)
 {
     return NSessionPool::InjectSessionStatusInterception(
@@ -828,7 +830,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const std::string& query, const 
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
-TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TExecuteQuerySettings& settings)
 {
     return NSessionPool::InjectSessionStatusInterception(
@@ -838,7 +840,7 @@ TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const std::string& query
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
-TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
+TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(std::string_view query, const TTxControl& txControl,
     const TParams& params, const TExecuteQuerySettings& settings)
 {
     return NSessionPool::InjectSessionStatusInterception(
@@ -860,16 +862,16 @@ TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSet
 
 class TTransaction::TImpl : public std::enable_shared_from_this<TImpl> {
 public:
-    TImpl(const TSession& session, const std::string& txId)
+    TImpl(const TSession& session, std::string_view txId)
         : Session_(session)
         , TxId_(txId)
     {}
 
-    const std::string& GetId() const {
+    std::string_view GetId() const {
         return TxId_;
     }
 
-    const std::string& GetSessionId() const {
+    std::string_view GetSessionId() const {
         return Session_.GetId();
     }
 
@@ -991,10 +993,10 @@ private:
     std::mutex OnFailureCallbacksMutex;
 };
 
-TTransaction::TTransaction(const TSession& session, const std::string& txId)
+TTransaction::TTransaction(const TSession& session, std::string_view txId)
     : TransactionImpl_(std::make_shared<TTransaction::TImpl>(session, txId))
 {
-    SessionId_ = &TransactionImpl_->Session_.GetId();
+    SessionId_ = &TransactionImpl_->Session_.SessionImpl_->GetId();
     TxId_ = &TransactionImpl_->TxId_;
 }
 

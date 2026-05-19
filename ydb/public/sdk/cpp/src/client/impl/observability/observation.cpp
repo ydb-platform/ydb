@@ -6,10 +6,10 @@
 
 namespace NYdb::inline Dev::NObservability {
 
-TRequestObservation::TRequestObservation(const std::string& ydbClientType
+TRequestObservation::TRequestObservation(std::string_view ydbClientType
     , NSdkStats::TStatCollector::TClientOperationStatCollector* operationCollector
     , std::shared_ptr<NTrace::ITracer> tracer
-    , const std::string& operationName
+    , std::string_view operationName
     , const std::shared_ptr<TDbDriverState>& dbDriverState
 ) : Span_(
         TRequestSpan::Create(ydbClientType
@@ -24,7 +24,7 @@ TRequestObservation::TRequestObservation(const std::string& ydbClientType
     ), DbDriverState_(dbDriverState)
 {}
 
-void TRequestObservation::End(EStatus status, const std::string& endpoint) noexcept {
+void TRequestObservation::End(EStatus status, std::string_view endpoint) noexcept {
     if (Span_) {
         std::uint64_t nodeId = 0;
         std::string location;

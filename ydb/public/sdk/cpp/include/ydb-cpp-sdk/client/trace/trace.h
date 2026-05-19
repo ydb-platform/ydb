@@ -51,12 +51,12 @@ public:
     virtual ~ITracer() = default;
 
     virtual std::shared_ptr<ISpan> StartSpan(
-        const std::string& name
+        std::string_view name
         , ESpanKind kind = ESpanKind::INTERNAL
     ) = 0;
 
     virtual std::shared_ptr<ISpan> StartSpan(
-        const std::string& name
+        std::string_view name
         , ESpanKind kind
         , ISpan* parent
     ) {
@@ -70,7 +70,7 @@ public:
 class ITraceProvider {
 public:
     virtual ~ITraceProvider() = default;
-    virtual std::shared_ptr<ITracer> GetTracer(const std::string& name) = 0;
+    virtual std::shared_ptr<ITracer> GetTracer(std::string_view name) = 0;
 };
 
 } // namespace NYdb::NTrace

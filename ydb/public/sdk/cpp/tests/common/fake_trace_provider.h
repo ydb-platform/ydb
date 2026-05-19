@@ -83,24 +83,24 @@ public:
         return StatusDescription_;
     }
 
-    std::string GetStringAttribute(const std::string& key) const {
+    std::string GetStringAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
         auto it = StringAttributes_.find(key);
         return it != StringAttributes_.end() ? it->second : "";
     }
 
-    bool HasStringAttribute(const std::string& key) const {
+    bool HasStringAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
         return StringAttributes_.contains(key);
     }
 
-    int64_t GetIntAttribute(const std::string& key) const {
+    int64_t GetIntAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
         auto it = IntAttributes_.find(key);
         return it != IntAttributes_.end() ? it->second : 0;
     }
 
-    bool HasIntAttribute(const std::string& key) const {
+    bool HasIntAttribute(std::string_view key) const {
         std::lock_guard lock(Mutex_);
         return IntAttributes_.contains(key);
     }
@@ -125,14 +125,14 @@ private:
 class TFakeTracer : public NTrace::ITracer {
 public:
     std::shared_ptr<NTrace::ISpan> StartSpan(
-        const std::string& name,
+        std::string_view name,
         NTrace::ESpanKind kind
     ) override {
         return StartSpan(name, kind, /*parent=*/ nullptr);
     }
 
     std::shared_ptr<NTrace::ISpan> StartSpan(
-        const std::string& name,
+        std::string_view name,
         NTrace::ESpanKind kind,
         NTrace::ISpan* parent
     ) override {
@@ -181,7 +181,7 @@ private:
 
 class TFakeTraceProvider : public NTrace::ITraceProvider {
 public:
-    std::shared_ptr<NTrace::ITracer> GetTracer(const std::string& name) override {
+    std::shared_ptr<NTrace::ITracer> GetTracer(std::string_view name) override {
         std::lock_guard lock(Mutex_);
         auto it = Tracers_.find(name);
         if (it != Tracers_.end()) {
@@ -192,7 +192,7 @@ public:
         return tracer;
     }
 
-    std::shared_ptr<TFakeTracer> GetFakeTracer(const std::string& name) const {
+    std::shared_ptr<TFakeTracer> GetFakeTracer(std::string_view name) const {
         std::lock_guard lock(Mutex_);
         auto it = Tracers_.find(name);
         return it != Tracers_.end() ? it->second : nullptr;

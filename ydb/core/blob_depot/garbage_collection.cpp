@@ -3,6 +3,9 @@
 #include "data.h"
 #include "blocks.h"
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
@@ -233,21 +236,30 @@ namespace NKikimr::NBlobDepot {
                         NIceDb::TUpdate<Schema::Barriers::TYPE##GenCtr>(ui64(barrierGenCtr)), \
                         NIceDb::TUpdate<Schema::Barriers::TYPE>(ui64(barrierCollect)) \
                     ); \
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT45, "replaced " #TYPE " barrier through decommission", \
-                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                        (Barrier, barrier)); \
+                    YDB_LOG_DEBUG("replaced " #TYPE " barrier through decommission", \
+                        {"Marker", "BDT45"}, \
+                        {"TabletId", barrier.TabletId}, \
+                        {"Channel", int(barrier.Channel)}, \
+                        {"GenCtr", current.TYPE##GenCtr}, \
+                        {"Collect", current.TYPE}, \
+                        {"Barrier", barrier}); \
                 } else { \
-                    STLOG(PRI_ERROR, BLOB_DEPOT, BDT36, "decreasing " #TYPE " barrier through decommission", \
-                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                        (Barrier, barrier)); \
+                    YDB_LOG_ERROR("decreasing " #TYPE " barrier through decommission", \
+                        {"Marker", "BDT36"}, \
+                        {"TabletId", barrier.TabletId}, \
+                        {"Channel", int(barrier.Channel)}, \
+                        {"GenCtr", current.TYPE##GenCtr}, \
+                        {"Collect", current.TYPE}, \
+                        {"Barrier", barrier}); \
                 } \
             } else if (current.TYPE##GenCtr == barrierGenCtr && current.TYPE != barrierCollect) { \
-                STLOG(PRI_ERROR, BLOB_DEPOT, BDT43, "barrier value mismatch through decommission", \
-                    (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                    (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                    (Barrier, barrier)); \
+                YDB_LOG_ERROR("barrier value mismatch through decommission", \
+                    {"Marker", "BDT43"}, \
+                    {"TabletId", barrier.TabletId}, \
+                    {"Channel", int(barrier.Channel)}, \
+                    {"GenCtr", current.TYPE##GenCtr}, \
+                    {"Collect", current.TYPE}, \
+                    {"Barrier", barrier}); \
             } \
         }
 

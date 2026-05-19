@@ -3,6 +3,9 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
@@ -403,10 +406,15 @@ namespace NKikimr::NBridge {
 #define MSG(TYPE) \
             case TEvBlobStorage::TYPE: { \
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
-                STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS07, #TYPE, (LogId, LogId), (ToTargetGroup, toTargetGroup), \
-                    (Msg, msg), (QueriesInFlight, QueriesInFlight), \
-                    (PendingQueries.size, PendingQueries.size()), (MaxQueriesInFlight, MaxQueriesInFlight), \
-                    (Payloads.size, Payloads.size())); \
+                YDB_LOG_DEBUG(#TYPE, \
+                    {"Marker", "BRSS07"}, \
+                    {"LogId", LogId}, \
+                    {"ToTargetGroup", toTargetGroup}, \
+                    {"Msg", msg}, \
+                    {"QueriesInFlight", QueriesInFlight}, \
+                    {"PendingQueries.size", PendingQueries.size()}, \
+                    {"MaxQueriesInFlight", MaxQueriesInFlight}, \
+                    {"Payloads.size", Payloads.size()}); \
                 msg.ForceGroupGeneration.emplace(toTargetGroup ? TargetGroupGeneration : SourceGroupGeneration); \
                 break; \
             }

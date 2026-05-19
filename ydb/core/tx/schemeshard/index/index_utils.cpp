@@ -495,6 +495,7 @@ auto CalcFulltextCompactImplTableDescImpl(
     }
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
+    implTableDesc.SetIndexImplType(indexType);
 
     return implTableDesc;
 }

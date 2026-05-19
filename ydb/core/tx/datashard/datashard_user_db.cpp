@@ -1,6 +1,7 @@
 #include "datashard_user_db.h"
 
 #include "datashard_impl.h"
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 
@@ -85,6 +86,13 @@ ui64 CalculateKeyBytes(const TArrayRef<const TRawTypeValue> key) {
     ui64 bytes = 0ull;
     for (const TRawTypeValue& value : key)
         bytes += value.IsEmpty() ? 1ull : value.Size();
+    return bytes;
+};
+
+ui64 CalculateKeyBytes(const TArrayRef<const TCell> key) {
+    ui64 bytes = 0ull;
+    for (const TCell& value : key)
+        bytes += !value.Size() ? 1ull : value.Size();
     return bytes;
 };
 
@@ -250,7 +258,137 @@ void TDataShardUserDb::UpdateRow(
     IncreaseUpdateCounters(key, ops);
 }
 
-// Вот сюда надо внедрить fulltext компакшен
+void TDataShardUserDb::InsertFulltext(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    TIntrusivePtr<NACLib::TUserContext> userCtx,
+    bool withRelevance)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
+
+    // Key = { token, max_id, generation }, but actually max_id and generation are ignored
+    // Data = { added, segment }
+
+    ui32 addedTag = UINT32_MAX, segmentTag = UINT32_MAX;
+    const TUserTable& tableInfo = *Self.GetUserTables().at(tableId.PathId.LocalPathId);
+    for (const auto& it : tableInfo.Columns) {
+        if (it.second.Name == "__ydb_added") {
+            addedTag = it.first;
+        } else if (it.second.Name == "__ydb_segment") {
+            segmentTag = it.first;
+        }
+    }
+
+    // Unpack the list
+    bool added = false;
+    TConstArrayRef<ui8> segment;
+    for (const auto& op: ops) {
+        if (op.Tag == addedTag && op.Op == NTable::ECellOp::Set) {
+            added = op.AsCell().AsValue<bool>();
+        } else if (op.Tag == segmentTag && op.Op == NTable::ECellOp::Set) {
+            segment = TConstArrayRef<ui8>((const ui8*)op.Value.Data(), op.Value.Size());
+        }
+    }
+    if (!segment.size()) {
+        return;
+    }
+    TCell addedCell = TCell::Make(added);
+    TRawTypeValue addedValue(addedCell.Data(), addedCell.Size(), NScheme::NTypeIds::Bool);
+
+    NFulltext::TDeltaReader reader;
+    reader.Reset(0, segment);
+
+    bool valid = true;
+    ui64 docId = 0;
+    ui32 freq = 0;
+    ui64 zero = 0;
+    if (withRelevance) {
+        reader.Read(docId, freq);
+    } else {
+        reader.Read(docId);
+    }
+
+    auto version = MvccVersion;
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation && SnapshotVersion < version) {
+        // We want to keep using snapshot version at commit time in SnapshotRW isolation
+        version = SnapshotVersion;
+    }
+    SetPerformedUserReads(true);
+    auto txMap = GetReadTxMap(tableId);
+    auto txObserver = GetReadTxObserver(tableId);
+    InvisibleRowSkips = 0;
+
+    while (valid) {
+        // FIXME: Forbid splits between different __ydb_generations
+        auto minKey = TVector<const TRawTypeValue>{
+            key[0],
+            TRawTypeValue(&docId, sizeof(docId), NScheme::NTypeIds::Uint64),
+            TRawTypeValue(&zero, sizeof(zero), NScheme::NTypeIds::Uint64),
+        };
+        auto iter = Db.IterateRange(localTableId, NTable::TKeyRange{minKey, {}, true, false}, {}, version, txMap, txObserver);
+        auto ready = iter->Next(NTable::ENext::Data);
+        if (LockMode == ELockMode::Optimistic && InvisibleRowSkips > 0) {
+            if (LockTxId) {
+                Self.SysLocksTable().BreakSetLocks();
+            }
+            MvccReadConflict = true;
+            return;
+        }
+        ui64 maxId = UINT64_MAX, gen = 0;
+        switch (ready) {
+        case NTable::EReady::Page:
+            throw TNotReadyTabletException();
+        case NTable::EReady::Data: {
+            auto existingKey = iter->GetKey().Cells();
+            maxId = existingKey[1].AsValue<ui64>();
+            gen = existingKey[2].AsValue<ui64>();
+            IncreaseSelectCounters(existingKey);
+            break;
+        }
+        case NTable::EReady::Gone:
+            break;
+        }
+        NFulltext::TDeltaWriter wr;
+        if (withRelevance) {
+            wr.Add(docId, freq);
+        } else {
+            wr.Add(docId);
+        }
+        valid = false;
+        while (!reader.IsEnded()) {
+            if (withRelevance) {
+                reader.Read(docId, freq);
+            } else {
+                reader.Read(docId);
+            }
+            if (docId <= maxId) {
+                if (withRelevance) {
+                    wr.Add(docId, freq);
+                } else {
+                    wr.Add(docId);
+                }
+            } else {
+                valid = true;
+                break;
+            }
+        }
+        auto newSegment = wr.GetBuf();
+        maxId = gen ? maxId : wr.GetMaxId();
+        gen = gen ? gen-newSegment.size()-50 : UINT64_MAX;
+        // FIXME: Add compaction here if gen exceeds some size
+        TVector<TRawTypeValue> newKey;
+        newKey.push_back(key[0]);
+        newKey.emplace_back(&maxId, sizeof(maxId), NScheme::NTypeIds::Uint64);
+        newKey.emplace_back(&gen, sizeof(gen), NScheme::NTypeIds::Uint64);
+        TVector<const NIceDb::TUpdateOp> newOps;
+        newOps.emplace_back(addedTag, NTable::ECellOp::Set, addedValue);
+        newOps.emplace_back(segmentTag, NTable::ECellOp::Set, TRawTypeValue(newSegment.data(), newSegment.size(), NScheme::NTypeIds::String));
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, newKey, newOps, userCtx);
+        IncreaseUpdateCounters(newKey, newOps);
+    }
+}
 
 void TDataShardUserDb::IncrementRow(
     const TTableId& tableId,
@@ -351,6 +489,16 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 
 void TDataShardUserDb::IncreaseSelectCounters(
     const TArrayRef<const TRawTypeValue> key)
+{
+    ui64 keyBytes = CalculateKeyBytes(key);
+
+    Counters.NSelectRow++;
+    Counters.SelectRowRows++;
+    Counters.SelectRowBytes += keyBytes;
+}
+
+void TDataShardUserDb::IncreaseSelectCounters(
+    const TArrayRef<const TCell> key)
 {
     ui64 keyBytes = CalculateKeyBytes(key);
 
@@ -579,11 +727,13 @@ public:
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnSkipCommitted(const TRowVersion&, ui64) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion) override {
@@ -612,11 +762,13 @@ public:
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnSkipCommitted(const TRowVersion&, ui64) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion) override {
@@ -1047,6 +1199,10 @@ NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTable
     }
 
     return ptr;
+}
+
+void TDataShardUserDb::AddInvisibleRowSkip() {
+    InvisibleRowSkips++;
 }
 
 void TDataShardUserDb::AddReadConflict(ui64 txId) {

@@ -95,6 +95,8 @@ class IDataShardConflictChecker {
 protected:
     ~IDataShardConflictChecker() = default;
 public:
+    virtual void AddInvisibleRowSkip() = 0;
+
     virtual void AddReadConflict(ui64 txId) = 0;
     virtual void CheckReadConflict(const TRowVersion& rowVersion) = 0;
     virtual void CheckReadDependency(ui64 txId) = 0;
@@ -198,6 +200,13 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
+    void InsertFulltext(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            TIntrusivePtr<NACLib::TUserContext> userCtx,
+            bool withRelevance);
+
     void CommitChanges(
             const TTableId& tableId,
             ui64 lockId) override;
@@ -209,6 +218,8 @@ public:
 
 //IDataShardConflictChecker
 public:
+    void AddInvisibleRowSkip() override;
+
     void AddReadConflict(ui64 txId) override;
     void CheckReadConflict(const TRowVersion& rowVersion) override;
     void CheckReadDependency(ui64 txId) override;
@@ -253,6 +264,7 @@ private:
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
     void IncreaseSelectCounters(const TArrayRef<const TRawTypeValue> key);
+    void IncreaseSelectCounters(const TArrayRef<const TCell> key);
 
     TArrayRef<const NIceDb::TUpdateOp> RemoveDefaultColumnsIfNeeded(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount);
 
@@ -271,6 +283,7 @@ private:
     TDataShardChangeGroupProvider ChangeGroupProvider;
 
     absl::flat_hash_map<TPathId, THolder<IDataShardChangeCollector>> ChangeCollectors;
+    ui64 InvisibleRowSkips = 0;
 
     YDB_READONLY_DEF(ui64, GlobalTxId);
     YDB_ACCESSOR_DEF(ui64, LockTxId);

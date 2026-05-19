@@ -8,7 +8,6 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <optional>
-#include <utility>
 
 #include <util/string/split.h>
 
@@ -89,13 +88,12 @@ std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(
     arrow::StringBuilder msgBuilder;
     arrow::UInt64Builder ncolBuilder;
 
-    ui64 idx = 0;
     for (ui64 i = 0; i < timestamps.size(); ++i) {
         const auto ts = timestamps[i];
         Y_ABORT_UNLESS(tsBuilder.Append(ts).ok());
         const TString& rid = resourceIds[i];
         Y_ABORT_UNLESS(resourceBuilder.Append(rid.data(), rid.size()).ok());
-        const TString uid = TStringBuilder() << uidPrefix << "_" << (levels ? i : idx);
+        const TString uid = TStringBuilder() << uidPrefix << "_" << i;
         Y_ABORT_UNLESS(uidBuilder.Append(uid.data(), uid.size()).ok());
         if (levels) {
             if ((*levels)[i].has_value()) {
@@ -104,11 +102,10 @@ std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(
                 Y_ABORT_UNLESS(levelBuilder.AppendNull().ok());
             }
         } else {
-            Y_ABORT_UNLESS(levelBuilder.Append((i32)(idx % 5)).ok());
+            Y_ABORT_UNLESS(levelBuilder.Append((i32)(i % 5)).ok());
         }
         Y_ABORT_UNLESS(msgBuilder.Append("m").ok());
-        Y_ABORT_UNLESS(ncolBuilder.Append(levels ? i : idx).ok());
-        ++idx;
+        Y_ABORT_UNLESS(ncolBuilder.Append(i).ok());
     }
 
     std::shared_ptr<arrow::TimestampArray> a1;
@@ -161,7 +158,7 @@ std::vector<TString> MakeRepeatedResourceIds(const TString& prefix, const ui32 d
 
 TString BuildDistinctScanQueryText(
     const TString& tablePath,
-    bool enablePushdown,
+    bool withForceDistinct,
     const TString& forceDistinctColumn,
     const TString& selectList,
     const TString& whereClause,
@@ -175,7 +172,7 @@ TString BuildDistinctScanQueryText(
         --!syntax_v1
         PRAGMA Kikimr.OptEnableOlapPushdown = "true";
     )";
-    if (enablePushdown) {
+    if (withForceDistinct) {
         q << R"(
         PRAGMA Kikimr.OptForceOlapPushdownDistinct = ")" << forceDistinctColumn << R"(";
     )";
@@ -203,7 +200,7 @@ TString BuildDistinctScanQueryText(
 TCollectedStreamResult RunDistinctScanQuery(
     NYdb::NTable::TTableClient& tableClient,
     const TString& tablePath,
-    bool enablePushdown,
+    bool withForceDistinct,
     const TString& forceDistinctColumn,
     const TString& selectList,
     const TString& whereClause,
@@ -213,7 +210,7 @@ TCollectedStreamResult RunDistinctScanQuery(
     const std::optional<ui64> forceDistinctLimitValue = std::nullopt)
 {
     const TString q = BuildDistinctScanQueryText(
-        tablePath, enablePushdown, forceDistinctColumn, selectList, whereClause, orderByClause,
+        tablePath, withForceDistinct, forceDistinctColumn, selectList, whereClause, orderByClause,
         sqlLimit, withForceDistinctLimitPragma, forceDistinctLimitValue);
     auto it = tableClient.StreamExecuteScanQuery(q).GetValueSync();
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -223,11 +220,11 @@ TCollectedStreamResult RunDistinctScanQuery(
 TCollectedStreamResult RunDistinctQuery(
     NYdb::NTable::TTableClient& tableClient,
     const TString& tablePath,
-    const bool enablePushdown,
+    const bool withForceDistinct,
     ui64 sqlLimit)
 {
     return RunDistinctScanQuery(
-        tableClient, tablePath, enablePushdown, "resource_id", "resource_id", {}, {},
+        tableClient, tablePath, withForceDistinct, "resource_id", "resource_id", {}, {},
         std::optional<ui64>(sqlLimit), true, std::nullopt);
 }
 
@@ -817,10 +814,18 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
 
         auto tableClient = kikimr.GetTableClient();
         constexpr ui64 kCap = 50;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
         auto resOff = RunDistinctScanQuery(
             tableClient, "/Root/olapStore/olapTable", false, "timestamp", "`timestamp`", {}, {}, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
         auto resOn = RunDistinctScanQuery(
             tableClient, "/Root/olapStore/olapTable", true, "timestamp", "`timestamp`", {}, {}, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
 
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);

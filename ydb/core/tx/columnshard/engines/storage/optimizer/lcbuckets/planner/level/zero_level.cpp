@@ -42,31 +42,6 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(cons
     return result;
 }
 
-std::optional<TCompactionTaskData> TZeroLevelPortions::DoGetNextOptimizationTask(const TMayUsePortion& mayUsePortion) const {
-    if (Portions.empty()) {
-        return std::nullopt;
-    }
-    TCompactionTaskData result(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit,
-        CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
-    for (auto&& i : Portions) {
-        if (!mayUsePortion(i.GetPortion())) {
-            continue;
-        }
-        auto affectedPortions = NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd(), mayUsePortion);
-        if (affectedPortions.has_value() && affectedPortions->HasBlockedPortions()) {
-            continue;
-        }
-        result.AddCurrentLevelPortion(i.GetPortion(), std::move(affectedPortions), true);
-        if (!result.CanTakeMore()) {
-            break;
-        }
-    }
-    if (result.IsEmpty()) {
-        return std::nullopt;
-    }
-    return result;
-}
-
 ui64 TZeroLevelPortions::GetMaxConcurrency() const {
     return std::clamp(ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) /
                            std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())), ui64(1), Concurrency);

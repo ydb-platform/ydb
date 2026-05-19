@@ -518,9 +518,10 @@ void TColumnShard::TryScheduleCompaction(const std::set<TInternalPathId>& pathId
         BackgroundController.ClearCompactionSession();
     }
     if (BackgroundController.GetCompactionsCount()) {
-        if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling() && BackgroundController.CanStartMoreCompactions() &&
-            BackgroundController.HasCompactionSession()) {
-            StartCompactionTasksUpToLimit();
+        if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling()) {
+            if (BackgroundController.CanStartMoreCompactions() && BackgroundController.HasCompactionSession()) {
+                StartCompactionTasksUpToLimit();
+            }
         }
         return;
     }
@@ -696,33 +697,14 @@ void TColumnShard::StartCompactionTasksUpToLimit() {
     }
 }
 
-void TColumnShard::StartCompactionBatch(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
-    AFL_VERIFY(guard);
-    if (BackgroundController.GetCompactionsCount()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_in_progress");
-        return;
-    }
-
-    auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
-    if (indexChangesList.empty()) {
-        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
-        return;
-    }
-
-    for (const auto& indexChanges : indexChangesList) {
-        StartOneCompactionTask(std::static_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges), guard);
-    }
-}
-
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
-    Counters.GetCSCounters().OnSetupCompaction();
-    BackgroundController.ResetWaitingPriority();
-
     if (TablesManager.GetPrimaryIndexSafe().UsesPullCompactionScheduling()) {
         if (!BackgroundController.CanStartMoreCompactions() && BackgroundController.GetCompactionsCount()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_inflight_full");
             return;
         }
+        Counters.GetCSCounters().OnSetupCompaction();
+        BackgroundController.ResetWaitingPriority();
         if (!BackgroundController.HasCompactionSession()) {
             BackgroundController.SetCompactionSessionGuard(guard);
         }
@@ -730,8 +712,42 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
         if (!BackgroundController.GetCompactionsCount()) {
             BackgroundController.ClearCompactionSession();
         }
-    } else {
-        StartCompactionBatch(guard);
+        return;
+    }
+
+    if (BackgroundController.GetCompactionsCount()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_in_progress");
+        return;
+    }
+    Counters.GetCSCounters().OnSetupCompaction();
+    BackgroundController.ResetWaitingPriority();
+
+    auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
+
+    if (indexChangesList.empty()) {
+        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
+        return;
+    }
+
+    const ui64 compactionStageMemoryLimit =
+        HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
+    for (const auto& indexChanges : indexChangesList) {
+        AFL_VERIFY(indexChanges);
+        auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
+        compaction.SetActivityFlag(GetTabletActivity());
+        compaction.SetQueueGuard(guard);
+        compaction.Start(*this);
+
+        auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
+        auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
+        NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
+            NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard, TabletID());
+        auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
+            std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(),
+                GetLastCompletedTx(), TabletActivityImpl), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
     }
 }
 

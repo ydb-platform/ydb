@@ -101,11 +101,6 @@ protected:
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
-        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
-
-    virtual ui32 DoGetMaxCompactionInflight() const override;
-
     virtual void DoActualize(const TInstant currentInstant) override {
         for (const auto& level : Levels) {
             if (currentInstant >= level->GetWeightExpirationInstant()) {

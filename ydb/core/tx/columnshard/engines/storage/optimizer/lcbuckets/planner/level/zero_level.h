@@ -77,7 +77,6 @@ private:
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
     virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const override;
-    virtual std::optional<TCompactionTaskData> DoGetNextOptimizationTask(const TMayUsePortion& mayUsePortion) const override;
 
     virtual ui64 GetExpectedPortionSize() const override {
         return ExpectedBlobsSize;

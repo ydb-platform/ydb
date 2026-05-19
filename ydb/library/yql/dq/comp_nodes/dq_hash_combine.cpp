@@ -65,10 +65,9 @@ using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
 using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
 
-static ui64 GetSelfHash(void* self) {
-    char buf[sizeof(void*)];
-    WriteUnaligned<void*>(buf, self);
-    return CityHash64(buf, sizeof(buf));
+static ui64 GetInstanceSeed(void* self) {
+    // Used to return CityHash64(self) but looks like that's unnecessary: we put the seed through regular and then Fibonacci hashing anyway
+    return reinterpret_cast<ui64>(self);
 }
 
 struct TSegmentedArena
@@ -1148,7 +1147,7 @@ public:
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes, GetSelfHash(this))))
+        , Hasher(THashFunc(TWideUnboxedHasher(KeyTypes, GetInstanceSeed(this))))
         , Equals(TWideUnboxedEqual(KeyTypes))
         , Draining(false)
         , SourceEmpty(false)

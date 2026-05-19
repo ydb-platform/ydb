@@ -244,7 +244,7 @@ SDK автоматически прокидывает заголовок W3C `tr
 
   ```cpp
   #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-  #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/open_telemetry/trace.h>
+  #include <ydb-cpp-sdk/open_telemetry/trace.h>
 
   #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
   #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>

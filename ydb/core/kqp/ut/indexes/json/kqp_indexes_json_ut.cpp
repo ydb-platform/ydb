@@ -233,17 +233,17 @@ void FillTestTable(TQueryClient& db, const std::string& tableName, const std::st
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void ValidatePredicate(TQueryClient& db, const std::string& predicate, TParams params = TParamsBuilder().Build()) {
+void ValidatePredicate(TQueryClient& db, const std::string& predicate, TParams params = TParamsBuilder().Build(), const std::string& suffix = "ORDER BY Key") {
     static constexpr const char* table = "TestTable";
     static constexpr const char* indexTable = "json_idx";
 
     auto query = [&](const std::string& indexPart, const std::string& pred) {
         return std::format(R"(
-            SELECT Key, Text FROM {} {} WHERE {} ORDER BY Key;
-        )", table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
+            SELECT Key, Text FROM {} VIEW {} WHERE {} {};
+        )", table, indexPart, pred, suffix);
     };
 
-    auto mainResult = db.ExecuteQuery(query("", predicate), TTxControl::NoTx(), params).ExtractValueSync();
+    auto mainResult = db.ExecuteQuery(query("PRIMARY KEY", predicate), TTxControl::NoTx(), params).ExtractValueSync();
     UNIT_ASSERT_C(mainResult.IsSuccess(), mainResult.GetIssues().ToString());
 
     auto indexResult = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx(), params).ExtractValueSync();
@@ -264,8 +264,8 @@ void ValidateError(TQueryClient& db, const std::string& predicate,
 
     auto query = [&](const std::string& indexPart, const std::string& pred) {
         return std::format(R"(
-            SELECT * FROM {} {} WHERE {} ORDER BY Key;
-        )", table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
+            SELECT * FROM {} VIEW {} WHERE {} ORDER BY Key;
+        )", table, indexPart, pred);
     };
 
     auto result = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
@@ -281,8 +281,8 @@ void ValidateError(TQueryClient& db, const std::string& predicate, TParams param
 
     auto query = [&](const std::string& indexPart, const std::string& pred) {
         return std::format(R"(
-            SELECT * FROM {} {} WHERE {} ORDER BY Key;
-        )", table, (indexPart.empty() ? "" : "VIEW  " + indexPart), pred);
+            SELECT * FROM {} VIEW {} WHERE {} ORDER BY Key;
+        )", table, indexPart, pred);
     };
 
     auto result = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx(), params).ExtractValueSync();
@@ -321,6 +321,13 @@ void TestSelectJsonWithIndex(const std::string& jsonType, const std::optional<bo
     }
 
     body(db, jsonExists);
+}
+
+void FillDataColumn(TQueryClient& db) {
+    auto result = db.ExecuteQuery(
+        R"(UPDATE TestTable SET Data = "row_"u || CAST(Key AS Utf8) WHERE Key > 0;)",
+        TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 void ValidateTokens(TQueryClient& db, const std::string& predicate,
@@ -398,6 +405,70 @@ TExecuteQueryResult WriteJsonIndexWithKeys(TQueryClient& db, const std::string& 
     }
 
     return db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+}
+
+void ValidateAutoSelect(TQueryClient& db, const std::string& predicate,
+    std::vector<std::string> expectedTokens,
+    const std::string& defaultOperator = "and",
+    const std::string& tableName = "TestTable")
+{
+    auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto query = std::format("SELECT * FROM {} WHERE {};", tableName, predicate);
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "Predicate: " + predicate + ", error: " + result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.GetStats(), "Stats are empty for: " + predicate);
+
+    auto plan = result.GetStats()->GetPlan();
+    UNIT_ASSERT_C(plan, "Plan is empty for: " + predicate);
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*plan, &planJson, true), "Failed to parse plan JSON");
+
+    auto tokensNodes = FindPlanNodes(planJson, "Tokens");
+    UNIT_ASSERT_C(!tokensNodes.empty(),
+        TStringBuilder() << "JSON index was not autoselected for: " << predicate << "\nPlan: " << *plan);
+
+    std::vector<std::string> actual;
+
+    const auto& tokensNode = tokensNodes.front();
+    UNIT_ASSERT_C(tokensNode.IsArray(), "Tokens field is not an array");
+    for (const auto& t : tokensNode.GetArray()) {
+        actual.push_back(t.GetString());
+    }
+
+    std::vector<std::string> expectedFormatted;
+    for (const auto& e : expectedTokens) {
+        expectedFormatted.push_back(TString(NJsonIndex::FormatJsonIndexToken(TString(e), TString(""))));
+    }
+
+    std::sort(actual.begin(), actual.end());
+    std::sort(expectedFormatted.begin(), expectedFormatted.end());
+    UNIT_ASSERT_VALUES_EQUAL_C(actual, expectedFormatted, "Wrong tokens for: " + predicate);
+
+    auto opNodes = FindPlanNodes(planJson, "DefaultOperator");
+    UNIT_ASSERT_C(!opNodes.empty(), "DefaultOperator not found in plan for: " + predicate);
+    UNIT_ASSERT_VALUES_EQUAL_C(opNodes[0].GetString(), '"' + defaultOperator + '"',
+        "Wrong DefaultOperator for: " + predicate);
+}
+
+void ValidateNoAutoSelect(TQueryClient& db, const std::string& predicate,
+    const std::string& tableName = "TestTable")
+{
+    auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto query = std::format("SELECT * FROM {} WHERE {};", tableName, predicate);
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), "Predicate: " + predicate + ", error: " + result.GetIssues().ToString());
+    UNIT_ASSERT_C(result.GetStats(), "Stats are empty");
+
+    auto plan = result.GetStats()->GetPlan();
+    UNIT_ASSERT_C(plan, "Plan is empty");
+
+    NJson::TJsonValue planJson;
+    NJson::ReadJsonTree(*plan, &planJson, true);
+
+    auto tokensNodes = FindPlanNodes(planJson, "Tokens");
+    UNIT_ASSERT_C(tokensNodes.empty(),
+        TStringBuilder() << "Unexpected Tokens in plan for: " << predicate << "\nPlan: " << *plan);
 }
 
 }  // namespace
@@ -1806,7 +1877,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             // Main table scan works fine without RETURNING
             {
                 auto result = db.ExecuteQuery(
-                    R"(SELECT Key FROM TestTable WHERE JSON_VALUE(Text, '$.k1') == "1"u ORDER BY Key;)",
+                    R"(SELECT Key FROM TestTable VIEW PRIMARY KEY WHERE JSON_VALUE(Text, '$.k1') == "1"u ORDER BY Key;)",
                     TTxControl::NoTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
@@ -1864,6 +1935,53 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                     .AddListItem().Utf8("string")
                     .AddListItem().Utf8("number")
                     .EndList().Build().Build());
+        });
+    }
+
+    Y_UNIT_TEST(SelectJsonIndex_Top) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            static constexpr const char* where = R"(JSON_EXISTS(Text, '$.k1'))";
+            auto empty = TParamsBuilder().Build();
+
+            FillDataColumn(db);
+
+            ValidatePredicate(db, where, empty, "LIMIT 0");
+            ValidatePredicate(db, where, empty, "LIMIT 1");
+            ValidatePredicate(db, where, empty, "LIMIT 2");
+            ValidatePredicate(db, where, empty, "LIMIT 10");
+            ValidatePredicate(db, where, empty, "LIMIT 100000");
+            ValidatePredicate(db, where, empty, "LIMIT -1");
+
+            ValidatePredicate(db, where, empty, "LIMIT 0 OFFSET 5");
+            ValidatePredicate(db, where, empty, "LIMIT 1 OFFSET 5");
+            ValidatePredicate(db, where, empty, "LIMIT 2 OFFSET 5");
+            ValidatePredicate(db, where, empty, "LIMIT 3 OFFSET 5");
+            ValidatePredicate(db, where, empty, "LIMIT 10 OFFSET 5");
+            ValidatePredicate(db, where, empty, "LIMIT 100000 OFFSET 5");
+            ValidatePredicate(db, where, empty, "LIMIT -1 OFFSET 5");
+        });
+    }
+
+    Y_UNIT_TEST(SelectJsonIndex_TopSort) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            static constexpr const char* where = R"(JSON_EXISTS(Text, '$.k1'))";
+            auto empty = TParamsBuilder().Build();
+
+            FillDataColumn(db);
+
+            ValidatePredicate(db, where, empty, "ORDER BY Data ASC");
+            ValidatePredicate(db, where, empty, "ORDER BY Data DESC");
+            ValidatePredicate(db, where, empty, "ORDER BY Data ASC LIMIT 5");
+            ValidatePredicate(db, where, empty, "ORDER BY Data DESC LIMIT 5");
+            ValidatePredicate(db, where, empty, "ORDER BY Data ASC LIMIT 5 OFFSET 3");
+            ValidatePredicate(db, where, empty, "ORDER BY Data DESC LIMIT 5 OFFSET 3");
+
+            ValidatePredicate(db, where, empty, "ORDER BY Key ASC");
+            ValidatePredicate(db, where, empty, "ORDER BY Key DESC");
+            ValidatePredicate(db, where, empty, "ORDER BY Key ASC LIMIT 5");
+            ValidatePredicate(db, where, empty, "ORDER BY Key DESC LIMIT 5");
+            ValidatePredicate(db, where, empty, "ORDER BY Key ASC LIMIT 5 OFFSET 3");
+            ValidatePredicate(db, where, empty, "ORDER BY Key DESC LIMIT 5 OFFSET 3");
         });
     }
 }
@@ -4606,4 +4724,227 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
         });
     }
 }
+
+Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
+    Y_UNIT_TEST(BasicTokens) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.key'))", {"\4key"});
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))", {"\3k1\3k2" + numSuffix(2)});
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))",
+                {"\3k1" + trueSuffix, "\3k2" + falseSuffix}, "and");
+            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))",
+                {"\3k1" + nullSuffix, "\3k2" + strSuffix("str")}, "or");
+        });
+    }
+
+    Y_UNIT_TEST(AndOrCombinations) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateAutoSelect(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
+                {"\3k1", "\3k2"}, "and");
+            ValidateAutoSelect(db,
+                R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))",
+                {"\3k1", "\3k2"}, "or");
+            ValidateAutoSelect(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))",
+                {"\3k1", "\3k2", "\3k3"}, "and");
+            ValidateAutoSelect(db,
+                R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) OR JSON_EXISTS(Text, '$.k3'))",
+                {"\3k1", "\3k2", "\3k3"}, "or");
+        });
+    }
+
+    Y_UNIT_TEST(WithNonJsonPredicate) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateAutoSelect(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1")",
+                {"\3k1"});
+            ValidateAutoSelect(db,
+                R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
+                {"\3k1", "\3k2"}, "and");
+            ValidateAutoSelect(db,
+                R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND Data = "d1")",
+                {"\3k1", "\3k2"}, "and");
+        });
+    }
+
+    Y_UNIT_TEST(ResultsMatchExplicitView) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            FillDataColumn(db);
+
+            const std::vector<std::string> predicates = {
+                R"(JSON_EXISTS(Text, '$.k1'))",
+                R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
+                R"(JSON_EXISTS(Text, '$.k1') AND Data = "row_1")",
+            };
+
+            for (const auto& pred : predicates) {
+                auto autoQuery = std::format("SELECT Key FROM TestTable WHERE {} ORDER BY Key;", pred);
+                auto viewQuery = std::format("SELECT Key FROM TestTable VIEW json_idx WHERE {} ORDER BY Key;", pred);
+
+                auto autoResult = db.ExecuteQuery(autoQuery, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(autoResult.IsSuccess(), "auto query failed: " + pred);
+
+                auto viewResult = db.ExecuteQuery(viewQuery, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(viewResult.IsSuccess(), "view query failed: " + pred);
+
+                CompareYson(
+                    FormatResultSetYson(autoResult.GetResultSet(0)),
+                    FormatResultSetYson(viewResult.GetResultSet(0)));
+            }
+        });
+    }
+
+    Y_UNIT_TEST(TwoJsonIndexes) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    Text JsonDocument,
+                    Extra JsonDocument,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx_text GLOBAL USING json ON (Text),
+                    INDEX json_idx_extra GLOBAL USING json ON (Extra)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Query on Data column
+        {
+            auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+            auto result = db.ExecuteQuery(
+                "SELECT * FROM TestTable WHERE JSON_EXISTS(Text, '$.k1');",
+                TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true);
+
+            // Tokens present -> index was used
+            auto tokensNodes = FindPlanNodes(planJson, "Tokens");
+            UNIT_ASSERT_C(!tokensNodes.empty(), "json_idx_text was not autoselected");
+
+            // Plan must reference json_idx_text
+            UNIT_ASSERT_C(
+                CountPlanNodesByKv(planJson, "Index", "json_idx_text") > 0,
+                "Expected json_idx_text in plan, got: " + *result.GetStats()->GetPlan());
+            UNIT_ASSERT_C(
+                CountPlanNodesByKv(planJson, "Index", "json_idx_extra") == 0,
+                "Unexpected json_idx_extra in plan, got: " + *result.GetStats()->GetPlan());
+        }
+
+        // Query on Extra column
+        {
+            auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+            auto result = db.ExecuteQuery(
+                "SELECT * FROM TestTable WHERE JSON_EXISTS(Extra, '$.k1');",
+                TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true);
+
+            auto tokensNodes = FindPlanNodes(planJson, "Tokens");
+            UNIT_ASSERT_C(!tokensNodes.empty(), "json_idx_extra was not autoselected");
+
+            // Plan must reference json_idx_extra
+            UNIT_ASSERT_C(
+                CountPlanNodesByKv(planJson, "Index", "json_idx_extra") > 0,
+                "Expected json_idx_extra in plan, got: " + *result.GetStats()->GetPlan());
+            UNIT_ASSERT_C(
+                CountPlanNodesByKv(planJson, "Index", "json_idx_text") == 0,
+                "Unexpected json_idx_text in plan, got: " + *result.GetStats()->GetPlan());
+        }
+    }
+
+    Y_UNIT_TEST(MixedIndexes) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    Text JsonDocument,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text),
+                    INDEX data_idx GLOBAL ON (Data)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
+        ValidateNoAutoSelect(db, R"(Data = "d1")");
+    }
+
+    Y_UNIT_TEST(WrongColumn) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    Text JsonDocument,
+                    Data JsonDocument,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text),
+                );
+            )", TTxControl::NoTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Data, '$.k1'))");
+    }
+
+    Y_UNIT_TEST(NoJsonIndex) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, "JsonDocument", /* withIndex */ false);
+        FillTestTable(db, "TestTable", "JsonDocument");
+
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
+
+        {
+            const std::string query = R"(
+                SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.k1');
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.k1');
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))", {"\3k1"});
+    }
+}
+
 }  // namespace NKikimr::NKqp

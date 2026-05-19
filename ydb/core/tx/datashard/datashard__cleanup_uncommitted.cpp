@@ -1,4 +1,7 @@
 #include "datashard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -62,8 +65,9 @@ public:
         }
 
         if (removed > 0) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "DataShard " << Self->TabletID() << " removed " << removed << " untracked uncommitted changes");
+            YDB_LOG_CTX_WARN(ctx, "DataShard removed untracked uncommitted changes",
+                {"TabletID", Self->TabletID()},
+                {"removed", removed});
         }
 
         return true;

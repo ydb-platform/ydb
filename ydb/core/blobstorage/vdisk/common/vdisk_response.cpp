@@ -3,6 +3,9 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <util/system/datetime.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_VDISK_CHUNKS
 
 namespace NKikimr {
 
@@ -159,10 +162,12 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
         return;
     }
 
-    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_VDISK_CHUNKS,
-        vDiskLogPrefix << "Disk space status changed to " <<
-        TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags)) << " on blob " << blobId.ToString() << "; " <<
-        "oldFlags: " << prevFlags << ", newFlags: " << flags);
+    YDB_LOG_NOTICE("Disk space status changed to on blob",
+        {"vDiskLogPrefix", vDiskLogPrefix},
+        {"#_TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags))", TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags))},
+        {"blobId", blobId.ToString()},
+        {"oldFlags", prevFlags},
+        {"newFlags", flags});
 }
 
 void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {

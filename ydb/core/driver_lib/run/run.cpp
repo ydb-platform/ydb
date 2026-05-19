@@ -193,6 +193,9 @@
 #include <ydb/core/tracing/tablet_info.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::GLOBAL
 
 namespace NKikimr {
 
@@ -2249,7 +2252,8 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
         ActorSystem->Start();
-        LOG_NOTICE_S(*ActorSystem, NActorsServices::GLOBAL, GetProgramSvnVersion());
+        YDB_LOG_CTX_NOTICE(*ActorSystem, "",
+            {"GetProgramSvnVersion", GetProgramSvnVersion()});
     }
 
     if (!!Monitoring) {

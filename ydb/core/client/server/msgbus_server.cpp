@@ -4,6 +4,9 @@
 #include "msgbus_server.h"
 #include "msgbus_http_server.h"
 #include "grpc_server.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MSGBUS_REQUEST
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -576,11 +579,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
 void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageStatus status) {
     if (ActorSystem) {
         if (status == NBus::MESSAGE_SHUTDOWN) {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Msgbus client disconnected before reply was sent"
-                    << " msg# " << msg->Describe());
+            YDB_LOG_CTX_DEBUG(*ActorSystem, "Msgbus client disconnected before reply was sent",
+                {"msg", msg->Describe()});
         } else {
-            LOG_ERROR_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Failed to send reply over msgbus status# " << status
-                    << " msg# " << msg->Describe());
+            YDB_LOG_CTX_ERROR(*ActorSystem, "Failed to send reply over msgbus",
+                {"status", status},
+                {"msg", msg->Describe()});
         }
     }
 }

@@ -1,4 +1,7 @@
 #include "datashard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -20,14 +23,14 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxActivateChangeSender Execute"
-            << ": origin# " << Origin
-            << ", at tablet# " << Self->TabletID());
+        YDB_LOG_CTX_INFO(ctx, "TTxActivateChangeSender Execute",
+            {"origin", Origin},
+            {"at_tablet", Self->TabletID()});
 
         if (!Self->ReceiveActivationsFrom.contains(Origin)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Ignoring received activation"
-                << ": origin# " << Origin
-                << ", at tablet# " << Self->TabletID());
+            YDB_LOG_CTX_DEBUG(ctx, "Ignoring received activation",
+                {"origin", Origin},
+                {"at_tablet", Self->TabletID()});
             return true;
         }
 
@@ -41,9 +44,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxActivateChangeSender Complete"
-            << ": origin# " << Origin
-            << ", at tablet# " << Self->TabletID());
+        YDB_LOG_CTX_INFO(ctx, "TTxActivateChangeSender Complete",
+            {"origin", Origin},
+            {"at_tablet", Self->TabletID()});
 
         auto ev = MakeHolder<TEvChangeExchange::TEvActivateSenderAck>();
         ev->Record.SetOrigin(Self->TabletID());
@@ -81,9 +84,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxActivateChangeSenderAck Execute"
-            << ": origin# " << Origin
-            << ", at tablet# " << Self->TabletID());
+        YDB_LOG_CTX_INFO(ctx, "TTxActivateChangeSenderAck Execute",
+            {"origin", Origin},
+            {"at_tablet", Self->TabletID()});
 
         Self->ChangeSenderActivator.Ack(Origin, ctx);
         AllDstAcksReceived = Self->ChangeSenderActivator.AllAcked();
@@ -95,9 +98,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxActivateChangeSenderAck Complete"
-            << ": origin# " << Origin
-            << ", at tablet# " << Self->TabletID());
+        YDB_LOG_CTX_INFO(ctx, "TTxActivateChangeSenderAck Complete",
+            {"origin", Origin},
+            {"at_tablet", Self->TabletID()});
 
         if (AllDstAcksReceived && Self->SrcAckPartitioningChangedTo) {
             Self->Execute(Self->CreateTxSplitPartitioningChanged(std::move(Self->SrcAckPartitioningChangedTo)), ctx);

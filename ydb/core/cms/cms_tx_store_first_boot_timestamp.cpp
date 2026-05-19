@@ -1,5 +1,8 @@
 #include "cms_impl.h"
 #include "scheme.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -12,7 +15,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_FIRST_BOOT_TIMESTAMP; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "TTxStoreFirstBootTimestamp Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxStoreFirstBootTimestamp Execute");
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Param>().Key(Schema::Param::Key)

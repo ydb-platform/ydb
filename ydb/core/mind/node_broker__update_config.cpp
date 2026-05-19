@@ -2,6 +2,9 @@
 #include "node_broker__scheme.h"
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -32,8 +35,8 @@ public:
     {
         auto &rec = Notification->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxUpdateConfig Execute " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfig Execute",
+            {"ShortDebugString", rec.ShortDebugString()});
 
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
@@ -49,8 +52,8 @@ public:
     {
         auto &rec = Request->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxUpdateConfig Execute " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfig Execute",
+            {"ShortDebugString", rec.ShortDebugString()});
 
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
@@ -88,8 +91,8 @@ public:
             Self->Committed.LoadConfigFromProto(Config);
 
         if (Response) {
-            LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                        "TTxUpdateConfig reply with: " << Response->ToString());
+            YDB_LOG_CTX_TRACE(ctx, "TTxUpdateConfig reply",
+                {"with", Response->ToString()});
             ctx.Send(Response);
         }
 

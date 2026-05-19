@@ -2,6 +2,9 @@
 #include "datashard_failpoints.h"
 
 #include <ydb/core/tablet_flat/flat_exec_seat.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -12,13 +15,14 @@ TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOp
 {}
 
 bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProgressTransaction::Execute at " << Self->TabletID());
+    YDB_LOG_CTX_DEBUG(ctx, "TTxProgressTransaction::Execute at",
+        {"TabletID", Self->TabletID()});
 
     if (!Self->IsStateActive()) {
         Self->IncCounter(COUNTER_TX_PROGRESS_SHARD_INACTIVE);
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Progress tx at non-ready tablet " << Self->TabletID() << " state " << Self->State);
+        YDB_LOG_CTX_INFO(ctx, "Progress tx at non-ready tablet state",
+            {"TabletID", Self->TabletID()},
+            {"State", Self->State});
         Y_ENSURE(!ActiveOp, "Unexpected ActiveOp at inactive shard " << Self->TabletID());
         Self->PlanQueue.Reset(ctx);
         return true;
@@ -44,8 +48,9 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 
         if (!ActiveOp) {
             Self->IncCounter(COUNTER_TX_PROGRESS_IDLE);
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "No tx to execute at " << Self->TabletID() << " TxInFly " << Self->TxInFly());
+            YDB_LOG_CTX_INFO(ctx, "No tx to execute at TxInFly",
+                {"TabletID", Self->TabletID()},
+                {"TxInFly", Self->TxInFly()});
             return true;
         }
 
@@ -115,8 +120,8 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 }
 
 void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProgressTransaction::Complete at " << Self->TabletID());
+    YDB_LOG_CTX_DEBUG(ctx, "TTxProgressTransaction::Complete at",
+        {"TabletID", Self->TabletID()});
 
     if (ActiveOp) {
         Y_ENSURE(!ActiveOp->GetExecutionPlan().empty());

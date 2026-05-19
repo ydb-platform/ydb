@@ -1,6 +1,7 @@
 #include "dsproxy_impl.h"
 #include "dsproxy_monactor.h"
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 
 namespace NKikimr {
@@ -161,10 +162,9 @@ namespace NKikimr {
                     new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
             result->ErrorReason = errorReason;
             result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
-                    "HandleNormal ev# " << ev->Get()->Print(false)
-                    << " result# " << result->Print(false)
-                    << " Marker# DSP54");
+            YDB_LOG_COMP_ERROR(NKikimrServices::BS_PROXY, "HandleNormal Marker# DSP54",
+                {"ev", ev->Get()->Print(false)},
+                {"result", result->Print(false)});
             Send(ev->Sender, result.release(), 0, ev->Cookie);
         };
 
@@ -1083,8 +1083,9 @@ namespace NKikimr {
                 }
                 *PoolCounters->DSProxyDiskCostCounter += cost;
 
-                LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST,
-                    "DSProxy Request Type# " << TypeName<T>() << " Cost# " << cost);
+                YDB_LOG_CTX_COMP_TRACE(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST, "DSProxy Request",
+                    {"Type", TypeName<T>()},
+                    {"Cost", cost});
             }
 
             if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut> ||

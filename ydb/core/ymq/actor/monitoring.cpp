@@ -2,6 +2,9 @@
 
 #include <ydb/core/ymq/actor/cfg/cfg.h>
 #include <ydb/core/ymq/base/run_query.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 
 
 namespace NKikimr::NSQS {
@@ -30,7 +33,8 @@ namespace NKikimr::NSQS {
     void TMonitoringActor::HandleError(const TString& error, const TActorContext& ctx) {
         auto runAfter = RetryPeriod;
         RetryPeriod = Min(RetryPeriod * 2, RETRY_PERIOD_MAX);
-        LOG_ERROR_S(ctx, NKikimrServices::SQS, "[monitoring] Got an error : " << error);
+        YDB_LOG_CTX_ERROR(ctx, "[monitoring] Got an error",
+            {"error", error});
         RequestMetrics(runAfter, ctx);
     }
 
@@ -57,7 +61,9 @@ namespace NKikimr::NSQS {
             removeQueuesDataLag = ctx.Now() - minRemoveQueueTimestamp;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[monitoring] Report deletion queue data lag: " << removeQueuesDataLag << ", count: " << parser.RowsCount());
+        YDB_LOG_CTX_DEBUG(ctx, "[monitoring] Report deletion queue data",
+            {"lag", removeQueuesDataLag},
+            {"count", parser.RowsCount()});
         *Counters->CleanupRemovedQueuesLagSec = removeQueuesDataLag.Seconds();
         *Counters->CleanupRemovedQueuesLagCount = parser.RowsCount();
         RequestMetrics(RetryPeriod, ctx);

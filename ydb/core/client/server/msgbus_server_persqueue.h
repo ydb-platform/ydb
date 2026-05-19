@@ -12,6 +12,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/system/compiler.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -323,7 +324,9 @@ protected:
             HFunc(TPipeEvent, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
+            YDB_LOG_COMP_WARN(NKikimrServices::PERSQUEUE, "Unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 
@@ -334,7 +337,9 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeEvent);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::PERSQUEUE, "Unexpected event type: " << ev->GetTypeRewrite() << ", " << ev->ToString());
+            YDB_LOG_COMP_WARN(NKikimrServices::PERSQUEUE, "Unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 

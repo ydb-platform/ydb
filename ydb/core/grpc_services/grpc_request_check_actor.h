@@ -23,6 +23,7 @@
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 
 #include <util/string/split.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -219,7 +220,7 @@ public:
         if (authToken) {
             TBase::SetSecurityToken(authToken.GetRef());
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
             const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
             if (!clientCertificates.empty()) {
                 TBase::SetSecurityToken(TString(clientCertificates.front()));
@@ -289,15 +290,16 @@ public:
         Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
         const auto& entry = navigate->ResultSet.front();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-            "Handle " << ev->Get()->ToString() << ": entry# " << entry.ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::GRPC_SERVER, "Handle",
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()},
+            {"entry", entry.ToString()});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                "Unexpected status" << ": entry# " << entry.ToString());
+            YDB_LOG_COMP_WARN(NKikimrServices::GRPC_SERVER, "Unexpected status",
+                {"entry", entry.ToString()});
             return ReplyUnauthenticatedAndDie();
         }
 
@@ -439,7 +441,8 @@ private:
             switch (resp.operation().status()) {
                 case Ydb::StatusIds::SUCCESS:
                     Counters_->ReportThrottleDelay(delay);
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Request delayed for " << delay << " by ratelimiter");
+                    YDB_LOG_COMP_DEBUG(NKikimrServices::GRPC_SERVER, "Request delayed for by ratelimiter",
+                        {"delay", delay});
                     SetTokenAndDie();
                     break;
                 case Ydb::StatusIds::TIMEOUT:
@@ -675,11 +678,10 @@ private:
 
     std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
         if (SkipCheckConnectRights_) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user",
+                {"database", CheckedDatabaseName_},
+                {"user", TBase::GetUserSID()},
+                {"from_ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
 
@@ -688,20 +690,18 @@ private:
         // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
         // validated earlier in the request processing pipeline.
         if (!TBase::GetParsedToken()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, anonymous requests allowed"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, anonymous requests allowed",
+                {"database", CheckedDatabaseName_},
+                {"user", TBase::GetUserSID()},
+                {"from_ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
 
         if (!SecurityObject_) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, no SecurityObject_"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, no SecurityObject_",
+                {"database", CheckedDatabaseName_},
+                {"user", TBase::GetUserSID()},
+                {"from_ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
 
@@ -713,11 +713,10 @@ private:
         // - database admin -- to their database
         const bool isAdmin = TBase::IsUserAdmin() || (parsedToken && IsDatabaseAdministrator(parsedToken.Get(), databaseOwner));
         if (isAdmin) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, user is a admin"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, user is a admin",
+                {"database", CheckedDatabaseName_},
+                {"user", TBase::GetUserSID()},
+                {"from_ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
 
@@ -733,12 +732,11 @@ private:
         }
 
         const TString error = "No permission to connect to the database";
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER,
-            error
-            << ": " << CheckedDatabaseName_
-            << ", user: " << TBase::GetUserSID()
-            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()
-        );
+        YDB_LOG_COMP_INFO(NKikimrServices::GRPC_SERVER, "",
+            {"error", error},
+            {"CheckedDatabaseName_", CheckedDatabaseName_},
+            {"user", TBase::GetUserSID()},
+            {"from_ip", GrpcRequestBaseCtx_->GetPeerName()});
 
         return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};;
     }

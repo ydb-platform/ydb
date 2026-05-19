@@ -1,4 +1,7 @@
 #include "console_tenants_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 namespace NKikimr::NConsole {
 
@@ -27,7 +30,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot create tenant: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot create",
+            {"tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -67,8 +71,8 @@ public:
         auto &token = Request->Get()->Record.GetUserToken();
         auto &peer = Request->Get()->Record.GetPeerName();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxCreateTenant: "
-                    << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"TTxCreateTenant", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvCreateTenantResponse;
 
@@ -100,9 +104,9 @@ public:
 
         if (Self->Config.TenantsQuota
             && Self->Tenants.size() >= Self->Config.TenantsQuota) {
-            LOG_NOTICE_S(ctx, NKikimrServices::CMS_TENANTS,
-                         "Tenants quota is exceeded (" << Self->Tenants.size()
-                         << "/" << Self->Config.TenantsQuota << ")");
+            YDB_LOG_CTX_NOTICE(ctx, "Tenants quota is exceeded ( /",
+                {"size", Self->Tenants.size()},
+                {"TenantsQuota", Self->Config.TenantsQuota});
             Self->Counters.Inc(COUNTER_TENANTS_QUOTA_EXCEEDED);
             return Error(Ydb::StatusIds::UNAVAILABLE,
                          "Tenants quota is exceeded", ctx);
@@ -361,8 +365,9 @@ public:
         Tenant->TxId = ctx.Now().GetValue();
         Tenant->Generation = 1;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "Add tenant " << path << " (txid = " << Tenant->TxId << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "Add tenant (txid",
+            {"path", path},
+            {"TxId", Tenant->TxId});
 
         Self->DbAddTenant(Tenant, txc, ctx);
 
@@ -380,7 +385,8 @@ public:
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                                COUNTER_CREATE_RESPONSES);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
+        YDB_LOG_CTX_TRACE(ctx, "",
+            {"Send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

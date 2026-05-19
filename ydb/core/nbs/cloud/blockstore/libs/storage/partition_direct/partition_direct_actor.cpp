@@ -21,6 +21,9 @@
 #include <util/system/fs.h>
 
 #include <unistd.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -438,11 +441,9 @@ STFUNC(TPartitionActor::StateWork)
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG_S(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "Unhandled event type: " << ev->GetTypeRewrite()
-                                             << " event: " << ev->ToString());
+                YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Unhandled event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
             }
             break;
     }

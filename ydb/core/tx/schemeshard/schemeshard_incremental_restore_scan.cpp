@@ -10,6 +10,9 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #if defined LOG_D || \
     defined LOG_W || \
@@ -1343,11 +1346,11 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
 
     state.PendingItems.push_back(std::move(item));
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[IncrementalRestore] EnqueueIncrementalRestoreItem op=" << originalOpId
-        << " itemSeq=" << state.PendingItems.back().ItemSeq
-        << " kind=" << static_cast<ui32>(kind)
-        << " tablePathId=" << tablePathId);
+    YDB_LOG_CTX_INFO(ctx, "[IncrementalRestore] EnqueueIncrementalRestoreItem",
+        {"op", originalOpId},
+        {"itemSeq", state.PendingItems.back().ItemSeq},
+        {"kind", static_cast<ui32>(kind)},
+        {"tablePathId", tablePathId});
     ctx.Send(TxAllocatorClient,
         new TEvTxAllocatorClient::TEvAllocate(),
         /*flags=*/0,

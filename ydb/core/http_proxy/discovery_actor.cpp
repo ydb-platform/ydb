@@ -16,6 +16,9 @@
 #include <chrono>
 #include <map>
 #include <vector>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr::NHttpProxy {
 
@@ -113,7 +116,10 @@ namespace NKikimr::NHttpProxy {
         NYdbGrpc::TResponseCallback<Ydb::Discovery::ListEndpointsResponse> responseCb =
                 [actorSystem = ctx.ActorSystem(), actorId = ctx.SelfID](NYdbGrpc::TGrpcStatus&& status, Ydb::Discovery::ListEndpointsResponse&& response) -> void {
                     auto res = std::make_unique<TEvServerlessProxy::TEvListEndpointsResponse>();
-                    LOG_INFO_S(*actorSystem, NKikimrServices::PERSQUEUE, "list endpoints result status: " << status.GRpcStatusCode << " " << status.Msg << " " << status.Details);
+                    YDB_LOG_CTX_INFO(*actorSystem, "list endpoints result",
+                        {"status", status.GRpcStatusCode},
+                        {"Msg", status.Msg},
+                        {"Details", status.Details});
                     if (status.Ok()) {
                         res->Record = std::make_unique<Ydb::Discovery::ListEndpointsResponse>();
                         res->Record->CopyFrom(response);

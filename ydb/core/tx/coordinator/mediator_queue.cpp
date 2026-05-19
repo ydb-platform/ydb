@@ -6,6 +6,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
@@ -79,8 +82,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, Mediator, MediatorSyncRetryPolicy));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND EvCoordinatorSync to# " << Mediator << " Mediator");
+        YDB_LOG_CTX_DEBUG(ctx, "SEND EvCoordinatorSync Mediator",
+            {"Actor", ctx.SelfID.ToString()},
+            {"tablet", Coordinator},
+            {"to", Mediator});
         NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorSync(++GenCookie, Mediator, Coordinator));
         Become(&TThis::StateSync);
         Active = false;
@@ -89,8 +94,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     void SendStep(const TMediatorStep &step, const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "], step [%" PRIu64 "]", Coordinator, Mediator, step.Step);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND to# " << Mediator << " Mediator TEvCoordinatorStep");
+        YDB_LOG_CTX_DEBUG(ctx, "SEND Mediator TEvCoordinatorStep",
+            {"Actor", ctx.SelfID.ToString()},
+            {"tablet", Coordinator},
+            {"to", Mediator});
         auto msg = std::make_unique<TEvTxCoordinator::TEvCoordinatorStep>(
             step.Step, PrevStep, Mediator, Coordinator, CoordinatorGeneration);
         step.SerializeTo(msg.get());
@@ -100,9 +107,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void SendConfirmations(const TActorContext &ctx) {
         if (Confirmations) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " tablet# " << Coordinator << " SEND EvMediatorQueueConfirmations to# " << Owner.ToString()
-                << " Owner");
+            YDB_LOG_CTX_DEBUG(ctx, "SEND EvMediatorQueueConfirmations Owner",
+                {"Actor", ctx.SelfID.ToString()},
+                {"tablet", Coordinator},
+                {"to", Owner.ToString()});
             ctx.Send(Owner, new TEvMediatorQueueConfirmations(std::move(Confirmations)));
             ConfirmedParticipants = 0;
             ConfirmedSteps = 0;
@@ -142,9 +150,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTxCoordinator::TEvCoordinatorSyncResult::TPtr &ev, const TActorContext &ctx) {
         TEvTxCoordinator::TEvCoordinatorSyncResult *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " HANDLE EvCoordinatorSyncResult Status# "
-            << NKikimrProto::EReplyStatus_Name(msg->Record.GetStatus()));
+        YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvCoordinatorSyncResult",
+            {"Actor", ctx.SelfID.ToString()},
+            {"tablet", Coordinator},
+            {"Status", NKikimrProto::EReplyStatus_Name(msg->Record.GetStatus())});
 
         if (msg->Record.GetCookie() != GenCookie)
             return;
@@ -153,8 +162,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             return Sync(ctx);
 
         PrevStep = 0;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND EvMediatorQueueRestart to# " << Owner.ToString() << " Owner");
+        YDB_LOG_CTX_DEBUG(ctx, "SEND EvMediatorQueueRestart Owner",
+            {"Actor", ctx.SelfID.ToString()},
+            {"tablet", Coordinator},
+            {"to", Owner.ToString()});
         ctx.Send(Owner, new TEvMediatorQueueRestart(Mediator, 0, ++GenCookie));
 
         Become(&TThis::StateWork);
@@ -172,8 +183,9 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         while (!msg->Steps.empty()) {
             auto it = msg->Steps.begin();
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " HANDLE EvMediatorQueueStep step# " << it->Step);
+            YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvMediatorQueueStep",
+                {"Actor", ctx.SelfID.ToString()},
+                {"step", it->Step});
 
             // Remove the last empty step (empty steps except the last one are not needed)
             if (!Queue.empty() && Queue.back().Transactions.empty()) {
@@ -206,8 +218,9 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvClientConnected Status# " << NKikimrProto::EReplyStatus_Name(msg->Status));
+        YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvClientConnected",
+            {"Actor", ctx.SelfID.ToString()},
+            {"Status", NKikimrProto::EReplyStatus_Name(msg->Status)});
 
         if (msg->ClientId != PipeClient)
             return;
@@ -220,22 +233,24 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvClientDestroyed");
+        YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvClientDestroyed",
+            {"Actor", ctx.SelfID.ToString()});
         if (msg->ClientId != PipeClient)
             return;
         Active = false;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " <<  Coordinator << " SEND EvMediatorQueueStop to# " << Owner.ToString()
-            << " Owner Mediator# " << Mediator);
+        YDB_LOG_CTX_DEBUG(ctx, "SEND EvMediatorQueueStop Owner",
+            {"Actor", ctx.SelfID.ToString()},
+            {"tablet", Coordinator},
+            {"to", Owner.ToString()},
+            {"Mediator", Mediator});
         ctx.Send(Owner, new TEvMediatorQueueStop(Mediator));
         Sync(ctx);
     }
 
     void Handle(TEvTxProcessing::TEvPlanStepAck::TPtr &ev, const TActorContext &ctx) {
         const NKikimrTx::TEvPlanStepAck &record = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvPlanStepAck");
+        YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvPlanStepAck",
+            {"Actor", ctx.SelfID.ToString()});
 
         bool firstConfirmed = false;
 

@@ -2,6 +2,9 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_EXECUTOR
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -104,10 +107,11 @@ bool TLoadBlobQueue::SendRequests(const TActorId& sender) {
         }
 
         if (newBlobs) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR, TLogPrefix{ Config }
-                << "sending TEvGet batch " << batchSize
-                << " bytes, " << ActiveBytesInFly
-                << " total, blobs: " << TDumpLogoBlobs{ newBlobs });
+            YDB_LOG_DEBUG("sending TEvGet batch bytes, total,",
+                {"#_TLogPrefix{ Config }", TLogPrefix{ Config }},
+                {"batchSize", batchSize},
+                {"ActiveBytesInFly", ActiveBytesInFly},
+                {"blobs", TDumpLogoBlobs{ newBlobs }});
             TArrayHolder<TEvBlobStorage::TEvGet::TQuery> query(new TEvBlobStorage::TEvGet::TQuery[newBlobs.size()]);
             for (size_t i = 0; i < newBlobs.size(); ++i) {
                 query[i].Set(newBlobs[i]);
@@ -133,8 +137,9 @@ bool TLoadBlobQueue::SendRequests(const TActorId& sender) {
 
 bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
     if (msg->Status != NKikimrProto::OK) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR, TLogPrefix{ Config }
-            << "EvGet failed, request: " << msg->Print(false));
+        YDB_LOG_ERROR("EvGet failed,",
+            {"#_TLogPrefix{ Config }", TLogPrefix{ Config }},
+            {"request", msg->Print(false)});
 
         if (msg->Status == NKikimrProto::NODATA) {
             if (Config.NoDataCounter) {
@@ -149,8 +154,10 @@ bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
     auto* resEnd = resBegin + msg->ResponseSz;
     for (auto* x = resBegin; x != resEnd; ++x) {
         if (x->Status != NKikimrProto::OK) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR, TLogPrefix{ Config }
-                << "EvGet failed for blob " << x->Id << ", request: " << msg->Print(false));
+            YDB_LOG_ERROR("EvGet failed for blob",
+                {"#_TLogPrefix{ Config }", TLogPrefix{ Config }},
+                {"Id", x->Id},
+                {"request", msg->Print(false)});
 
             if (x->Status == NKikimrProto::NODATA) {
                 if (Config.NoDataCounter) {

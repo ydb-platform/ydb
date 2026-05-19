@@ -1,4 +1,7 @@
 #include "client.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 void NKikimr::TTxAllocatorClient::AddAllocationRange(const NKikimr::TTxAllocatorClient::TTabletId &from, const NKikimrTx::TEvTxAllocateResult &allocation) {
     ReservedRanges.emplace_back(from, allocation.GetRangeBegin(), allocation.GetRangeEnd());
@@ -29,13 +32,12 @@ TVector<ui64> NKikimr::TTxAllocatorClient::AllocateTxIds(ui64 count, const NActo
                << " MaxCapacity: " << MaxCapacity);
 
     if (count >= BatchAllocationWarning) {
-        LOG_WARN_S(ctx, Service,
-                   "AllocateTxIds: requested many txIds. Just a warning, request is processed."
-                   << " Requested: " << count
-                   << " TxAllocators count: " << TxAllocators.size()
-                   << " RequestPerAllocator: " << RequestPerAllocator
-                   << " MaxCapacity: " << MaxCapacity
-                   << " BatchAllocationWarning: " << BatchAllocationWarning);
+        YDB_LOG_CTX_WARN(ctx, "AllocateTxIds: requested many txIds. Just a warning, request is processed. TxAllocators",
+            {"Requested", count},
+            {"count", TxAllocators.size()},
+            {"RequestPerAllocator", RequestPerAllocator},
+            {"MaxCapacity", MaxCapacity},
+            {"BatchAllocationWarning", BatchAllocationWarning});
     }
 
     if (count > Capacity) {
@@ -82,17 +84,14 @@ bool NKikimr::TTxAllocatorClient::OnAllocateResult(TEvTxAllocator::TEvAllocateRe
     }
 
     const NKikimrTx::TEvTxAllocateResult& record = ev->Get()->Record;
-    LOG_DEBUG_S(ctx, Service,
-                "Handle TEvAllocateResult ACCEPTED " <<
-                " RangeBegin# " << record.GetRangeBegin() <<
-                " RangeEnd# " << record.GetRangeEnd() <<
-                " txAllocator# " << txAllocator);
+    YDB_LOG_CTX_DEBUG(ctx, "Handle TEvAllocateResult ACCEPTED",
+        {"RangeBegin", record.GetRangeBegin()},
+        {"RangeEnd", record.GetRangeEnd()},
+        {"txAllocator", txAllocator});
 
     if (record.GetStatus() == NKikimrTx::TEvTxAllocateResult::IMPOSIBLE) {
-        LOG_ERROR_S(ctx, Service,
-                    "Handle TEvAllocateResult receive IMPOSIBLE status" <<
-                    " allocator is exhausted " <<
-                    " txAllocator# " << txAllocator);
+        YDB_LOG_CTX_ERROR(ctx, "Handle TEvAllocateResult receive IMPOSIBLE status allocator is exhausted",
+            {"txAllocator", txAllocator});
         DeregisterRequest(txAllocator);
 
         return false;

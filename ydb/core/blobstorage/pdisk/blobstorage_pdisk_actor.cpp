@@ -33,6 +33,9 @@
 #include <util/string/split.h>
 #include <util/system/sanitizers.h>
 #include <util/generic/variant.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PDISK
 
 namespace NKikimr {
 namespace NPDisk {
@@ -433,7 +436,9 @@ public:
 
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
-                        STLOGX(*actorSystem, PRI_ERROR, BS_PDISK, BSP01, "Formatting error", (What, readOnlyError));
+                        YDB_LOG_CTX_ERROR(*actorSystem, "Formatting error",
+                            {"Marker", "BSP01"},
+                            {"What", readOnlyError});
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
                         return nullptr;
                     }
@@ -466,7 +471,9 @@ public:
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
-                        STLOGX(*actorSystem, PRI_ERROR, BS_PDISK, BSP01, "Formatting error", (What, ex.what()));
+                        YDB_LOG_CTX_ERROR(*actorSystem, "Formatting error",
+                            {"Marker", "BSP01"},
+                            {"What", ex.what()});
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, ex.what()));
                     }
                     return nullptr;
@@ -497,7 +504,9 @@ public:
 
                 if (cfg->ReadOnly) {
                     TString readOnlyError = "PDisk is in read-only mode";
-                    STLOGX(*pCtx->ActorSystem, PRI_ERROR, BS_PDISK, BSP01, "Formatting error", (What, readOnlyError));
+                    YDB_LOG_CTX_ERROR(*pCtx->ActorSystem, "Formatting error",
+                        {"Marker", "BSP01"},
+                        {"What", readOnlyError});
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
                     return nullptr;
                 }
@@ -514,7 +523,9 @@ public:
                     pDisk->WriteApplyFormatRecord(format, mainKey);
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(true, ""));
                 } catch (yexception ex) {
-                    STLOGX(*pCtx->ActorSystem, PRI_ERROR, BS_PDISK, BPD01, "Reencryption error", (What, ex.what()));
+                    YDB_LOG_CTX_ERROR(*pCtx->ActorSystem, "Reencryption error",
+                        {"Marker", "BPD01"},
+                        {"What", ex.what()});
                     pCtx->ActorSystem->Send(pCtx->PDiskActor, new TEvFormatReencryptionFinish(false, ex.what()));
                 }
                 return nullptr;

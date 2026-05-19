@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -278,7 +279,7 @@ namespace NKikimr {
             CompactionScheduled = false;
             UpdateTimingMetrics(ctx);
             if (ctx.Monotonic() >= NextCompactionWakeup) {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
+                YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
                 ScheduleCompaction(ctx);
             } else {
                 ScheduleCompactionWakeup(ctx);
@@ -357,8 +358,8 @@ namespace NKikimr {
                         RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateWaitPreCompact);
 
                         const ui64 cookie = NextPreCompactCookie++;
-                        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                            << "requesting PreCompact for ActDeleteSsts");
+                        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "requesting PreCompact for ActDeleteSsts",
+                            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
                         ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                         PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                             Y_VERIFY_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitPreCompact,
@@ -366,8 +367,9 @@ namespace NKikimr {
                             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
 
                             Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
-                            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                                << "got PreCompactResult for ActDeleteSsts, wId# " << wId);
+                            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "got PreCompactResult for ActDeleteSsts,",
+                                {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                                {"wId", wId});
                             ApplyCompactionResult(ctx, {}, {}, wId);
                             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
                         });
@@ -596,13 +598,14 @@ namespace NKikimr {
 
             if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty()) && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                    << "requesting PreCompact for THullChange");
+                YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "requesting PreCompact for THullChange",
+                    {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
                 ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                 PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                     Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
-                    LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                        << "got PreCompactResult for THullChange, wId# " << wId);
+                    YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "got PreCompactResult for THullChange,",
+                        {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                        {"wId", wId});
                     Handle(ev, ctx, wId);
                 });
                 return;
@@ -829,9 +832,11 @@ namespace NKikimr {
         void Handle(TEvHullCompact::TPtr &ev, const TActorContext &ctx) {
             const ui64 confirmedLsn = RTCtx->LsnMngr->GetConfirmedLsnForHull();
             auto *msg = ev->Get();
-            STLOG(PRI_INFO, BS_HULLCOMP, VDHC01, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
-                (ConfirmedLsn, confirmedLsn), (Msg, *msg),
-                (CompState, TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())));
+            YDB_LOG_COMP_INFO(BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
+                {"Marker", "VDHC01"},
+                {"ConfirmedLsn", confirmedLsn},
+                {"Msg", *msg},
+                {"CompState", TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())});
             Y_VERIFY_S(TKeyToEHullDbType<TKey>() == msg->Type, HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
             Y_VERIFY_S(ForceFreshCompactLsn <= confirmedLsn, HullDs->HullCtx->VCtx->VDiskLogPrefix);

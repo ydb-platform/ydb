@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
     namespace NHullComp {
@@ -68,8 +69,10 @@ namespace NKikimr {
                     if (p.Level > 0 && ratio && ratio->CanDeleteSst()) {
                         action = ActDeleteSsts;
                         if (HullCtx->VCtx->ActorSystem) {
-                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                HullCtx->VCtx->VDiskLogPrefix << " TStrategyDelSst going to delete SST# " << p.ToString() << " because of ration# " << ratio->ToString());
+                            YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyDelSst going to delete because of",
+                                {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                {"SST", p.ToString()},
+                                {"ration", ratio->ToString()});
                         }
                         Task->DeleteSsts.DeleteSst(p.Level, p.SstPtr);
                         SstToDelete++;

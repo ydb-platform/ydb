@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include "sock_settings.h"
 #include "sock_ssl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NRawSocket {
 
@@ -184,7 +185,7 @@ public:
 
         if (UseMtlsAuth) {
             if (!ServerCreds || !ServerCreds->ServerCert || !ServerCreds->ServerPrivateKey || !ServerCreds->CACert) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
                 return false;
             }
             if (ServerCreds->AllowSelfSignedCerts) {
@@ -194,40 +195,40 @@ public:
             }
             i32 retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
             if (retServerCert != 1) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
             }
 
             if (!ServerCreds->ServerPrivateKey) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
                 return false;
             }
             i32 retPrivateKey = SSL_CTX_use_PrivateKey(ctx, ServerCreds->ServerPrivateKey.get());
             if (retPrivateKey != 1) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server private key to ssl context, it might be incorrect.");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Couldn't add server private key to ssl context, it might be incorrect.");
                 return false;
             }
 
             X509_STORE* store = SSL_CTX_get_cert_store(ctx);
             if (!store) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't get cert store from SSL context.");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Couldn't get cert store from SSL context.");
                 return false;
             }
 
             if (X509_STORE_add_cert(store, ServerCreds->CACert.get()) != 1) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
                 return false;
             }
 
             SSL_CTX_set_verify_depth(ctx, 9);
             if (SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256") != 1) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load cipher list");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Couldn't load cipher list");
                 return false;
             }
 
             const char *session_context = "YdbMtlsContext";
             if (SSL_CTX_set_session_id_context(ctx, (const unsigned char *)session_context, strlen(session_context)) != 1) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add ssl session id to ssl context.");
+                YDB_LOG_CTX_COMP_ERROR(*NActors::TlsActivationContext, Service, "Couldn't add ssl session id to ssl context.");
                 return false;
             }
         } else {

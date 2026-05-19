@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -52,7 +53,8 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
         ss << "], ";
 
         ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+        YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::TLI, "",
+            {"Str", ss.Str()});
     }
 
     // Log to DATA_INTEGRITY service (only if we have broken locks)
@@ -69,7 +71,8 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
         }
         ss << "], ";
         ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+        YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            {"Str", ss.Str()});
     }
 
 }
@@ -102,7 +105,8 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
         TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
         ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+        YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::TLI, "",
+            {"Str", ss.Str()});
     }
 
     // Log to DATA_INTEGRITY service
@@ -111,7 +115,8 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
         ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+        YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::DATA_INTEGRITY, "",
+            {"Str", ss.Str()});
     }
 }
 

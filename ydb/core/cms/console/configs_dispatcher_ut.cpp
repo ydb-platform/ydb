@@ -13,6 +13,9 @@
 #include <util/system/hostname.h>
 
 #include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
 
 namespace NKikimr {
 
@@ -240,8 +243,8 @@ public:
     {
         while (!EventsQueue.empty()) {
             TAutoPtr<IEventHandle> &ev = EventsQueue.front();
-            LOG_DEBUG_S(ctx, NKikimrServices::CONFIGS_DISPATCHER,
-                        "Dequeue event type: " << ev->GetTypeRewrite());
+            YDB_LOG_CTX_DEBUG(ctx, "Dequeue event",
+                {"type", ev->GetTypeRewrite()});
             ctx.Send(ev.Release());
             EventsQueue.pop_front();
         }

@@ -1,6 +1,9 @@
 #include "console_configs_manager.h"
 
 #include <util/random/random.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -17,7 +20,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Cannot replace subscriptions: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot replace",
+            {"subscriptions", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -32,7 +36,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxReplaceConfigSubscriptions Execute: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxReplaceConfigSubscriptions",
+            {"Execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -89,8 +94,8 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Send TEvReplaceConfigSubscriptionsResponse: " << Response->Record.ShortDebugString());
+            YDB_LOG_CTX_TRACE(ctx, "Send",
+                {"TEvReplaceConfigSubscriptionsResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

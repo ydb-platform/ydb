@@ -17,6 +17,9 @@
 #include <ydb/public/api/protos/ydb_clickhouse_internal.pb.h>
 
 #include <util/string/vector.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -379,7 +382,8 @@ private:
         ev->Record.SetMaxRows(proto->max_rows());
         ev->Record.SetMaxBytes(proto->max_bytes());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to tablet " << tabletId);
+        YDB_LOG_CTX_DEBUG(ctx, "Sending request to tablet",
+            {"tabletId", tabletId});
 
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), tabletId, true), IEventHandle::FlagTrackDelivery);
 
@@ -419,7 +423,7 @@ private:
 
                 // Skip rows before MinKey just in case (because currently sys view scan ignores key range)
                 if (cmp > 0 || (cmp == 0 && !MinKeyInclusive)) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Skipped rows by sys view scan");
+                    YDB_LOG_CTX_DEBUG(ctx, "Skipped rows by sys view scan");
                     continue;
                 } else {
                     skippedBeforeMinKey = true;
@@ -585,9 +589,9 @@ private:
         TTableRange range(MinKey.GetCells(), true, MinKey.GetCells(), true, false);
         KeyRange.Reset(new TKeyDesc(entry.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Resolving range: "
-                    << " fromKey: " << PrintKey(MinKey.GetBuffer(), *AppData(ctx)->TypeRegistry)
-                    << " fromInclusive: " << true);
+        YDB_LOG_CTX_DEBUG(ctx, "Resolving range:",
+            {"fromKey", PrintKey(MinKey.GetBuffer(), *AppData(ctx)->TypeRegistry)},
+            {"fromInclusive", true});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
         request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
@@ -634,8 +638,8 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Range shards: "
-            << getShardsString(KeyRange->GetPartitions()));
+        YDB_LOG_CTX_DEBUG(ctx, "Range",
+            {"shards", getShardsString(KeyRange->GetPartitions())});
 
         MakeShardRequests(ctx);
     }
@@ -662,7 +666,8 @@ private:
 
         ui64 shardId = KeyRange->GetPartitions()[0].ShardId;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
+        YDB_LOG_CTX_DEBUG(ctx, "Sending request to shards",
+            {"shardId", shardId});
 
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
@@ -734,9 +739,10 @@ private:
         Result.set_last_key_inclusive(shardResponse.GetLastKeyInclusive());
         Result.set_eos(shardResponse.GetLastKey().empty()); // TODO: ??
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Got reply from shard: " << shardResponse.GetTabletID()
-                    << " lastKey: " << PrintKey(shardResponse.GetLastKey(), *AppData(ctx)->TypeRegistry)
-                    << " inclusive: " << shardResponse.GetLastKeyInclusive());
+        YDB_LOG_CTX_DEBUG(ctx, "Got reply",
+            {"from_shard", shardResponse.GetTabletID()},
+            {"lastKey", PrintKey(shardResponse.GetLastKey(), *AppData(ctx)->TypeRegistry)},
+            {"inclusive", shardResponse.GetLastKeyInclusive()});
 
         if (ShardReplyCount == ShardRequestCount)
             ReplySuccess(ctx);
@@ -760,9 +766,10 @@ private:
         Result.set_last_key_inclusive(shardResponse.GetLastKeyInclusive());
         Result.set_eos(shardResponse.GetLastKey().empty()); // TODO: ??
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Got reply from shard: " << shardResponse.GetTabletID()
-                    << " lastKey: " << PrintKey(shardResponse.GetLastKey(), *AppData(ctx)->TypeRegistry)
-                    << " inclusive: " << shardResponse.GetLastKeyInclusive());
+        YDB_LOG_CTX_DEBUG(ctx, "Got reply",
+            {"from_shard", shardResponse.GetTabletID()},
+            {"lastKey", PrintKey(shardResponse.GetLastKey(), *AppData(ctx)->TypeRegistry)},
+            {"inclusive", shardResponse.GetLastKeyInclusive()});
 
         if (ShardReplyCount == ShardRequestCount)
             ReplySuccess(ctx);

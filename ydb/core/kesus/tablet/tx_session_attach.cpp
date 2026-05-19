@@ -1,4 +1,7 @@
 #include "tablet_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -29,10 +32,12 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SESSION_ATTACH; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionAttach::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", session=" << SessionId
-                << ", seqNo=" << Record.GetSeqNo() << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionAttach::Execute",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie},
+            {"session", SessionId},
+            {"seqNo", Record.GetSeqNo()});
 
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
@@ -114,8 +119,9 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
                 NIceDb::TUpdate<Schema::Sessions::TimeoutMillis>(session->TimeoutMillis),
                 NIceDb::TUpdate<Schema::Sessions::Description>(session->Description),
                 NIceDb::TUpdate<Schema::Sessions::ProtectionKey>(session->ProtectionKey));
-            LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-                "[" << Self->TabletID() << "] Created new session " << SessionId);
+            YDB_LOG_CTX_DEBUG(ctx, "] Created new session",
+                {"TabletID", Self->TabletID()},
+                {"SessionId", SessionId});
         }
 
         // Set new owner and cancel timeout
@@ -135,9 +141,11 @@ struct TKesusTablet::TTxSessionAttach : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionAttach::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ", session=" << SessionId << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionAttach::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie},
+            {"session", SessionId});
 
         if (SessionId != 0) {
             Self->RemoveSessionTx(SessionId);
@@ -256,10 +264,12 @@ void TKesusTablet::Handle(TEvKesus::TEvAttachSession::TPtr& ev) {
             // will reconnect to the new leader anyway and situation where
             // two sessions successfully attached is not possible.
             // Unless they use the same SessionId that is.
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-                "[" << TabletID() << "] Fast-path attach session=" << sessionId
-                    << " to sender=" << ev->Sender << ", cookie=" << ev->Cookie
-                    << ", seqNo=" << record.GetSeqNo());
+            YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "] Fast-path attach",
+                {"TabletID", TabletID()},
+                {"session", sessionId},
+                {"to_sender", ev->Sender},
+                {"cookie", ev->Cookie},
+                {"seqNo", record.GetSeqNo()});
 
             if (session->OwnerProxy && session->OwnerProxy != proxy) {
                 // Notify old proxy that its session has been stolen

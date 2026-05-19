@@ -12,6 +12,9 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/random/random.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -161,8 +164,8 @@ private:
 
         Expire = TInstant::MicroSeconds(rec.GetExpire());
         LastResponse = ctx.Now();
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Node has now extended lease expiring " << ToString(Expire));
+        YDB_LOG_CTX_DEBUG(ctx, "Node has now extended lease expiring",
+            {"#_ToString(Expire)", ToString(Expire)});
 
         if (rec.HasEpoch()) {
             LastPingEpoch = rec.GetEpoch().GetId();
@@ -229,7 +232,7 @@ private:
 
     void StopNode(const TActorContext &ctx)
     {
-        LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER, "Stop node upon lease expiration (exit code 2)");
+        YDB_LOG_CTX_ERROR(ctx, "Stop node upon lease expiration (exit code 2)");
         AppData(ctx)->KikimrShouldContinue->ShouldStop(2);
     }
 

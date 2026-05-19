@@ -1,4 +1,7 @@
 #include "load_actor_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
 
 namespace NKikimr::NTestShard {
 
@@ -28,7 +31,10 @@ namespace NKikimr::NTestShard {
             r->SetTo(key);
             r->SetIncludeTo(true);
 
-            STLOG(PRI_INFO, TEST_SHARD, TS09, "deleting data", (TabletId, TabletId), (Key, key));
+            YDB_LOG_INFO("deleting data",
+                {"Marker", "TS09"},
+                {"TabletId", TabletId},
+                {"Key", key});
 
             const auto it = Keys.find(key);
             Y_ABORT_UNLESS(it != Keys.end());

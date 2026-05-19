@@ -8,6 +8,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LABELS_MAINTAINER
 
 namespace NKikimr {
 
@@ -151,15 +154,15 @@ private:
     {
         auto root = AppData(ctx)->Counters;
         for (auto &service : DatabaseSensorServices) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                        "Reset counters for " << service.data());
+            YDB_LOG_CTX_DEBUG(ctx, "Reset counters for",
+                {"data", service.data()});
 
             auto serviceGroup = GetServiceCounters(root, service);
             serviceGroup->ResetCounters(true);
         }
         for (auto &service : DatabaseAttributeSensorServices) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                        "Reset counters for " << service.data());
+            YDB_LOG_CTX_DEBUG(ctx, "Reset counters for",
+                {"data", service.data()});
 
             auto serviceGroup = GetServiceCounters(root, service);
             serviceGroup->ResetCounters(true);
@@ -170,8 +173,8 @@ private:
     {
         auto root = AppData(ctx)->Counters;
         for (auto &service : AllSensorServices) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                        "Removing database labels from " << service << " counters");
+            YDB_LOG_CTX_DEBUG(ctx, "Removing database labels from counters",
+                {"service", service});
 
             ReplaceSubgroup(root, service);
         }
@@ -343,15 +346,15 @@ private:
     {
         auto &rec = ev->Get()->Record;
 
-        LOG_INFO_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                   "Got new config: " << rec.GetConfig().ShortDebugString());
+        YDB_LOG_CTX_INFO(ctx, "Got new",
+            {"config", rec.GetConfig().ShortDebugString()});
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-        LOG_TRACE_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                    "Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
+        YDB_LOG_CTX_TRACE(ctx, "Send",
+            {"TEvConfigNotificationResponse", resp->Record.ShortDebugString()});
 
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
@@ -361,8 +364,8 @@ private:
     {
         CurrentStatus.CopyFrom(ev->Get()->Record);
 
-        LOG_INFO_S(ctx, NKikimrServices::LABELS_MAINTAINER,
-                    "Got new pool status: " << CurrentStatus.ShortDebugString());
+        YDB_LOG_CTX_INFO(ctx, "Got new pool",
+            {"status", CurrentStatus.ShortDebugString()});
 
         UpdateDatabaseLabels(ctx);
     }

@@ -57,6 +57,9 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr::NKqp {
 
@@ -209,8 +212,8 @@ public:
         }
 
         Graph->BuildAllTasks({}, snapshot, nullptr);
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER,
-            "Tasks graph after BuildAllTasks:\n" << Graph->DumpToString());
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Tasks graph after BuildAllTasks:\n",
+            {"DumpToString", Graph->DumpToString()});
 
         auto reply = MakeHolder<TEvBuildTasksDone>();
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {

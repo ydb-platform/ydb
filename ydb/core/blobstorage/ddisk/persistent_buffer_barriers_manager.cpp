@@ -2,6 +2,9 @@
 #include "persistent_buffer_barriers_manager.h"
 
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
@@ -76,7 +79,11 @@ namespace NKikimr::NDDisk {
         barrier.SectorIdx = newSector.SectorIdx;
 
         if (barrier.Header.Barrier.Barriers[pos].Lsn >= lsn) {
-            STLOG(PRI_ERROR, BS_DDISK, BSDD29, "TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous", (TabletId, tabletId), (Lsn, lsn), (PrevLsn, barrier.Header.Barrier.Barriers[pos].Lsn));
+            YDB_LOG_ERROR("TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous",
+                {"Marker", "BSDD29"},
+                {"TabletId", tabletId},
+                {"Lsn", lsn},
+                {"PrevLsn", barrier.Header.Barrier.Barriers[pos].Lsn});
         }
         barrier.Header.Barrier.Barriers[pos] = {tabletId, lsn};
         barrier.Header.Barrier.BarrierLsn++;
@@ -92,7 +99,10 @@ namespace NKikimr::NDDisk {
                 auto& barrier = b.Header.Barrier.Barriers[FreeBarrierPosition];
                 auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
                 if (it == persistentBuffers.end() || std::get<0>(it->first) != barrier.TabletId) {
-                    STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreBarriers tablet records not found, erase barrier marked as free", (TabletId, barrier.TabletId), (Lsn, barrier.Lsn));
+                    YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers tablet records not found, erase barrier marked as free",
+                        {"Marker", "BSDD30"},
+                        {"TabletId", barrier.TabletId},
+                        {"Lsn", barrier.Lsn});
                     PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
                 } else {
                     auto it = PersistentBufferBarriersLocation.find(barrier.TabletId);
@@ -101,7 +111,11 @@ namespace NKikimr::NDDisk {
                     } else {
                         auto oldBarrierLocation = PersistentBufferBarriersLocation[barrier.TabletId];
                         ui64 oldLsn = PersistentBufferBarriers[std::get<0>(oldBarrierLocation)].Header.Barrier.Barriers[std::get<1>(oldBarrierLocation)].Lsn;
-                        STLOG(PRI_DEBUG, BS_DDISK, BSDD38, "TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used", (TabletId, barrier.TabletId), (Lsn, barrier.Lsn), (oldLsn, oldLsn));
+                        YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
+                            {"Marker", "BSDD38"},
+                            {"TabletId", barrier.TabletId},
+                            {"Lsn", barrier.Lsn},
+                            {"oldLsn", oldLsn});
                         if (barrier.Lsn > oldLsn) {
                             PersistentBufferBarrierHoles.push_back(it->second);
                             it->second = {pos, FreeBarrierPosition};

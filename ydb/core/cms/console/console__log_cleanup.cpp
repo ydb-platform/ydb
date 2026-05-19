@@ -1,4 +1,7 @@
 #include "console_configs_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -11,8 +14,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTxLogCleanup Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Execute");
 
         const ui32 maxConsoleLogEntries = 25000;
 

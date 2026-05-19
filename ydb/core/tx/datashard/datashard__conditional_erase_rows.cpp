@@ -13,6 +13,9 @@
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -650,8 +653,8 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
 
 void TDataShard::Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!InFlightCondErase || InFlightCondErase.TxId != ev->Get()->TxId) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "Unknown conditional erase actor registered"
-            << ": at: " << TabletID());
+        YDB_LOG_CTX_WARN(ctx, "Unknown conditional erase actor registered",
+            {"at", TabletID()});
         return;
     }
 

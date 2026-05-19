@@ -13,6 +13,9 @@
 //#include <ydb/library/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -477,10 +480,10 @@ private:
         Y_ENSURE(PendingAcks);
         --PendingAcks;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Got stream data ack ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", PendingAcks: " << PendingAcks);
+        YDB_LOG_CTX_DEBUG(ctx, "Got stream data ack",
+            {"ShardId", ShardId},
+            {"TxId", TxId},
+            {"PendingAcks", PendingAcks});
 
         if (Finished && !PendingAcks)
             Driver->Touch(EScan::Feed);
@@ -508,10 +511,10 @@ private:
 
         Writer->Reserve(MessageSizeLimit);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Got quota for read table scan ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", MessageQuota: " << MessageQuota);
+        YDB_LOG_CTX_DEBUG(ctx, "Got quota for read table scan",
+            {"ShardId", ShardId},
+            {"TxId", TxId},
+            {"MessageQuota", MessageQuota});
 
         CheckQuota(ctx);
 
@@ -653,13 +656,13 @@ private:
         ++PendingAcks;
         --MessageQuota;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Send response data ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", Size: " << Writer->GetMessageSize()
-                    << ", Rows: " << Writer->GetMessageRows()
-                    << ", PendingAcks: " << PendingAcks
-                    << ", MessageQuota: " << MessageQuota);
+        YDB_LOG_CTX_DEBUG(ctx, "Send response data",
+            {"ShardId", ShardId},
+            {"TxId", TxId},
+            {"Size", Writer->GetMessageSize()},
+            {"Rows", Writer->GetMessageRows()},
+            {"PendingAcks", PendingAcks},
+            {"MessageQuota", MessageQuota});
 
         if (RowLimit) {
             RowLimit -= rows;
@@ -678,7 +681,8 @@ private:
         Y_DEBUG_ABORT_UNLESS(DebugCheckKeyInRange(key));
 
         if (!Writer->PutRow(row, Error)) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got scan fatal error: " << Error);
+            YDB_LOG_ERROR("Got scan fatal",
+                {"error", Error});
             IsFatalError = true;
             return EScan::Final;
         }
@@ -712,10 +716,10 @@ private:
             ctx.Send(Sink, request.Release());
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Finish scan ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", MessageQuota: " << MessageQuota);
+        YDB_LOG_CTX_DEBUG(ctx, "Finish scan",
+            {"ShardId", ShardId},
+            {"TxId", TxId},
+            {"MessageQuota", MessageQuota});
 
         Driver = nullptr;
 

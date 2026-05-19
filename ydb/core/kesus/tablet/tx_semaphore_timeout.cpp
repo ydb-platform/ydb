@@ -2,6 +2,9 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -25,9 +28,10 @@ struct TKesusTablet::TTxSemaphoreTimeout : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SEMAPHORE_TIMEOUT; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreTimeout::Execute (session=" << SessionId
-                << ", semaphore=" << SemaphoreId << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSemaphoreTimeout::Execute",
+            {"TabletID", Self->TabletID()},
+            {"(session", SessionId},
+            {"semaphore", SemaphoreId});
 
         if (!Cookie.DetachEvent()) {
             // Timeout has been cancelled
@@ -66,9 +70,10 @@ struct TKesusTablet::TTxSemaphoreTimeout : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreTimeout::Complete (session=" << SessionId
-                << ", semaphore=" << SemaphoreId << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSemaphoreTimeout::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(session", SessionId},
+            {"semaphore", SemaphoreId});
         Self->RemoveSessionTx(SessionId);
 
         for (auto& ev : Events) {

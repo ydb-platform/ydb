@@ -10,6 +10,9 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/stream/zlib.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
 #error log macro definition clash
@@ -103,8 +106,7 @@ private:
     }
 
     void InitDefaultConfiguration() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,
-                        "NetClassifierUpdate is adding distributable config item with cookie");
+        YDB_LOG_INFO("NetClassifierUpdate is adding distributable config item with cookie");
 
         auto event = MakeHolder<TEvConsole::TEvConfigureRequest>();
 

@@ -1,5 +1,8 @@
 #include "info_collector.h"
 #include "test_load_actor.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DS_LOAD_TEST
 
 namespace NKikimr::NDataShardLoad {
 
@@ -55,16 +58,18 @@ public:
     }
 
     void HandleWakeup(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TInfoCollector# " << Parent
-            << " actor timeout: waiting# " << ResponsesPending << " out of actorsCount# " << Actors.size());
+        YDB_LOG_CTX_DEBUG(ctx, "actor timeout: out of",
+            {"TInfoCollector", Parent},
+            {"waiting", ResponsesPending},
+            {"actorsCount", Actors.size()});
 
         Reply(ctx);
         Die(ctx);
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TInfoCollector# " << Parent
-            << " actor received PoisonPill");
+        YDB_LOG_CTX_DEBUG(ctx, "actor received PoisonPill",
+            {"TInfoCollector", Parent});
         Die(ctx);
     }
 

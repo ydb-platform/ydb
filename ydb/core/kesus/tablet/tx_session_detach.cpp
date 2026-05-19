@@ -1,4 +1,7 @@
 #include "tablet_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -23,9 +26,11 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionDetach::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", session=" << Record.GetSessionId() << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionDetach::Execute",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie},
+            {"session", Record.GetSessionId()});
 
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
@@ -54,9 +59,10 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionDetach::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionDetach::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 
         Y_ABORT_UNLESS(Reply);
@@ -95,9 +101,11 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
         }
 
         // avoid unnecessary transactions
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-            "[" << TabletID() << "] Fast-path detach session=" << sessionId
-                << " from sender=" << ev->Sender << ", cookie=" << ev->Cookie);
+        YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "] Fast-path detach",
+            {"TabletID", TabletID()},
+            {"session", sessionId},
+            {"from_sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         Y_ABORT_UNLESS(ScheduleSessionTimeout(session, TActivationContext::AsActorContext()));
         Send(ev->Sender,

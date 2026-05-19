@@ -9,6 +9,9 @@
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr::NSysView::NAuth {
 
@@ -61,8 +64,8 @@ protected:
             }
         }
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Sending list users request " << request->Record.ShortUtf8DebugString());
+        YDB_LOG_TRACE("Sending list users request",
+            {"ShortUtf8DebugString", request->Record.ShortUtf8DebugString()});
 
         TBase::SendThroughPipeCache(request.Release(), TBase::SchemeShardId);
     }
@@ -70,8 +73,8 @@ protected:
     void Handle(TEvSchemeShard::TEvListUsersResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got list users response " << record.ShortUtf8DebugString());
+        YDB_LOG_CTX_TRACE(ctx, "Got list users response",
+            {"ShortUtf8DebugString", record.ShortUtf8DebugString()});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 

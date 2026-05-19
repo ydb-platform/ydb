@@ -30,6 +30,9 @@
 #include <util/stream/format.h>
 
 #include <tcmalloc/malloc_extension.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MEMORY_CONTROLLER
 
 namespace NKikimr::NMemory {
 
@@ -153,12 +156,14 @@ public:
 
         tcmalloc::MallocExtension::SetMemoryLimit(softLimitBytes, tcmalloc::MallocExtension::LimitKind::kSoft);
 
-        LOG_NOTICE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Set tcmalloc soft limit " << softLimitBytes);
+        YDB_LOG_CTX_NOTICE(ctx, "Set tcmalloc soft limit",
+            {"softLimitBytes", softLimitBytes});
 #endif
 
         HandleWakeup(ctx);
 
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Bootstrapped with config " << Config.ShortDebugString());
+        YDB_LOG_CTX_INFO(ctx, "Bootstrapped with config",
+            {"ShortDebugString", Config.ShortDebugString()});
     }
 
 private:
@@ -179,7 +184,8 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         Config.Swap(ev->Get()->Record.MutableConfig()->MutableMemoryControllerConfig());
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Config updated " << Config.ShortDebugString());
+        YDB_LOG_CTX_INFO(ctx, "Config updated",
+            {"ShortDebugString", Config.ShortDebugString()});
     }
 
     void HandleWakeup(const TActorContext& ctx) noexcept {
@@ -224,15 +230,23 @@ private:
             resultingConsumersConsumption += GetResultingConsumption(consumer, coefficient);
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Periodic memory stats:"
-            << " AnonRss: " << HumanReadableBytes(processMemoryInfo.AnonRss) << " CGroupLimit: " << HumanReadableBytes(processMemoryInfo.CGroupLimit)
-            << " MemTotal: " << HumanReadableBytes(processMemoryInfo.MemTotal) << " MemAvailable: " << HumanReadableBytes(processMemoryInfo.MemAvailable)
-            << " AllocatedMemory: " << HumanReadableBytes(processMemoryInfo.AllocatedMemory) << " AllocatorCachesMemory: " << HumanReadableBytes(processMemoryInfo.AllocatorCachesMemory)
-            << " HardLimit: " << HumanReadableBytes(hardLimitBytes) << " SoftLimit: " << HumanReadableBytes(softLimitBytes) << " TargetUtilization: " << HumanReadableBytes(targetUtilizationBytes)
-            << " ActivitiesLimitBytes: " << HumanReadableBytes(activitiesLimitBytes)
-            << " ConsumersConsumption: " << HumanReadableBytes(consumersConsumption) << " OtherConsumption: " << HumanReadableBytes(otherConsumption) << " ExternalConsumption: " << HumanReadableBytes(externalConsumption)
-            << " TargetConsumersConsumption: " << HumanReadableBytes(targetConsumersConsumption) << " ResultingConsumersConsumption: " << HumanReadableBytes(resultingConsumersConsumption)
-            << " Coefficient: " << coefficient);
+        YDB_LOG_CTX_INFO(ctx, "Periodic memory stats:",
+            {"AnonRss", HumanReadableBytes(processMemoryInfo.AnonRss)},
+            {"CGroupLimit", HumanReadableBytes(processMemoryInfo.CGroupLimit)},
+            {"MemTotal", HumanReadableBytes(processMemoryInfo.MemTotal)},
+            {"MemAvailable", HumanReadableBytes(processMemoryInfo.MemAvailable)},
+            {"AllocatedMemory", HumanReadableBytes(processMemoryInfo.AllocatedMemory)},
+            {"AllocatorCachesMemory", HumanReadableBytes(processMemoryInfo.AllocatorCachesMemory)},
+            {"HardLimit", HumanReadableBytes(hardLimitBytes)},
+            {"SoftLimit", HumanReadableBytes(softLimitBytes)},
+            {"TargetUtilization", HumanReadableBytes(targetUtilizationBytes)},
+            {"ActivitiesLimitBytes", HumanReadableBytes(activitiesLimitBytes)},
+            {"ConsumersConsumption", HumanReadableBytes(consumersConsumption)},
+            {"OtherConsumption", HumanReadableBytes(otherConsumption)},
+            {"ExternalConsumption", HumanReadableBytes(externalConsumption)},
+            {"TargetConsumersConsumption", HumanReadableBytes(targetConsumersConsumption)},
+            {"ResultingConsumersConsumption", HumanReadableBytes(resultingConsumersConsumption)},
+            {"Coefficient", coefficient});
 
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
@@ -275,9 +289,12 @@ private:
             }
             consumersLimitBytes += limitBytes;
 
-            LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << consumer.Kind << " state:"
-                << " Consumption: " << HumanReadableBytes(consumer.Consumption) << " Limit: " << HumanReadableBytes(limitBytes)
-                << " Min: " << HumanReadableBytes(consumer.MinBytes) << " Max: " << HumanReadableBytes(consumer.MaxBytes));
+            YDB_LOG_CTX_INFO(ctx, "Consumer state:",
+                {"Kind", consumer.Kind},
+                {"Consumption", HumanReadableBytes(consumer.Consumption)},
+                {"Limit", HumanReadableBytes(limitBytes)},
+                {"Min", HumanReadableBytes(consumer.MinBytes)},
+                {"Max", HumanReadableBytes(consumer.MaxBytes)});
             auto& counters = GetConsumerCounters(consumer.Kind);
             counters.Consumption->Set(consumer.Consumption);
             counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
@@ -302,37 +319,43 @@ private:
         const auto *msg = ev->Get();
         auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
         Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer " << msg->Kind << " " << ev->Sender << " registered");
+        YDB_LOG_CTX_INFO(ctx, "Consumer registered",
+            {"Kind", msg->Kind},
+            {"Sender", ev->Sender});
         Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
     }
 
     void Handle(TEvMemTableRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
         auto consumer = MemTables->Register(ev->Sender, msg->Table);
-        LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << msg->Table << " registered");
+        YDB_LOG_CTX_TRACE(ctx, "MemTable registered",
+            {"Sender", ev->Sender},
+            {"Table", msg->Table});
         Send(ev->Sender, new TEvMemTableRegistered(msg->Table, std::move(consumer)));
     }
 
     void Handle(TEvMemTableUnregister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
         MemTables->Unregister(ev->Sender, msg->Table);
-        LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << msg->Table << " unregistered");
+        YDB_LOG_CTX_TRACE(ctx, "MemTable unregistered",
+            {"Sender", ev->Sender},
+            {"Table", msg->Table});
     }
 
     void Handle(TEvMemTableCompacted::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
         if (auto consumer = dynamic_cast<TMemTableMemoryConsumer*>(msg->MemoryConsumer.Get())) {
             ui32 table = MemTables->CompactionComplete(consumer);
-            LOG_TRACE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "MemTable " << ev->Sender << " " << table << " compacted");
+            YDB_LOG_CTX_TRACE(ctx, "MemTable compacted",
+                {"Sender", ev->Sender},
+                {"table", table});
         }
     }
 
     void Handle(TEvResourceBroker::TEvConfigureResult::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        LOG_LOG_S(ctx,
-            msg->Record.GetSuccess() ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR,
-            NKikimrServices::MEMORY_CONTROLLER,
-            "ResourceBroker configure result " << msg->Record.ShortDebugString());
+        YDB_LOG_CTX(ctx, msg->Record.GetSuccess() ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, "ResourceBroker configure result",
+            {"ShortDebugString", msg->Record.ShortDebugString()});
     }
 
     double BinarySearchCoefficient(const TVector<TConsumerState>& consumers, ui64 availableMemory) {
@@ -414,8 +437,9 @@ private:
     void ApplyMemTableLimit(ui64 limitBytes) const {
         auto consumers = MemTables->SelectForCompaction(limitBytes);
         for (const auto& consumer : consumers) {
-            LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::MEMORY_CONTROLLER, "Request MemTable compaction of table " <<
-                consumer.first->Table << " with " << HumanReadableBytes(consumer.second));
+            YDB_LOG_TRACE("Request MemTable compaction of table with",
+                {"Table", consumer.first->Table},
+                {"#_HumanReadableBytes(consumer.second)", HumanReadableBytes(consumer.second)});
             Send(consumer.first->Owner, new TEvMemTableCompact(consumer.first->Table, consumer.second));
         }
     }
@@ -440,7 +464,9 @@ private:
 
         // TODO: counters and logs for all column table queues
         ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:" << " Consumption: " << HumanReadableBytes(queryExecutionConsumption) << " Limit: " << HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]));
+        YDB_LOG_CTX_INFO(ctx, "Consumer QueryExecution state:",
+            {"Consumption", HumanReadableBytes(queryExecutionConsumption)},
+            {"Limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
         Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
         Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
         memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
@@ -455,7 +481,8 @@ private:
             return;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::MEMORY_CONTROLLER, "Apply ResourceBroker config: " << config.ToString());
+        YDB_LOG_INFO("Apply ResourceBroker",
+            {"config", config.ToString()});
 
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;

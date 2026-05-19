@@ -29,6 +29,9 @@
 #include <util/system/sanitizers.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PDISK
 
 namespace NKikimr {
 namespace NPDisk {
@@ -1287,14 +1290,20 @@ class TCachedBlockDevice : public TRealBlockDevice {
 
         void Exec(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Exec TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
+                YDB_LOG_CTX_DEBUG(*actorSystem, "Exec TCachedReadCompletion",
+                    {"Marker", "BPD01"},
+                    {"ReqId", ReqId},
+                    {"Offset", Offset});
             }
             CachedBlockDevice.ExecRead(this, actorSystem);
         }
 
         void Release(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Release TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
+                YDB_LOG_CTX_DEBUG(*actorSystem, "Release TCachedReadCompletion",
+                    {"Marker", "BPD01"},
+                    {"ReqId", ReqId},
+                    {"Offset", Offset});
             }
             CachedBlockDevice.ReleaseRead(this, actorSystem);
         }

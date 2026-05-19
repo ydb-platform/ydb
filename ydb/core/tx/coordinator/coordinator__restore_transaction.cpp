@@ -4,6 +4,9 @@
 #include <ydb/core/tablet/tablet_exception.h>
 
 #include <util/stream/file.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
@@ -101,7 +104,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                     auto& medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
                     medTx.PushToAffected.push_back(affectedShardId);
                 } else {
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found: MedId = " << medId << " TxId = " << txId << " DataShardId = " << affectedShardId);
+                    YDB_LOG_CTX_ERROR(ctx, "Transaction not found: MedId TxId DataShardId",
+                        {"medId", medId},
+                        {"txId", txId},
+                        {"affectedShardId", affectedShardId});
                     ++errors;
                 }
 

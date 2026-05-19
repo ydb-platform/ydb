@@ -9,6 +9,9 @@
 
 #define XXH_INLINE_ALL
 #include <contrib/libs/xxhash/xxhash.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
@@ -401,8 +404,12 @@ namespace NKikimr::NDDisk {
         const ui64 lsn = record.GetLsn();
 
         if (auto barrier = PersistentBufferBarriersManager.GetBarrier(creds.TabletId); lsn <= barrier) {
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite write before barrier",
-                (TabletId, creds.TabletId), (Generation, creds.Generation), (Lsn, lsn), (Barrier, barrier));
+            YDB_LOG_DEBUG("TDDiskActor::ProcessPersistentBufferWrite write before barrier",
+                {"Marker", "BSDD15"},
+                {"TabletId", creds.TabletId},
+                {"Generation", creds.Generation},
+                {"Lsn", lsn},
+                {"Barrier", barrier});
             SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
                 TStringBuilder() << "write before barrier"

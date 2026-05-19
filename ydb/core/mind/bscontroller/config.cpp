@@ -4,6 +4,9 @@
 #include "table_merger.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
 
 namespace NKikimr::NBsController {
 
@@ -311,11 +314,12 @@ namespace NKikimr::NBsController {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
                     const TVSlotInfo& curSlot = *cur.VDisksInGroup[i];
                     if (prevSlot.VSlotId != curSlot.VSlotId) {
-                        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA05, "VDisk moved",
-                            (UniqueId, State.UniqueId),
-                            (PrevSlot, prevSlot.VSlotId),
-                            (CurSlot, curSlot.VSlotId),
-                            (VDiskId, curSlot.GetVDiskId()));
+                        YDB_LOG_INFO("VDisk moved",
+                            {"Marker", "BSCA05"},
+                            {"UniqueId", State.UniqueId},
+                            {"PrevSlot", prevSlot.VSlotId},
+                            {"CurSlot", curSlot.VSlotId},
+                            {"VDiskId", curSlot.GetVDiskId()});
                     }
                 }
             }

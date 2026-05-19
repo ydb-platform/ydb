@@ -8,6 +8,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -33,7 +34,8 @@ protected:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_CTX_COMP_NOTICE(ctx, NKikimrServices::TX_DATASHARD, "",
+            {"error", error});
 
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, error);
         ResetWaiting(op);
@@ -94,8 +96,9 @@ public:
         }
 
         if (!IsWaiting(op)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Starting a " << GetKind() << " operation"
-                << " at " << DataShard.TabletID());
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Starting a operation at",
+                {"GetKind", GetKind()},
+                {"TabletID", DataShard.TabletID()});
 
             if (!Run(op, txc, ctx)) {
                 return EExecutionStatus::Executed;
@@ -106,8 +109,9 @@ public:
         }
 
         if (HasResult(op)) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "" << GetKind() << " complete"
-                << " at " << DataShard.TabletID());
+            YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::TX_DATASHARD, "complete at",
+                {"GetKind", GetKind()},
+                {"TabletID", DataShard.TabletID()});
 
             ResetWaiting(op);
             if (ProcessResult(op, ctx)) {

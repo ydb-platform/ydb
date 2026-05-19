@@ -2,6 +2,9 @@
 #include "datashard_impl.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -102,14 +105,12 @@ private:
             offset += prevSize;
             // Try to fail gracefully instead of crashing on unexpected data
             if (offset < lastOffset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that go backwards");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that go backwards");
                 Failed();
                 return;
             }
             if (Buffer.size() < offset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
                 Failed();
                 return;
             }
@@ -133,8 +134,7 @@ private:
                 TRopeStream stream(Buffer.Begin(), chunkSize);
                 bool ok = state->ParseFromZeroCopyStream(&stream);
                 if (!ok) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
+                    YDB_LOG_CRIT("Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
                     Failed();
                     return;
                 }
@@ -184,8 +184,8 @@ private:
             for (const auto& protoRange : state->GetLockRanges()) {
                 auto* row = Locks.FindPtr(protoRange.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock range for a missing lock " << protoRange.GetLockId());
+                    YDB_LOG_CRIT("Received lock range for a missing lock",
+                        {"GetLockId", protoRange.GetLockId()});
                     Failed();
                     return;
                 }
@@ -197,8 +197,8 @@ private:
             for (const auto& protoConflict : state->GetLockConflicts()) {
                 auto* row = Locks.FindPtr(protoConflict.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock conflict for a missing lock " << protoConflict.GetLockId());
+                    YDB_LOG_CRIT("Received lock conflict for a missing lock",
+                        {"GetLockId", protoConflict.GetLockId()});
                     Failed();
                     return;
                 }
@@ -207,8 +207,8 @@ private:
             for (const auto& protoVolatileDep : state->GetLockVolatileDependencies()) {
                 auto* row = Locks.FindPtr(protoVolatileDep.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received volatile dependency for a missing lock " << protoVolatileDep.GetLockId());
+                    YDB_LOG_CRIT("Received volatile dependency for a missing lock",
+                        {"GetLockId", protoVolatileDep.GetLockId()});
                     Failed();
                     return;
                 }

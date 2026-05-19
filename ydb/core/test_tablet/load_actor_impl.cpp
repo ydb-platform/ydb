@@ -1,4 +1,7 @@
 #include "load_actor_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
 
 namespace NKikimr::NTestShard {
 
@@ -50,7 +53,9 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::Bootstrap() {
-        STLOG(PRI_DEBUG, TEST_SHARD, TS31, "TLoadActor::Bootstrap", (TabletId, TabletId));
+        YDB_LOG_DEBUG("TLoadActor::Bootstrap",
+            {"Marker", "TS31"},
+            {"TabletId", TabletId});
         if (Settings.HasStorageServerHost()) {
             Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
                 Settings.GetStorageServerPort()));
@@ -73,7 +78,9 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::HandleWakeup() {
-        STLOG(PRI_ERROR, TEST_SHARD, TS00, "voluntary restart", (TabletId, TabletId));
+        YDB_LOG_ERROR("voluntary restart",
+            {"Marker", "TS00"},
+            {"TabletId", TabletId});
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Tablet, TabletActorId, nullptr, 0));
     }
 
@@ -163,7 +170,9 @@ namespace NKikimr::NTestShard {
         if (ev->Get()->Connected) {
             RunValidation(true);
         } else {
-            STLOG(PRI_ERROR, TEST_SHARD, TS33, "state server not connected", (TabletId, TabletId));
+            YDB_LOG_ERROR("state server not connected",
+                {"Marker", "TS33"},
+                {"TabletId", TabletId});
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
             PassAway();
         }
@@ -205,14 +214,20 @@ namespace NKikimr::NTestShard {
         Y_ABORT_UNLESS(!ValidationActorId); // no requests during validation
         auto& record = ev->Get()->Record;
         if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            STLOG(PRI_ERROR, TEST_SHARD, TS26, "TEvKeyValue::TEvRequest failed", (TabletId, TabletId),
-                (Status, record.GetStatus()), (ErrorReason, record.GetErrorReason()));
+            YDB_LOG_ERROR("TEvKeyValue::TEvRequest failed",
+                {"Marker", "TS26"},
+                {"TabletId", TabletId},
+                {"Status", record.GetStatus()},
+                {"ErrorReason", record.GetErrorReason()});
             if (const auto it = WritesInFlight.find(record.GetCookie()); it != WritesInFlight.end()) {
                 WriteCounters.RecordFail(it->second.KeysInQuery.size());
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    STLOG(PRI_WARN, TEST_SHARD, TS27, "write failed", (TabletId, TabletId), (Key, key));
+                    YDB_LOG_WARN("write failed",
+                        {"Marker", "TS27"},
+                        {"TabletId", TabletId},
+                        {"Key", key});
                     RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
                 }
                 WritesInFlight.erase(it);
@@ -222,7 +237,10 @@ namespace NKikimr::NTestShard {
                 const TString& key = nh.mapped();
                 const auto it = Keys.find(key);
                 Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                STLOG(PRI_WARN, TEST_SHARD, TS34, "patch failed", (TabletId, TabletId), (Key, key));
+                YDB_LOG_WARN("patch failed",
+                    {"Marker", "TS34"},
+                    {"TabletId", TabletId},
+                    {"Key", key});
                 RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
             }
             if (const auto it = DeletesInFlight.find(record.GetCookie()); it != DeletesInFlight.end()) {
@@ -230,7 +248,10 @@ namespace NKikimr::NTestShard {
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    STLOG(PRI_WARN, TEST_SHARD, TS28, "delete failed", (TabletId, TabletId), (Key, key));
+                    YDB_LOG_WARN("delete failed",
+                        {"Marker", "TS28"},
+                        {"TabletId", TabletId},
+                        {"Key", key});
                     RegisterTransition(*it, ::NTestShard::TStateServer::DELETE_PENDING, ::NTestShard::TStateServer::CONFIRMED);
                     BytesOfData += it->second.Len;
                 }
@@ -257,7 +278,10 @@ namespace NKikimr::NTestShard {
                 }
                 return SingleLineProto(copy);
             };
-            STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, makeResponse()));
+            YDB_LOG_INFO("TEvKeyValue::TEvResponse",
+                {"Marker", "TS04"},
+                {"TabletId", TabletId},
+                {"Msg", makeResponse()});
             ProcessWriteResult(record.GetCookie(), record.GetWriteResult());
             ProcessPatchResult(record.GetCookie(), record.GetPatchResult());
             ProcessDeleteResult(record.GetCookie(), record.GetDeleteRangeResult());

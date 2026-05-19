@@ -14,6 +14,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/sanitizers.h>
 #include <util/thread/factory.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
 
 namespace NKikimr {
     using namespace NActors;
@@ -98,7 +101,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
             if (++Responses == Counter) {
                Send(Edge, new TEvents::TEvWakeup);
-               ALOG_NOTICE(NActorsServices::TEST, "Done.");
+               YDB_LOG_NOTICE("Done.");
             }
         }
 

@@ -1,4 +1,7 @@
 #include "kqp_worker_common.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SLOW_LOG
 
 namespace NKikimr::NKqp {
 
@@ -123,13 +126,14 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             resultsSize += result.ByteSize();
         }
 
-        LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SLOW_LOG, requestInfo
-            << "Slow query, duration: " << duration.ToString()
-            << ", status: " << status
-            << ", user: " << username
-            << ", results: " << resultsSize << 'b'
-            << ", text: \"" << EscapeC(queryText) << '"'
-            << ", parameters: " << paramsText);
+        YDB_LOG_CTX(ctx, priority, "Slow query, b, text:",
+            {"requestInfo", requestInfo},
+            {"duration", duration.ToString()},
+            {"status", status},
+            {"user", username},
+            {"results", resultsSize},
+            {"#_EscapeC(queryText)", EscapeC(queryText)},
+            {"parameters", paramsText});
     }
 }
 

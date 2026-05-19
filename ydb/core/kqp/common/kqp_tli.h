@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {
@@ -209,7 +210,8 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
         LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::TLI, "",
+        {"Str", ss.Str()});
 }
 
 }

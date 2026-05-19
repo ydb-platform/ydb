@@ -2,6 +2,9 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -23,8 +26,9 @@ struct TKesusTablet::TTxSessionTimeout : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SESSION_TIMEOUT; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionTimeout::Execute (session=" << SessionId << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionTimeout::Execute",
+            {"TabletID", Self->TabletID()},
+            {"(session", SessionId});
 
         if (!Cookie.DetachEvent()) {
             // Timeout has been cancelled
@@ -52,8 +56,9 @@ struct TKesusTablet::TTxSessionTimeout : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionTimeout::Complete (session=" << SessionId << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionTimeout::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(session", SessionId});
         Self->RemoveSessionTx(SessionId);
 
         for (auto& ev : Events) {

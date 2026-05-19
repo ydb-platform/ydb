@@ -12,6 +12,9 @@
 #include <util/stream/format.h>
 
 #include <cerrno>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_DDISK
 
 namespace NKikimr::NDDisk {
 
@@ -110,7 +113,8 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " chunkIdx=" << ChunkIdx
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
-        LOG_ERROR_S(*actorSystem, NKikimrServices::BS_DDISK, reason);
+        YDB_LOG_CTX_ERROR(*actorSystem, "",
+            {"reason", reason});
         Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
         Y_UNUSED(guard.release());
         SelfRecycle();

@@ -2,6 +2,9 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_ALLOCATOR
 
 namespace NKikimr {
 namespace NTxAllocator {
@@ -14,7 +17,8 @@ TTxAllocator::TTxAllocator(const TActorId &tablet, TTabletStorageInfo *info)
 }
 
 void TTxAllocator::OnActivateExecutor(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_ALLOCATOR, "tablet# " << TabletID() << " OnActivateExecutor");
+    YDB_LOG_CTX_DEBUG(ctx, "OnActivateExecutor",
+        {"tablet", TabletID()});
     Executor()->RegisterExternalTabletCounters(new TProtobufTabletCounters<
                                                ESimpleCounters_descriptor,
                                                ECumulativeCounters_descriptor,
@@ -54,20 +58,20 @@ void TTxAllocator::Handle(TEvTxAllocator::TEvAllocate::TPtr &ev, const TActorCon
     MonCounters.AllocationsPresence->Inc();
 
     const ui64 requestedSize = ev->Get()->Record.GetRangeSize();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_ALLOCATOR,
-                 "tablet# " << TabletID() <<
-                 " HANDLE TEvAllocate Sender# " << ev->Sender.ToString() <<
-                 " requested range size#" << requestedSize);
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE TEvAllocate requested range",
+        {"tablet", TabletID()},
+        {"Sender", ev->Sender.ToString()},
+        {"size", requestedSize});
 
     Execute(CreateTxReserve(ev), ctx);
 }
 
 void TTxAllocator::Reply(const ui64 rangeBegin, const ui64 rangeEnd, const TEvTxAllocator::TEvAllocate::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_ALLOCATOR,
-                 "tablet# " << TabletID() <<
-                 " Send to Sender# " << ev->Sender.ToString() <<
-                 " TEvAllocateResult from# " << rangeBegin <<
-                 " to# " << rangeEnd);
+    YDB_LOG_CTX_DEBUG(ctx, "Send TEvAllocateResult",
+        {"tablet", TabletID()},
+        {"to_Sender", ev->Sender.ToString()},
+        {"from", rangeBegin},
+        {"to", rangeEnd});
     *MonCounters.Allocated += rangeEnd - rangeBegin;
 
     const ui64 begin = ApplyPrivateMarker(rangeBegin);
@@ -78,10 +82,10 @@ void TTxAllocator::Reply(const ui64 rangeBegin, const ui64 rangeEnd, const TEvTx
 
 void TTxAllocator::ReplyImposible(const TEvTxAllocator::TEvAllocate::TPtr &ev, const TActorContext &ctx) {
     static const auto status = NKikimrTx::TEvTxAllocateResult::IMPOSIBLE;
-    LOG_ERROR_S(ctx, NKikimrServices::TX_ALLOCATOR,
-                 "tablet# " << TabletID() <<
-                 " Send to Sender# " << ev->Sender.ToString() <<
-                 " TEvAllocateResult status# " << status);
+    YDB_LOG_CTX_ERROR(ctx, "Send TEvAllocateResult",
+        {"tablet", TabletID()},
+        {"to_Sender", ev->Sender.ToString()},
+        {"status", status});
     ctx.Send(ev->Sender, new TEvTxAllocator::TEvAllocateResult(status), 0, ev->Cookie);
 }
 

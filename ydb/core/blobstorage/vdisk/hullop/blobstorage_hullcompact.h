@@ -8,6 +8,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/queue.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 
 namespace NKikimr {
@@ -284,14 +285,16 @@ namespace NKikimr {
             const auto& reservedChunks = IsAborting ? Worker.GetAllocatedChunks() : Worker.GetReservedChunks();
             msg->ReservedChunks = {reservedChunks.begin(), reservedChunks.end()};
 
-            LOG_LOG_S(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP,
-                HullCtx->VCtx->VDiskLogPrefix << PDiskSignatureForHullDbKey<TKey>().ToString() << ": Compaction job ("
-                << CompactionID << ") finished: FreshSegment# " << (FreshSegment ? "true" : "false")
-                << " FreedHugeBlobs# " << Worker.GetFreedHugeBlobs().Size()
-                << " AllocatedHugeBlobs# " << Worker.GetAllocatedHugeBlobs().Size()
-                << " CommitChunks# " << FormatList(Worker.GetCommitChunks())
-                << " Stats# " << Worker.Statistics.ToString()
-                << " IsAborting# " << (IsAborting ? "true" : "false"));
+            YDB_LOG_CTX_COMP(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, ": Compaction job ( ) finished:",
+                {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                {"#_PDiskSignatureForHullDbKey<TKey>().ToString()", PDiskSignatureForHullDbKey<TKey>().ToString()},
+                {"CompactionID", CompactionID},
+                {"FreshSegment", (FreshSegment ? "true" : "false")},
+                {"FreedHugeBlobs", Worker.GetFreedHugeBlobs().Size()},
+                {"AllocatedHugeBlobs", Worker.GetAllocatedHugeBlobs().Size()},
+                {"CommitChunks", FormatList(Worker.GetCommitChunks())},
+                {"Stats", Worker.Statistics.ToString()},
+                {"IsAborting", (IsAborting ? "true" : "false")});
 
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
             msg->AllocatedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetAllocatedHugeBlobs();

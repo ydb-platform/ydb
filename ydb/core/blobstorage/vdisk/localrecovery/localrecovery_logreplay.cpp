@@ -12,6 +12,9 @@
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_LOCALRECOVERY
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
@@ -463,12 +466,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipLogoBlobsBatch();
-                LOG_DEBUG_S(ctx, BS_LOCALRECOVERY, LocRecCtx->VCtx->VDiskLogPrefix
-                        << "RECORD (LOGOBLOBS_BATCH) SKIPPED: lsn# " << seg);
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) SKIPPED:",
+                    {"#_LocRecCtx->VCtx->VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyLogoBlobsBatch();
-                LOG_DEBUG_S(ctx, BS_LOCALRECOVERY, LocRecCtx->VCtx->VDiskLogPrefix
-                        << "RECORD (LOGOBLOBS_BATCH) ADDED: lsn# " << seg);
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) ADDED:",
+                    {"#_LocRecCtx->VCtx->VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"lsn", seg});
 
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_LogoBlobsBatch(ctx, std::move(logoBlobs),
                         seg, THullDbRecovery::RECOVERY);
@@ -483,12 +488,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBlocksBatch();
-                LOG_DEBUG_S(ctx, BS_LOCALRECOVERY, LocRecCtx->VCtx->VDiskLogPrefix
-                        << "RECORD (BLOCKS_BATCH) SKIPPED: lsn# " << seg);
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) SKIPPED:",
+                    {"#_LocRecCtx->VCtx->VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBlocksBatch();
-                LOG_DEBUG_S(ctx, BS_LOCALRECOVERY, LocRecCtx->VCtx->VDiskLogPrefix
-                        << "RECORD (BLOCKS_BATCH) ADDED: lsn# " << seg);
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) ADDED:",
+                    {"#_LocRecCtx->VCtx->VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"lsn", seg});
 
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BlocksBatch(ctx, std::move(blocks),
                         seg, THullDbRecovery::RECOVERY);
@@ -503,12 +510,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBarriersBatch();
-                LOG_DEBUG_S(ctx, BS_LOCALRECOVERY, LocRecCtx->VCtx->VDiskLogPrefix
-                        << "RECORD (BARRIERS_BATCH) SKIPPED: lsn# " << seg);
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) SKIPPED:",
+                    {"#_LocRecCtx->VCtx->VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBarriersBatch();
-                LOG_DEBUG_S(ctx, BS_LOCALRECOVERY, LocRecCtx->VCtx->VDiskLogPrefix
-                        << "RECORD (BARRIERS_BATCH) ADDED: lsn# " << seg);
+                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) ADDED:",
+                    {"#_LocRecCtx->VCtx->VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"lsn", seg});
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BarriersBatch(ctx, std::move(barriers),
                         seg, THullDbRecovery::RECOVERY);
             }

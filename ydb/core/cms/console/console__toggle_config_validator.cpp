@@ -5,6 +5,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/cms/console/validators/registry.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -21,8 +24,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Cannot toggle validator: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot toggle",
+            {"validator", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -33,8 +36,8 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConsole::TTxToggleConfigValidator: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"TConsole::TTxToggleConfigValidator", rec.ShortDebugString()});
 
         Response = MakeHolder<TEvConsole::TEvToggleConfigValidatorResponse>();
 
@@ -54,8 +57,8 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::DisabledValidators>().Key(rec.GetName()).Update();
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Add disabled validator to local database name=" << rec.GetName());
+            YDB_LOG_CTX_DEBUG(ctx, "Add disabled validator to local database",
+                {"name", rec.GetName()});
         } else {
             if (!Self->DisabledValidators.contains(name))
                 return true;
@@ -63,8 +66,8 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             db.Table<Schema::DisabledValidators>().Key(rec.GetName()).Delete();
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Remove disabled validator from local database name=" << rec.GetName());
+            YDB_LOG_CTX_DEBUG(ctx, "Remove disabled validator from local database",
+                {"name", rec.GetName()});
         }
 
         Modify = true;
@@ -85,20 +88,20 @@ public:
                 registry->DisableValidator(rec.GetName());
                 Self->DisabledValidators.insert(rec.GetName());
 
-                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                            "Disable validator " << rec.GetName());
+                YDB_LOG_CTX_DEBUG(ctx, "Disable validator",
+                    {"GetName", rec.GetName()});
             } else {
                 registry->EnableValidator(rec.GetName());
                 Self->DisabledValidators.erase(rec.GetName());
 
-                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                            "Enable validator " << rec.GetName());
+                YDB_LOG_CTX_DEBUG(ctx, "Enable validator",
+                    {"GetName", rec.GetName()});
             }
         }
 
         Y_ABORT_UNLESS(Response);
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Send: " << Response->ToString());
+        YDB_LOG_CTX_TRACE(ctx, "",
+            {"Send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         Self->TxProcessor->TxCompleted(this, ctx);

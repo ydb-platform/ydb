@@ -2,6 +2,9 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 #include "node_info.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -121,7 +124,9 @@ public:
             }
             NextKick = Tablets.begin();
             Become(&THiveFill::StateWork, ctx, TDuration::MilliSeconds(TIMEOUT), new TEvents::TEvWakeup());
-            LOG_INFO_S(ctx, NKikimrServices::HIVE, "Fill " << SelfId() << " started for node " << NodeId);
+            YDB_LOG_CTX_INFO(ctx, "Fill started for node",
+                {"SelfId", SelfId()},
+                {"NodeId", NodeId});
             KickNextTablet(ctx);
         } else {
             ReplyAndDie(NKikimrProto::ERROR, ctx);

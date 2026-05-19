@@ -1,5 +1,8 @@
 #include "impl.h"
 #include "select_groups.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
 
@@ -24,8 +27,11 @@ public:
         THPTimer timer;
 
         const auto& record = request->Get()->Record;
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG01, "Handle TEvControllerSelectGroups", (Request, record),
-            (Sender, request->Sender), (Cookie, request->Cookie));
+        YDB_LOG_DEBUG("Handle TEvControllerSelectGroups",
+            {"Marker", "BSCTXSG01"},
+            {"Request", record},
+            {"Sender", request->Sender},
+            {"Cookie", request->Cookie});
 
         auto result = MakeHolder<TEvBlobStorage::TEvControllerSelectGroupsResult>();
         auto& out = result->Record;
@@ -41,11 +47,14 @@ public:
             TVector<const TGroupInfo*> groups;
 
             for (const auto& params : record.GetGroupParameters()) {
-                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG02, "Searching for group with parameters", (Params, params));
+                YDB_LOG_DEBUG("Searching for group with parameters",
+                    {"Marker", "BSCTXSG02"},
+                    {"Params", params});
 
                 if (!TGroupSelector::PopulateGroups(groups, params, *Self)) {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXSG03, "Handle TEvControllerSelectGroups: invalid parameters requested",
-                        (Params, params));
+                    YDB_LOG_ERROR("Handle TEvControllerSelectGroups: invalid parameters requested",
+                        {"Marker", "BSCTXSG03"},
+                        {"Params", params});
                     out.SetStatus(NKikimrProto::ERROR);
                     break;
                 }
@@ -68,15 +77,21 @@ public:
         }
 
         if (record.GetBlockUntilAllResourcesAreComplete() && !missingGroupIds.empty()) {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG05, "TEvControllerSelectGroups failed", (MissingGroupIds, missingGroupIds),
-                (Sender, request->Sender), (Cookie, request->Cookie));
+            YDB_LOG_DEBUG("TEvControllerSelectGroups failed",
+                {"Marker", "BSCTXSG05"},
+                {"MissingGroupIds", missingGroupIds},
+                {"Sender", request->Sender},
+                {"Cookie", request->Cookie});
             auto iter = Self->WaitingSelectGroups.emplace(Self->WaitingSelectGroups.end(), request, std::move(missingGroupIds));
             for (TGroupId groupId : iter->MissingGroups) {
                 Self->GroupToWaitingSelectGroupsItem.emplace(groupId, iter);
             }
         } else {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG04, "TEvControllerSelectGroups finished", (Result, result->Record),
-                (Sender, request->Sender), (Cookie, request->Cookie));
+            YDB_LOG_DEBUG("TEvControllerSelectGroups finished",
+                {"Marker", "BSCTXSG04"},
+                {"Result", result->Record},
+                {"Sender", request->Sender},
+                {"Cookie", request->Cookie});
             Response = std::make_unique<IEventHandle>(request->Sender, Self->SelfId(), result.Release(), 0, request->Cookie);
 
             const TDuration passed = TDuration::Seconds(timer.Passed());

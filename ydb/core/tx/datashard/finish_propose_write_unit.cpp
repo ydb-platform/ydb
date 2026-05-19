@@ -5,6 +5,9 @@
 #include "datashard_write_operation.h"
 #include "execution_unit_ctors.h"
 #include "probes.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 LWTRACE_USING(DATASHARD_PROVIDER)
 
@@ -157,10 +160,11 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Propose transaction complete txid " << op->GetTxId() << " at tablet "
-                << DataShard.TabletID() << " send to client, propose latency: "
-                << duration.MilliSeconds() << " ms, status: " << res->GetStatus());
+    YDB_LOG_CTX_TRACE(ctx, "Propose transaction complete txid at tablet send to client, propose ms,",
+        {"GetTxId", op->GetTxId()},
+        {"TabletID", DataShard.TabletID()},
+        {"latency", duration.MilliSeconds()},
+        {"status", res->GetStatus()});
 
     if (res->IsError()) {
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 

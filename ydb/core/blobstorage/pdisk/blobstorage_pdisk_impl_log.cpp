@@ -6,6 +6,9 @@
 
 #include <util/random/entropy.h>
 #include <util/random/mersenne64.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PDISK_SHRED
 
 namespace NKikimr::NPDisk {
 
@@ -1191,18 +1194,20 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
             if (chunkIdx >= ChunkState.size()) {
                 if (!isLogged) {
                     isLogged = true;
-                    LOG_CRIT_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-                        PCtx->PDiskLogPrefix << "Commit DirtyChunk contains invalid chunkIdx# " << chunkIdx
-                        << " ShredGeneration# " << ShredGeneration);
+                    YDB_LOG_CTX_CRIT(*PCtx->ActorSystem, "Commit DirtyChunk contains invalid",
+                        {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
+                        {"chunkIdx", chunkIdx},
+                        {"ShredGeneration", ShredGeneration});
                 }
             } else {
                 if (!ChunkState[chunkIdx].IsDirty) {
                     ChunkState[chunkIdx].IsDirty = true;
                     isDirtyMarked = true;
-                    LOG_DEBUG_S(*PCtx->ActorSystem, NKikimrServices::BS_PDISK_SHRED,
-                        PCtx->PDiskLogPrefix << "marked chunkIdx# " << chunkIdx << " as dirty"
-                        << " chunk.ShredGeneration# " << ChunkState[chunkIdx].ShredGeneration
-                        << " ShredGeneration# " << ShredGeneration);
+                    YDB_LOG_CTX_DEBUG(*PCtx->ActorSystem, "marked as dirty",
+                        {"PDiskLogPrefix", PCtx->PDiskLogPrefix},
+                        {"chunkIdx", chunkIdx},
+                        {"chunk.ShredGeneration", ChunkState[chunkIdx].ShredGeneration},
+                        {"ShredGeneration", ShredGeneration});
                 }
             }
         }

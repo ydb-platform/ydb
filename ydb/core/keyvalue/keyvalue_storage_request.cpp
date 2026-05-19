@@ -8,6 +8,9 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KEYVALUE
 
 namespace NKikimr {
 namespace NKeyValue {
@@ -314,8 +317,9 @@ public:
             return;
         }
         if (ev->Get()->ResponseSz != request.ReadQueue.size()) {
-            ALOG_ERROR(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
-                << " Got# " << ev->Get()->Print(false));
+            YDB_LOG_ERROR("",
+                {"KeyValue", TabletInfo->TabletID},
+                {"Got", ev->Get()->Print(false)});
             TStringStream str;
             str << "KeyValue# " << TabletInfo->TabletID;
             str << " Unexpected EvGet ResponseSz# " << (ui32)ev->Get()->ResponseSz;
@@ -394,16 +398,16 @@ public:
             return false;
         }
 
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
-                << " UpdateRequest ReadRequestsReplied# " << ReadRequestsReplied
-                << " ReadRequestsSent# " << ReadRequestsSent
-                << " WriteRequestsReplied # " << WriteRequestsReplied
-                << " WriteRequestsSent# " << WriteRequestsSent
-                << " GetStatusRequestsReplied # " << GetStatusRequestsReplied
-                << " GetStatusRequestsSent# " << GetStatusRequestsSent
-                << " PatchRequestSent# " << PatchRequestsSent
-                << " PatchRequestReplied# " << PatchRequestsReplied
-                << " Marker# KV45");
+        YDB_LOG_DEBUG("UpdateRequest WriteRequestsReplied GetStatusRequestsReplied Marker# KV45",
+            {"KeyValue", TabletInfo->TabletID},
+            {"ReadRequestsReplied", ReadRequestsReplied},
+            {"ReadRequestsSent", ReadRequestsSent},
+            {"WriteRequestsReplied", WriteRequestsReplied},
+            {"WriteRequestsSent", WriteRequestsSent},
+            {"GetStatusRequestsReplied", GetStatusRequestsReplied},
+            {"GetStatusRequestsSent", GetStatusRequestsSent},
+            {"PatchRequestSent", PatchRequestsSent},
+            {"PatchRequestReplied", PatchRequestsReplied});
         if (ReadRequestsReplied == ReadRequestsSent &&
                 WriteRequestsReplied == WriteRequestsSent &&
                 GetStatusRequestsReplied == GetStatusRequestsSent &&
@@ -530,7 +534,8 @@ public:
     void ReplyErrorAndDie(const TActorContext &ctx, TString errorDescription,
             NMsgBusProxy::EResponseStatus status = NMsgBusProxy::MSTATUS_INTERNALERROR,
             NLog::EPriority logPriority = NLog::PRI_ERROR) {
-        LOG_LOG_S(ctx, logPriority, NKikimrServices::KEYVALUE, errorDescription);
+        YDB_LOG_CTX(ctx, logPriority, "",
+            {"errorDescription", errorDescription});
 
         std::unique_ptr<IEventBase> response = MakeErrorResponse(IntermediateResults.Get(), status, errorDescription);
         ctx.Send(IntermediateResults->RespondTo, std::move(response));
@@ -711,9 +716,11 @@ public:
                         const ui32 groupId = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
                         Y_ABORT_UNLESS(groupId != Max<ui32>(), "Put Blob# %s is mapped to an invalid group (-1)!",
                                 logoBlobId.ToString().c_str());
-                        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
-                                << " Send TEvPut# " << put->ToString() << " to groupId# " << groupId
-                                << " now# " << TAppData::TimeProvider->Now().MilliSeconds() << " Marker# KV60");
+                        YDB_LOG_DEBUG("Send Marker# KV60",
+                            {"KeyValue", TabletInfo->TabletID},
+                            {"TEvPut", put->ToString()},
+                            {"to_groupId", groupId},
+                            {"now", TAppData::TimeProvider->Now().MilliSeconds()});
 
                         SendPutToGroup(ctx, groupId, TabletInfo.Get(), std::move(put), i, Span.GetTraceId());
 
@@ -757,9 +764,11 @@ public:
 
                 const ui32 groupId = TabletInfo->GroupFor(request.PatchedBlobId.Channel(), request.PatchedBlobId.Generation());
                 Y_VERIFY_S(groupId != Max<ui32>(), "Patch Blob# " << request.PatchedBlobId.ToString() << " is mapped to an invalid group (-1)!");
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID
-                        << " Send TEvPatch# " << patch->ToString() << " to groupId# " << groupId
-                        << " now# " << TAppData::TimeProvider->Now().MilliSeconds() << " Marker# KV69");
+                YDB_LOG_DEBUG("Send Marker# KV69",
+                    {"KeyValue", TabletInfo->TabletID},
+                    {"TEvPatch", patch->ToString()},
+                    {"to_groupId", groupId},
+                    {"now", TAppData::TimeProvider->Now().MilliSeconds()});
 
 
                 SendPatchToGroup(ctx, groupId, TabletInfo.Get(), std::move(patch), i, Span.GetTraceId());

@@ -9,6 +9,9 @@
 
 #if defined(__linux__)
 #include <unistd.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 #endif
 
 namespace NKikimr::NDDisk {
@@ -45,7 +48,11 @@ namespace {
             auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
             it->second.resize(SectorInChunk);
             if (!inserted) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+                YDB_LOG_ERROR("TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log",
+                    {"Marker", "BSDD10"},
+                    {"DDiskId", DDiskId},
+                    {"PDiskActorId", BaseInfo.PDiskActorID},
+                    {"ChunkIdx", idx});
                 continue;
             }
             PersistentBufferSpaceAllocator.AddNewChunk(idx);
@@ -177,7 +184,9 @@ namespace {
         FillPool(PersistentBufferPartIoOpPool);
         FillPool(InternalSyncWriteOpPool);
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
+        YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
+            {"Marker", "BSDD09"},
+            {"DDiskId", DDiskId});
         if (IsPersistentBufferActor) {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
@@ -204,14 +213,14 @@ namespace {
             auto& sync = it->second;
 
             if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-                STLOG(PRI_ERROR, BS_DDISK, BSDD23,
-                    "TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
-                    (DDiskId, DDiskId),
-                    (Cookie, ev->Cookie),
-                    (SyncId, syncId),
-                    (FirstRequestId, sync.FirstRequestId),
-                    (RequestsCount, sync.Requests.size()),
-                    (SourceType, sourceType));
+                YDB_LOG_ERROR("TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
+                    {"Marker", "BSDD23"},
+                    {"DDiskId", DDiskId},
+                    {"Cookie", ev->Cookie},
+                    {"SyncId", syncId},
+                    {"FirstRequestId", sync.FirstRequestId},
+                    {"RequestsCount", sync.Requests.size()},
+                    {"SourceType", sourceType});
                 return;
             }
             auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
@@ -336,12 +345,12 @@ namespace {
         case NKikimrProto::INVALID_ROUND:
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::OUT_OF_SPACE:
-            STLOG(PRI_NOTICE, BS_DDISK, BSDD44,
-                "TDDiskActor: PDisk session lost, switching to terminate state",
-                (DDiskId, DDiskId),
-                (Source, source),
-                (Status, NKikimrProto::EReplyStatus_Name(status)),
-                (ErrorReason, errorReason));
+            YDB_LOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
+                {"Marker", "BSDD44"},
+                {"DDiskId", DDiskId},
+                {"Source", source},
+                {"Status", NKikimrProto::EReplyStatus_Name(status)},
+                {"ErrorReason", errorReason});
             Become(&TThis::StateFuncTerminate);
             return false;
         default:

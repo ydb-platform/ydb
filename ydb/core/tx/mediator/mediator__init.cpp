@@ -1,6 +1,9 @@
 #include "mediator_impl.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_MEDIATOR
 
 namespace NKikimr {
 namespace NTxMediator {
@@ -59,9 +62,8 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
 
     void Complete(const TActorContext &ctx) override {
         if (Coordinators.size()) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR
-                       , "tablet# " << Self->TabletID()
-                       << " CreateTxInit Complete");
+            YDB_LOG_CTX_INFO(ctx, "CreateTxInit Complete",
+                {"tablet", Self->TabletID()});
             Self->Config.CoordinatorsVersion = Version;
             Self->Config.CoordinatorSeletor = new TCoordinators(std::move(Coordinators));
             Self->Config.Bukets = new TTimeCastBuckets(TimeCastBuketsPerMediator);
@@ -73,9 +75,8 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
 
         TAppData* appData = AppData(ctx);
         if (IsTabletInStaticDomain(appData)) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR,
-                 "tablet# " << Self->TabletID() <<
-                 " CreateTxInit initialize himself");
+            YDB_LOG_CTX_INFO(ctx, "CreateTxInit initialize himself",
+                {"tablet", Self->TabletID()});
             Self->DoConfigure(*CreateDomainConfigurationFromStatic(appData), ctx);
             return;
         }
@@ -83,9 +84,8 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
         Self->Become(&TThis::StateSync);
         Self->SignalTabletActive(ctx);
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR,
-             "tablet# " << Self->TabletID() <<
-             " CreateTxInit wait TEvMediatorConfiguration for switching to StateWork from external");
+        YDB_LOG_CTX_INFO(ctx, "CreateTxInit wait TEvMediatorConfiguration for switching to StateWork from external",
+            {"tablet", Self->TabletID()});
     }
 };
 

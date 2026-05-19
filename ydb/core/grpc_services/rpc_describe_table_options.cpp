@@ -9,6 +9,9 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -55,8 +58,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-                   "TDescribeTableOptionsRPC: cannot deliver config request to Configs Dispatcher");
+        YDB_LOG_CTX_CRIT(ctx, "TDescribeTableOptionsRPC: cannot deliver config request to Configs Dispatcher");
          NYql::TIssues issues;
          issues.AddIssue(NYql::TIssue("Cannot get table profiles (service unavailable)"));
          Reply(Ydb::StatusIds::UNAVAILABLE, issues, ctx);
@@ -184,8 +186,7 @@ private:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
             case WakeupTagGetConfig: {
-                LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-                   "TDescribeTableOptionsRPC: cannot get table profiles (timeout)");
+                YDB_LOG_CTX_CRIT(ctx, "TDescribeTableOptionsRPC: cannot get table profiles (timeout)");
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
                 return Reply(Ydb::StatusIds::UNAVAILABLE, issues, ctx);

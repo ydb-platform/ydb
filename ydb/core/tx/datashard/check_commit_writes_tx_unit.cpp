@@ -2,6 +2,9 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -78,7 +81,8 @@ public:
                 << "Can't propose tx " << op->GetTxId()
                 << " at blocked shard " << DataShard.TabletID();
 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_CTX_NOTICE(ctx, "",
+                {"err", err});
             return buildUnsuccessfulResult(
                 err,
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
@@ -87,10 +91,10 @@ public:
 
         BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Prepared " << op->GetKind()
-            << " transaction txId " << op->GetTxId()
-            << " at shard " << DataShard.TabletID());
+        YDB_LOG_CTX_DEBUG(ctx, "Prepared transaction txId at shard",
+            {"GetKind", op->GetKind()},
+            {"GetTxId", op->GetTxId()},
+            {"TabletID", DataShard.TabletID()});
         return EExecutionStatus::Executed;
     }
 

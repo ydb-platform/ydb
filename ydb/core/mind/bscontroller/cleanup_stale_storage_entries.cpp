@@ -1,4 +1,7 @@
 #include "impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr {
 namespace NBsController {
@@ -25,12 +28,16 @@ public:
         const bool selfManagementConfigEnabled = Self->SelfManagementEnabled ||
             (Self->StorageConfig && Self->StorageConfig->GetSelfManagementConfig().GetEnabled());
         if (!selfManagementConfigEnabled) {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCS01, "TTxCleanupStaleStorageEntries skipped, self-management disabled");
+            YDB_LOG_DEBUG("TTxCleanupStaleStorageEntries skipped, self-management disabled",
+                {"Marker", "BSCTXCS01"});
             return true;
         }
 
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCS02, "TTxCleanupStaleStorageEntries Execute",
-             (BoxHosts, StaleBoxHostKeys.size()), (PDisks, StalePDiskKeys.size()), (VSlots, StaleVSlotKeys.size()));
+        YDB_LOG_DEBUG("TTxCleanupStaleStorageEntries Execute",
+            {"Marker", "BSCTXCS02"},
+            {"BoxHosts", StaleBoxHostKeys.size()},
+            {"PDisks", StalePDiskKeys.size()},
+            {"VSlots", StaleVSlotKeys.size()});
 
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& [boxId, fqdn, icPort] : StaleBoxHostKeys) {

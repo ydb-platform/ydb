@@ -8,6 +8,9 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 
 namespace NKikimr {
@@ -50,7 +53,7 @@ private:
 };
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute");
+    YDB_LOG_CTX_DEBUG(ctx, "TDataShard::TTxInit::Execute");
 
     try {
         Self->State = TShardState::Unknown;
@@ -154,9 +157,10 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
     // previous actor id.
     if (InMemoryStateActorStarted || Self->InMemoryStatePrevActorId && !Self->InMemoryStateActorId) {
         NIceDb::TNiceDb db(txc.DB);
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "DataShard " << Self->TabletID()
-            << " persisting started state actor id " << Self->InMemoryStateActorId
-            << " in generation " << Self->Generation());
+        YDB_LOG_CTX_DEBUG(ctx, "DataShard persisting started state actor id in generation",
+            {"TabletID", Self->TabletID()},
+            {"InMemoryStateActorId", Self->InMemoryStateActorId},
+            {"Generation", Self->Generation()});
         Self->PersistSys(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStateActorId);
         Self->PersistSys(db, Schema::Sys_InMemoryStateGeneration, Self->Generation());
     }
@@ -203,22 +207,20 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
 
             if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexResponseFinal)) {
                 response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TTxInitRestored: resending persisted final build index progress to SchemeShard"
-                    << ", buildId# " << buildId
-                    << ", tabletId# " << Self->TabletID()
-                    << ", schemeShardId# " << Self->CurrentSchemeShardId
-                    << ", responseType# " << scanInfo.ResponseType);
+                YDB_LOG_CTX_NOTICE(ctx, "TTxInitRestored: resending persisted final build index progress to SchemeShard",
+                    {"buildId", buildId},
+                    {"tabletId", Self->TabletID()},
+                    {"schemeShardId", Self->CurrentSchemeShardId},
+                    {"responseType", scanInfo.ResponseType});
             } else if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse)) {
                 TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
                 FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
                 response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TTxInitRestored: notifying SchemeShard of aborted index build scan"
-                    << ", buildId# " << buildId
-                    << ", tabletId# " << Self->TabletID()
-                    << ", schemeShardId# " << Self->CurrentSchemeShardId
-                    << ", responseType# " << scanInfo.ResponseType);
+                YDB_LOG_CTX_NOTICE(ctx, "TTxInitRestored: notifying SchemeShard of aborted index build scan",
+                    {"buildId", buildId},
+                    {"tabletId", Self->TabletID()},
+                    {"schemeShardId", Self->CurrentSchemeShardId},
+                    {"responseType", scanInfo.ResponseType});
             } else {
                 Y_ENSURE(false, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
             }
@@ -901,10 +903,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSysUpdate < lastSysUpdate) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Updating sys metadata on follower, tabletId " << TabletID()
-                << " prev " << FollowerState.LastSysUpdate
-                << " current " << lastSysUpdate);
+        YDB_LOG_CTX_DEBUG(ctx, "Updating sys metadata on follower, tabletId prev current",
+            {"TabletID", TabletID()},
+            {"LastSysUpdate", FollowerState.LastSysUpdate},
+            {"lastSysUpdate", lastSysUpdate});
 
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
@@ -918,10 +920,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Updating tables metadata on follower, tabletId " << TabletID()
-                << " prev " << FollowerState.LastSchemeUpdate
-                << " current " << lastSchemeUpdate);
+        YDB_LOG_CTX_DEBUG(ctx, "Updating tables metadata on follower, tabletId prev current",
+            {"TabletID", TabletID()},
+            {"LastSchemeUpdate", FollowerState.LastSchemeUpdate},
+            {"lastSchemeUpdate", lastSchemeUpdate});
 
         struct TRow {
             TPathId TableId;
@@ -989,10 +991,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
     if (FollowerState.LastSnapshotsUpdate < lastSnapshotsUpdate) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Updating snapshots metadata on follower, tabletId " << TabletID()
-                << " prev " << FollowerState.LastSnapshotsUpdate
-                << " current " << lastSnapshotsUpdate);
+        YDB_LOG_CTX_DEBUG(ctx, "Updating snapshots metadata on follower, tabletId prev current",
+            {"TabletID", TabletID()},
+            {"LastSnapshotsUpdate", FollowerState.LastSnapshotsUpdate},
+            {"lastSnapshotsUpdate", lastSnapshotsUpdate});
 
         NIceDb::TNiceDb db(txc.DB);
         if (!SnapshotManager.ReloadSnapshots(db)) {

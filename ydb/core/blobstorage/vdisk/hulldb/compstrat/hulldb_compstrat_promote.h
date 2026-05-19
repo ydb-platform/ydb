@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
     namespace NHullComp {
@@ -80,8 +81,10 @@ namespace NKikimr {
                             action = ActMoveSsts;
                             Task->MoveSsts.MoveSst(level, level + 1, sst);
                             if (HullCtx->VCtx->ActorSystem) {
-                                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyPromoteSsts: move sst# " << p.ToString() << " to level " << level + 1);
+                                YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyPromoteSsts: move to level",
+                                    {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                    {"sst", p.ToString()},
+                                    {"#_level + 1", level + 1});
                             }
                             break;
                         }

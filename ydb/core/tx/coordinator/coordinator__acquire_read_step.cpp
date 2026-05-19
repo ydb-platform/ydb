@@ -1,4 +1,7 @@
 #include "coordinator_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
@@ -93,8 +96,8 @@ void TTxCoordinator::MaybeFlushAcquireReadStep(const TActorContext& ctx) {
 }
 
 void TTxCoordinator::Handle(TEvTxProxy::TEvAcquireReadStep::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID()
-        << " HANDLE TEvAcquireReadStep");
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE TEvAcquireReadStep",
+        {"tablet", TabletID()});
 
     IncCounter(COUNTER_REQ_ACQUIRE_READ_STEP);
 

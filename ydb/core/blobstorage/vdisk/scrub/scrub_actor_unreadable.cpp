@@ -1,14 +1,19 @@
 #include "scrub_actor_impl.h"
 #include "restore_corrupted_blob_actor.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
 namespace NKikimr {
 
     void TScrubCoroImpl::DropGarbageBlob(const TLogoBlobID& fullId) {
         Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
-            STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS39, VDISKP(LogPrefix,
-                "dropped garbage unreadable blob"), (BlobId, it->first), (UnreadableParts, it->second.UnreadableParts));
+            YDB_LOG_CTX_NOTICE(GetActorContext(), VDISKP(LogPrefix, "dropped garbage unreadable blob"),
+                {"Marker", "VDS39"},
+                {"BlobId", it->first},
+                {"UnreadableParts", it->second.UnreadableParts});
             MonGroup.UnreadableBlobsFound() -= it->second.UnreadableParts.CountBits();
             UnreadableBlobs.erase(it);
         }
@@ -33,10 +38,14 @@ namespace NKikimr {
             const NMatrix::TVectorType becameOk = prevCorrupted & ~corrupted;
             const NMatrix::TVectorType becameCorrupted = corrupted & ~prevCorrupted;
 
-            STLOGX(GetActorContext(), becameCorrupted.Empty() ? PRI_NOTICE : PRI_ERROR, BS_VDISK_SCRUB, VDS41,
-                VDISKP(LogPrefix, "huge blob corrupted state updated"), (BlobId, fullId),
-                (UnreadablePartsBefore, prevCorrupted), (UnreadablePartsAfter, corrupted),
-                (BecameOk, becameOk), (BecameCorrupted, becameCorrupted), (CorruptedPart, corruptedPart));
+            YDB_LOG_CTX(GetActorContext(), becameCorrupted.Empty() ? PRI_NOTICE : PRI_ERROR, VDISKP(LogPrefix, "huge blob corrupted state updated"),
+                {"Marker", "VDS41"},
+                {"BlobId", fullId},
+                {"UnreadablePartsBefore", prevCorrupted},
+                {"UnreadablePartsAfter", corrupted},
+                {"BecameOk", becameOk},
+                {"BecameCorrupted", becameCorrupted},
+                {"CorruptedPart", corruptedPart});
 
             if (corrupted.Empty()) {
                 UnreadableBlobs.erase(it);
@@ -58,9 +67,11 @@ namespace NKikimr {
     void TScrubCoroImpl::UpdateReadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType readable) {
         Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
-            STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS42, VDISKP(LogPrefix,
-                "read parts of previously unreadable blob"), (BlobId, it->first),
-                (UnreadablePartsBefore, it->second.UnreadableParts), (ReadableParts, readable));
+            YDB_LOG_CTX_NOTICE(GetActorContext(), VDISKP(LogPrefix, "read parts of previously unreadable blob"),
+                {"Marker", "VDS42"},
+                {"BlobId", it->first},
+                {"UnreadablePartsBefore", it->second.UnreadableParts},
+                {"ReadableParts", readable});
             MonGroup.UnreadableBlobsFound() -= (it->second.UnreadableParts & readable).CountBits();
             if ((it->second.UnreadableParts &= ~readable).Empty()) {
                 UnreadableBlobs.erase(it);
@@ -79,9 +90,12 @@ namespace NKikimr {
                     data.RecoveryInFlightCookie);
                 const auto& p = data;
                 const auto& q = blobId;
-                STLOG(PRI_INFO, BS_VDISK_SCRUB, VDS22, VDISKP(LogPrefix, "going to restore unreadable blob"),
-                    (Cookie, p.RecoveryInFlightCookie), (BlobId, q), (UnreadableParts, p.UnreadableParts),
-                    (CorruptedPart, p.CorruptedPart));
+                YDB_LOG_INFO(VDISKP(LogPrefix, "going to restore unreadable blob"),
+                    {"Marker", "VDS22"},
+                    {"Cookie", p.RecoveryInFlightCookie},
+                    {"BlobId", q},
+                    {"UnreadableParts", p.UnreadableParts},
+                    {"CorruptedPart", p.CorruptedPart});
             }
         }
 
@@ -109,9 +123,11 @@ namespace NKikimr {
                 data.RetryTimestamp = now + TDuration::Minutes(1);
 
                 if (item.Status == NKikimrProto::OK) {
-                    STLOG(PRI_NOTICE, BS_VDISK_SCRUB, VDS40, VDISKP(LogPrefix,
-                        "recovered parts of previously unreadable blob"), (BlobId, it->first),
-                        (UnreadablePartsBefore, data.UnreadableParts), (RecoveredParts, item.Needed));
+                    YDB_LOG_NOTICE(VDISKP(LogPrefix, "recovered parts of previously unreadable blob"),
+                        {"Marker", "VDS40"},
+                        {"BlobId", it->first},
+                        {"UnreadablePartsBefore", data.UnreadableParts},
+                        {"RecoveredParts", item.Needed});
 
                     MonGroup.UnreadableBlobsFound() -= (data.UnreadableParts & item.Needed).CountBits();
                     if ((data.UnreadableParts &= ~item.Needed).Empty()) {
@@ -120,8 +136,10 @@ namespace NKikimr {
                     ++MonGroup.BlobsFixed();
 
                 } else {
-                    STLOG(PRI_WARN, BS_VDISK_SCRUB, VDS07, VDISKP(LogPrefix, "failed to restore corrupted blob"),
-                        (BlobId, item.BlobId), (Status, item.Status));
+                    YDB_LOG_WARN(VDISKP(LogPrefix, "failed to restore corrupted blob"),
+                        {"Marker", "VDS07"},
+                        {"BlobId", item.BlobId},
+                        {"Status", item.Status});
                 }
             }
         }

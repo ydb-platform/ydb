@@ -13,6 +13,9 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 #include <util/system/hostname.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
 #error log macro definition clash
@@ -742,8 +745,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
                 res.insert(node);
             }
         } else if (ctx) {
-            LOG_ERROR_S(*ctx, NKikimrServices::CMS,
-                        "FindLockedItems: unknown host " << action.GetHost());
+            YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown host",
+                {"GetHost", action.GetHost()});
         }
         break;
 
@@ -1020,8 +1023,8 @@ void TClusterInfo::GenerateClusterNodesCheckers() {
 
 void TClusterInfo::DebugDump(const TActorContext &ctx) const
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Timestamp: " << Timestamp.ToStringLocalUpToSeconds());
+    YDB_LOG_CTX_DEBUG(ctx, "",
+        {"Timestamp", Timestamp.ToStringLocalUpToSeconds()});
     for (auto &entry: Nodes) {
         TStringStream ss;
         auto &node = *entry.second;

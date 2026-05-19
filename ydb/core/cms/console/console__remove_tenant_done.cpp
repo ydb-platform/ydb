@@ -1,4 +1,7 @@
 #include "console_tenants_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 namespace NKikimr::NConsole {
 
@@ -17,9 +20,9 @@ public:
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_POOLS);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxRemoveTenantDone for tenant " << Tenant->Path
-                    << " txid=" << Tenant->TxId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantDone for tenant",
+            {"Path", Tenant->Path},
+            {"txid", Tenant->TxId});
 
         Self->DbRemoveComputationalUnits(Tenant, txc, ctx);
         Self->DbRemoveTenantAndPools(Tenant, txc, ctx);

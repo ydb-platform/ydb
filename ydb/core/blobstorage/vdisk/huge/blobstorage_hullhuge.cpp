@@ -17,6 +17,7 @@
 #include <ydb/library/actors/wilson/wilson_with_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NHuge;
@@ -844,14 +845,15 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         template<typename TEvent>
         bool CheckPendingWrite(ui64 writeId, TAutoPtr<TEventHandle<TEvent>>& ev, ui64 lsn, const char *action) {
-            LOG_DEBUG_S(*TlsActivationContext, BS_HULLHUGE, HugeKeeperCtx->VCtx->VDiskLogPrefix << "CheckPendingWrite"
-                << " WriteId# " << writeId
-                << " ProcessingPendingWrite# " << State.ProcessingPendingWrite
-                << " Lsn# " << lsn
-                << " Action# " << action
-                << " LsnFifo# " << State.LsnFifo.ToString()
-                << " PendingWrites.size# " << State.PendingWrites.size()
-                << " FirstPendingWrite# " << (State.PendingWrites.empty() ? 0 : State.PendingWrites.begin()->first));
+            YDB_LOG_COMP_DEBUG(BS_HULLHUGE, "CheckPendingWrite",
+                {"#_HugeKeeperCtx->VCtx->VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
+                {"WriteId", writeId},
+                {"ProcessingPendingWrite", State.ProcessingPendingWrite},
+                {"Lsn", lsn},
+                {"Action", action},
+                {"LsnFifo", State.LsnFifo.ToString()},
+                {"PendingWrites.size", State.PendingWrites.size()},
+                {"FirstPendingWrite", (State.PendingWrites.empty() ? 0 : State.PendingWrites.begin()->first)});
 
             Y_VERIFY_S(writeId, HugeKeeperCtx->VCtx->VDiskLogPrefix);
             if (State.ProcessingPendingWrite) {
@@ -1021,9 +1023,10 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             const ui64 lsnInfimum = HugeKeeperCtx->LsnMngr->GetLsn();
             CheckLsn(lsnInfimum, "PreCompact");
             const ui64 wId = State.LsnFifo.Push(HugeKeeperCtx->VCtx->VDiskLogPrefix, lsnInfimum);
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLHUGE, HugeKeeperCtx->VCtx->VDiskLogPrefix
-                << "THullHugeKeeper: requested PreCompact wId# " << wId
-                << " LsnInfimum# " << lsnInfimum);
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLHUGE, "THullHugeKeeper: requested PreCompact",
+                {"#_HugeKeeperCtx->VCtx->VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
+                {"wId", wId},
+                {"LsnInfimum", lsnInfimum});
             ctx.Send(ev->Sender, new TEvHugePreCompactResult(wId), 0, ev->Cookie);
         }
 
@@ -1199,8 +1202,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
 
             if (done) {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLHUGE, HugeKeeperCtx->VCtx->VDiskLogPrefix
-                    << "TEvHugeAllocateSlotsResult# " << FormatList(task->Result));
+                YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLHUGE, "",
+                    {"#_HugeKeeperCtx->VCtx->VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
+                    {"TEvHugeAllocateSlotsResult", FormatList(task->Result)});
                 Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result)), 0, task->Cookie);
             }
         }
@@ -1214,8 +1218,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         }
 
         void Handle(TEvHugeAllocateSlots::TPtr ev, const TActorContext& ctx) {
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLHUGE, HugeKeeperCtx->VCtx->VDiskLogPrefix
-                << "TEvHugeAllocateSlots# " << FormatList(ev->Get()->BlobSizes));
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLHUGE, "",
+                {"#_HugeKeeperCtx->VCtx->VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
+                {"TEvHugeAllocateSlots", FormatList(ev->Get()->BlobSizes)});
             TryToFulfillTask(std::make_shared<TAllocateSlotsTask>(ev), 0, ctx);
         }
 

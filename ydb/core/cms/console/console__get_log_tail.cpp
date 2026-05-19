@@ -1,4 +1,7 @@
 #include "console_configs_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -17,16 +20,15 @@ public:
     {
         auto &req = Request->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTxGetLogTail Execute " << req.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail Execute",
+            {"ShortDebugString", req.ShortDebugString()});
 
         TVector<NKikimrConsole::TLogRecord> records;
         if (!Self->Logger.DbLoadLogTail(req.GetLogFilter(), records, txc))
             return false;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTxGetLogTail found " << records.size()
-                    << " matching log records");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGetLogTail found matching log records",
+            {"size", records.size()});
 
         Response = MakeHolder<TEvConsole::TEvGetLogTailResponse>();
         auto &rec = Response->Record;

@@ -1,5 +1,8 @@
 #include "subscriber.h"
 #include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr {
 namespace NPQ {
@@ -63,8 +66,14 @@ TMaybe<TReadInfo> TSubscriber::OnTimeout(TEvPQ::TEvReadTimeout::TPtr& ev) {
 }
 
 void TSubscriber::AddSubscription(TReadInfo&& info, const ui32 timeout, const ui64 cookie, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "waiting read cookie " << cookie << " partition " << Partition << " user " << info.User
-                << " offset " << info.Offset << " count " << info.Count << " size " << info.Size << " timeout " << timeout);
+    YDB_LOG_CTX_DEBUG(ctx, "waiting read cookie partition user offset count size timeout",
+        {"cookie", cookie},
+        {"Partition", Partition},
+        {"User", info.User},
+        {"Offset", info.Offset},
+        {"Count", info.Count},
+        {"Size", info.Size},
+        {"timeout", timeout});
     Subscriber.AddSubscription(std::move(info), cookie);
     if (timeout == 0)
         ctx.Send(ctx.SelfID, new TEvPQ::TEvReadTimeout(cookie));

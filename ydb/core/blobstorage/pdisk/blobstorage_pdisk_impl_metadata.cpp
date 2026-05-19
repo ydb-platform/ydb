@@ -1,6 +1,9 @@
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_completion_impl.h"
 #include <util/random/fast.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PDISK
 
 namespace NKikimr::NPDisk {
 
@@ -105,17 +108,19 @@ namespace NKikimr::NPDisk {
                 Y_VERIFY_S(!WriteQueue.empty(), PDisk->PCtx->PDiskLogPrefix);
                 auto& [key, buffer] = WriteQueue.front();
                 const ui64 writeOffset = PDisk->Format.Offset(key.ChunkIdx, key.OffsetInSectors);
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionWriteMetadata::IssueQuery",
-                    (Buffer.size, buffer.size()),
-                    (WriteOffset, writeOffset),
-                    (ChunkIdx, key.ChunkIdx),
-                    (OffsetInSectors, key.OffsetInSectors));
+                YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteMetadata::IssueQuery",
+                    {"Marker", "BPD01"},
+                    {"Buffer.size", buffer.size()},
+                    {"WriteOffset", writeOffset},
+                    {"ChunkIdx", key.ChunkIdx},
+                    {"OffsetInSectors", key.OffsetInSectors});
                 PDisk->BlockDevice->PwriteAsync(buffer.data(), buffer.size(), writeOffset, this, {}, nullptr);
             }
 
             void Exec(TActorSystem *actorSystem) override {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01,  "TCompletionWriteMetadata::Exec",
-                    (Result, Result));
+                YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteMetadata::Exec",
+                    {"Marker", "BPD01"},
+                    {"Result", Result});
                 Y_VERIFY_S(!WriteQueue.empty(), PDisk->PCtx->PDiskLogPrefix);
                 WriteQueue.pop_front();
                 if (Result != EIoResult::Ok) {
@@ -231,10 +236,11 @@ namespace NKikimr::NPDisk {
                         PDisk->Cfg->EnableFormatAndMetadataEncryption);
                 }
 
-                STLOGX(*PDisk->PCtx->ActorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionWriteUnformattedMetadata::IssueQuery",
-                    (FormatIndex, FormatIndex),
-                    (Payload.size, Payload.size()),
-                    (Offset, offset));
+                YDB_LOG_CTX_DEBUG(*PDisk->PCtx->ActorSystem, "TCompletionWriteUnformattedMetadata::IssueQuery",
+                    {"Marker", "BPD01"},
+                    {"FormatIndex", FormatIndex},
+                    {"Payload.size", Payload.size()},
+                    {"Offset", offset});
 
                 PDisk->BlockDevice->PwriteAsync(Payload.data(), Payload.size(), offset, this, {}, nullptr);
             }
@@ -242,11 +248,12 @@ namespace NKikimr::NPDisk {
             bool CanHandleResult() const override { return true; }
 
             void Exec(TActorSystem * actorSystem) override {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionWriteUnformattedMetadata::Exec",
-                    (Result, Result),
-                    (FormatIndex, FormatIndex),
-                    (BadSectors, BadSectors),
-                    (ReplicationFactor, ReplicationFactor));
+                YDB_LOG_CTX_DEBUG(*actorSystem, "TCompletionWriteUnformattedMetadata::Exec",
+                    {"Marker", "BPD01"},
+                    {"Result", Result},
+                    {"FormatIndex", FormatIndex},
+                    {"BadSectors", BadSectors},
+                    {"ReplicationFactor", ReplicationFactor});
                 if (Result != EIoResult::Ok) {
                     if (FormatIndex == -1) {
                         return Finish(false);

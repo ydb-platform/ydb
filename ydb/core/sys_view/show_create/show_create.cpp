@@ -13,6 +13,9 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 
 namespace NKikimr {
@@ -103,8 +106,8 @@ private:
 
         AllowedByLimiter = true;
 
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Scan prepared, actor: " << TBase::SelfId());
+        YDB_LOG_INFO("Scan prepared,",
+            {"actor", TBase::SelfId()});
 
         ProceedToScan();
         return;

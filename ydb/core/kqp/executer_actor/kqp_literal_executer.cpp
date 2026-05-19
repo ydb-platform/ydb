@@ -9,6 +9,9 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_TASKS_RUNNER
 
 namespace NKikimr {
 namespace NKqp {
@@ -205,8 +208,10 @@ public:
         }
 
         auto log = [as = TlsActivationContext->ActorSystem(), txId = TxId, taskId = task.Id](const TString& message) {
-            LOG_DEBUG_S(*as, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId << ", task: " << taskId << ". "
-                << message);
+            YDB_LOG_CTX_DEBUG(*as, ".",
+                {"TxId", txId},
+                {"task", taskId},
+                {"message", message});
         };
 
         auto taskRunner = MakeDqTaskRunner(alloc, context, settings, log);

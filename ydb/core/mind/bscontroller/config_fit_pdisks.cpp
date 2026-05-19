@@ -2,6 +2,9 @@
 
 #include <util/generic/string.h>
 #include <util/system/types.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr {
     namespace NBsController {
@@ -358,14 +361,19 @@ namespace NKikimr {
                         info->Guid = guid;
                     }
 
-                    STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP02, "Create new pdisk", (PDiskId, pdiskId), (Path, disk.Path));
+                    YDB_LOG_NOTICE("Create new pdisk",
+                        {"Marker", "BSCFP02"},
+                        {"PDiskId", pdiskId},
+                        {"Path", disk.Path});
                 }
 
                 state.PDisksToRemove.erase(pdiskId);
             }
 
             for (const auto& pdiskId : state.PDisksToRemove) {
-                STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP03, "PDisk to remove:", (PDiskId, pdiskId));
+                YDB_LOG_NOTICE("PDisk to remove:",
+                    {"Marker", "BSCFP03"},
+                    {"PDiskId", pdiskId});
             }
             state.CheckConsistency();
         }

@@ -3,6 +3,9 @@
 #include "datashard_impl.h"
 
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -62,9 +65,11 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
     auto it = CoverageBuilders().find(std::make_pair(rsKey.From, rsKey.To));
     if (it != CoverageBuilders().end()) {
         if (it->second->AddResult(btList)) {
-            LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Filled readset for " << *this << " from=" << rsKey.From
-                        << " to=" << rsKey.To << "origin=" << rsKey.Origin);
+            YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Filled readset for",
+                {"#_*this", *this},
+                {"from", rsKey.From},
+                {"to", rsKey.To},
+                {"origin", rsKey.Origin});
             InReadSets()[it->first].emplace_back(TRSData{ std::move(readSet), rsKey.Origin });
             if (it->second->IsComplete()) {
                 Y_ENSURE(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
@@ -72,9 +77,11 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
             }
         }
     } else {
-        LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                     "Discarded readset for " << *this << " from=" << rsKey.From
-                     << " to=" << rsKey.To << "origin=" << rsKey.Origin);
+        YDB_LOG_CTX_NOTICE(TActivationContext::AsActorContext(), "Discarded readset for",
+            {"#_*this", *this},
+            {"from", rsKey.From},
+            {"to", rsKey.To},
+            {"origin", rsKey.Origin});
     }
 }
 

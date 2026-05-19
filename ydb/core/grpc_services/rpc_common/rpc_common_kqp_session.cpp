@@ -15,6 +15,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -46,8 +49,9 @@ public:
         const auto& deadline = Request->GetDeadline();
 
         if (deadline <= now) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
-                SelfId() << " Request deadline has expired for " << now - deadline << " seconds");
+            YDB_LOG_WARN("Request deadline has expired for seconds",
+                {"SelfId", SelfId()},
+                {"#_now - deadline", now - deadline});
 
             Reply(Ydb::StatusIds::TIMEOUT);
             return;
@@ -111,8 +115,10 @@ private:
         auto actorId = NRpcService::DoLocalRpcSameMailbox<TEvDeleteSessionRequest>(
             std::move(request), std::move(cb), database, Request->GetSerializedToken(), ctx);
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
-            SelfId() << " Client lost, session " << sessionId << " will be closed by " << actorId);
+        YDB_LOG_NOTICE("Client lost, session will be closed by",
+            {"SelfId", SelfId()},
+            {"sessionId", sessionId},
+            {"actorId", actorId});
     }
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {

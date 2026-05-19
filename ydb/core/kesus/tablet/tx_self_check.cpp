@@ -4,6 +4,9 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -71,8 +74,8 @@ void TKesusTablet::Handle(TEvPrivate::TEvSelfCheckTimeout::TPtr& ev) {
     if (msg->Cookie.DetachEvent()) {
         // Try to die as soon as possible
         const auto& ctx = TActivationContext::AsActorContext();
-        LOG_ERROR_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << TabletID() << "] Self-check timeout, attempting suicide");
+        YDB_LOG_CTX_ERROR(ctx, "] Self-check timeout, attempting suicide",
+            {"TabletID", TabletID()});
         HandlePoison(TActivationContext::ActorContextFor(SelfId()));
     }
 }

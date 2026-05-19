@@ -26,6 +26,7 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 // Uncomment the following macro to enable consistency check before every transactions in TTxRequest
 //#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
@@ -62,10 +63,12 @@ protected:
         }
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat Execute");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxInit flat Execute",
+                {"KeyValue", txc.Tablet});
             TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
             if (txc.DB.GetScheme().GetTableInfo(TABLE_ID) == nullptr) {
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat BuildScheme");
+                YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxInit flat BuildScheme",
+                    {"KeyValue", txc.Tablet});
                 // Init the scheme
                 auto &alter = txc.DB.Alter();
                 alter.AddTable("kvtable", TABLE_ID);
@@ -75,7 +78,8 @@ protected:
                 ApplyLogBatching(ctx, alter);
                 Self.State.Clear();
             } else {
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat ReadDb Tree");
+                YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxInit flat ReadDb Tree",
+                    {"KeyValue", txc.Tablet});
                 if (!LoadStateFromDB(Self.State, txc.DB)) {
                     return false;
                 }
@@ -89,8 +93,8 @@ protected:
                 // ApplyLogBatching(ctx, alter);
             }
             Self.State.InitExecute(Self.TabletID(), KeyValueActorId, txc.Generation, db, ctx, Self.Info());
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet
-                    << " TTxInit flat Execute returns true");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxInit flat Execute returns true",
+                {"KeyValue", txc.Tablet});
             return true;
         }
 
@@ -143,7 +147,8 @@ protected:
         TTxType GetTxType() const override { return TXTYPE_REQUEST; }
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxRequest Execute");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxRequest Execute",
+                {"KeyValue", txc.Tablet});
             if (!CheckConsistency(txc)) {
                 return false;
             }
@@ -159,7 +164,8 @@ protected:
         }
 
         void Complete(const TActorContext &ctx) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxRequest Complete");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxRequest Complete",
+                {"KeyValue", Self->TabletID()});
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
             Self->State.RequestComplete(Intermediate, ctx, Self->Info());
         }
@@ -194,7 +200,8 @@ protected:
         TTxType GetTxType() const override { return TXTYPE_DROP_REF_COUNTS_ON_ERROR; }
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &/*ctx*/) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Execute");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxDropRefCountsOnError Execute",
+                {"KeyValue", Self->TabletID()});
             if (!Self->State.GetIsDamaged()) {
                 TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
                 Self->State.DropRefCountsOnErrorInTx(std::move(RefCountsIncr), db);
@@ -203,7 +210,8 @@ protected:
         }
 
         void Complete(const TActorContext &ctx) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Complete");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxDropRefCountsOnError Complete",
+                {"KeyValue", Self->TabletID()});
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
         }
     };
@@ -259,7 +267,8 @@ protected:
         {}
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext& /*ctx*/) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxResetVacuumGeneration Execute");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxResetVacuumGeneration Execute",
+                {"KeyValue", txc.Tablet});
             TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
             Self->State.UpdateVacuumGeneration(db, Generation - 1);
             return true;
@@ -285,10 +294,11 @@ protected:
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             ui64 actualVacuumResetGeneration = Self->State.GetVacuumResetGeneration();
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet
-                    << " TTxCompleteVacuum Execute vacuumResetGeneration# " << VacuumResetGeneration
-                    << " actualVacuumResetGeneration# " << actualVacuumResetGeneration
-                    << " VacuumGeneration# " << VacuumGeneration);
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxCompleteVacuum Execute",
+                {"KeyValue", txc.Tablet},
+                {"vacuumResetGeneration", VacuumResetGeneration},
+                {"actualVacuumResetGeneration", actualVacuumResetGeneration},
+                {"VacuumGeneration", VacuumGeneration});
             if (VacuumResetGeneration == actualVacuumResetGeneration) {
                 TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
                 Self->State.CompleteVacuumExecute(db, ctx, VacuumGeneration);
@@ -298,10 +308,11 @@ protected:
 
         void Complete(const TActorContext &ctx) override {
             ui64 actualVacuumResetGeneration = Self->State.GetVacuumResetGeneration();
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
-                    << " TTxCompleteVacuum Complete vacuumResetGeneration# " << VacuumResetGeneration
-                    << " actualVacuumResetGeneration# " << actualVacuumResetGeneration
-                    << " VacuumGeneration# " << VacuumGeneration);
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "TTxCompleteVacuum Complete",
+                {"KeyValue", Self->TabletID()},
+                {"vacuumResetGeneration", VacuumResetGeneration},
+                {"actualVacuumResetGeneration", actualVacuumResetGeneration},
+                {"VacuumGeneration", VacuumGeneration});
             if (VacuumResetGeneration == actualVacuumResetGeneration) {
                 Self->State.CompleteVacuumComplete(ctx, Self->Info(), VacuumGeneration);
             }
@@ -321,15 +332,18 @@ protected:
         {}
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << ' ' << TDerived::Name << " Execute");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Execute",
+                {"KeyValue", txc.Tablet},
+                {"#_TDerived::Name", TDerived::Name});
             TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
             (Self->State.*ExecuteMethod)(db, ctx);
             return true;
         }
 
         void Complete(const TActorContext &ctx) override {
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
-                    << ' ' << TDerived::Name << " Complete");
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Complete",
+                {"KeyValue", Self->TabletID()},
+                {"#_TDerived::Name", TDerived::Name});
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
             (Self->State.*CompleteMethod)(ctx, Self->Info());
         }
@@ -356,13 +370,15 @@ protected:
     TActorId CollectorActorId;
 
     void OnDetach(const TActorContext &ctx) override {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " OnDetach");
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "OnDetach",
+            {"KeyValue", TabletID()});
         HandleDie(ctx);
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " OnTabletDead " << ev->Get()->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "OnTabletDead",
+            {"KeyValue", TabletID()},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         HandleDie(ctx);
     }
 
@@ -378,10 +394,10 @@ protected:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE,
-                "KeyValue# " << TabletID()
-                << " Enqueue, event type# " << (ui32)ev->GetTypeRewrite()
-                << " event# " << ev->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Enqueue, event",
+            {"KeyValue", TabletID()},
+            {"type", (ui32)ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         InitialEventsQueue.push_back(ev);
     }
 
@@ -412,8 +428,9 @@ protected:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state
     void Handle(TEvKeyValue::TEvCompleteGC::TPtr &ev, const TActorContext &ctx) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvCompleteGC " << ev->Get()->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvCompleteGC",
+            {"KeyValue", TabletID()},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         Y_ABORT_UNLESS(ev->Sender == (ev->Get()->Repeat ? ctx.SelfID : CollectorActorId));
         CollectorActorId = {};
         State.OnEvCompleteGC(ev->Get()->Repeat);
@@ -421,26 +438,29 @@ protected:
     }
 
     void Handle(TEvKeyValue::TEvCollect::TPtr &ev, const TActorContext &ctx) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvCollect " << ev->Get()->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvCollect",
+            {"KeyValue", TabletID()},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         if (State.OnEvCollect(ctx)) {
             auto& operation = State.GetCollectOperation();
-            STLOG(PRI_DEBUG, KEYVALUE_GC, KVC09, "TEvCollect", (TabletId, TabletID()),
-                (Generation, Executor()->Generation()),
-                (PerGenerationCounter, State.GetPerGenerationCounter()),
-                (AdvanceBarrier, operation->AdvanceBarrier),
-                (CollectGeneration, operation->Header.CollectGeneration),
-                (CollectStep, operation->Header.CollectStep),
-                (KeepCount, operation->Keep.size()),
-                (DoNotKeepCount, operation->DoNotKeep.size()),
-                (TrashGoingToCollectCount, operation->TrashGoingToCollect.size()),
-                (TrashCount, State.GetTrashCount()));
+            YDB_LOG_COMP_DEBUG(KEYVALUE_GC, "TEvCollect",
+                {"Marker", "KVC09"},
+                {"TabletId", TabletID()},
+                {"Generation", Executor()->Generation()},
+                {"PerGenerationCounter", State.GetPerGenerationCounter()},
+                {"AdvanceBarrier", operation->AdvanceBarrier},
+                {"CollectGeneration", operation->Header.CollectGeneration},
+                {"CollectStep", operation->Header.CollectStep},
+                {"KeepCount", operation->Keep.size()},
+                {"DoNotKeepCount", operation->DoNotKeep.size()},
+                {"TrashGoingToCollectCount", operation->TrashGoingToCollect.size()},
+                {"TrashCount", State.GetTrashCount()});
             CollectorActorId = ctx.Register(CreateKeyValueCollector(ctx.SelfID, operation, Info(),
                 Executor()->Generation(), State.GetPerGenerationCounter()));
             State.OnEvCollectDone(ctx);
         } else {
-            ALOG_ERROR(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                    << " Handle TEvCollect: PerGenerationCounter overflow prevention restart.");
+            YDB_LOG_COMP_ERROR(NKikimrServices::KEYVALUE, "Handle TEvCollect: PerGenerationCounter overflow prevention restart.",
+                {"KeyValue", TabletID()});
             Become(&TThis::StateBroken);
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
@@ -454,8 +474,9 @@ protected:
     }
 
     void Handle(TEvKeyValue::TEvIntermediate::TPtr &ev, const TActorContext &ctx) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvIntermediate " << ev->Get()->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvIntermediate",
+            {"KeyValue", TabletID()},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         CheckYellowChannels(ev->Get()->Intermediate->Stat);
 
@@ -466,8 +487,9 @@ protected:
 
     void Handle(TEvKeyValue::TEvNotify::TPtr &ev, const TActorContext &ctx) {
         TEvKeyValue::TEvNotify &event = *ev->Get();
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvNotify " << event.ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvNotify",
+            {"KeyValue", TabletID()},
+            {"event", event.ToString()});
 
         CheckYellowChannels(ev->Get()->Stat);
         State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
@@ -478,23 +500,25 @@ protected:
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-            << " Handle TEvCollectGarbageResult Cookie# " << ev->Cookie <<  " Marker# KV52");
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvCollectGarbageResult Marker# KV52",
+            {"KeyValue", TabletID()},
+            {"Cookie", ev->Cookie});
 
         if (ev->Cookie != (ui64)TKeyValueState::ECollectCookie::SoftInitial &&
                 ev->Cookie != (ui64)TKeyValueState::ECollectCookie::Hard) {
-            ALOG_CRIT(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " received TEvCollectGarbageResult with unexpected Cookie# " << ev->Cookie);
+            YDB_LOG_COMP_CRIT(NKikimrServices::KEYVALUE, "received TEvCollectGarbageResult with unexpected",
+                {"KeyValue", TabletID()},
+                {"Cookie", ev->Cookie});
             Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
             return;
         }
 
         NKikimrProto::EReplyStatus status = ev->Get()->Status;
         if (status != NKikimrProto::OK) {
-            ALOG_ERROR(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " received not ok TEvCollectGarbageResult"
-                << " Status# " << NKikimrProto::EReplyStatus_Name(status)
-                << " ErrorReason# " << ev->Get()->ErrorReason);
+            YDB_LOG_COMP_ERROR(NKikimrServices::KEYVALUE, "received not ok TEvCollectGarbageResult",
+                {"KeyValue", TabletID()},
+                {"Status", NKikimrProto::EReplyStatus_Name(status)},
+                {"ErrorReason", ev->Get()->ErrorReason});
             Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
             return;
         }
@@ -506,14 +530,16 @@ protected:
     }
 
     void Handle(TEvKeyValue::TEvRequest::TPtr ev, const TActorContext &ctx) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvRequest " << ev->Get()->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvRequest",
+            {"KeyValue", TabletID()},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         UpdateTabletYellow();
         State.OnEvRequest(ev, ctx, Info());
     }
 
     void HandlePeriodicRefresh() {
-        ALOG_TRACE(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " Handle TEvPeriodicRefresh");
+        YDB_LOG_COMP_TRACE(NKikimrServices::KEYVALUE, "Handle TEvPeriodicRefresh",
+            {"KeyValue", TabletID()});
         Schedule(TDuration::MilliSeconds(PeriodicRefreshMs), new TEvKeyValue::TEvPeriodicRefresh);
         State.OnPeriodicRefresh();
     }
@@ -529,23 +555,26 @@ protected:
         if (!ev)
             return true;
 
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " Handle TEvRemoteHttpInfo: %s"
-                << ev->Get()->Query.data());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvRemoteHttpInfo: %s",
+            {"KeyValue", TabletID()},
+            {"data", ev->Get()->Query.data()});
         Execute(new TTxMonitoring(ev->Release(), ev->Sender, this), ctx);
 
         return true;
     }
 
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID() << " Handle TEvents::TEvPoisonPill");
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvents::TEvPoisonPill",
+            {"KeyValue", TabletID()});
         Y_UNUSED(ev);
         Become(&TThis::StateBroken);
         ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     }
 
     void Handle(TEvKeyValue::TEvVacuumRequest::TPtr &ev) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvVacuumRequest " << ev->Get()->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvVacuumRequest",
+            {"KeyValue", TabletID()},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         ui64 generation = ev->Get()->Record.generation();
         if (generation == 0) {
             Send(ev->Sender, TEvKeyValue::TEvVacuumResponse::MakeError(generation, "generation can't be 0", generation, TabletID()));
@@ -559,8 +588,9 @@ protected:
     }
 
     void Handle(TEvKeyValue::TEvForceTabletVacuum::TPtr &ev) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvForceTabletVacuum generation# " << ev->Get()->Generation);
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Handle TEvForceTabletVacuum",
+            {"KeyValue", TabletID()},
+            {"generation", ev->Get()->Generation});
         Executor()->StartVacuum(ev->Get()->Generation);
     }
 
@@ -605,15 +635,17 @@ public:
     }
 
     void VacuumComplete(ui64 vacuumGeneration, const TActorContext &ctx) override {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "VacuumComplete",
-            (TabletId, TabletID()));
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE_GC, "VacuumComplete",
+            {"Marker", "KV271"},
+            {"TabletId", TabletID()});
         Execute(new TTxCompleteVacuum(this, State.GetVacuumResetGeneration(), vacuumGeneration), ctx);
     }
 
     STFUNC(StateInit) {
-        ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " StateInit flat event type# " << (ui32)ev->GetTypeRewrite()
-                << " event# " << ev->ToString());
+        YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "StateInit flat event",
+            {"KeyValue", TabletID()},
+            {"type", (ui32)ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         StateInitImpl(ev, SelfId());
     }
 
@@ -641,9 +673,10 @@ public:
             hFunc(TEvKeyValue::TEvForceTabletVacuum, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                            << " StateWork unexpected event type# " << (ui32)ev->GetTypeRewrite()
-                            << " event# " << ev->ToString());
+                    YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "StateWork unexpected event",
+                        {"KeyValue", TabletID()},
+                        {"type", (ui32)ev->GetTypeRewrite()},
+                        {"event", ev->ToString()});
                 }
                 break;
         }
@@ -654,9 +687,10 @@ public:
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
 
             default:
-                ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                        << " BrokenState unexpected event type# " << (ui32)ev->GetTypeRewrite()
-                        << " event# " << ev->ToString());
+                YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "BrokenState unexpected event",
+                    {"KeyValue", TabletID()},
+                    {"type", (ui32)ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 break;
         }
     }
@@ -667,9 +701,10 @@ public:
         UpdateTabletYellow();
         while (!InitialEventsQueue.empty()) {
             TAutoPtr<IEventHandle> &ev = InitialEventsQueue.front();
-            ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                    << " Dequeue, event type# " << (ui32)ev->GetTypeRewrite()
-                    << " event# " << ev->ToString());
+            YDB_LOG_COMP_DEBUG(NKikimrServices::KEYVALUE, "Dequeue, event",
+                {"KeyValue", TabletID()},
+                {"type", (ui32)ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
             Send(ev.Release());
             InitialEventsQueue.pop_front();
         }

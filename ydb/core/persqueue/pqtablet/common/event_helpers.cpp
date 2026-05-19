@@ -5,6 +5,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/builder.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT service
 
 namespace NKikimr {
 namespace NPQ {
@@ -37,9 +40,11 @@ void ReplyPersQueueError(
     logStr << " error: " << error;
 
     if (logDebug) {
-        LOG_DEBUG_S(ctx, service, logStr);
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"logStr", logStr});
     } else {
-        LOG_WARN_S(ctx, service, logStr);
+        YDB_LOG_CTX_WARN(ctx, "",
+            {"logStr", logStr});
     }
     ctx.Send(dstActor, new TEvPQ::TEvError(errorCode, error, responseCookie, isInternal));
 }

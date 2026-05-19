@@ -8,6 +8,7 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -192,10 +193,14 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noe
     const TString reason = ev->Get()->GetIssues().ToOneLineString();
 
     auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
-    LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN,
-        "Scan " << ScanActorId << " got AbortExecution"
-                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
-                << " code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()) << " reason: " << reason);
+    YDB_LOG_COMP(prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
+        {"ScanActorId", ScanActorId},
+        {"txId", TxId},
+        {"scanId", ScanId},
+        {"gen", ScanGen},
+        {"tablet", TabletId},
+        {"code", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
+        {"reason", reason});
 
     AbortReason = std::move(reason);
     Finish(NColumnShard::TScanCounters::EStatusFinish::ExternalAbort);
@@ -212,9 +217,15 @@ void TColumnShardScan::HandleScan(TEvents::TEvUndelivered::TPtr& ev) {
             break;
     }
 
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-        "Scan " << ScanActorId << " undelivered event: " << eventType << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen
-                << " tablet: " << TabletId << " reason: " << ev->Get()->Reason << " description: " << AbortReason);
+    YDB_LOG_COMP_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan undelivered",
+        {"ScanActorId", ScanActorId},
+        {"event", eventType},
+        {"txId", TxId},
+        {"scanId", ScanId},
+        {"gen", ScanGen},
+        {"tablet", TabletId},
+        {"reason", ev->Get()->Reason},
+        {"description", AbortReason});
 
     Finish(NColumnShard::TScanCounters::EStatusFinish::UndeliveredEvent);
 }
@@ -505,7 +516,9 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
         Send(ScanDiagnosticsActorId,
             std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan " << ScanActorId << " finished for tablet " << TabletId);
+    YDB_LOG_COMP_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan finished for tablet",
+        {"ScanActorId", ScanActorId},
+        {"TabletId", TabletId});
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
     FinishInstant = TMonotonic::Now();

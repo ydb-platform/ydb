@@ -15,6 +15,7 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 
 #include <algorithm>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -80,7 +81,8 @@ private:
 
     void UpdateActiveNode() {
         ActiveNode = PickActiveNode(BoardInfo);
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Active node is " << ActiveNode);
+        YDB_LOG_CTX_COMP_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Active node is",
+            {"ActiveNode", ActiveNode});
         bool areWeActive = (ActiveNode == SelfId().NodeId());
         if (areWeActive && CurrentStateFunc() != &TThis::StateActive) {
             RefreshCache();
@@ -132,13 +134,13 @@ private:
     }
 
     void Handle(NHealthCheck::TEvSelfCheckRequestProto::TPtr& ev) {
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Got request");
+        YDB_LOG_CTX_COMP_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Got request");
         TInstant now = TActivationContext::Now();
         if (Result && now - LastResultUpdate <= 2 * RefreshPeriod) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Replying now");
+            YDB_LOG_CTX_COMP_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Replying now");
             Reply(ev);
         } else {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Answer not ready, waiting");
+            YDB_LOG_CTX_COMP_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Answer not ready, waiting");
             SendRequest();
             Requests.emplace_back(std::move(ev));
         }
@@ -200,7 +202,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Starting db metadata cache actor");
+        YDB_LOG_CTX_COMP_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Starting db metadata cache actor");
         Become(&TThis::StateInactive);
         ApplyConfig(AppData()->MetadataCacheConfig, AppData()->FeatureFlags);
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),

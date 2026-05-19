@@ -6,6 +6,9 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -204,12 +207,10 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
                 }
             }
 
-            LOG_DEBUG_S(*ActorSystem, NActorsServices::HTTP, "HttpRequest "
-                        << request.GetMethod()
-                        << " "
-                        << request.GetUri()
-                        << " "
-                        << message->GetRecord()->AsJSON());
+            YDB_LOG_CTX_DEBUG(*ActorSystem, "HttpRequest",
+                {"GetMethod", request.GetMethod()},
+                {"GetUri", request.GetUri()},
+                {"#_message->GetRecord()->AsJSON()", message->GetRecord()->AsJSON()});
 
             TBusHttpServerSession session(this, request, Protocol, Config);
             TBusHttpIdentity identity;

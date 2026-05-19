@@ -1,5 +1,8 @@
 #include "s3.h"
 #include "blocks.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -108,8 +111,11 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
         auto& agent = GetAgent(ev->Recipient);
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-            (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG("TEvPrepareWriteS3",
+            {"Marker", "BDTS07"},
+            {"Id", GetLogId()},
+            {"AgentId", agent.Connection->NodeId},
+            {"Msg", ev->Get()->Record});
 
         Execute(std::make_unique<TS3Manager::TTxPrepareWriteS3>(this, agent,
             std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));

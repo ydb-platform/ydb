@@ -1,5 +1,8 @@
 #include "cms_impl.h"
 #include "scheme.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -13,8 +16,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_LOG_CLEANUP; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TTxLogCleanup Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogCleanup Execute");
 
         return Self->Logger.DbCleanupLog(txc, ctx);
     }

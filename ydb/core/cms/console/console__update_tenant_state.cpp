@@ -1,4 +1,7 @@
 #include "console_tenants_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 namespace NKikimr::NConsole {
 
@@ -19,13 +22,14 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdateTenantState for tenant " << Path << " to " << State);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateTenantState for tenant to",
+            {"Path", Path},
+            {"State", State});
 
         Tenant = Self->GetTenant(Path);
         if (!Tenant) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxUpdateTenantState cannot find tenant " << Path);
+            YDB_LOG_CTX_ERROR(ctx, "TTxUpdateTenantState cannot find tenant",
+                {"Path", Path});
             return true;
         }
 
@@ -41,8 +45,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxUpdateTenantState complete for " << Path);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateTenantState complete for",
+            {"Path", Path});
 
         if (Tenant && PrevState != State) {
             if (Tenant->Worker == Worker)

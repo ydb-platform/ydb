@@ -7,6 +7,9 @@
 
 #include <util/generic/hash.h>
 #include <util/string/join.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RESOURCE_BROKER
 
 namespace NKikimr {
 namespace NResourceBroker {
@@ -1186,13 +1189,15 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
 {
     auto &config = ev->Get()->Record;
     if (ev->Get()->Merge) {
-        LOG_INFO_S(ctx, NKikimrServices::RESOURCE_BROKER, "New config diff: " << config.ShortDebugString());
+        YDB_LOG_CTX_INFO(ctx, "New config",
+            {"diff", config.ShortDebugString()});
         auto current = ResourceBroker->GetConfig();
         MergeConfigUpdates(current, config);
         config.Swap(&current);
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::RESOURCE_BROKER, "New config: " << config.ShortDebugString());
+    YDB_LOG_CTX_INFO(ctx, "New",
+        {"config", config.ShortDebugString()});
 
     TSet<TString> queues;
     TSet<TString> tasks;
@@ -1234,10 +1239,8 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         ResourceBroker->Configure(std::move(config));
     }
 
-    LOG_LOG_S(ctx,
-        success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR,
-        NKikimrServices::RESOURCE_BROKER,
-        "Configure result: " << response->Record.ShortDebugString());
+    YDB_LOG_CTX(ctx, success ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR, "Configure",
+        {"result", response->Record.ShortDebugString()});
 
     auto newConfig = ResourceBroker->GetConfig();
     for (auto& queue : newConfig.GetQueues()) {

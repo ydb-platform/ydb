@@ -1,4 +1,7 @@
 #include "space_monitor.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -42,9 +45,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         Y_ABORT_UNLESS(yellowMove || yellowStop);
-        STLOG(PRI_INFO, BLOB_DEPOT, BDT28, "asking to reassign channels", (Id, Self->GetLogId()),
-            (YellowMove, FormatList(yellowMove)),
-            (YellowStop, FormatList(yellowStop)));
+        YDB_LOG_INFO("asking to reassign channels",
+            {"Marker", "BDT28"},
+            {"Id", Self->GetLogId()},
+            {"YellowMove", FormatList(yellowMove)},
+            {"YellowStop", FormatList(yellowStop)});
         Self->Executor()->OnYellowChannels(std::move(yellowMove), std::move(yellowStop));
     }
 

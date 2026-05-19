@@ -17,6 +17,9 @@
 #include <ydb/core/ydb_convert/table_description.h>
 
 #include <util/generic/hash_set.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
 
 #define TXLOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 #define TXLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
@@ -136,9 +139,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-            "TAlterTableRPC: cannot deliver config request to Configs Dispatcher"
-            " (empty default profile is available only)");
+        YDB_LOG_CTX_CRIT(ctx, "");
         AlterTable(ctx);
         Become(&TAlterTableRPC::AlterStateWork);
     }
@@ -154,7 +155,7 @@ private:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
         case WakeupTagGetConfig: {
-            LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TAlterTableRPC: cannot get table profiles (timeout)");
+            YDB_LOG_CTX_CRIT(ctx, "TAlterTableRPC: cannot get table profiles (timeout)");
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
             return Reply(StatusIds::UNAVAILABLE, issues, ctx);

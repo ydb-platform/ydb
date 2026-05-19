@@ -1,6 +1,9 @@
 #include "execution_unit.h"
 #include "execution_unit_ctors.h"
 #include "datashard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -188,8 +191,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Tablet " << DataShard.TabletID() << " rejecting tx due to split");
+        YDB_LOG_CTX_NOTICE(ctx, "Tablet rejecting tx due to split",
+            {"TabletID", DataShard.TabletID()});
 
         op->Abort();
         return true;
@@ -210,7 +213,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_CTX_NOTICE(ctx, "",
+            {"err", err});
 
         op->Abort();
         return true;
@@ -227,7 +231,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_CTX_NOTICE(ctx, "",
+            {"err", err});
 
         op->Abort();
         return true;
@@ -246,8 +251,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                     ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-                     "Tablet " << DataShard.TabletID() << " rejecting tx due to changes queue overflow");
+        YDB_LOG_CTX_NOTICE(ctx, "Tablet rejecting tx due to changes queue overflow",
+            {"TabletID", DataShard.TabletID()});
 
         op->Abort();
         return true;
@@ -265,7 +270,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_CTX_NOTICE(ctx, "",
+            {"err", err});
 
         op->Abort();
         return true;

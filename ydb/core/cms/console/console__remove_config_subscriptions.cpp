@@ -1,4 +1,7 @@
 #include "console_configs_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -16,7 +19,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxRemoveConfigSubscriptions Execute: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscriptions",
+            {"Execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -50,8 +54,8 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Send TEvRemoveConfigSubscriptionsResponse: " << Response->Record.ShortDebugString());
+            YDB_LOG_CTX_TRACE(ctx, "Send",
+                {"TEvRemoveConfigSubscriptionsResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

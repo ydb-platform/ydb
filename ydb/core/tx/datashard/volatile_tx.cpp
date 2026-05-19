@@ -1,6 +1,9 @@
 #include "volatile_tx.h"
 #include "datashard_impl.h"
 #include <library/cpp/resource/resource.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -65,8 +68,10 @@ namespace NKikimr::NDataShard {
                         txc.DB.CommitTx(tid, commitTxId, info->Version);
                         Self->GetConflictsCache().GetTableCache(tid).RemoveUncommittedWrites(commitTxId, txc.DB);
                     } else if (txc.DB.HasRemovedTx(tid, commitTxId)) {
-                        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                            "Committing removed changes txId# " << commitTxId << " tid# " << tid << " shard# " << Self->TabletID());
+                        YDB_LOG_CRIT("Committing removed changes",
+                            {"txId", commitTxId},
+                            {"tid", tid},
+                            {"shard", Self->TabletID()});
                         Self->IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
                     }
                 }
@@ -849,8 +854,10 @@ namespace NKikimr::NDataShard {
         ui64 dstTabletId = record.GetTabletDest();
 
         if (dstTabletId != Self->TabletID()) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Unexpected readset from " << srcTabletId << " to " << dstTabletId << " at tablet " << Self->TabletID());
+            YDB_LOG_WARN("Unexpected readset from to at tablet",
+                {"srcTabletId", srcTabletId},
+                {"dstTabletId", dstTabletId},
+                {"TabletID", Self->TabletID()});
             return true;
         }
 
@@ -868,9 +875,10 @@ namespace NKikimr::NDataShard {
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
                 Y_ENSURE(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
                     "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in ProcessReadSet");
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Processed readset without data from " << srcTabletId << " to " << dstTabletId
-                    << " at tablet " << Self->TabletID());
+                YDB_LOG_TRACE("Processed readset without data from to at tablet",
+                    {"srcTabletId", srcTabletId},
+                    {"dstTabletId", dstTabletId},
+                    {"TabletID", Self->TabletID()});
                 return false;
             }
 
@@ -879,17 +887,21 @@ namespace NKikimr::NDataShard {
             Y_ENSURE(ok, "Failed to parse readset from " << srcTabletId << " to " << dstTabletId);
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Processed readset with decision " << ui32(data.GetDecision()) << " from "
-                    << srcTabletId << " to " << dstTabletId << " at tablet " << Self->TabletID());
+                YDB_LOG_TRACE("Processed readset with decision from to at tablet",
+                    {"#_ui32(data.GetDecision())", ui32(data.GetDecision())},
+                    {"srcTabletId", srcTabletId},
+                    {"dstTabletId", dstTabletId},
+                    {"TabletID", Self->TabletID()});
                 return false;
             }
 
             if (record.GetStep() != info->Version.Step) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Processed readset from " << srcTabletId << " to " << dstTabletId
-                    << " with step " << record.GetStep() << " expecting " << info->Version.Step
-                    << ", treating like abort due to divergence at tablet " << Self->TabletID());
+                YDB_LOG_TRACE("Processed readset from to with step expecting, treating like abort due to divergence at tablet",
+                    {"srcTabletId", srcTabletId},
+                    {"dstTabletId", dstTabletId},
+                    {"GetStep", record.GetStep()},
+                    {"Step", info->Version.Step},
+                    {"TabletID", Self->TabletID()});
                 return false;
             }
 

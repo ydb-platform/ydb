@@ -4,6 +4,9 @@
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 
 namespace NKikimr {
@@ -122,8 +125,10 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     else {
         ui64 consumed = tx->GetDataTx()->GetTxSize() + engine->GetMemoryAllocated();
         if (MaybeRequestMoreTxMemory(consumed, txc)) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
-                << " requested " << txc.GetRequestedMemory() << " more memory");
+            YDB_LOG_CTX_TRACE(ctx, "Operation at requested more memory",
+                {"#_*op", *op},
+                {"TabletID", DataShard.TabletID()},
+                {"GetRequestedMemory", txc.GetRequestedMemory()});
 
             DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
             return EExecutionStatus::Restart;
@@ -175,10 +180,11 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             throw;
         }
     } catch (const TMemoryLimitExceededException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
-            << " exceeded memory limit " << txc.GetMemoryLimit()
-            << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
-            << " more for the next try");
+        YDB_LOG_CTX_TRACE(ctx, "Operation at exceeded memory limit and requests more for the next try",
+            {"#_*op", *op},
+            {"TabletID", DataShard.TabletID()},
+            {"GetMemoryLimit", txc.GetMemoryLimit()},
+            {"#_txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
         txc.NotEnoughMemory();
         DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
@@ -191,8 +197,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
-            << " is not ready for " << *op << " execution");
+        YDB_LOG_CTX_TRACE(ctx, "Tablet is not ready for execution",
+            {"TabletID", DataShard.TabletID()},
+            {"#_*op", *op});
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
@@ -201,8 +208,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TRollbackAndWaitException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
-            << " needs to wait " << *op << " for dependencies");
+        YDB_LOG_CTX_TRACE(ctx, "Tablet needs to wait for dependencies",
+            {"TabletID", DataShard.TabletID()},
+            {"#_*op", *op});
 
         tx->GetDataTx()->ResetCollectedChanges();
         tx->ReleaseTxData(txc, ctx);
@@ -270,15 +278,18 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
         switch (engineResult) {
             case IEngineFlat::EResult::ResultTooBig:
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
+                YDB_LOG_CTX_ERROR(ctx, "",
+                    {"errorMessage", errorMessage});
                 break;
             case IEngineFlat::EResult::Cancelled:
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
+                YDB_LOG_CTX_NOTICE(ctx, "",
+                    {"errorMessage", errorMessage});
                 Y_ENSURE(tx->GetDataTx()->CanCancel());
                 break;
             default:
                 if (op->IsReadOnly() || op->IsImmediate()) {
-                    LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
+                    YDB_LOG_CTX_CRIT(ctx, "",
+                        {"errorMessage", errorMessage});
                 } else {
                     // TODO: Kill only current datashard tablet.
                     Y_ENSURE(false, "Unexpected execution error in read-write transaction: "
@@ -306,15 +317,17 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         op->ChangeRecords() = std::move(tx->GetDataTx()->GetCollectedChanges());
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Executed operation " << *op << " at tablet " << DataShard.TabletID()
-                                      << " with status " << result->GetStatus());
+    YDB_LOG_CTX_TRACE(ctx, "Executed operation at tablet with status",
+        {"#_*op", *op},
+        {"TabletID", DataShard.TabletID()},
+        {"GetStatus", result->GetStatus()});
 
     auto& counters = tx->GetDataTx()->GetCounters();
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Datashard execution counters for " << *op << " at "
-                                                    << DataShard.TabletID() << ": " << counters.ToString());
+    YDB_LOG_CTX_TRACE(ctx, "Datashard execution counters for at",
+        {"#_*op", *op},
+        {"TabletID", DataShard.TabletID()},
+        {"counters", counters.ToString()});
 
     KqpUpdateDataShardStatCounters(DataShard, counters);
     if (tx->GetDataTx()->CollectStats()) {
@@ -367,9 +380,10 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
 
     for (const auto& lock : locks) {
         if (lock.IsError()) {
-            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                         "Lock is not set for " << *op << " at " << DataShard.TabletID()
-                                                << " lock " << lock);
+            YDB_LOG_CTX_NOTICE(TActivationContext::AsActorContext(), "Lock is not set for at lock",
+                {"#_*op", *op},
+                {"TabletID", DataShard.TabletID()},
+                {"lock", lock});
         }
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
                                 lock.SchemeShard, lock.PathId, lock.HasWrites);

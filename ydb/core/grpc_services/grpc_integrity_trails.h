@@ -5,6 +5,7 @@
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {
@@ -21,7 +22,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request)", log(traceId, request)});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::ExecuteDataQueryRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
@@ -43,7 +45,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request, response)", log(traceId, request, response)});
 }
 
 // BeginTransaction
@@ -58,7 +61,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request)", log(traceId, request)});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::BeginTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
@@ -78,7 +82,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, response)", log(traceId, response)});
 }
 
 // CommitTransaction
@@ -93,7 +98,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request)", log(traceId, request)});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::CommitTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
@@ -111,7 +117,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request, response)", log(traceId, request, response)});
 }
 
 // RollbackTransaction
@@ -126,7 +133,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request)", log(traceId, request)});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::RollbackTransactionRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
@@ -144,7 +152,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request, response)", log(traceId, request, response)});
 }
 
 // ExecuteYqlScript/StreamExecuteYqlScript
@@ -159,7 +168,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Script
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId)", log(traceId)});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Scripting::ExecuteYqlRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
@@ -178,7 +188,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Script
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, response)", log(traceId, response)});
 }
 
 // ExecuteQuery
@@ -197,7 +208,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request)", log(traceId, request)});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query::ExecuteQueryRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
@@ -223,7 +235,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, request, response));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, request, response)", log(traceId, request, response)});
 }
 
 // ExecuteSrcipt
@@ -240,7 +253,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId)", log(traceId)});
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query::ExecuteScriptRequest& request, const NKqp::TEvKqp::TEvScriptResponse::TPtr& response, const TActorContext& ctx) {
@@ -258,7 +272,8 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
         return ss.Str();
     };
 
-    LOG_TRACE_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+    YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"#_log(traceId, response)", log(traceId, response)});
 }
 
 }

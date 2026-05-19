@@ -1,5 +1,8 @@
 #include "cms_impl.h"
 #include "scheme.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -15,8 +18,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_LOG_AND_SEND; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TTxLogAndSend Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxLogAndSend Execute");
 
         Self->Logger.DbLogData(Event->Get()->LogData, txc, ctx);
 

@@ -4,6 +4,9 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/util/config_index.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NConsole {
 
@@ -19,7 +22,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Cannot set config: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot set",
+            {"config", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -30,7 +34,8 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "TConsole::TTxSetConfig: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"TConsole::TTxSetConfig", rec.ShortDebugString()});
 
         Response = new TEvConsole::TEvSetConfigResponse;
 
@@ -76,7 +81,8 @@ public:
             Self->LoadConfigFromProto(NewConfig);
 
         Y_ABORT_UNLESS(Response);
-        LOG_TRACE_S(ctx, NKikimrServices::CMS, "Send: " << Response->ToString());
+        YDB_LOG_CTX_TRACE(ctx, "",
+            {"Send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         Self->TxProcessor->TxCompleted(this, ctx);

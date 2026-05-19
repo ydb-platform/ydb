@@ -5,6 +5,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/cms/console/validators/registry.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -19,8 +22,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConsole::TTxCleanupSubscriptions");
+        YDB_LOG_CTX_DEBUG(ctx, "TConsole::TTxCleanupSubscriptions");
 
         THashSet<ui32> nodes;
         for (auto &node : Nodes->Get()->Nodes)
@@ -31,9 +33,9 @@ public:
             if (nodeId && !nodes.contains(nodeId)) {
                 Self->PendingSubscriptionModifications.RemovedSubscriptions.insert(pr.first);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                            "Subscription " << pr.first << " has subscriber from unknown node "
-                            << nodeId << " and will be removed");
+                YDB_LOG_CTX_DEBUG(ctx, "Subscription has subscriber from unknown node and will be removed",
+                    {"first", pr.first},
+                    {"nodeId", nodeId});
             }
         }
 

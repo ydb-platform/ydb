@@ -17,6 +17,9 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr::NSysView {
 
@@ -246,8 +249,9 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node_id=" << nodeId << ", request: " << req->Record.ShortDebugString());
+            YDB_LOG_DEBUG("Send request",
+                {"to_node_id", nodeId},
+                {"request", req->Record.ShortDebugString()});
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;
@@ -297,8 +301,8 @@ private:
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListCompileCacheQueriesRequest) {
             ui32 nodeId = ev->Cookie;
-            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Undelivered response for node_id=" << nodeId);
+            YDB_LOG_INFO("Undelivered response for",
+                {"node_id", nodeId});
             PendingRequest = false;
             PendingNodes.pop_front();
             StartScan();

@@ -1,4 +1,7 @@
 #include "datashard_txs.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -13,8 +16,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Cleanup tx at non-ready tablet " << Self->TabletID() << " state " << Self->State);
+            YDB_LOG_CTX_INFO(ctx, "Cleanup tx at non-ready tablet state",
+                {"TabletID", Self->TabletID()},
+                {"State", Self->State});
             Self->CleanupQueue.Reset(ctx);
             return true;
         }
@@ -33,9 +37,9 @@ public:
                     // We want to send confirmed replies when cleaning up volatile transactions
                     ReplyTs = Self->ConfirmReadOnlyLease();
                 }
-                LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Cleaned up old txs at " << Self->TabletID()
-                        << " TxInFly " << Self->TxInFly());
+                YDB_LOG_CTX_INFO(ctx, "Cleaned up old txs at TxInFly",
+                    {"TabletID", Self->TabletID()},
+                    {"TxInFly", Self->TxInFly()});
                 Self->IncCounter(COUNTER_TX_PROGRESS_CLEANUP);
                 Self->ExecuteCleanupTx(ctx);
                 return true;
@@ -50,8 +54,8 @@ public:
                 Self->State == TShardState::SplitSrcMakeSnapshot);
 
         if (expireSnapshotsAllowed && Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Removed expired snapshots at " << Self->TabletID());
+            YDB_LOG_CTX_DEBUG(ctx, "Removed expired snapshots at",
+                {"TabletID", Self->TabletID()});
         }
 
         const bool needFutureCleanup = Self->TxInFly() > 0 || expireSnapshotsAllowed;
@@ -64,8 +68,8 @@ public:
         // Cleanup is regularly executed, and an extra progress is used
         // as a workaround for possible bugs with missing progress calls
         if (Self->Pipeline.CanRunAnotherOp()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Can run another op at " << Self->TabletID() << ", scheduling plan queue progress");
+            YDB_LOG_CTX_DEBUG(ctx, "Can run another op at, scheduling plan queue progress",
+                {"TabletID", Self->TabletID()});
             Self->PlanQueue.Progress(ctx);
         }
 
@@ -106,15 +110,17 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Cleanup volatile tx at non-ready tablet " << Self->TabletID() << " state " << Self->State);
+            YDB_LOG_CTX_INFO(ctx, "Cleanup volatile tx at non-ready tablet state",
+                {"TabletID", Self->TabletID()},
+                {"State", Self->State});
             return true;
         }
 
         if (Self->Pipeline.CleanupVolatile(TxId, ctx, Replies)) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Cleaned up volatile tx " << TxId << " at " << Self->TabletID()
-                    << " TxInFly " << Self->TxInFly());
+            YDB_LOG_CTX_INFO(ctx, "Cleaned up volatile tx at TxInFly",
+                {"TxId", TxId},
+                {"TabletID", Self->TabletID()},
+                {"TxInFly", Self->TxInFly()});
             Self->IncCounter(COUNTER_TX_PROGRESS_CLEANUP);
 
             if (!Replies.empty()) {

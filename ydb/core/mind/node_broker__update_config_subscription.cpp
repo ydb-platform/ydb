@@ -2,6 +2,9 @@
 #include "node_broker__scheme.h"
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -37,8 +40,8 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfigSubscription Complete");
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Using new subscription id=" << SubscriptionId);
+        YDB_LOG_CTX_DEBUG(ctx, "Using new subscription",
+            {"id", SubscriptionId});
 
         Self->Committed.ConfigSubscriptionId = SubscriptionId;
 

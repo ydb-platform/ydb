@@ -10,6 +10,9 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -219,7 +222,8 @@ private:
                 const TString explanation = TStringBuilder()
                     << "Cannot commit writes to system tableId# "
                     << entry.KeyDescription->TableId;
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation);
+                YDB_LOG_CTX_ERROR(ctx, "",
+                    {"explanation", explanation});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, explanation));
                 UnresolvedKeys.push_back(explanation);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
@@ -238,7 +242,8 @@ private:
                     << " with access " << NACLib::AccessRightsToString(access)
                     << " to tableId# " << entry.KeyDescription->TableId;
 
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str());
+                YDB_LOG_CTX_ERROR(ctx, "",
+                    {"Str", explanation.Str()});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
                 return Die(ctx);
@@ -410,12 +415,11 @@ private:
 
                     TxProxyMon->TxResultAborted->Inc();
 
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                        "HANDLE Prepare TEvProposeTransactionResult TCommitWritesReq "
-                        << explanation
-                        << ", actorId: " << ctx.SelfID.ToString()
-                        << ", coordinator selected at resolve keys state: " << SelectedCoordinator
-                        << ", coordinator selected at propose result state: " << privateCoordinator);
+                    YDB_LOG_CTX_ERROR(ctx, "HANDLE Prepare TEvProposeTransactionResult TCommitWritesReq, coordinator selected at resolve keys, coordinator selected at propose result",
+                        {"explanation", explanation},
+                        {"actorId", ctx.SelfID.ToString()},
+                        {"state", SelectedCoordinator},
+                        {"#_state", privateCoordinator});
 
                     return Die(ctx);
                 }
@@ -445,7 +449,8 @@ private:
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, explanation));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError,
                         NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation);
+                YDB_LOG_CTX_ERROR(ctx, "",
+                    {"explanation", explanation});
                 TxProxyMon->TxResultComplete->Inc();
                 return Die(ctx);
             }
@@ -857,11 +862,9 @@ private:
 
         // no tablets keys are found in requests keys
         // it take place when a transaction have only checks locks
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                    "Actor# " << ctx.SelfID.ToString() <<
-                    " txid# " << TxId <<
-                    " SelectCoordinator unable to choose coordinator from resolved keys," <<
-                    " will try to pick it from TEvProposeTransactionResult from datashard");
+        YDB_LOG_CTX_DEBUG(ctx, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
+            {"Actor", ctx.SelfID.ToString()},
+            {"txid", TxId});
         return 0;
     }
 

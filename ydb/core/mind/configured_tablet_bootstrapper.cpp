@@ -36,6 +36,9 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <google/protobuf/util/message_differencer.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BOOTSTRAPPER
 
 namespace NKikimr {
 
@@ -65,8 +68,9 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                 appData->Dcb->RegisterSharedControl(control, controlName);
                 state.DisableBootstrapper = control;
                 state.HasDcbControl = true;
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                    "Registered DCB control '" << controlName << "' for tablet " << tabletId);
+                YDB_LOG_DEBUG("Registered DCB control ' ' for tablet",
+                    {"controlName", controlName},
+                    {"tabletId", tabletId});
             }
         }
     }
@@ -111,10 +115,12 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
         // check if bootstrappers are disabled via ICB
         if (DisableLocalBootstrappers && !WasLocalBootstrappersDisabled) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER, "Local bootstrappers are disabled via ICB on node " << SelfId().NodeId());
+            YDB_LOG_NOTICE("Local bootstrappers are disabled via ICB on node",
+                {"NodeId", SelfId().NodeId()});
             WasLocalBootstrappersDisabled = true;
         } else if (!DisableLocalBootstrappers && WasLocalBootstrappersDisabled) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER, "Local bootstrappers are re-enabled via ICB on node " << SelfId().NodeId());
+            YDB_LOG_NOTICE("Local bootstrappers are re-enabled via ICB on node",
+                {"NodeId", SelfId().NodeId()});
             WasLocalBootstrappersDisabled = false;
         }
 
@@ -130,12 +136,12 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                         currentTabletIds.insert(tabletId);
                         newLast.AddTablet()->CopyFrom(it->second.Config);
                     }
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                        "Skipping invalid tablet config update with incomplete channels for tablet "
-                        << tabletId << " on node " << SelfId().NodeId());
+                    YDB_LOG_ERROR("Skipping invalid tablet config update with incomplete channels for tablet on node",
+                        {"tabletId", tabletId},
+                        {"NodeId", SelfId().NodeId()});
                 } else {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                        "Skipping invalid tablet config update without tablet id on node " << SelfId().NodeId());
+                    YDB_LOG_ERROR("Skipping invalid tablet config update without tablet id on node",
+                        {"NodeId", SelfId().NodeId()});
                 }
                 continue;
             }
@@ -166,8 +172,9 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "Stopping tablet " << tabletId << " bootstrapper on node " << SelfId().NodeId());
+        YDB_LOG_DEBUG("Stopping tablet bootstrapper on node",
+            {"tabletId", tabletId},
+            {"NodeId", SelfId().NodeId()});
 
         Send(*state.BootstrapperInstance, new TEvents::TEvPoisonPill());
         TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(tabletId, SelfId().NodeId()), TActorId());
@@ -178,8 +185,8 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         const auto &record = ev->Get()->Record;
 
         if (record.GetConfig().HasBootstrapConfig()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "Received bootstrap config update on node " << SelfId().NodeId());
+            YDB_LOG_DEBUG("Received bootstrap config update on node",
+                {"NodeId", SelfId().NodeId()});
             const auto &bootstrapConfig = record.GetConfig().GetBootstrapConfig();
 
             ProcessTabletsFromConfig(bootstrapConfig);
@@ -198,14 +205,16 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         if (configChanged) {
             bool wasRunning = state.BootstrapperInstance.has_value();
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "Tablet " << tabletId << " config changed on node " << SelfId().NodeId());
+            YDB_LOG_DEBUG("Tablet config changed on node",
+                {"tabletId", tabletId},
+                {"NodeId", SelfId().NodeId()});
 
             state.Config.CopyFrom(tabletConfig);
 
             if (wasRunning) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                    "Tablet " << tabletId << " config changed, stopping running bootstrapper due to config change on node " << SelfId().NodeId());
+                YDB_LOG_DEBUG("Tablet config changed, stopping running bootstrapper due to config change on node",
+                    {"tabletId", tabletId},
+                    {"NodeId", SelfId().NodeId()});
                 StopBootstrapper(tabletId, state);
             }
         }
@@ -290,8 +299,9 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
         TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(tabletId, selfNode), *state.BootstrapperInstance);
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "Started tablet " << tabletId << " bootstrapper on node " << selfNode);
+        YDB_LOG_DEBUG("Started tablet bootstrapper on node",
+            {"tabletId", tabletId},
+            {"selfNode", selfNode});
     }
 
     TString MakeBootstrapperNodeUrl(ui32 nodeId) const {
@@ -348,9 +358,9 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
     void SetLocalBootstrappersDisabled(TAppData* appData, bool disable) {
         if (appData && appData->Icb) {
             TControlBoard::SetValue(disable, appData->Icb->BootstrapperControls.DisableLocalBootstrappers);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "Local bootstrappers " << (disable ? "disabled" : "enabled")
-                << " via HTTP on node " << SelfId().NodeId());
+            YDB_LOG_DEBUG("Local bootstrappers via HTTP on node",
+                {"#_num_0", (disable ? "disabled" : "enabled")},
+                {"NodeId", SelfId().NodeId()});
         }
     }
 
@@ -360,10 +370,10 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             TAtomic prevValue;
             appData->Dcb->SetValue(controlName, static_cast<TAtomic>(disable), prevValue);
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "Tablet " << tabletId << " bootstrapper "
-                << (disable ? "disabled" : "enabled")
-                << " via HTTP on node " << SelfId().NodeId());
+            YDB_LOG_DEBUG("Tablet bootstrapper via HTTP on node",
+                {"tabletId", tabletId},
+                {"#_num_0", (disable ? "disabled" : "enabled")},
+                {"NodeId", SelfId().NodeId()});
         }
 
         auto it = TabletStates.find(tabletId);
@@ -402,8 +412,8 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
 
             ui64 tabletId;
             if (!TryFromString(postParams.Get("tablet_id"), tabletId)) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                    "Invalid tablet ID " << postParams.Get("tablet_id") << " in HTTP request");
+                YDB_LOG_WARN("Invalid tablet ID in HTTP request",
+                    {"#_num_0", postParams.Get("tablet_id")});
                 RenderRedirectPage(str, redirectPath);
                 return true;
             }
@@ -616,8 +626,9 @@ public:
         bool currentlyDisabled = DisableLocalBootstrappers;
 
         if (currentlyDisabled != WasLocalBootstrappersDisabled) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "ICB control DisableLocalBootstrappers changed to " << currentlyDisabled << " on node " << SelfId().NodeId());
+            YDB_LOG_DEBUG("ICB control DisableLocalBootstrappers changed to on node",
+                {"currentlyDisabled", currentlyDisabled},
+                {"NodeId", SelfId().NodeId()});
             ProcessTabletsFromConfig(LastBootstrapConfig);
         } else {
             for (auto& [tabletId, state] : TabletStates) {

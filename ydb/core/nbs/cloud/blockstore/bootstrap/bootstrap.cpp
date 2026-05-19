@@ -26,7 +26,8 @@ NVhost::TServerConfig CreateVhostServerConfig(
     const TStorageConfig& storageConfig)
 {
     NVhost::TServerConfig result;
-    result.ThreadsCount = storageConfig.GetVhostThreadsCount();
+    const auto threadsCount = storageConfig.GetVhostThreadsCount();
+    result.ThreadsCount = threadsCount > 0 ? threadsCount : 1;
     return result;
 }
 

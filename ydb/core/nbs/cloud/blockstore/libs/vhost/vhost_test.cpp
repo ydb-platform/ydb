@@ -170,7 +170,6 @@ public:
 class TTestVhostDevice final
     : public ITestVhostDevice
     , public IVhostDevice
-    , public std::enable_shared_from_this<TTestVhostDevice>
 {
 private:
     const TString SocketPath;

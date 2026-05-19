@@ -145,12 +145,12 @@ struct TAppContext
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// A vhost endpoint exposes a single virtio-blk device over a unix socket.
-// The device is served by N vhost queues (one per VhostQueuesCount). Each
-// queue is processed by a different executor thread, but all queues share
-// the same IDeviceHandler (and therefore the same storage-wrapper chain:
-// aligned device handler, fast-path service, overlapped-requests guard,
-// etc.). The handler is reentrant from multiple threads.
+// The device is served by up to VhostQueuesCount vhost queues, with the
+// actual queue count capped by the executor pool size. Each queue is
+// processed by a different executor thread, but all queues share the same
+// IDeviceHandler (and therefore the same storage-wrapper chain: aligned
+// device handler, fast-path service, overlapped-requests guard, etc.).
+// The handler is reentrant from multiple threads.
 class TEndpoint final: public std::enable_shared_from_this<TEndpoint>
 {
 private:
@@ -417,7 +417,7 @@ using TEndpointPtr = std::shared_ptr<TEndpoint>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TExecutor runs a single vhost request queue in its own thread..
+// TExecutor runs a single vhost request queue in its own thread.
 class TExecutor final: public ISimpleThread
 {
 private:

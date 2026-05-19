@@ -12,21 +12,32 @@ HEALTH_TIMEOUT_SECONDS = 120
 POLL_INTERVAL_SECONDS = 2
 
 
+def _link_or_copy(src: str, dst: str) -> None:
+    # ydbd is multi-GB. Hardlink avoids the copy entirely; fall back to copy
+    # only if src and dst happen to be on different filesystems.
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy(src, dst)
+
+
 def _prepare_context() -> str:
-    ctx = tempfile.mkdtemp(prefix="ydb-docker-test-")
+    # tempdir under output_path() so it lives on the same filesystem as the
+    # ya make artifacts; os.link() then works without EXDEV.
+    ctx = tempfile.mkdtemp(prefix="ydb-docker-test-", dir=yatest.common.output_path())
     docker_src = yatest.common.source_path(".github/docker")
     shutil.copytree(docker_src, os.path.join(ctx, "main/.github/docker"))
     prebuilt = os.path.join(ctx, "prebuilt")
     os.makedirs(prebuilt)
-    shutil.copy(
+    _link_or_copy(
         yatest.common.binary_path("ydb/apps/ydbd/ydbd"),
         os.path.join(prebuilt, "ydbd"),
     )
-    shutil.copy(
+    _link_or_copy(
         yatest.common.binary_path("ydb/apps/ydb/ydb"),
         os.path.join(prebuilt, "ydb"),
     )
-    shutil.copy(
+    _link_or_copy(
         yatest.common.binary_path("ydb/public/tools/local_ydb/local_ydb"),
         os.path.join(prebuilt, "local_ydb"),
     )

@@ -177,6 +177,29 @@ struct TBackupSettings {
     }
 };
 
+// Per-incremental restore orchestrator rate-limit settings. Sentinel -1 means unbounded.
+struct TIncrementalRestoreSettings {
+    TControlWrapper MaxIncrementalRestoreTablesInFlight;
+    // Wall-clock deadlines (seconds). Sentinel -1 disables the deadline.
+    TControlWrapper MaxIncrementalRestoreOverallDurationSeconds;
+    TControlWrapper MaxIncrementalRestoreStageDurationSeconds;
+
+    TIncrementalRestoreSettings()
+        : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
+        , MaxIncrementalRestoreOverallDurationSeconds(86400, -1, 604800)
+        , MaxIncrementalRestoreStageDurationSeconds(86400, -1, 604800)
+    {}
+
+    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreTablesInFlight,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreOverallDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreOverallDurationSeconds);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreStageDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreStageDurationSeconds);
+    }
+};
+
 
 struct TBindingsRoomsChange {
     TChannelsBindings ChannelsBindings;
@@ -199,6 +222,7 @@ struct TTableShardInfo {
     TInstant LastCondErase;
     TInstant NextCondErase;
     mutable TMaybe<TDuration> LastCondEraseLag;
+    ui64 Position = 0;  // index in TTableInfo::Partitions; maintained by TTableInfo, not persisted
 
     // TODO: remove this ctor. It's used for vector.resize() that is not clear.
     TTableShardInfo() = default;
@@ -543,6 +567,11 @@ struct TTableAggregatedStats {
         const TShardIdx& shardIdx,
         const TPartitionStats& newStats
     );
+
+    // Subtracts current-state metrics of each shard from Aggregated
+    // and removes each shard from PartitionStats/UpdatedStats.
+    // Silently skips shards not in PartitionStats.
+    void RemoveShardStats(const TVector<TShardIdx>& keys, TInstant now);
 };
 
 struct TAggregatedStats : public TTableAggregatedStats {
@@ -552,6 +581,143 @@ struct TAggregatedStats : public TTableAggregatedStats {
 };
 
 struct TSubDomainInfo;
+
+// Indexed min-heap keyed by TShardIdx.
+// Pos map enables O(log N) targeted Erase (O(1) position lookup + O(log N) sift).
+class TCondEraseSchedule {
+public:
+    using TEntry = std::pair<TInstant, TShardIdx>;
+
+    void Push(TInstant t, const TShardIdx& shardIdx) {
+        Y_ABORT_UNLESS(!Contains(shardIdx));
+        const ui32 i = Heap.size();
+        Heap.push_back({t, shardIdx});
+        Pos[shardIdx] = i;
+        SiftUp(i);
+    }
+
+    // Batch load: call PushRaw for each entry, then BuildHeap once — O(N) total.
+    void PushRaw(TInstant t, const TShardIdx& shardIdx) {
+        Heap.push_back({t, shardIdx});
+    }
+    void BuildHeap() {
+        std::make_heap(Heap.begin(), Heap.end(), TGreater{});
+        Pos.clear();
+        Pos.reserve(Heap.size());
+        for (ui32 i = 0; i < Heap.size(); ++i) {
+            Pos[Heap[i].second] = i;
+        }
+    }
+
+    void Pop() {
+        Y_ABORT_UNLESS(!Heap.empty());
+        Pos.erase(Heap[0].second);
+        if (Heap.size() > 1) {
+            Heap[0] = std::move(Heap.back());
+            Pos[Heap[0].second] = 0;
+        }
+        Heap.pop_back();
+        if (!Heap.empty()) {
+            SiftDown(0);
+        }
+    }
+
+    // O(log N) targeted removal; no-op if shardIdx not present.
+    void Erase(const TShardIdx& shardIdx) {
+        auto posIt = Pos.find(shardIdx);
+        if (posIt == Pos.end()) {
+            return;
+        }
+        const ui32 i = posIt->second;
+        Pos.erase(posIt);
+        const ui32 last = Heap.size() - 1;
+        if (i < last) {
+            Heap[i] = std::move(Heap[last]);
+            Pos[Heap[i].second] = i;
+            Heap.pop_back();
+            SiftUp(i);
+            SiftDown(i);
+        } else {
+            Heap.pop_back();
+        }
+    }
+
+    bool Empty() const {
+        return Heap.empty();
+    }
+    bool Contains(const TShardIdx& shardIdx) const {
+        return Pos.contains(shardIdx);
+    }
+    void Clear() {
+        Heap.clear(); Pos.clear();
+    }
+    const TEntry& Top() const {
+        Y_ABORT_UNLESS(!Heap.empty());
+        return Heap[0];
+    }
+    const TVector<TEntry>& Container() const {
+        return Heap;
+    }
+
+    bool IsValidHeap() const {
+        if (Pos.size() != Heap.size()) {
+            return false;
+        }
+        for (ui32 i = 0; i < Heap.size(); ++i) {
+            auto it = Pos.find(Heap[i].second);
+            if (it == Pos.end() || it->second != i) {
+                return false;
+            }
+        }
+        return std::is_heap(Heap.begin(), Heap.end(), TGreater{});
+    }
+
+private:
+    struct TGreater {
+        bool operator()(const TEntry& a, const TEntry& b) const {
+            return a.first > b.first;
+        }
+    };
+
+    void SwapAt(ui32 i, ui32 j) {
+        std::swap(Heap[i], Heap[j]);
+        Pos[Heap[i].second] = i;
+        Pos[Heap[j].second] = j;
+    }
+
+    void SiftUp(ui32 i) {
+        while (i > 0) {
+            const ui32 p = (i - 1) >> 1;
+            if (Heap[p].first <= Heap[i].first) {
+                break;
+            }
+            SwapAt(i, p);
+            i = p;
+        }
+    }
+
+    void SiftDown(ui32 i) {
+        const ui32 n = Heap.size();
+        while (true) {
+            ui32 best = i;
+            const ui32 l = 2*i + 1, r = l + 1;
+            if (l < n && Heap[l].first < Heap[best].first) {
+                best = l;
+            }
+            if (r < n && Heap[r].first < Heap[best].first) {
+                best = r;
+            }
+            if (best == i) {
+                break;
+            }
+            SwapAt(i, best);
+            i = best;
+        }
+    }
+
+    TVector<TEntry> Heap;
+    THashMap<TShardIdx, ui32> Pos;
+};
 
 struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     using TPtr = TIntrusivePtr<TTableInfo>;
@@ -736,19 +902,13 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     }
 
 private:
-    using TPartitionsVec = TVector<TTableShardInfo>;
+    using TPartitionsVec = TVector<TTableShardInfo*>;
 
-    struct TSortByNextCondErase {
-        using TIterator = TPartitionsVec::iterator;
-
-        bool operator()(TIterator left, TIterator right) const {
-            return left->NextCondErase > right->NextCondErase;
-        }
-    };
-
-    TPartitionsVec Partitions;
-    THashMap<TShardIdx, ui64> Shard2PartitionIdx; // shardIdx -> index in Partitions
-    TPriorityQueue<TPartitionsVec::iterator, TVector<TPartitionsVec::iterator>, TSortByNextCondErase> CondEraseSchedule;
+    // Stable-address store: THashMap uses separate chaining, so element references
+    // survive insert.  Also serves as the O(1) ShardIdx lookup index.
+    THashMap<TShardIdx, TTableShardInfo> PartitionStore;
+    TPartitionsVec Partitions;  // ordered by EndOfRange; raw ptrs into PartitionStore
+    TCondEraseSchedule CondEraseSchedule;
     THashMap<TShardIdx, TActorId> InFlightCondErase; // shard to pipe client
     mutable TMaybe<ui32> TTLColumnId;
     THashSet<TOperationId> SplitOpsInFlight;
@@ -758,18 +918,8 @@ private:
     TAggregatedStats Stats;
     bool ShardsStatsDetached = false;
 
-    TPartitionsVec::iterator FindPartition(const TShardIdx& shardIdx) {
-        auto it = Shard2PartitionIdx.find(shardIdx);
-        if (it == Shard2PartitionIdx.end()) {
-            return Partitions.end();
-        }
-
-        const auto partitionIdx = it->second;
-        if (partitionIdx >= Partitions.size()) {
-            return Partitions.end();
-        }
-
-        return Partitions.begin() + partitionIdx;
+    TTableShardInfo* FindPartition(const TShardIdx& shardIdx) {
+        return PartitionStore.FindPtr(shardIdx);
     }
 
 public:
@@ -789,11 +939,15 @@ public:
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
         TTableInfo::TPtr copy(new TTableInfo(other));
-        // rebuild conditional erase schedule since it uses iterators
-        copy->CondEraseSchedule.clear();
-        for (ui32 i = 0; i < copy->Partitions.size(); ++i) {
-            copy->CondEraseSchedule.push(copy->Partitions.begin() + i);
+        // Partitions holds raw pointers into PartitionStore; after the value copy
+        // they point into other's store — rebuild them to point into the copy's.
+        copy->Partitions.resize(other.Partitions.size());
+        for (ui64 i = 0; i < other.Partitions.size(); ++i) {
+            copy->Partitions[i] = copy->PartitionStore.FindPtr(other.Partitions[i]->ShardIdx);
+            Y_ABORT_UNLESS(copy->Partitions[i]);
         }
+
+        copy->VerifyConsistency();
 
         return copy;
     }
@@ -900,8 +1054,20 @@ public:
 #endif
 
     void SetPartitioning(TVector<TTableShardInfo>&& newPartitioning);
+    // Rebuild PartitionStore/Partitions from newPartitioning; Stats are already correct
+    // (caller is a DeepCopy of a table with the same physical shard set).
+    void MovePartitioning(TVector<TTableShardInfo>&& newPartitioning);
+    // Rebuild PartitionStore/Partitions and Stats from scratch for all-new shard IDs
+    // (caller is a fresh dst table whose old placeholder shards had zero stats).
+    void CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning);
 
-    const TVector<TTableShardInfo>& GetPartitions() const {
+    // O(N) consistency check across Partitions, PartitionStore, Stats, and CondEraseSchedule.
+    void VerifyConsistency() const;
+
+    // In-place split/merge: replaces the contiguous src shard range with dst shards.
+    void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const TVector<TShardIdx>& removedShards, ui64 splitFirstIdx, TInstant now);
+
+    const TVector<TTableShardInfo*>& GetPartitions() const {
         return Partitions;
     }
 
@@ -942,8 +1108,8 @@ public:
         return SplitOpsInFlight;
     }
 
-    const THashMap<TShardIdx, ui64>& GetShard2PartitionIdx() const {
-        return Shard2PartitionIdx;
+    const THashMap<TShardIdx, TTableShardInfo>& GetPartitionStore() const {
+        return PartitionStore;
     }
 
     ui64 GetExpectedPartitionCount() const {
@@ -1173,11 +1339,27 @@ public:
     }
 
     const TTableShardInfo* GetScheduledCondEraseShard() const {
-        if (CondEraseSchedule.empty()) {
+        if (CondEraseSchedule.Empty()) {
             return nullptr;
         }
+        const TShardIdx& shardIdx = CondEraseSchedule.Top().second;
+        const auto* p = PartitionStore.FindPtr(shardIdx);
+        Y_ABORT_UNLESS(p);
+        return p;
+    }
 
-        return CondEraseSchedule.top();
+    // Schedule any partition not already in the schedule or in-flight.
+    void ScheduleAllCondErase() {
+        for (const auto* p : Partitions) {
+            if (!CondEraseSchedule.Contains(p->ShardIdx) && !InFlightCondErase.contains(p->ShardIdx)) {
+                CondEraseSchedule.Push(p->NextCondErase, p->ShardIdx);
+            }
+        }
+    }
+
+    void ClearCondEraseSchedule() {
+        CondEraseSchedule.Clear();
+        InFlightCondErase.clear();
     }
 
     const auto& GetInFlightCondErase() const {
@@ -1193,26 +1375,26 @@ public:
         Y_ENSURE(shardInfo && shardIdx == shardInfo->ShardIdx);
 
         InFlightCondErase[shardIdx] = TActorId();
-        CondEraseSchedule.pop();
+        CondEraseSchedule.Pop();
     }
 
     void RescheduleCondErase(const TShardIdx& shardIdx) {
         Y_ENSURE(InFlightCondErase.contains(shardIdx));
 
-        auto it = FindPartition(shardIdx);
-        Y_ENSURE(it != Partitions.end());
+        auto* p = FindPartition(shardIdx);
+        Y_ENSURE(p);
 
-        CondEraseSchedule.push(it);
+        CondEraseSchedule.Push(p->NextCondErase, shardIdx);
         InFlightCondErase.erase(shardIdx);
     }
 
     void UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
-        auto it = FindPartition(shardIdx);
-        Y_ENSURE(it != Partitions.end());
+        auto* p = FindPartition(shardIdx);
+        Y_ENSURE(p);
 
-        it->LastCondErase = now;
-        it->NextCondErase = now + next;
-        it->LastCondEraseLag = TDuration::Zero();
+        p->LastCondErase = now;
+        p->NextCondErase = now + next;
+        p->LastCondEraseLag = TDuration::Zero();
     }
 
     bool IsUsingSequence(const TString& name) {
@@ -1981,6 +2163,24 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         PQPartitionsInsideCount -= delta;
     }
 
+    ui64 GetPQGroupsInside() const {
+        return PQGroupsInsideCount;
+    }
+
+    void SetPQGroupsInside(ui64 val) {
+        PQGroupsInsideCount = val;
+    }
+
+    void IncPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(Max<ui64>() - PQGroupsInsideCount >= delta);
+        PQGroupsInsideCount += delta;
+    }
+
+    void DecPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(PQGroupsInsideCount >= delta, "PQGroupsInsideCount: " << PQGroupsInsideCount << " delta: " << delta);
+        PQGroupsInsideCount -= delta;
+    }
+
     ui64 GetPQReservedStorage() const {
         return PQReservedStorage;
     }
@@ -2456,6 +2656,7 @@ private:
     THashSet<TShardIdx> SequenceShards;
 
     ui64 PQPartitionsInsideCount = 0;
+    ui64 PQGroupsInsideCount = 0;
     ui64 PQReservedStorage = 0;
 
     TPathId ResourcesDomainId;
@@ -3610,17 +3811,14 @@ struct TIncrementalRestoreState {
         Running = 1,
         Finalizing = 2,
         Completed = 3,
+        Failed = 4,
     };
 
     EState State = EState::Running;
 
-    // The backup collection path this restore belongs to
-    TPathId BackupCollectionPathId; // used for DB scoping and finalization
-
-    // Global id of the original incremental restore operation
+    TPathId BackupCollectionPathId;
     ui64 OriginalOperationId = 0;
 
-    // Sequential incremental backup processing
     struct TIncrementalBackup {
         TPathId BackupPathId;
         TString BackupPath;
@@ -3639,6 +3837,10 @@ struct TIncrementalRestoreState {
         THashSet<TShardIdx> CompletedShards;
         THashSet<TShardIdx> FailedShards;
 
+        // When true, completion is detected from per-shard reports rather than
+        // Self->Operations.contains(txId) (no schema transaction was proposed).
+        bool RequestsDispatched = false;
+
         TTableOperationState() = default;
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
@@ -3650,20 +3852,125 @@ struct TIncrementalRestoreState {
         bool HasFailures() const {
             return !FailedShards.empty();
         }
+
+        bool HasNonRetriableFailure = false;
+
+        // Idempotent against re-delivery: the first terminal report wins.
+        bool RecordShardResult(TShardIdx shardIdx, bool success, bool retriable = true) {
+            if (CompletedShards.contains(shardIdx) || FailedShards.contains(shardIdx)) {
+                return false;
+            }
+            if (success) {
+                CompletedShards.insert(shardIdx);
+            } else {
+                FailedShards.insert(shardIdx);
+                if (!retriable) {
+                    HasNonRetriableFailure = true;
+                }
+            }
+            return true;
+        }
     };
 
-    TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+    // Pending sub-op dispatched in batches bounded by MaxIncrementalRestoreTablesInFlight.
+    // Both Table and Index sub-ops share the queue so indexes don't fan out unbounded.
+    struct TPendingRestoreOp {
+        enum class EKind { Table, Index };
+        EKind Kind = EKind::Table;
+
+        TString BackupName;
+        TString TablePath;
+
+        TString IndexName;
+        TString TargetTablePath;
+        TString SpecificImplTableName;
+    };
+
+    // Sorted by timestamp.
+    TVector<TIncrementalBackup> IncrementalBackups;
     ui32 CurrentIncrementalIdx = 0;
     bool CurrentIncrementalStarted = false;
 
-    // Operation completion tracking for current incremental backup
+    bool RetryNeeded = false;
+
+    // Two-tier wall-clock deadline anchors. Persisted across reboots so the
+    // budget cannot be defeated by a reboot loop.
+    TInstant RestoreStartedAt;
+    TInstant CurrentStageStartedAt;
+
+    // Two-phase backoff guard: set when a retry is scheduled, cleared when it fires.
+    // Prevents concurrent completion events from double-counting retries.
+    bool RetryScheduled = false;
+    TInstant NextRetryAttemptAt;
+
+    bool NonRetriableFailure = false;
+
+    // Set by TTxInit when retryNeeded=true. The first post-reboot retry-fire
+    // absorbs failed sub-ops as completed rather than re-dispatching (pre-reboot
+    // scan data is authoritative; re-dispatch won't get a fresh reply).
+    bool FreshBootRetryAbsorbPending = false;
+
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
 
-    // Table operation state tracking for DataShard completion
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
-    THashSet<TShardIdx> InvolvedShards;
+    struct TPerShardDispatch {
+        TPathId SrcPathId;
+        TPathId DstPathId;
+        ui64 SchemeShardGeneration = 0;
+        THashMap<TShardIdx, TTabletId> ShardTablets;
+    };
+    THashMap<TOperationId, TPerShardDispatch> ShardDispatchByOp;
+
+    // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingIncrementalRestoreTables.
+    // In-memory only; rebuilt after reboot from backup-collection contents.
+    TDeque<TPendingRestoreOp> PendingTables;
+
+    // ui32 maps to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED);
+    // typed here to avoid pulling Ydb::StatusIds into the header.
+    ui32 FinalStatus = 0;
+    TString FinalIssues;
+
+    // Per-sub-op tracking. Items move from PendingItems to InFlightItems once
+    // TxAllocatorClient supplies a TxId.
+    struct TItem {
+        enum class EKind : ui32 {
+            Table = 0,
+            Index = 1,
+            Finalize = 2,
+        };
+        ui32 ItemSeq = 0;
+        EKind Kind = EKind::Table;
+        TPathId TablePathId;
+        TPathId SrcTablePathId; // 0/0 for Finalize items or unresolved src path
+        // 0 == awaiting allocation.
+        ui64 WaitTxId = 0;
+
+        // Filled in and sent once TxAllocatorClient replies. In-memory only;
+        // rebuilt on reboot via the orchestrator's re-entry path.
+        TAutoPtr<NActors::IEventBase> PendingRequest;
+    };
+
+    ui32 NextItemSeq = 0;
+    TDeque<TItem> PendingItems;
+    THashMap<ui32 /*ItemSeq*/, TItem> InFlightItems;
+    THashMap<ui64 /*WaitTxId*/, ui32 /*ItemSeq*/> WaitTxIdToItemSeq;
+
+    // Returns progress within the current incremental as a fraction [0.0, 1.0]
+    // based on per-shard completion across all table operations
+    float CalcCurrentIncrementalProgress() const {
+        ui32 totalShards = 0;
+        ui32 doneShards = 0;
+        for (const auto& [_, tableOp] : TableOperations) {
+            totalShards += tableOp.ExpectedShards.size();
+            doneShards += tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+        }
+        if (totalShards == 0) {
+            return 0.0f;
+        }
+        return static_cast<float>(doneShards) / totalShards;
+    }
 
     bool AllIncrementsProcessed() const {
         return CurrentIncrementalIdx >= IncrementalBackups.size();
@@ -3678,11 +3985,15 @@ struct TIncrementalRestoreState {
         // If we started processing the current incremental but there are no operations at all,
         // it means no table backups were found in this incremental backup, so consider it complete
         // TODO: probably have to ensure that empty backups are impossible
-        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()
+            && PendingTables.empty() && PendingItems.empty()) {
             return true;
         }
-        // Normal case: all operations have moved from InProgress to Completed
-        return InProgressOperations.empty() && !CompletedOperations.empty();
+        // All in-progress ops completed and no sub-ops still queued or awaiting allocation.
+        return InProgressOperations.empty()
+            && PendingTables.empty()
+            && PendingItems.empty()
+            && !CompletedOperations.empty();
     }
 
     void MarkCurrentIncrementalComplete() {
@@ -3696,11 +4007,17 @@ struct TIncrementalRestoreState {
             CurrentIncrementalIdx++;
             CurrentIncrementalStarted = false;
 
-            // Reset operation tracking for next incremental
             InProgressOperations.clear();
             CompletedOperations.clear();
+            // TableOperations.clear() also clears HasNonRetriableFailure on each table.
             TableOperations.clear();
-            // Note: We don't clear InvolvedShards as it accumulates across all incrementals
+            PendingTables.clear();
+
+            // Stage deadline anchor reset is owned by the caller (HandleAllOperationsComplete)
+            // because it needs ctx.Now() and a paired db.Update.
+            RetryScheduled = false;
+            NextRetryAttemptAt = TInstant::Zero();
+            NonRetriableFailure = false;
         }
     }
 

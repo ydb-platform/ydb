@@ -190,9 +190,8 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
             ? TTxState::CreateParts
             : TTxState::ConfigureParts;
 
-    txState.Shards.reserve(table->GetPartitions().size());
-    for (const auto& shard : table->GetPartitions()) {
-        auto shardIdx = shard.ShardIdx;
+    txState.Shards.reserve(table->GetPartitionStore().size());
+    for (auto& [shardIdx, shard] : table->GetPartitionStore()) {
         TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
 
         auto shardOp = commonShardOp;
@@ -392,9 +391,10 @@ public:
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables[pathId] = table;
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+            table->ScheduleAllCondErase();
 
             const auto now = context.Ctx.Now();
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& [_, shard] : table->GetPartitionStore()) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
@@ -404,8 +404,9 @@ public:
         } else if (!table->IsTTLEnabled() && ttlIt != context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables.erase(ttlIt);
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Sub(1);
+            table->ClearCondEraseSchedule();
 
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& [_, shard] : table->GetPartitionStore()) {
                 if (auto& lag = shard.LastCondEraseLag) {
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                     lag.Clear();

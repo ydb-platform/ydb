@@ -490,11 +490,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         client.CreateUser("/Root", "username", "password");
         client.GrantConnect("username");
 
+        const auto grantStatus = client.Grant("/", "Root", "username", NACLib::EAccessRights::DescribeSchema);
+        UNIT_ASSERT_EQUAL(grantStatus, NMsgBusProxy::MSTATUS_OK);
+
         const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
             { "folder_id", "test_folder_id" },
             { "database_id", "test_database_id" },
         });
         UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
+    void GrantRead(TClient& client) {
+        GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
     }
 
    TKeepAliveHttpClient::THttpCode PostOffsetCommit(TKeepAliveHttpClient& httpClient,
@@ -535,7 +543,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-        GrantConnect(client);
+        GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TKeepAliveHttpClient httpClient("localhost", monPort);

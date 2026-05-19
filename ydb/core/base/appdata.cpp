@@ -34,6 +34,7 @@
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
@@ -42,6 +43,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 namespace NKikimr {
 
@@ -86,6 +88,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
     NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig ClusterDiagnosticsConfig;
+    NKikimrConfig::TLongTxServiceConfig LongTxServiceConfig;
 };
 
 TAppData::TAppData(
@@ -155,6 +158,7 @@ TAppData::TAppData(
     , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
     , RecoveryShardConfig(Impl->RecoveryShardConfig)
     , ClusterDiagnosticsConfig(Impl->ClusterDiagnosticsConfig)
+    , LongTxServiceConfig(Impl->LongTxServiceConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

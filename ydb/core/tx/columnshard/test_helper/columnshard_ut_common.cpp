@@ -4,6 +4,7 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -12,6 +13,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -48,6 +50,26 @@ void TTester::Setup(TTestActorRuntime& runtime) {
 
     app.AddDomain(domain.Release());
     SetupTabletServices(runtime, &app);
+
+    // No LongTxService actor is created in this basic test runtime, so we initialize the
+    // SnapshotRegistryHolder with an empty registry (border = TRowVersion::Max, no active scans).
+    // This makes TRegistryScanSnapshotGuard use purely timing-based MinSnapshotForNewReads.
+    // Short LongTxServiceConfig delays (1+1+1+10 = 13s) ensure cleanup can run within test timeouts.
+    // Tests that specifically test the registry path (ut_scan_snapshot_guard_integration.cpp)
+    // override these settings after calling Setup().
+    {
+        auto builder = CreateImmutableSnapshotRegistryBuilder();
+        // Leave border at the default TRowVersion::Max and add no snapshots → empty registry.
+        auto holder = CreateImmutableSnapshotRegistryHolder();
+        holder->Set(std::move(*builder).Build());
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            auto& appData = runtime.GetAppData(nodeIndex);
+            appData.SnapshotRegistryHolder = holder;
+            appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+            appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
+            appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        }
+    }
 
     runtime.UpdateCurrentTime(TInstant::Now());
 }

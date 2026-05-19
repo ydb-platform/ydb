@@ -165,7 +165,7 @@ message TFeatureFlags {
     optional bool EnablePgSyntax = 139 [default = false];
     optional bool EnableTieringInColumnShard = 140 [default = false];
     optional bool EnableMetadataObjectsOnServerless = 141 [default = true];
-    optional bool EnableOlapCompression = 142 [default = false];
+    optional bool EnableOlapCompression = 142 [default = true];
     optional bool EnableExternalDataSourcesOnServerless = 143 [default = true];
     optional bool EnableSparsedColumns = 144 [default = false];
     optional bool EnableParameterizedDecimal = 145 [default = true];
@@ -237,7 +237,7 @@ message TFeatureFlags {
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
-    optional bool EnableOlapRejectProbability = 213 [default = false];
+    optional bool EnableOlapRejectProbability = 213 [default = true];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
     optional bool EnableColumnTablesBackup = 216 [default = false];
@@ -250,14 +250,14 @@ message TFeatureFlags {
     optional bool EnableCmsLocksPriority = 223 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = false]; // works only with EnableResourcePools = true
     optional bool EnableTruncateTable = 225 [default = false];
-    optional bool EnableTopicsSqlIoOperations = 226 [default = false];
+    optional bool EnableTopicsSqlIoOperations = 226 [default = true];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
     optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
     optional bool EnableForcedCompactions = 231 [default = false];
-    optional bool EnableLocalBloomFilterIndex = 232 [default = false];
-    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
+    optional bool EnableLocalBloomFilterIndex = 232 [default = true];
+    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableSkipConflictCheckForTopicsInTransaction = 243 [default = false];
@@ -281,8 +281,12 @@ message TFeatureFlags {
     optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
     optional bool EnableOltpSinkForTopicOnlyTx = 251 [default = false];
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
+    optional bool EnableSnapshotsLocking = 254 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
-    optional bool EnableLocalMinMaxIndex = 261 [default = false];
+    // Skip persisting partition rows that are not affected by a split/merge operation.
+    optional bool EnableSplitMergePartialPersistence = 261 [default = true];
+    optional bool EnableLocalMinMaxIndex = 262 [default = false];
+    optional bool DisableOnlineRO = 263 [default = false];
 }

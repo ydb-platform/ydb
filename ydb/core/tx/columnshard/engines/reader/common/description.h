@@ -8,8 +8,9 @@
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
-
-namespace NLWTrace { class TOrbit; }
+namespace NLWTrace {
+class TOrbit;
+}
 
 namespace NKikimr::NOlap::NReader {
 
@@ -35,7 +36,6 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
 
 public:
-    // Table
     ui64 TxId = 0;
     ui64 ScanId = 0;
     std::optional<ui64> LockId;

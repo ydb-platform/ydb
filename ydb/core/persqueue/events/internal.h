@@ -228,6 +228,9 @@ struct TEvPQ {
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
         EvMLPUpdateExternalLockedMessageGroupsId,
+        EvMLPGetRuntimeAttributesRequest,
+        EvMLPGetRuntimeAttributesResponse,
+        EvRewindCommitResult,
         EvEnd,
     };
 
@@ -1783,6 +1786,15 @@ struct TEvPQ {
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
         }
+    };
+
+    struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
+        explicit TEvRewindCommitResult(NYdb::TStatus status)
+            : Status(std::move(status))
+        {
+        }
+
+        NYdb::TStatus Status;
     };
 };
 

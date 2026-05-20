@@ -211,7 +211,7 @@ private:
         auto time = ev->Get()->Time;
         auto sortedParts = ev->Get()->Parts;
 
-        auto cmpToSort = [](const std::pair<TString, TString>& lhs, const std::pair<TString, TString>& rhs){
+        auto cmpToSort = [](const std::pair<TString, TString>& lhs, const std::pair<TString, TString>& rhs) {
             ui32 lhsOrder, rhsOrder;
 
             {

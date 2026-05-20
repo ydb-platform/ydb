@@ -27,13 +27,17 @@ class YDBWrapper:
     when exiting the ``with`` block.
     """
 
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = True):
-        # If use_local_config=True: use only local config file (ignore YDB_QA_CONFIG env)
-        # If use_local_config=False: Priority: YDB_QA_CONFIG env > config file (JSON)
+    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = None):
+        # use_local_config=None (default): YDB_QA_CONFIG env if set, else local config file
+        # use_local_config=True: only local config file (ignore YDB_QA_CONFIG env)
+        # use_local_config=False: YDB_QA_CONFIG env > config file (JSON)
         # By default logs go to stdout (as before)
         # If silent=True, logs go to stderr (for scripts called from other scripts)
         self._log_stream = sys.stderr if silent else sys.stdout
-        
+
+        if use_local_config is None:
+            use_local_config = not os.environ.get("YDB_QA_CONFIG")
+
         if use_local_config:
             # Force use local config file, ignore environment variable
             if config_path is None:

@@ -840,14 +840,12 @@ private:
 
     void HandlePrefill(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TXLOG_DEBUG("Handling TEvNodeDisconnected for NodeId: " << ev->Get()->NodeId);
-        AFL_ENSURE(ev->Get()->NodeId == PrefillTargetActor.NodeId());
         TXLOG_DEBUG("Prefill target disconnected, proceeding without prefill");
         ProceedToPublish();
     }
 
     void HandlePrefill(TEvents::TEvUndelivered::TPtr& ev) {
         TXLOG_DEBUG("Handling TEvents::TEvUndelivered from " << ev->Sender);
-        AFL_ENSURE(ev->Sender.NodeId() == PrefillTargetActor.NodeId());
         TXLOG_DEBUG("Prefill request undelivered, proceeding without prefill");
         ProceedToPublish();
     }

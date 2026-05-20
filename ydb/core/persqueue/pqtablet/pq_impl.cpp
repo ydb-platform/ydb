@@ -1877,7 +1877,7 @@ void TPersQueue::FillBatchInfo(
     if (cmd.HasTotalBatchMessages()) {
         msg.MessagesInBatch = static_cast<ui64>(cmd.GetTotalBatchMessages());
     }
-    if (cmd.GetPartNo() == 0) {
+    if (cmd.GetPartNo() > 0) {
         return;
     }
 

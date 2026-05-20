@@ -4,6 +4,33 @@
 
 using namespace NKikimr;
 
+namespace {
+
+struct TAllowedSidsConfig {
+    TVector<TString> DatabaseAllowedSIDs = {"database"};
+    TVector<TString> ViewerAllowedSIDs = {"viewer"};
+    TVector<TString> MonitoringAllowedSIDs = {"monitoring"};
+    TVector<TString> AdministrationAllowedSIDs = {"admin"};
+
+    const TVector<TString>& GetDatabaseAllowedSIDs() const {
+        return DatabaseAllowedSIDs;
+    }
+
+    const TVector<TString>& GetViewerAllowedSIDs() const {
+        return ViewerAllowedSIDs;
+    }
+
+    const TVector<TString>& GetMonitoringAllowedSIDs() const {
+        return MonitoringAllowedSIDs;
+    }
+
+    const TVector<TString>& GetAdministrationAllowedSIDs() const {
+        return AdministrationAllowedSIDs;
+    }
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(AuthTokenAllowed) {
 
     const TVector<TString> EmptyList;
@@ -78,6 +105,48 @@ Y_UNIT_TEST_SUITE(AuthTokenAllowed) {
         NACLib::TUserToken token({ .UserSID = "no-match-user", .GroupSIDs = {"no-match-group"} });
         UNIT_ASSERT_EQUAL(IsTokenAllowed(&token, {"group1", "group2", "user1", "user2"}), false);
         UNIT_ASSERT_EQUAL(IsTokenAllowed(token.SerializeAsString(), {"group1", "group2", "user1", "user2"}), false);
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(AuthStrictDatabaseOnly) {
+
+    const TAllowedSidsConfig Config;
+
+    Y_UNIT_TEST(PassOnDatabaseAllowedSidOnly) {
+        NACLib::TUserToken token({ .UserSID = "database" });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), true);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), true);
+    }
+
+    Y_UNIT_TEST(PassOnDatabaseAllowedGroupSidOnly) {
+        NACLib::TUserToken token({ .UserSID = "user", .GroupSIDs = {"database"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), true);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), true);
+    }
+
+    Y_UNIT_TEST(FailWithoutDatabaseAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "user" });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
+    }
+
+    Y_UNIT_TEST(FailOnViewerAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"viewer"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
+    }
+
+    Y_UNIT_TEST(FailOnMonitoringAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"monitoring"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
+    }
+
+    Y_UNIT_TEST(FailOnAdministrationAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"admin"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
     }
 
 }

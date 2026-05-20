@@ -55,8 +55,7 @@ struct TEndpointAccessSettings {
 
 struct TEndpointAccessRule {
     TStringBuf Path;
-    EViewerEndpointAccessType AccessType = EViewerEndpointAccessType::Database;
-    bool RequireDatabaseParam = false;
+    TEndpointAccessSettings Settings;
 };
 
 }
@@ -224,10 +223,7 @@ public:
             }
 
             auto applyAccessRule = [this](const TEndpointAccessRule& rule) {
-                EndpointAccess[TString(rule.Path)] = TEndpointAccessSettings{
-                    .AccessType = rule.AccessType,
-                    .RequireDatabaseParam = rule.RequireDatabaseParam,
-                };
+                EndpointAccess[TString(rule.Path)] = rule.Settings;
             };
 
             auto applyAccessRules = [&](std::initializer_list<TEndpointAccessRule> rules) {
@@ -239,73 +235,73 @@ public:
             if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
                 applyAccessRules({
                     // Viewer-level endpoints.
-                    {"/viewer/hiveinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/hiveinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/hivestats", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/hivestats", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/counters", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/counters", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/graph", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/graph", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/tenants", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/tenants", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/storage", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/storage", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/peers", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/peers", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/nodeinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/nodeinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/pdiskinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/pdiskinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/vdiskinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/vdiskinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/bsgroupinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/bsgroupinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/multipart_counter", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/multipart_counter", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/simple_counter", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/simple_counter", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/sse_counter", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/sse_counter", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/feature_flags", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/feature_flags", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/groups", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/groups", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/render", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/render", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/cluster", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/cluster", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/sysinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/config", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/config", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/sysinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/compute", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/compute", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/netinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/netinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/topicinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/topicinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/storage_usage", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/storage_usage", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/pqconsumerinfo", EViewerEndpointAccessType::Viewer},
-                    {"/viewer/json/pqconsumerinfo", EViewerEndpointAccessType::Viewer},
+                    {"/viewer/hiveinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/hiveinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/hivestats", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/hivestats", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/counters", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/counters", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/graph", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/graph", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/tenants", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/tenants", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/storage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/storage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/peers", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/peers", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/nodeinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/nodeinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/pdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/pdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/vdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/vdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/bsgroupinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/bsgroupinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/multipart_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/multipart_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/simple_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/simple_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/sse_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/sse_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/feature_flags", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/feature_flags", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/groups", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/groups", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/render", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/cluster", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/cluster", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/config", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/config", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/compute", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/compute", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/netinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/netinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/topicinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/topicinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/storage_usage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/storage_usage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
 
                     // Administration-level endpoints.
-                    {"/viewer/bscontrollerinfo", EViewerEndpointAccessType::Administration},
-                    {"/viewer/json/bscontrollerinfo", EViewerEndpointAccessType::Administration},
-                    {"/viewer/topic_data", EViewerEndpointAccessType::Administration},
-                    {"/viewer/json/topic_data", EViewerEndpointAccessType::Administration},
+                    {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
+                    {"/viewer/json/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
+                    {"/viewer/topic_data", {EViewerEndpointAccessType::Administration}},
+                    {"/viewer/json/topic_data", {EViewerEndpointAccessType::Administration}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
-                    {"/viewer/autocomplete", EViewerEndpointAccessType::Database, true},
-                    {"/viewer/json/autocomplete", EViewerEndpointAccessType::Database, true},
-                    {"/viewer/nodelist", EViewerEndpointAccessType::Database, true},
-                    {"/viewer/json/nodelist", EViewerEndpointAccessType::Database, true},
-                    {"/viewer/nodes", EViewerEndpointAccessType::Database, true},
-                    {"/viewer/json/nodes", EViewerEndpointAccessType::Database, true},
-                    {"/viewer/tabletinfo", EViewerEndpointAccessType::Database, true},
-                    {"/viewer/json/tabletinfo", EViewerEndpointAccessType::Database, true},
-                    {"/storage/groups", EViewerEndpointAccessType::Database, true},
+                    {"/viewer/autocomplete", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/autocomplete", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/nodelist", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/nodelist", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/nodes", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/nodes", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/tabletinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/tabletinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/storage/groups", {EViewerEndpointAccessType::Database, true}},
                 });
             }
 
@@ -330,10 +326,7 @@ public:
             addV2JsonAlias("/viewer/v2/json/nodeinfo", "/viewer/nodeinfo");
 
             auto resolveAllowedSids = [&](const TString& path) -> const TVector<TString>& {
-                const auto itAccess = EndpointAccess.find(path);
-                auto accessType = itAccess != EndpointAccess.end()
-                    ? itAccess->second.AccessType
-                    : EViewerEndpointAccessType::Database;
+                auto accessType = GetEndpointAccessType(path, EViewerEndpointAccessType::Database);
                 switch (accessType) {
                     case EViewerEndpointAccessType::Administration:
                         return administrationAllowedSIDs;
@@ -596,11 +589,15 @@ private:
     TString CurrentWorkerName;
     NProtobufJson::TProto2JsonConfig Proto2JsonConfig;
 
-    bool IsDatabaseAccessEndpoint(const TString& path) const {
+    EViewerEndpointAccessType GetEndpointAccessType(const TString& path, EViewerEndpointAccessType defaultAccessType) const {
         const auto itAccess = EndpointAccess.find(path);
-        auto accessType = itAccess != EndpointAccess.end()
+        return itAccess != EndpointAccess.end()
             ? itAccess->second.AccessType
-            : EViewerEndpointAccessType::Database;
+            : defaultAccessType;
+    }
+
+    bool IsDatabaseAccessEndpoint(const TString& path) const {
+        auto accessType = GetEndpointAccessType(path, EViewerEndpointAccessType::Database);
         return accessType == EViewerEndpointAccessType::Database;
     }
 
@@ -630,23 +627,6 @@ private:
         }
     }
 
-    bool IsStrictDatabaseOnlyToken(const TString& serializedToken) const {
-        const auto& sec = AppData()->DomainsConfig.GetSecurityConfig();
-        if (!IsTokenAllowed(serializedToken, sec.GetDatabaseAllowedSIDs())) {
-            return false;
-        }
-        if (IsTokenAllowed(serializedToken, sec.GetViewerAllowedSIDs())) {
-            return false;
-        }
-        if (IsTokenAllowed(serializedToken, sec.GetMonitoringAllowedSIDs())) {
-            return false;
-        }
-        if (IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs())) {
-            return false;
-        }
-        return true;
-    }
-
     enum class EDatabaseScopedRequestValidationResult {
         Ok,
         DatabaseRequired,
@@ -664,7 +644,7 @@ private:
         if (!IsDatabaseAccessEndpoint(path)) {
             return EDatabaseScopedRequestValidationResult::Ok;
         }
-        if (!IsStrictDatabaseOnlyToken(serializedToken)) {
+        if (!IsStrictDatabaseOnlyToken(serializedToken, AppData()->DomainsConfig.GetSecurityConfig())) {
             return EDatabaseScopedRequestValidationResult::Ok;
         }
         const auto itAccess = EndpointAccess.find(path);

@@ -2104,6 +2104,50 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ensureIndexNonEmpty();
         }
     }
+
+    Y_UNIT_TEST(ShowCreateTable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetEnableShowCreate(true));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Text Json,
+                    Data JsonDocument,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx_2 GLOBAL USING json ON (Data);
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/TestTable`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(!result.GetResultSets().empty());
+
+            auto yson = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_STRING_CONTAINS_C(yson, "INDEX `json_idx` GLOBAL USING json ON (`Text`)", yson);
+            UNIT_ASSERT_STRING_CONTAINS_C(yson, "INDEX `json_idx_2` GLOBAL USING json ON (`Data`)", yson);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {

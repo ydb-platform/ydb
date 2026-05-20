@@ -1551,6 +1551,10 @@ TTableClient::TTableClient(const TDriver& driver, const TClientSettings& setting
     Impl_->InitStopper();
 }
 
+TTableClient::TTableClient(std::shared_ptr<TImpl> impl)
+    : Impl_(std::move(impl))
+{}
+
 TAsyncCreateSessionResult TTableClient::CreateSession(const TCreateSessionSettings& settings) {
     // Returns standalone session
     auto rpcSettings = TRpcRequestSettings::Make(settings);
@@ -1762,33 +1766,69 @@ TSession::TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<
     , SessionImpl_(sessionid)
 {}
 
+class TSessionUnaryRetryHelper {
+public:
+    template<typename TAsyncResult, typename TOperation, typename TErrorFactory = std::nullptr_t>
+    static TAsyncResult Run(
+        const std::shared_ptr<TTableClient::TImpl>& clientImpl,
+        const TSession& session,
+        TOperation&& operation,
+        const TRetryOperationSettings& retrySettings,
+        TErrorFactory errorResultFactory = nullptr)
+    {
+        TTableClient client(clientImpl);
+        using TRetryCtx = NRetry::Async::TRetryContext<TTableClient, TAsyncResult>;
+        using TRetryWithSession = NRetry::Async::TRetryWithSession<TTableClient, std::decay_t<TOperation>, TAsyncResult>;
+
+        if constexpr (std::is_same_v<TErrorFactory, std::nullptr_t>) {
+            return typename TRetryCtx::TPtr(new TRetryWithSession(
+                client, session, std::forward<TOperation>(operation), retrySettings))->Execute();
+        } else {
+            return typename TRetryCtx::TPtr(new TRetryWithSession(
+                client, session, std::forward<TOperation>(operation), retrySettings,
+                std::move(errorResultFactory)))->Execute();
+        }
+    }
+};
+
 TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescription&& tableDesc,
-        const TCreateTableSettings& settings)
+        const TCreateTableSettings& settings,
+        const TRetryOperationSettings& retrySettings)
 {
-    auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .TryUpdateDeadline(GetPropagatedDeadline());
+    return TSessionUnaryRetryHelper::Run<TAsyncStatus>(Client_, *this,
+        [path, tableDesc = std::move(tableDesc), settings](TSession session) {
+            auto rpcSettings = TRpcRequestSettings::Make(settings)
+                .TryUpdateDeadline(session.GetPropagatedDeadline());
 
-    auto request = MakeOperationRequest<Ydb::Table::CreateTableRequest>(settings);
-    request.set_session_id(TStringType{SessionImpl_->GetId()});
-    request.set_path(TStringType{path});
+            auto request = MakeOperationRequest<Ydb::Table::CreateTableRequest>(settings);
+            request.set_session_id(TStringType{session.SessionImpl_->GetId()});
+            request.set_path(TStringType{path});
 
-    tableDesc.SerializeTo(request);
+            tableDesc.SerializeTo(request);
 
-    ConvertCreateTableSettingsToProto(settings, request.mutable_profile());
+            ConvertCreateTableSettingsToProto(settings, request.mutable_profile());
 
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->CreateTable(std::move(request), rpcSettings),
-        false,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->CreateTable(std::move(request), rpcSettings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
-TFuture<TStatus> TSession::DropTable(const std::string& path, const TDropTableSettings& settings) {
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->DropTable(*this, path, settings),
-        false,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+TFuture<TStatus> TSession::DropTable(const std::string& path, const TDropTableSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncStatus>(Client_, *this,
+        [path, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->DropTable(session, path, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
 static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
@@ -1898,72 +1938,155 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
     return request;
 }
 
-TAsyncStatus TSession::AlterTable(const std::string& path, const TAlterTableSettings& settings) {
-    auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .TryUpdateDeadline(GetPropagatedDeadline());
+TAsyncStatus TSession::AlterTable(const std::string& path, const TAlterTableSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncStatus>(Client_, *this,
+        [path, settings](TSession session) {
+            auto rpcSettings = TRpcRequestSettings::Make(settings)
+                .TryUpdateDeadline(session.GetPropagatedDeadline());
 
-    auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
+            auto request = MakeAlterTableProtoRequest(path, settings, session.SessionImpl_->GetId());
 
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->AlterTable(std::move(request), rpcSettings),
-        false,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->AlterTable(std::move(request), rpcSettings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
-TAsyncOperation TSession::AlterTableLong(const std::string& path, const TAlterTableSettings& settings) {
-    auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .TryUpdateDeadline(GetPropagatedDeadline());
+TAsyncOperation TSession::AlterTableLong(const std::string& path, const TAlterTableSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncOperation>(Client_, *this,
+        [path, settings](TSession session) {
+            auto rpcSettings = TRpcRequestSettings::Make(settings)
+                .TryUpdateDeadline(session.GetPropagatedDeadline());
 
-    auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
+            auto request = MakeAlterTableProtoRequest(path, settings, session.SessionImpl_->GetId());
 
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->AlterTableLong(std::move(request), rpcSettings),
-        false,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->AlterTableLong(std::move(request), rpcSettings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
-TAsyncStatus TSession::RenameTables(const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings) {
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->RenameTables(*this, renameItems, settings),
-        false,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+TAsyncStatus TSession::RenameTables(const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncStatus>(Client_, *this,
+        [renameItems, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->RenameTables(session, renameItems, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
-TAsyncStatus TSession::CopyTables(const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings) {
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->CopyTables(*this, copyItems, settings),
-        false,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+TAsyncStatus TSession::CopyTables(const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncStatus>(Client_, *this,
+        [copyItems, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->CopyTables(session, copyItems, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
-TFuture<TStatus> TSession::CopyTable(const std::string& src, const std::string& dst, const TCopyTableSettings& settings) {
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->CopyTable(*this, src, dst, settings),
-        false,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+TFuture<TStatus> TSession::CopyTable(const std::string& src, const std::string& dst, const TCopyTableSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncStatus>(Client_, *this,
+        [src, dst, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->CopyTable(session, src, dst, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
-TAsyncDescribeTableResult TSession::DescribeTable(const std::string& path, const TDescribeTableSettings& settings) {
-    return Client_->DescribeTable(*this, path, settings);
+TAsyncDescribeTableResult TSession::DescribeTable(const std::string& path, const TDescribeTableSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncDescribeTableResult>(Client_, *this,
+        [path, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->DescribeTable(session, path, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings,
+        [path, settings](TStatus status) {
+            return TDescribeTableResult(std::move(status), {}, settings);
+        });
 }
 
-TAsyncDescribeExternalDataSourceResult TSession::DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings) {
-    return Client_->DescribeExternalDataSource(*this, path, settings);
+TAsyncDescribeExternalDataSourceResult TSession::DescribeExternalDataSource(const std::string& path,
+    const TDescribeExternalDataSourceSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncDescribeExternalDataSourceResult>(Client_, *this,
+        [path, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->DescribeExternalDataSource(session, path, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings,
+        [](TStatus status) {
+            return TDescribeExternalDataSourceResult(std::move(status), {});
+        });
 }
 
-TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
-    return Client_->DescribeExternalTable(*this, path, settings);
+TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::string& path,
+    const TDescribeExternalTableSettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncDescribeExternalTableResult>(Client_, *this,
+        [path, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->DescribeExternalTable(session, path, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings,
+        [](TStatus status) {
+            return TDescribeExternalTableResult(std::move(status), {});
+        });
 }
 
 TAsyncDescribeSystemViewResult TSession::DescribeSystemView(const std::string& path,
-        const TDescribeSystemViewSettings& settings)
+    const TDescribeSystemViewSettings& settings,
+    const TRetryOperationSettings& retrySettings)
 {
-    return Client_->DescribeSystemView(*this, path, settings);
+    return TSessionUnaryRetryHelper::Run<TAsyncDescribeSystemViewResult>(Client_, *this,
+        [path, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->DescribeSystemView(session, path, settings),
+                false,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings,
+        [](TStatus status) {
+            return TDescribeSystemViewResult(std::move(status), {});
+        });
 }
 
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
@@ -2000,7 +2123,9 @@ TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const
     }
 }
 
-TAsyncPrepareQueryResult TSession::PrepareDataQuery(const std::string& query, const TPrepareDataQuerySettings& settings) {
+TAsyncPrepareQueryResult TSession::PrepareDataQuery(const std::string& query, const TPrepareDataQuerySettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
     auto maybeQuery = SessionImpl_->GetQueryFromCache(query, Client_->Settings_.AllowRequestMigration_);
     if (maybeQuery) {
         TStatus status(EStatus::SUCCESS, NYdb::NIssue::TIssues());
@@ -2011,19 +2136,32 @@ TAsyncPrepareQueryResult TSession::PrepareDataQuery(const std::string& query, co
 
     Client_->CacheMissCounter.Inc();
 
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->PrepareDataQuery(*this, query, settings),
-        true,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+    return TSessionUnaryRetryHelper::Run<TAsyncPrepareQueryResult>(Client_, *this,
+        [query, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->PrepareDataQuery(session, query, settings),
+                true,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings,
+        [query, session = *this](TStatus status) {
+            return TPrepareQueryResult(std::move(status), TDataQuery(session, query, ""), false);
+        });
 }
 
-TAsyncStatus TSession::ExecuteSchemeQuery(const std::string& query, const TExecSchemeQuerySettings& settings) {
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->ExecuteSchemeQuery(*this, query, settings),
-        true,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+TAsyncStatus TSession::ExecuteSchemeQuery(const std::string& query, const TExecSchemeQuerySettings& settings,
+    const TRetryOperationSettings& retrySettings)
+{
+    return TSessionUnaryRetryHelper::Run<TAsyncStatus>(Client_, *this,
+        [query, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->ExecuteSchemeQuery(session, query, settings),
+                true,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings);
 }
 
 TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSettings,
@@ -2037,13 +2175,21 @@ TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSet
 }
 
 TAsyncExplainDataQueryResult TSession::ExplainDataQuery(const std::string& query,
-    const TExplainDataQuerySettings& settings)
+    const TExplainDataQuerySettings& settings,
+    const TRetryOperationSettings& retrySettings)
 {
-    return InjectSessionStatusInterception(
-        SessionImpl_,
-        Client_->ExplainDataQuery(*this, query, settings),
-        true,
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+    return TSessionUnaryRetryHelper::Run<TAsyncExplainDataQueryResult>(Client_, *this,
+        [query, settings](TSession session) {
+            return InjectSessionStatusInterception(
+                session.SessionImpl_,
+                session.Client_->ExplainDataQuery(session, query, settings),
+                true,
+                GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_));
+        },
+        retrySettings,
+        [](TStatus status) {
+            return TExplainQueryResult(std::move(status), "", "", "");
+        });
 }
 
 TAsyncTablePartIterator TSession::ReadTable(const std::string& path,

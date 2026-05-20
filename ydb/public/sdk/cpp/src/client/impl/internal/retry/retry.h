@@ -14,7 +14,6 @@
 
 #include <functional>
 #include <memory>
-
 namespace NYdb::inline Dev {
 class IClientImplCommon;
 }

@@ -1554,12 +1554,22 @@ enum class EDataFormat {
     CSV = 2,
 };
 
+class TSessionUnaryRetryHelper;
+
 class TTableClient {
     friend class TSession;
+    friend class TSessionUnaryRetryHelper;
     friend class TTransaction;
     friend class TSessionPool;
     friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncOperation>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncDescribeTableResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncDescribeExternalDataSourceResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncDescribeExternalTableResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncDescribeSystemViewResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncPrepareQueryResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncExplainDataQueryResult>;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
@@ -1651,6 +1661,9 @@ public:
 
 private:
     class TImpl;
+
+    explicit TTableClient(std::shared_ptr<TImpl> impl);
+
     std::shared_ptr<TImpl> Impl_;
 };
 
@@ -2247,44 +2260,57 @@ public:
     //! The following methods perform corresponding calls.
     //! Results are NThreading::TFuture<T> where T is corresponding result.
     TAsyncStatus CreateTable(const std::string& path, TTableDescription&& tableDesc,
-        const TCreateTableSettings& settings = TCreateTableSettings());
+        const TCreateTableSettings& settings = TCreateTableSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
-    TAsyncStatus DropTable(const std::string& path, const TDropTableSettings& settings = TDropTableSettings());
+    TAsyncStatus DropTable(const std::string& path, const TDropTableSettings& settings = TDropTableSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
-    TAsyncStatus AlterTable(const std::string& path, const TAlterTableSettings& settings = TAlterTableSettings());
+    TAsyncStatus AlterTable(const std::string& path, const TAlterTableSettings& settings = TAlterTableSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     // Same as AlterTable but may return operation in case of long running
-    TAsyncOperation AlterTableLong(const std::string& path, const TAlterTableSettings& settings = TAlterTableSettings());
+    TAsyncOperation AlterTableLong(const std::string& path, const TAlterTableSettings& settings = TAlterTableSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncStatus CopyTable(const std::string& src, const std::string& dst,
-        const TCopyTableSettings& settings = TCopyTableSettings());
+        const TCopyTableSettings& settings = TCopyTableSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncStatus CopyTables(const std::vector<TCopyItem>& copyItems,
-        const TCopyTablesSettings& settings = TCopyTablesSettings());
+        const TCopyTablesSettings& settings = TCopyTablesSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncStatus RenameTables(const std::vector<TRenameItem>& renameItems,
-        const TRenameTablesSettings& settings = TRenameTablesSettings());
+        const TRenameTablesSettings& settings = TRenameTablesSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncDescribeTableResult DescribeTable(const std::string& path,
-        const TDescribeTableSettings& settings = TDescribeTableSettings());
+        const TDescribeTableSettings& settings = TDescribeTableSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path,
-        const TDescribeExternalDataSourceSettings& settings = {});
+        const TDescribeExternalDataSourceSettings& settings = {},
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path,
-        const TDescribeExternalTableSettings& settings = {});
+        const TDescribeExternalTableSettings& settings = {},
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncDescribeSystemViewResult DescribeSystemView(const std::string& path,
-        const TDescribeSystemViewSettings& settings = {});
+        const TDescribeSystemViewSettings& settings = {},
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings = TTxSettings(),
         const TBeginTxSettings& settings = TBeginTxSettings());
 
     TAsyncExplainDataQueryResult ExplainDataQuery(const std::string& query,
-        const TExplainDataQuerySettings& settings = TExplainDataQuerySettings());
+        const TExplainDataQuerySettings& settings = TExplainDataQuerySettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncPrepareQueryResult PrepareDataQuery(const std::string& query,
-        const TPrepareDataQuerySettings& settings = TPrepareDataQuerySettings());
+        const TPrepareDataQuerySettings& settings = TPrepareDataQuerySettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncDataQueryResult ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
         const TExecDataQuerySettings& settings = TExecDataQuerySettings());
@@ -2296,7 +2322,8 @@ public:
         TParams&& params, const TExecDataQuerySettings& settings = TExecDataQuerySettings());
 
     TAsyncStatus ExecuteSchemeQuery(const std::string& query,
-        const TExecSchemeQuerySettings& settings = TExecSchemeQuerySettings());
+        const TExecSchemeQuerySettings& settings = TExecSchemeQuerySettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncTablePartIterator ReadTable(const std::string& path,
         const TReadTableSettings& settings = TReadTableSettings());

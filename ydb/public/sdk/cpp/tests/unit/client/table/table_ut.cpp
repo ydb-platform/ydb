@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/common/network.h>
@@ -92,6 +93,31 @@ namespace {
 
         std::optional<Ydb::Table::CreateTableRequest> LastCreateTableRequest;
         std::optional<Ydb::Table::AlterTableRequest> LastAlterTableRequest;
+
+        std::atomic<int> DescribeTableCallCount{0};
+        int DescribeTableFailCount = 0;
+
+        grpc::Status DescribeTable(
+            grpc::ServerContext* /* context */,
+            const Ydb::Table::DescribeTableRequest* request,
+            Ydb::Table::DescribeTableResponse* response
+        ) override {
+            Y_UNUSED(request);
+            DescribeTableCallCount.fetch_add(1);
+
+            auto op = response->mutable_operation();
+            op->set_ready(true);
+
+            if (DescribeTableCallCount.load() <= DescribeTableFailCount) {
+                op->set_status(Ydb::StatusIds::UNAVAILABLE);
+                return grpc::Status::OK;
+            }
+
+            op->set_status(Ydb::StatusIds::SUCCESS);
+            Ydb::Table::DescribeTableResult result;
+            op->mutable_result()->PackFrom(result);
+            return grpc::Status::OK;
+        }
     };
 
     /**
@@ -456,4 +482,68 @@ TEST(TableTest, AlterTableSetMetricsSettings) {
         NTable::TMetricsSettings::EMetricsLevel::Partition,
         Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
     );
+}
+
+TEST(TableTest, DescribeTableRetriesOnUnavailable) {
+    TMockTableService tableService;
+    tableService.DescribeTableFailCount = 1;
+
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    auto retrySettings = NRetry::TRetryOperationSettings()
+        .MaxRetries(3)
+        .FastBackoffSettings(NRetry::TBackoffSettings()
+            .SlotDuration(TDuration::MilliSeconds(1))
+            .Ceiling(1));
+
+    auto future = tableSession->DescribeTable(
+        "/Root/My/DB/test_table",
+        NTable::TDescribeTableSettings(),
+        retrySettings);
+
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+    auto result = future.ExtractValueSync();
+    ASSERT_TRUE(result.IsSuccess());
+    EXPECT_GE(tableService.DescribeTableCallCount.load(), 2);
+}
+
+TEST(TableTest, DescribeTableNoRetryWhenMaxRetriesZero) {
+    TMockTableService tableService;
+    tableService.DescribeTableFailCount = 10;
+
+    std::unique_ptr<grpc::Server> grpcServer;
+    std::unique_ptr<TDriver> driver;
+    std::unique_ptr<NTable::TTableClient> tableClient;
+    std::unique_ptr<NTable::TSession> tableSession;
+
+    StartServerWithTableService(
+        tableService,
+        grpcServer,
+        driver,
+        tableClient,
+        tableSession
+    );
+
+    auto retrySettings = NRetry::TRetryOperationSettings().MaxRetries(0);
+
+    auto future = tableSession->DescribeTable(
+        "/Root/My/DB/test_table",
+        NTable::TDescribeTableSettings(),
+        retrySettings);
+
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
+    auto result = future.ExtractValueSync();
+    ASSERT_FALSE(result.IsSuccess());
+    EXPECT_EQ(tableService.DescribeTableCallCount.load(), 1);
 }

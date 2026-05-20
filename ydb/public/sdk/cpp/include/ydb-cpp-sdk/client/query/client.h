@@ -68,6 +68,8 @@ class TQueryClient {
     friend class TSession;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
     friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, NThreading::TFuture<TScriptExecutionOperation>>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncFetchScriptResultsResult>;
     friend class NRetry::Sync::TRetryContext<TQueryClient, TStatus>;
 
 public:
@@ -110,13 +112,16 @@ public:
         TDuration timeout, bool isIndempotent);
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
-        const TExecuteScriptSettings& settings = TExecuteScriptSettings());
+        const TExecuteScriptSettings& settings = TExecuteScriptSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,
-        const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings());
+        const TParams& params, const TExecuteScriptSettings& settings = TExecuteScriptSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
-        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
+        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings(),
+        const TRetryOperationSettings& retrySettings = TRetryOperationSettings());
 
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings = TCreateSessionSettings());
 

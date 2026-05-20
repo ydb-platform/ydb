@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
@@ -11,8 +12,12 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
+#include <type_traits>
 #include <typeinfo>
+
+#include <util/system/yassert.h>
 
 namespace NYdb::inline Dev::NRetry::Async {
 
@@ -21,6 +26,14 @@ class TRetryContext : public TThrRefBase, public TRetryContextBase {
 public:
     using TStatusType = typename TAsyncStatusType::value_type;
     using TPtr = TIntrusivePtr<Async::TRetryContext<TClient, TAsyncStatusType>>;
+
+    static const TStatus& RetryStatus(const TStatusType& value) {
+        if constexpr (std::is_base_of_v<TOperation, TStatusType>) {
+            return value.Status();
+        } else {
+            return value;
+        }
+    }
 
 protected:
     TClient Client_;
@@ -40,7 +53,7 @@ public:
                     auto value = f.GetValue();
                     if (self->ParentSpan_) {
                         self->ParentSpan_->SetRetryCount(self->RetryNumber_);
-                        self->ParentSpan_->End(value.GetStatus());
+                        self->ParentSpan_->End(RetryStatus(value).GetStatus());
                     }
                     return value;
                 } catch (...) {
@@ -97,12 +110,13 @@ protected:
     }
 
     static void HandleStatusAsync(TPtr self, const TStatusType& status) {
-        self->EndAttemptSpan(status.GetStatus());
-        auto nextStep = self->GetNextStep(status);
+        const TStatus& retryStatus = RetryStatus(status);
+        self->EndAttemptSpan(retryStatus.GetStatus());
+        auto nextStep = self->GetNextStep(retryStatus);
         if (nextStep != NextStep::Finish) {
             self->RetryNumber_++;
-            self->Client_.Impl_->CollectRetryStatAsync(status.GetStatus());
-            self->LogRetry(status);
+            self->Client_.Impl_->CollectRetryStatAsync(retryStatus.GetStatus());
+            self->LogRetry(retryStatus);
         }
         switch (nextStep) {
             case NextStep::RetryImmediately:
@@ -192,9 +206,10 @@ class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType>, publi
     using TAsyncCreateSessionResult = typename TClient::TAsyncCreateSessionResult;
 
 private:
-    const TOperation Operation_;
+    TOperation Operation_;
     const TDeadline Deadline_;
     std::optional<TSession> Session_;
+    std::function<TStatusType(TStatus)> ErrorResultFactory_;
 
 public:
     explicit TRetryWithSession(
@@ -203,6 +218,34 @@ public:
         , Operation_(std::move(operation))
         , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
     {}
+
+    explicit TRetryWithSession(
+        const TClient& client,
+        const TSession& initialSession,
+        TOperation&& operation,
+        const TRetryOperationSettings& settings)
+        : TRetryContextAsync(client, settings)
+        , Operation_(std::move(operation))
+        , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
+        , Session_(initialSession)
+    {
+        TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
+    }
+
+    explicit TRetryWithSession(
+        const TClient& client,
+        const TSession& initialSession,
+        TOperation&& operation,
+        const TRetryOperationSettings& settings,
+        std::function<TStatusType(TStatus)> errorResultFactory)
+        : TRetryContextAsync(client, settings)
+        , Operation_(std::move(operation))
+        , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
+        , Session_(initialSession)
+        , ErrorResultFactory_(std::move(errorResultFactory))
+    {
+        TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
+    }
 
     void Retry() override {
         TIntrusivePtr<TRetryWithSession> self(this);
@@ -217,7 +260,15 @@ public:
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {
-                            return TRetryContextAsync::HandleStatusAsync(self, TStatusType(TStatus(result)));
+                            if (self->ErrorResultFactory_) {
+                                return TRetryContextAsync::HandleStatusAsync(
+                                    self, self->ErrorResultFactory_(TStatus(result)));
+                            }
+                            if constexpr (std::is_constructible_v<TStatusType, TStatus>) {
+                                return TRetryContextAsync::HandleStatusAsync(self, TStatusType(TStatus(result)));
+                            } else {
+                                Y_ABORT("TRetryWithSession: ErrorResultFactory is required for this result type");
+                            }
                         }
 
                         self->Session_ = result.GetSession();

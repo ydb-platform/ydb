@@ -28,6 +28,9 @@ namespace NYdb::inline Dev::NQuery {
 using TQueryObservation = NObservability::TRequestObservation;
 using TRetryContextResultAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
+using TAsyncScriptExecutionOperation = NThreading::TFuture<TScriptExecutionOperation>;
+using TRetryContextScriptAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncScriptExecutionOperation>;
+using TRetryContextFetchScriptAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncFetchScriptResultsResult>;
 
 NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIndempotent) {
     return NYdb::NRetry::TRetryOperationSettings()
@@ -697,21 +700,40 @@ TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const std::string& q
 }
 
 NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const std::string& script,
-    const TExecuteScriptSettings& settings)
+    const TExecuteScriptSettings& settings,
+    const TRetryOperationSettings& retrySettings)
 {
-    return Impl_->ExecuteScript(script, {}, settings);
+    auto operation = [script, settings](TQueryClient& client) {
+        return client.Impl_->ExecuteScript(script, {}, settings);
+    };
+    return TRetryContextScriptAsync::TPtr(
+        new NRetry::Async::TRetryWithoutSession<TQueryClient, decltype(operation), TAsyncScriptExecutionOperation>(
+            *this, std::move(operation), retrySettings))->Execute();
 }
 
 NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const std::string& script,
-    const TParams& params, const TExecuteScriptSettings& settings)
+    const TParams& params, const TExecuteScriptSettings& settings,
+    const TRetryOperationSettings& retrySettings)
 {
-    return Impl_->ExecuteScript(script, params, settings);
+    auto operation = [script, params, settings](TQueryClient& client) {
+        return client.Impl_->ExecuteScript(script, params, settings);
+    };
+    return TRetryContextScriptAsync::TPtr(
+        new NRetry::Async::TRetryWithoutSession<TQueryClient, decltype(operation), TAsyncScriptExecutionOperation>(
+            *this, std::move(operation), retrySettings))->Execute();
 }
 
-TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
-    const TFetchScriptResultsSettings& settings)
+TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId,
+    int64_t resultSetIndex,
+    const TFetchScriptResultsSettings& settings,
+    const TRetryOperationSettings& retrySettings)
 {
-    return Impl_->FetchScriptResults(operationId, resultSetIndex, settings);
+    auto operation = [operationId, resultSetIndex, settings](TQueryClient& client) {
+        return client.Impl_->FetchScriptResults(operationId, resultSetIndex, settings);
+    };
+    return TRetryContextFetchScriptAsync::TPtr(
+        new NRetry::Async::TRetryWithoutSession<TQueryClient, decltype(operation), TAsyncFetchScriptResultsResult>(
+            *this, std::move(operation), retrySettings))->Execute();
 }
 
 TAsyncCreateSessionResult TQueryClient::GetSession(const TCreateSessionSettings& settings)

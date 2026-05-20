@@ -155,6 +155,17 @@ public:
         , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
     {}
 
+    TRetryWithSession(
+        TClient& client,
+        const TSession& initialSession,
+        const TOperation& operation,
+        const TRetryOperationSettings& settings)
+        : TRetryContext<TClient, TStatusType>(client, settings)
+        , Operation_(operation)
+        , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
+        , Session_(initialSession)
+    {}
+
 protected:
     TStatusType Retry() override {
         std::optional<TStatusType> status;

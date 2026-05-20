@@ -97,6 +97,18 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor {
     bool IsContinuedVPatch = false;
     bool IsMovedPatch = false;
 
+#define PATCH_LOG(priority, service, marker, msg, ...)                         \
+        STLOG(priority, service, marker, msg,                                  \
+                (ActorId, SelfId()),                                           \
+                (Group, Info->GroupID),                                        \
+                (DiffCount, DiffCount),                                        \
+                (OriginalBlob, OriginalId),                                    \
+                (PatchedBlob, PatchedId),                                     \
+                (Deadline, Deadline),                                          \
+                (RestartCounter, RestartCounter),                              \
+                __VA_ARGS__)                                                   \
+// PATCH_LOG
+
 public:
     ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
         return Mon->ActivePatch;
@@ -133,14 +145,7 @@ public:
     {}
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA02, "ReplyAndDie",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA02, "ReplyAndDie",
                 (Status, status),
                 (ErrorReason, ErrorReason));
 
@@ -174,14 +179,7 @@ public:
         TEvBlobStorage::TEvGetResult *result = ev->Get();
         Orbit = std::move(result->Orbit);
 
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA30, "Received TEvGetResult",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA30, "Received TEvGetResult",
                 (Status, result->Status),
                 (ErrorReason, result->ErrorReason));
 
@@ -224,14 +222,7 @@ public:
         TEvBlobStorage::TEvPutResult *result = ev->Get();
         Orbit = std::move(result->Orbit);
 
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA29, "Received TEvPutResult",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA29, "Received TEvPutResult",
                 (Status, result->Status),
                 (ErrorReason, result->ErrorReason));
 
@@ -273,14 +264,7 @@ public:
     void Handle(TEvBlobStorage::TEvVMovedPatchResult::TPtr &ev) {
         TEvBlobStorage::TEvVMovedPatchResult *result = ev->Get();
         NKikimrBlobStorage::TEvVMovedPatchResult &record = result->Record;
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA28, "Received TEvVMovedPatchResult",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA28, "Received TEvVMovedPatchResult",
                 (Status, record.GetStatus()),
                 (ErrorReason, record.GetErrorReason()),
                 (VDiskId, VDiskIDFromVDiskID(record.GetVDiskID())));
@@ -304,14 +288,7 @@ public:
                         << " VMovedPatchStatus# " << NKikimrProto::EReplyStatus_Name(record.GetStatus())
                         << subErrorReason;
             }
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA27, "Start Naive strategy from hadling TEvVMovedPatchResult",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA27, "Start Naive strategy from hadling TEvVMovedPatchResult",
                     (Status, record.GetStatus()),
                     (ErrorReason, ErrorReason));
             StartNaivePatch();
@@ -360,14 +337,7 @@ public:
             OkVDisksWithParts.push_back(subgroupIdx);
         }
 
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA26, "Received VPatchFoundParts",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA26, "Received VPatchFoundParts",
                 (Status, status),
                 (SubgroupIdx, (ui32)subgroupIdx),
                 (VDiskId, VDisks[subgroupIdx]),
@@ -379,25 +349,11 @@ public:
             if (continueVPatch) {
                 continueVPatch = ContinueVPatch();
             } else {
-                STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA32, "Failed VerifyPartPlacement",
-                        (ActorId, SelfId()),
-                        (Group, Info->GroupID),
-                        (DiffCount, DiffCount),
-                        (OriginalBlob, OriginalId),
-                        (PatchedBlob, PatchedId),
-                        (Deadline, Deadline),
-                        (RestartCounter, RestartCounter));
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA32, "Failed VerifyPartPlacement");
                 Mon->VPatchPartPlacementVerifyFailed->Inc();
             }
             if (!continueVPatch) {
-                STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA33, "Start Fallback strategy from hadling TEvVPatchFoundParts",
-                        (ActorId, SelfId()),
-                        (Group, Info->GroupID),
-                        (DiffCount, DiffCount),
-                        (OriginalBlob, OriginalId),
-                        (PatchedBlob, PatchedId),
-                        (Deadline, Deadline),
-                        (RestartCounter, RestartCounter));
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA33, "Start Fallback strategy from hadling TEvVPatchFoundParts");
                 StopVPatch();
                 StartFallback();
             }
@@ -429,14 +385,7 @@ public:
             errorReason = record.GetErrorReason();
         }
 
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "Received VPatchResult",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "Received VPatchResult",
                 (Status, status),
                 (SubgroupIdx, (ui32)subgroupIdx),
                 (VDiskID, VDisks[subgroupIdx]),
@@ -447,28 +396,14 @@ public:
         Y_ABORT_UNLESS(!wasReceived);
 
         if (status != NKikimrProto::OK) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA24, "Start Fallback strategy from handling VPatchResult",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA24, "Start Fallback strategy from handling VPatchResult",
                     (ReceivedResults, TStringBuilder() << ReceivedResults << '/' << Info->Type.TotalPartCount()));
             StartFallback();
             return;
         }
 
         if (ReceivedResults == Info->Type.TotalPartCount()) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA25, "Got all succesful responses, make own success response",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA25, "Got all succesful responses, make own success response");
             ReplyAndDie(NKikimrProto::OK);
         }
     }
@@ -483,14 +418,7 @@ public:
         }
 
         if (countByDC[0] && countByDC[1] && countByDC[2]) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA22, "VerifyPartPlacement {mirror-3-dc} found all 3 disks",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA22, "VerifyPartPlacement {mirror-3-dc} found all 3 disks");
             return true;
         }
 
@@ -500,14 +428,7 @@ public:
                 x2Count++;
             }
         }
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA00, "VerifyPartPlacement {mirror-3-dc}",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA00, "VerifyPartPlacement {mirror-3-dc}",
                 (X2Count, x2Count));
         return x2Count >= 2;
     }
@@ -518,26 +439,12 @@ public:
         } else {
             TSubgroupPartLayout layout;
             for (auto &placement : FoundParts) {
-                STLOG(PRI_TRACE, BS_PROXY_PATCH, BPPA31, "Get part",
-                        (ActorId, SelfId()),
-                        (Group, Info->GroupID),
-                        (DiffCount, DiffCount),
-                        (OriginalBlob, OriginalId),
-                        (PatchedBlob, PatchedId),
-                        (Deadline, Deadline),
-                        (RestartCounter, RestartCounter),
+                PATCH_LOG(PRI_TRACE, BS_PROXY_PATCH, BPPA31, "Get part",
                         (SubgroupIdx, (ui32)placement.VDiskIdxInSubgroup),
                         (PartId, (ui32)placement.PartId));
                 layout.AddItem(placement.VDiskIdxInSubgroup, placement.PartId - 1, Info->Type);
             }
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA21, "VerifyPartPlacement",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA21, "VerifyPartPlacement",
                     (EffectiveReplicas, layout.CountEffectiveReplicas(Info->Type)),
                     (TotalPartount, Info->Type.TotalPartCount()));
             return layout.CountEffectiveReplicas(Info->Type) == Info->Type.TotalPartCount();
@@ -545,14 +452,7 @@ public:
     }
 
     void SendStopDiffs() {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA18, "Send stop diffs",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA18, "Send stop diffs");
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPatchDiff>> events;
         for (ui32 subgroupIdx = 0; subgroupIdx < VDisks.size(); ++subgroupIdx) {
             if (!ErrorResponseFlags[subgroupIdx] && !EmptyResponseFlags[subgroupIdx] && ReceivedResponseFlags[subgroupIdx]) {
@@ -561,14 +461,7 @@ public:
                 ev->SetForceEnd();
                 ForceStopFlags[subgroupIdx] = true;
                 events.emplace_back(std::move(ev));
-                STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA19, "Send stop message",
-                        (ActorId, SelfId()),
-                        (Group, Info->GroupID),
-                        (DiffCount, DiffCount),
-                        (OriginalBlob, OriginalId),
-                        (PatchedBlob, PatchedId),
-                        (Deadline, Deadline),
-                        (RestartCounter, RestartCounter),
+                PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA19, "Send stop message",
                         (VDiskIdxInSubgroup, subgroupIdx),
                         (VDiskId, VDisks[subgroupIdx]));
             }
@@ -636,14 +529,7 @@ public:
             for (auto &diff : diffsForPart) {
                 ev->AddDiff(diff.Offset, diff.Buffer);
 
-                STLOG(PRI_TRACE, BS_PROXY_PATCH, BPPA35, "Add Diff",
-                        (ActorId, SelfId()),
-                        (Group, Info->GroupID),
-                        (DiffCount, DiffCount),
-                        (OriginalBlob, OriginalId),
-                        (PatchedBlob, PatchedId),
-                        (Deadline, Deadline),
-                        (RestartCounter, RestartCounter),
+                PATCH_LOG(PRI_TRACE, BS_PROXY_PATCH, BPPA35, "Add Diff",
                         (Offset, diff.Offset),
                         (BufferSize, diff.Buffer.Size()));
             }
@@ -651,14 +537,7 @@ public:
             for (const TPartPlacement &parity : parityPlacements) {
                 ev->AddXorReceiver(VDisks[parity.VDiskIdxInSubgroup], parity.PartId);
             }
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA20, "Send TEvVPatchDiff",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA20, "Send TEvVPatchDiff",
                     (VDiskIdxInSubgroup, idxInSubgroup),
                     (VDiskId, VDisks[idxInSubgroup]),
                     (PatchedVDiskIdxInSubgroup, patchedIdxInSubgroup),
@@ -700,14 +579,7 @@ public:
     }
 
     void StartMovedPatch() {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA09, "Start Moved strategy",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA09, "Start Moved strategy",
                 (SentStarts, SentStarts));
         // ScheduleWakeUp(StartTime, MovedPatchTag);
         Become(&TBlobStorageGroupPatchRequest::MovedPatchState);
@@ -765,14 +637,7 @@ public:
     }
 
     void StartNaivePatch() {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA07, "Start Naive strategy",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter));
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA07, "Start Naive strategy");
         Become(&TBlobStorageGroupPatchRequest::NaiveState);
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0, OriginalId.BlobSize(), Deadline,
             NKikimrBlobStorage::AsyncRead);
@@ -787,24 +652,10 @@ public:
     void StartFallback() {
         Mon->PatchesWithFallback->Inc();
         if (WithMovingPatchRequestToStaticNode && UseVPatch && !IsSecured && !IsMovedPatch) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA05, "Start Moved strategy from fallback",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA05, "Start Moved strategy from fallback");
             StartMovedPatch();
         } else {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA06, "Start Naive strategy from fallback",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA06, "Start Naive strategy from fallback",
                     (WithMovingPatchRequestToStaticNode, WithMovingPatchRequestToStaticNode),
                     (UseVPatch, UseVPatch));
             StartNaivePatch();
@@ -839,14 +690,7 @@ public:
             }
         }
 
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA08, "Start VPatch strategy",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA08, "Start VPatch strategy",
                 (SentStarts, SentStarts));
 
         for (auto& ev : events) {
@@ -895,14 +739,7 @@ public:
     }
 
     bool ContinueVPatchForMirror3dc() {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA10, "Continue VPatch {mirror-3-dc}",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter));
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA10, "Continue VPatch {mirror-3-dc}");
         constexpr ui32 DCCount = 3;
         constexpr ui32 VDiskByDC = 3;
         ui32 countByDC[DCCount] = {0, 0, 0};
@@ -916,28 +753,14 @@ public:
         }
 
         if (countByDC[0] && countByDC[1] && countByDC[2]) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA11, "Found disks {mirror-3-dc} on each dc",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA11, "Found disks {mirror-3-dc} on each dc",
                     (DiskFromFirstDC, diskByDC[0][0].ToString()),
                     (DiskFromSecondDC, diskByDC[0][0].ToString()),
                     (DiskFromThirdDC, diskByDC[2][0].ToString()));
             SendDiffs({diskByDC[0][0], diskByDC[1][0], diskByDC[2][0]});
             return true;
         }
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA12, "Didn't find disks {mirror-3-dc} on each dc",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter));
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA12, "Didn't find disks {mirror-3-dc} on each dc");
 
         ui32 x2Count = 0;
         for (ui32 dcIdx = 0; dcIdx < DCCount; ++dcIdx) {
@@ -946,14 +769,7 @@ public:
             }
         }
         if (x2Count < 2) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA13, "Didn't find disks {mirror-3-dc}",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA13, "Didn't find disks {mirror-3-dc}");
             return false;
         }
         TStackVec<TPartPlacement, TypicalPartsInBlob> placements;
@@ -964,14 +780,7 @@ public:
             }
         }
         SendDiffs(placements);
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA14, "Found disks {mirror-3-dc} x2 mode",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA14, "Found disks {mirror-3-dc} x2 mode",
                 (FirstDiskFromFirstDC, placements[0]),
                 (SecondDiskFromFirstDC, placements[1]),
                 (FirstDiskFromSecondDC, placements[2]),
@@ -980,14 +789,7 @@ public:
     }
 
     bool ContinueVPatch() {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA15, "Continue VPatch strategy",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA15, "Continue VPatch strategy",
                 (FoundParts, ConvertFoundPartsToString()));
         StageStart = TActivationContext::Now();
         IsContinuedVPatch = true;
@@ -1032,14 +834,7 @@ public:
         TStackVec<ui32, TypicalHandoffCount> choosenHandoffForParts(handoffParts.size());
         if (handoffParts.size()) {
             bool find = FindHandoffs(handoffForParts, handoffParts, &choosenHandoffForParts);
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA16, "Find handoff parts",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA16, "Find handoff parts",
                     (HandoffParts, FormatList(handoffParts)),
                     (FoundParts, ConvertFoundPartsToString()),
                     (choosenHandoffForParts, FormatList(choosenHandoffForParts)),
@@ -1055,14 +850,7 @@ public:
     }
 
     void StopVPatch() {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA17, "Stop VPatch strategy",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter));
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA17, "Stop VPatch strategy");
         SendStopDiffs();
         ReceivedResponseFlags.assign(VDisks.size(), false);
     }
@@ -1098,14 +886,7 @@ public:
     }
 
     void Bootstrap() override {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA01, "Actor bootstrapped",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter));
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA01, "Actor bootstrapped");
         Schedule(TDuration::MicroSeconds(60'000'000), new TEvents::TEvWakeup(NeverTag));
 
         TLogoBlobID truePatchedBlobId = PatchedId;
@@ -1137,24 +918,10 @@ public:
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (false && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA03, "Start VPatch strategy from bootstrap",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA03, "Start VPatch strategy from bootstrap");
             StartVPatch();
         } else {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA04, "Start Fallback strategy from bootstrap",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA04, "Start Fallback strategy from bootstrap",
                     (IsGoodPatchedBlobId, IsGoodPatchedBlobId),
                     (IsAllowedErasure, IsAllowedErasure),
                     (UseVPatch, UseVPatch),
@@ -1193,14 +960,7 @@ public:
 
     template <ui64 ExpectedTag>
     void HandleWakeUp(TEvents::TEvWakeup::TPtr &ev) {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA36, "HandleWakeUp",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA36, "HandleWakeUp",
                 (ExpectedTag, ToString(ExpectedTag)),
                 (ReceivedTag, ToString(ev->Get()->Tag)));
         if (ev->Get()->Tag == ExpectedTag) {
@@ -1210,28 +970,13 @@ public:
         if (ev->Get()->Tag == NeverTag) {
             SetSlowDisks();
             StartFallback();
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA40, "Found NeverTag wake up",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
-                    (ExpectedTag, ToString(ExpectedTag)));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA40, "Found NeverTag wake up", (ExpectedTag, ToString(ExpectedTag)));
         }
     }
 
     void HandleVPatchWakeUp(TEvents::TEvWakeup::TPtr &ev) {
         ui64 expectedTag = (IsContinuedVPatch ? VPatchDiffTag : VPatchStartTag);
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA37, "HandleWakeUp",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA37, "HandleWakeUp",
                 (ExpectedTag, ToString(expectedTag)),
                 (ReceivedTag, ToString(ev->Get()->Tag)));
         if (ev->Get()->Tag == expectedTag) {
@@ -1241,38 +986,16 @@ public:
         if (ev->Get()->Tag == NeverTag) {
             SetSlowDisks();
             StartFallback();
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA41, "Found NeverTag wake up",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter),
-                    (ExpectedTag, ToString(expectedTag)));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA41, "Found NeverTag wake up", (ExpectedTag, ToString(expectedTag)));
         }
     }
 
     void HandleNeverTagWakeUp(TEvents::TEvWakeup::TPtr &ev) {
-        STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA42, "HandleWakeUp",
-                (ActorId, SelfId()),
-                (Group, Info->GroupID),
-                (DiffCount, DiffCount),
-                (OriginalBlob, OriginalId),
-                (PatchedBlob, PatchedId),
-                (Deadline, Deadline),
-                (RestartCounter, RestartCounter),
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA42, "HandleWakeUp",
                 (ExpectedTag, ToString(NeverTag)),
                 (ReceivedTag, ToString(ev->Get()->Tag)));
         if (ev->Get()->Tag == NeverTag) {
-            STLOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA43, "Found NeverTag wake up in naive state",
-                    (ActorId, SelfId()),
-                    (Group, Info->GroupID),
-                    (DiffCount, DiffCount),
-                    (OriginalBlob, OriginalId),
-                    (PatchedBlob, PatchedId),
-                    (Deadline, Deadline),
-                    (RestartCounter, RestartCounter));
+            PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA43, "Found NeverTag wake up in naive state");
             ReplyAndDie(NKikimrProto::DEADLINE);
         }
     }

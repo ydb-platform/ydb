@@ -315,7 +315,7 @@ namespace NKikimr {
             auto interval = fullRecovery ? TDuration::Seconds(0) : SyncTimeInterval;
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
-            const ui32 orderNumber = GInfo->GetOrderNumber(task.VDiskId);
+            const ui32 orderNumber = GInfo->GetOrderNumber(vDiskId);
             if (StartupDataSyncPeers.erase(orderNumber) && StartupDataSyncPeers.empty()) {
                 ReportStartupDataSyncDone(ctx);
             }

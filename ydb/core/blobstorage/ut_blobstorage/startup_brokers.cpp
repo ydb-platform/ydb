@@ -16,15 +16,6 @@
 
 namespace {
 
-    constexpr const char* MaxInProgressLocalRecoveryCountControl =
-        "VDiskControls.MaxInProgressLocalRecoveryCount";
-    constexpr const char* MaxInProgressLocalRecoveryPerPDiskCountControl =
-        "VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount";
-    constexpr const char* MaxInProgressStartupDataSyncCountControl =
-        "VDiskControls.MaxInProgressStartupDataSyncCount";
-    constexpr const char* MaxInProgressStartupDataSyncPerPDiskCountControl =
-        "VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount";
-
     constexpr ui32 NumGroups = 8;
     constexpr ui32 MinExpectedVDisksOnRestartedNode = 6;
     constexpr ui32 StartupBacklogTargetVDisks = 3;
@@ -54,35 +45,19 @@ namespace {
         ui64 MaxInProgressStartupDataSyncPerPDiskCount = 0;
     };
 
-    void SetNodeControl(TTestActorSystem& runtime, ui32 nodeId, const TString& controlName, i64 value,
-            i64 defaultValue = 0, i64 minValue = 0, i64 maxValue = 1'000)
-    {
-        TAppData* appData = runtime.GetNode(nodeId)->AppData.get();
-        TAtomic currentValue = 0;
-        bool exists = false;
-        appData->Icb->GetValue(controlName, currentValue, exists);
-
-        if (exists) {
-            TAtomic prevValue = 0;
-            appData->Icb->SetValue(controlName, value, prevValue);
-        } else {
-            TControlWrapper control(defaultValue, minValue, maxValue);
-            appData->Icb->RegisterSharedControl(control, controlName);
-            control = value;
-        }
-    }
-
     void ConfigureBrokerControls(TEnvironmentSetup& env, ui32 nodeId,
             ui64 maxInProgressLocalRecoveryCount, ui64 maxInProgressLocalRecoveryPerPDiskCount,
             ui64 maxInProgressStartupDataSyncCount, ui64 maxInProgressStartupDataSyncPerPDiskCount)
     {
-        SetNodeControl(*env.Runtime, nodeId, MaxInProgressLocalRecoveryCountControl, maxInProgressLocalRecoveryCount);
-        SetNodeControl(*env.Runtime, nodeId, MaxInProgressLocalRecoveryPerPDiskCountControl,
-            maxInProgressLocalRecoveryPerPDiskCount);
-        SetNodeControl(*env.Runtime, nodeId, MaxInProgressStartupDataSyncCountControl,
-            maxInProgressStartupDataSyncCount);
-        SetNodeControl(*env.Runtime, nodeId, MaxInProgressStartupDataSyncPerPDiskCountControl,
-            maxInProgressStartupDataSyncPerPDiskCount);
+        auto& icb = *env.Runtime->GetNode(nodeId)->AppData->Icb;
+        TControlBoard::SetValue(maxInProgressLocalRecoveryCount,
+            icb.VDiskControls.MaxInProgressLocalRecoveryCount);
+        TControlBoard::SetValue(maxInProgressLocalRecoveryPerPDiskCount,
+            icb.VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount);
+        TControlBoard::SetValue(maxInProgressStartupDataSyncCount,
+            icb.VDiskControls.MaxInProgressStartupDataSyncCount);
+        TControlBoard::SetValue(maxInProgressStartupDataSyncPerPDiskCount,
+            icb.VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount);
     }
 
     template<typename TPredicate>

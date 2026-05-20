@@ -36,6 +36,7 @@ struct TDqRobinHoodBatchRequestItem {
 
 
 // TODO: only POD key & payloads are now supported
+// This modification doesn't mix per-instance random SelfHash into the hash value; please do it in your Hasher instead
 template <typename TKey, typename TEqual, typename THash, typename TAllocator>
 class TDqRobinHoodHashSet {
 public:
@@ -67,13 +68,12 @@ public:
         }
     };
 
-    explicit TDqRobinHoodHashSet(THash hash, TEqual equal, const ui64 initialCapacity = 1u << 8)
+    explicit TDqRobinHoodHashSet(THash hash, TEqual equal, const ui64 initialCapacity)
         : HashLocal_(std::move(hash))
         , EqualLocal_(std::move(equal))
         , Capacity_(initialCapacity)
         , CapacityShift_(32 - MostSignificantBit(initialCapacity))
         , Allocator_()
-        , SelfHash_(GetSelfHash(this))
     {
         Y_ENSURE((Capacity_ & (Capacity_ - 1)) == 0);
         Init();
@@ -195,7 +195,7 @@ private:
 
     Y_FORCE_INLINE char* MakeIterator(const ui32 hash, char* data, ui32 capacityShift) {
         // https://web.archive.org/web/20180620004325/https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
-        ui32 bucket = static_cast<ui32>(((SelfHash_ ^ static_cast<ui64>(hash)) * 11400714819323198485ull)) >> capacityShift;
+        ui32 bucket = static_cast<ui32>((static_cast<ui64>(hash) * 11400714819323198485ull)) >> capacityShift;
         char* ptr = data + GetCellSize() * bucket;
         return ptr;
     }
@@ -322,12 +322,6 @@ private:
         ptr = (ptr == end) ? begin : ptr;
     }
 
-    static ui64 GetSelfHash(void* self) {
-        char buf[sizeof(void*)];
-        WriteUnaligned<void*>(buf, self);
-        return CityHash64(buf, sizeof(buf));
-    }
-
 protected:
     void Init() {
         Allocate(Capacity_, Data_, DataEnd_);
@@ -350,7 +344,6 @@ private:
     ui64 Capacity_;
     ui32 CapacityShift_;
     TAllocator Allocator_;
-    const ui64 SelfHash_;
     char* Data_ = nullptr;
     char* DataEnd_ = nullptr;
 };

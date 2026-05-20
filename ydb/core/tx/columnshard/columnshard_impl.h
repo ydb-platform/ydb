@@ -123,6 +123,7 @@ class TTxBlobsWritingFailed;
 class TWriteTasksQueue;
 class TWriteTask;
 class TCommitOperation;
+class IScanSnapshotGuard;
 
 namespace NLoading {
 class TTxControllerInitializer;
@@ -587,6 +588,7 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
+    void PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const;
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;
     std::unique_ptr<NOlap::ISnapshotHolders> GetSnapshotHolders() const;

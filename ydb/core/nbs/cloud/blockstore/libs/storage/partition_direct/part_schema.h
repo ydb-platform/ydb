@@ -54,7 +54,26 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
         using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
-    using TTables = SchemaTables<TabletInfo>;
+    // Persisted vchunk config overrides, keyed by vchunk index. Only vchunks
+    // whose layout was explicitly updated have a row here.
+    struct VChunkConfigs: public TTableSchema<2>
+    {
+        struct VChunkIndex: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct Config: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type = ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
+        };
+
+        using TKey = TableKey<VChunkIndex>;
+        using TColumns = TableColumns<VChunkIndex, Config>;
+
+        using StoragePolicy = TStoragePolicy<IndexChannel>;
+    };
+
+    using TTables = SchemaTables<TabletInfo, VChunkConfigs>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

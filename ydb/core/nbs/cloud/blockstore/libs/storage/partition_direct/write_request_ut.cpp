@@ -106,6 +106,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -183,6 +184,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -265,6 +267,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -359,6 +362,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -450,9 +454,12 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
 
-        // call hedge mechanism. It will work with default response's handler
-        // from base fixture
+        // call hedge mechanism.
         RunScheduledHedge();
+        // Reply to all write to PBuffer requests.
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
         UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
@@ -556,14 +563,12 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
 
         UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Get(THostIndex{0}));
-        UNIT_ASSERT_EQUAL(
-            true,
+        bool atLeastOneHandoffResponded =
             response.CompletedWrites.Get(
-                *VChunkConfig.PBufferHosts.GetHandOff().Nth(0)));
-        UNIT_ASSERT_EQUAL(
-            true,
+                *VChunkConfig.PBufferHosts.GetHandOff().Nth(0)) ||
             response.CompletedWrites.Get(
-                *VChunkConfig.PBufferHosts.GetHandOff().Nth(1)));
+                *VChunkConfig.PBufferHosts.GetHandOff().Nth(1));
+        UNIT_ASSERT_EQUAL(true, atLeastOneHandoffResponded);
     }
 
     // @brief sending main request then hedge requests.

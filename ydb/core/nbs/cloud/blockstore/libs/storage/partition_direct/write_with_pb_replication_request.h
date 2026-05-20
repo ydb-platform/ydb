@@ -19,6 +19,7 @@ class TWriteWithPbReplicationRequestExecutor: public TBaseWriteRequestExecutor
 public:
     TWriteWithPbReplicationRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,

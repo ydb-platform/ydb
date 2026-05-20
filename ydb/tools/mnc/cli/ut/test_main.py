@@ -1,7 +1,10 @@
+import os
+import tempfile
 import types
 import unittest
 from unittest import mock
 
+from ydb.tools.mnc.cli import command_options
 from ydb.tools.mnc.cli import main
 from ydb.tools.mnc.cli import parser_factory
 from ydb.tools.mnc.lib import progress
@@ -191,3 +194,56 @@ class CliMainTest(unittest.IsolatedAsyncioTestCase):
                 await main.async_main()
 
         self.assertEqual(str(error.exception), "Command 'empty' failed")
+
+    async def test_async_main_does_not_apply_cached_options_without_tui(self):
+        async def do(args):
+            return True
+
+        def add_arguments(parser):
+            parser.add_argument("--host", required=True)
+
+        module = types.SimpleNamespace(
+            __name__="ydb.tools.mnc.cli.commands.cached",
+            expected_config=None,
+            add_arguments=add_arguments,
+            do=do,
+        )
+
+        with tempfile.TemporaryDirectory() as home:
+            with mock.patch.dict(os.environ, {"HOME": home}):
+                command_options.save_cache({"cached": {"tokens": ["--host", "cached-host"]}})
+
+                with _patch_parser(module), mock.patch("sys.argv", ["mnc", "cached"]):
+                    with self.assertRaises(SystemExit):
+                        await main.async_main()
+
+    async def test_async_main_applies_cached_options_for_tui(self):
+        seen = {}
+
+        async def do(args):
+            seen["host"] = args.host
+            return True
+
+        async def run_tui_action(action):
+            return await action(None)
+
+        def add_arguments(parser):
+            parser.add_argument("--host", required=True)
+
+        module = types.SimpleNamespace(
+            __name__="ydb.tools.mnc.cli.commands.cached",
+            expected_config=None,
+            add_arguments=add_arguments,
+            do=do,
+        )
+
+        with tempfile.TemporaryDirectory() as home:
+            with mock.patch.dict(os.environ, {"HOME": home}):
+                command_options.save_cache({"cached": {"tokens": ["--host", "cached-host"]}})
+
+                with _patch_parser(module), \
+                     mock.patch("sys.argv", ["mnc", "--tui", "cached"]), \
+                     mock.patch("ydb.tools.mnc.cli.tui.app.TuiApp.run_async", side_effect=run_tui_action):
+                    await main.async_main()
+
+        self.assertEqual(seen["host"], "cached-host")

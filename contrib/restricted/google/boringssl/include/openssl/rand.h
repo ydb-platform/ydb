@@ -1,21 +1,21 @@
-/* Copyright (c) 2014, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2014 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_RAND_H
 #define OPENSSL_HEADER_RAND_H
 
-#include <contrib/restricted/google/boringssl/include/openssl/base.h>
+#include <contrib/restricted/google/boringssl/include/openssl/base.h>   // IWYU pragma: export
 
 #if defined(__cplusplus)
 extern "C" {
@@ -59,7 +59,7 @@ OPENSSL_EXPORT void RAND_enable_fork_unsafe_buffering(int fd);
 OPENSSL_EXPORT void RAND_disable_fork_unsafe_buffering(void);
 #endif
 
-#if defined(BORINGSSL_UNSAFE_DETERMINISTIC_MODE)
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
 // RAND_reset_for_fuzzing resets the fuzzer-only deterministic RNG. This
 // function is only defined in the fuzzer-only build configuration.
 OPENSSL_EXPORT void RAND_reset_for_fuzzing(void);
@@ -74,6 +74,17 @@ OPENSSL_EXPORT void RAND_reset_for_fuzzing(void);
 // from BoringSSL. This function is not FIPS compliant.
 OPENSSL_EXPORT void RAND_get_system_entropy_for_custom_prng(uint8_t *buf,
                                                             size_t len);
+
+// RAND_maybe_reseed might reseed the PRNG if it's getting close to the reseed
+// limit. If it does so, it may briefly block other threads that are
+// concurrently calling `RAND_bytes`, but only for ~microseconds. Applications
+// may wish to periodically call this function to avoid hitting a reseed while
+// servicing a `RAND_bytes` call, which could happen from anywhere and take
+// milliseconds or more in FIPS configurations. _Most_ applications, however,
+// should ignore this and it only makes a difference in FIPS builds.
+//
+// Returns one if a reseed was performed and zero otherwise.
+OPENSSL_EXPORT int RAND_maybe_reseed(void);
 
 
 // Deprecated functions

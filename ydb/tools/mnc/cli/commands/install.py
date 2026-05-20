@@ -131,8 +131,6 @@ async def generate_cfg(hosts, config: dict, parent_task: progress.TaskNode = Non
     commands = [
         f'mkdir -p {deploy_ctx.work_directory}/static',
         f'mkdir -p {deploy_ctx.work_directory}/dynamic',
-        f'mkdir -p {deploy_ctx.work_directory}/nbs',
-        f'mkdir -p {deploy_ctx.work_directory}/nbs/cfg',
     ]
     result = await term.shell(' && '.join(commands))
     if not result:
@@ -140,7 +138,6 @@ async def generate_cfg(hosts, config: dict, parent_task: progress.TaskNode = Non
     commands = [
         f'rm -rf {deploy_ctx.work_directory}/static/*',
         f'rm -rf {deploy_ctx.work_directory}/dynamic/*',
-        f'rm -rf {deploy_ctx.work_directory}/nbs/cfg/*',
     ]
     result = await term.shell(' && '.join(commands))
     if not result:

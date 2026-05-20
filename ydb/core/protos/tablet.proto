@@ -284,3 +284,10 @@ message TEvTabletStateUpdate {
     optional EState State = 3;
     optional NActorsProto.TActorId UserActorId = 4;
 }
+
+message TEvMoveData {
+}
+
+message TEvMoveDataResponse {
+    optional uint64 TabletId = 1;
+}

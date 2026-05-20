@@ -75,7 +75,8 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
         !!CollectGenStepInFlight, CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0,
         CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,
         new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
-        new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()), TInstant::Max(), true, TWriteSource::ColumnShardGC);
+        new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()), TInstant::Max(), true,
+        TWriteSource::ColumnShardGC);
     result->PerGenerationCounter = PerGenerationCounter.Add(result->PerGenerationCounterStepSize());
     return std::move(result);
 }

@@ -276,8 +276,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     ChunkWriteOpCounters.resize(WriteSourceCount());
     ForEachWriteSourceInfo([&](const TWriteSourceInfo& info) {
         Y_ABORT_UNLESS(info.Ordinal < LogWriteOpCounters.size());
-        LogWriteOpCounters[info.Ordinal].Setup(true, PDiskGroup, TString(info.Name), EVisibility::Public);
-        ChunkWriteOpCounters[info.Ordinal].Setup(false, PDiskGroup, TString(info.Name), EVisibility::Public);
+        LogWriteOpCounters[info.Ordinal].Setup("Log", PDiskGroup, TString(info.Name), visibilityForExtended);
+        ChunkWriteOpCounters[info.Ordinal].Setup("Chunk", PDiskGroup, TString(info.Name), visibilityForExtended);
     });
 
     COUNTER_INIT(PDiskGroup, PDiskThreadCPU, true);

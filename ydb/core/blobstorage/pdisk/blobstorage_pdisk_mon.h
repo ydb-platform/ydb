@@ -482,11 +482,11 @@ struct TPDiskMon {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
         ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
 
-        void Setup(const bool isLog, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name,
+        void Setup(TString metricPrefix, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString opName,
                 NMonitoring::TCountableBase::EVisibility vis) {
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("op", name);
-            Requests = subgroup->GetCounter(isLog ? "LogRequestsByOp" : "ChunkRequestsByOp", true, vis);
-            Bytes = subgroup->GetCounter(isLog? "LogBytesByOp" : "ChunkBytesByOp", true, vis);
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("op", opName);
+            Requests = subgroup->GetCounter(metricPrefix + "RequestsByOp", true, vis);
+            Bytes = subgroup->GetCounter(metricPrefix + "BytesByOp", true, vis);
         }
 
         void CountRequest(ui32 size) {

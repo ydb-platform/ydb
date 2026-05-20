@@ -17,11 +17,6 @@
 
 #include <util/string/split.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -92,7 +87,7 @@ public:
 
 private:
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        LOG_T("ResponseProcessor::HandleWakeup: tag=" << ev->Get()->Tag);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::HandleWakeup: tag=" << ev->Get()->Tag);
         auto tag = ev->Get()->Tag;
         switch (tag) {
         case WU_DIE_ON_TTL:
@@ -113,7 +108,7 @@ private:
             }
         }
         errorMsg << " in " << ResolvingTtl << " seconds.";
-        LOG_E("ResponseProcessor::DieOnTtl: errorMsg=" << errorMsg);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::DieOnTtl: errorMsg=" << errorMsg);
         Issues.AddIssue(errorMsg);
         SendResolvedEndpointsAndDie();
     }
@@ -123,7 +118,7 @@ private:
             new TEvents::TEvEndpointResponse(
                 NYql::TDatabaseResolverResponse(std::move(DatabaseId2Description), Issues.Empty(), Issues)));
         PassAway();
-        LOG_D("ResponseProcessor::SendResolvedEndpointsAndDie: passed away");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::SendResolvedEndpointsAndDie: passed away");
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev)
@@ -132,7 +127,7 @@ private:
         const auto requestIter = Requests.find(ev->Get()->Request);
         HandledIds++;
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got API response: code=" << ev->Get()->Response->Status);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): got API response: code=" << ev->Get()->Response->Status);
 
         try {
             HandleResponse(ev, requestIter, result);
@@ -140,11 +135,11 @@ private:
             const TString msg = TStringBuilder() << "error while response processing, params "
                 << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
                 << ", details: " << CurrentExceptionMessage();
-            LOG_E("ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
             Issues.AddIssue(msg);
         }
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
               << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
 
         if (HandledIds == Requests.size()) {
@@ -175,17 +170,17 @@ private:
 
         if (errorMessage) {
             Issues.AddIssue(errorMessage);
-            LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): error=" << errorMessage);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): error=" << errorMessage);
         } else {
             const auto& params = requestIter->second;
             auto key = std::make_tuple(params.Id, params.DatabaseType, params.DatabaseAuth);
             if (errorMessage) {
-                LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
                     << "; params: " << params.ToDebugString()
                     << ", error: " << errorMessage);
                 Cache.Put(key, errorMessage);
             } else {
-                LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
                     << "; params: " << params.ToDebugString()
                     << ", result: " << result->ToDebugString());
                 Cache.Put(key, result);
@@ -211,18 +206,18 @@ private:
                     MdbEndpointGenerator,
                     params.DatabaseAuth.UseTls,
                     params.DatabaseAuth.Protocol);
-                LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): got description" << ": params: " << params.ToDebugString()
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): got description" << ": params: " << params.ToDebugString()
                                                                                             << ", description: " << description.ToDebugString());
                 DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                 result.ConstructInPlace(description);
                 return "";
             } catch (const NKikimr::TCodeLineException& ex) {
-                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
             } catch (...) {
-                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << CurrentExceptionMessage());
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProcessor::Handle(HttpIncomingResponse): " << CurrentExceptionMessage());
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << CurrentExceptionMessage();
@@ -530,7 +525,7 @@ private:
         bool success = true,
         const TString& errorMessage = "")
     {
-        LOG_D("ResponseProccessor::SendResponse: Success: " << success << ", Errors: " << (errorMessage ? errorMessage : "no"));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::SendResponse: Success: " << success << ", Errors: " << (errorMessage ? errorMessage : "no"));
         NYql::TIssues issues;
         if (errorMessage)
             issues.AddIssue(errorMessage);
@@ -549,7 +544,7 @@ private:
             const auto& kind = item.first.second;
             initMsg << id << " (" << kind << ")" << ", ";
         }
-        LOG_D("ResponseProccessor::Handle(EndpointRequest): " << initMsg);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(EndpointRequest): " << initMsg);
 
         TRequestMap requests;
         TDatabaseResolverResponse::TDatabaseDescriptionMap ready;
@@ -560,7 +555,7 @@ private:
             if (Cache.Get(key, &cacheVal)) {
                 switch(cacheVal->index()) {
                     case 0U: {
-                        LOG_T("ResponseProccessor::Handle(EndpointRequest): obtained description from cache" 
+                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(EndpointRequest): obtained description from cache" 
                               << ": databaseId: " << std::get<0>(key)
                               << ", databaseType: " << std::get<1>(key)
                               << ", value: " << std::get<0>(*cacheVal).ToDebugString());
@@ -568,7 +563,7 @@ private:
                         break;
                     }
                     case 1U: {
-                        LOG_T("ResponseProccessor::Handle(EndpointRequest): obtained error from cache" 
+                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(EndpointRequest): obtained error from cache" 
                               << ": databaseId: " << std::get<0>(key)
                               << ", databaseType: " << std::get<1>(key)
                               << ", value: " << std::get<1>(*cacheVal));
@@ -576,12 +571,12 @@ private:
                         return;
                     }
                     default: {
-                        LOG_E("ResponseProccessor::Handle(EndpointRequest): unsupported cache value type");
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(EndpointRequest): unsupported cache value type");
                     }
                 }
                 continue;
             } else {
-                LOG_T("ResponseProccessor::Handle(EndpointRequest): key is missing in cache" 
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(EndpointRequest): key is missing in cache" 
                        << ": databaseId: " << std::get<0>(key)
                        << ", databaseType: " << std::get<1>(key));
             }
@@ -617,13 +612,13 @@ private:
                     httpRequest->Set("Authorization", token);
                 }
 
-                LOG_D("ResponseProccessor::Handle(EndpointRequest): start GET request: " << "url: "  << httpRequest->URL);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(EndpointRequest): start GET request: " << "url: "  << httpRequest->URL);
 
                 requests[httpRequest] = TResolveParams{databaseId, databaseType, databaseAuth};
             } catch (const std::exception& e) {
                 const TString msg = TStringBuilder() << "error while preparing to resolve database id: " << databaseId 
                                                      << ", details: " << e.what();
-                LOG_E("ResponseProccessor::Handle(EndpointRequest): put error in cache: " << msg);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " <<"ResponseProccessor::Handle(EndpointRequest): put error in cache: " << msg);
                 Cache.Put(key, msg);
                 SendResponse(ev->Sender, {}, /*success=*/false, msg);
                 return;

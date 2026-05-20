@@ -10,12 +10,6 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-#define LOG_T(stream) LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_C(stream) LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, stream)
-
 class TBuildWriteOutRSUnit : public TExecutionUnit {
 public:
     TBuildWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
@@ -74,10 +68,10 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
         const auto& kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{};
         KqpFillOutReadSets(op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), tabletId);
     } catch (const TNotReadyTabletException&) {
-        LOG_C("Unexpected TNotReadyTabletException exception at build out rs");
+        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD,"Unexpected TNotReadyTabletException exception at build out rs");
         return OnTabletNotReady(*writeOp, txc, ctx);
     } catch (const yexception& e) {
-        LOG_C("Exception while preparing out-readsets for KQP transaction " << *op << " at " << DataShard.TabletID() << ": " << e.what());
+        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD,"Exception while preparing out-readsets for KQP transaction " << *op << " at " << DataShard.TabletID() << ": " << e.what());
         if (op->IsImmediate()) {
             writeOp->ReleaseTxData(txc);
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Tx was terminated: " << e.what());
@@ -94,7 +88,7 @@ void TBuildWriteOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
 EExecutionStatus TBuildWriteOutRSUnit::OnTabletNotReady(TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx)
 {
-    LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
+    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,"Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
 
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 

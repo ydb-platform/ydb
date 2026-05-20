@@ -8,8 +8,6 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <library/cpp/threading/future/core/future.h>
 
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, LogComponent, LogPrefix() << stream)
-
 namespace NFq {
 
 namespace {
@@ -115,7 +113,7 @@ private:
         if (DataQuery->TxControl.SnapshotRead) {
             tx.SnapshotRead(true);
         }
-        LOG_T("Run query " << DataQuery->Sql << " commit " << tx.Commit_);
+        LOG_TRACE_S(*NActors::TlsActivationContext, LogComponent, LogPrefix() <<"Run query " << DataQuery->Sql << " commit " << tx.Commit_);
         RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx);
     }
 

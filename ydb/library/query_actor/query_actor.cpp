@@ -9,15 +9,6 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)
-
-
 namespace NKikimr {
 
 using namespace NGRpcService;
@@ -129,10 +120,10 @@ void TQueryBase::Bootstrap() {
     }
 
     if (SessionId) {
-        LOG_D("Bootstrap. Database: " << Database << ", SessionId: " << SessionId << ", IsSystemUser: " << IsSystemUser << ", run query");
+        LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Bootstrap. Database: " << Database << ", SessionId: " << SessionId << ", IsSystemUser: " << IsSystemUser << ", run query");
         RunQuery();
     } else {
-        LOG_D("Bootstrap. Database: " << Database << ", IsSystemUser: " << IsSystemUser << ", run create session");
+        LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Bootstrap. Database: " << Database << ", IsSystemUser: " << IsSystemUser << ", run create session");
         RunCreateSession();
     }
 }
@@ -153,13 +144,13 @@ void TQueryBase::RunCreateSession() const {
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
     if (ev->Get()->Status == StatusIds::SUCCESS) {
         SessionId = ev->Get()->SessionId;
-        LOG_T("Successfully created session: " << SessionId << ", run query");
+        LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Successfully created session: " << SessionId << ", run query");
 
         DeleteSession = true;
         RunQuery();
         Y_ABORT_UNLESS(Finished || RunningQuery || IsStreamingMode);
     } else {
-        LOG_W("Failed to create session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Failed to create session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 }
@@ -168,7 +159,7 @@ void TQueryBase::RunDeleteSession() const {
     using TDeleteSessionRequest = TGrpcRequestOperationCall<Table::DeleteSessionRequest, Table::DeleteSessionResponse>;
 
     Y_ABORT_UNLESS(SessionId);
-    LOG_T("Delete session: " << SessionId);
+    LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Delete session: " << SessionId);
 
     Table::DeleteSessionRequest request;
     request.set_session_id(SessionId);
@@ -177,7 +168,7 @@ void TQueryBase::RunDeleteSession() const {
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDeleteSessionResponse::TPtr& ev) {
     if (ev->Get()->Status != StatusIds::SUCCESS) {
-        LOG_W("Failed to delete session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Failed to delete session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
     }
     PassAway();
 }
@@ -198,7 +189,7 @@ void TQueryBase::RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params, 
     Y_ABORT_UNLESS(!RunningQuery);
     RequestStartTime = TInstant::Now();
     RunningQuery = true;
-    LOG_D("RunDataQuery with SessionId: " << SessionId << ", TxId: " << TxId << ", text: " << sql);
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"RunDataQuery with SessionId: " << SessionId << ", TxId: " << TxId << ", text: " << sql);
 
     Table::ExecuteDataQueryRequest request;
     request.set_session_id(SessionId);
@@ -241,7 +232,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
     TxId = ev->Get()->Result.tx_meta().id();
-    LOG_D("DataQuery #" << NumberRequests << " finished " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"DataQuery #" << NumberRequests << " finished " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
 
     if (ev->Get()->Status == StatusIds::SUCCESS) {
         ResultSets.clear();
@@ -270,7 +261,7 @@ void TQueryBase::RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params
     using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Table::ExecuteScanQueryRequest, Table::ExecuteScanQueryPartialResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
-    LOG_D("RunStreamQuery with text: " << sql);
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"RunStreamQuery with text: " << sql);
 
     Table::ExecuteScanQueryRequest request;
     request.set_mode(Table::ExecuteScanQueryRequest::MODE_EXEC);
@@ -289,7 +280,7 @@ void TQueryBase::ReadNextStreamPart() {
     Y_ABORT_UNLESS(StreamQueryProcessor && StreamQueryProcessor->HasData());
     RequestStartTime = TInstant::Now();
     RunningQuery = true;
-    LOG_D("Start read next stream part");
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Start read next stream part");
 
     StreamQueryProcessor->Read(GetOperationCallback<Table::ExecuteScanQueryPartialResponse, TEvQueryBasePrivate::TEvStreamQueryResultPart>());
 }
@@ -300,7 +291,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     NumberRequests++;
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
-    LOG_D("StreamQueryResultPart #" << NumberRequests << " finished " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"StreamQueryResultPart #" << NumberRequests << " finished " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
 
     if (ev->Get()->Status != StatusIds::SUCCESS) {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
@@ -330,7 +321,7 @@ void TQueryBase::CallOnStreamResult(NYdb::TResultSet&& resultSet) {
 }
 
 void TQueryBase::CancelStreamQuery() {
-    LOG_D("Cancel stream request");
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Cancel stream request");
     Y_ABORT_UNLESS(StreamQueryProcessor);
 
     if (!StreamQueryProcessor->IsFinished()) {
@@ -368,12 +359,12 @@ void TQueryBase::Finish(StatusIds::StatusCode status, TIssues&& issues, bool rol
         if (FinishOk) {
             FinishOk->Inc();
         }
-        LOG_D("Finish with SUCCESS, SessionId: " << SessionId << ", TxId: " << TxId);
+        LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Finish with SUCCESS, SessionId: " << SessionId << ", TxId: " << TxId);
     } else {
         if (FinishError) {
             FinishError->Inc();
         }
-        LOG_W("Finish with " << status << ", Issues: " << issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
+        LOG_WARN_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Finish with " << status << ", Issues: " << issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
     }
 
     Finished = true;
@@ -403,7 +394,7 @@ void TQueryBase::CommitTransaction() {
     Y_ABORT_UNLESS(SessionId);
     Y_ABORT_UNLESS(TxId);
     RunningCommit = true;
-    LOG_D("Commit transaction: " << TxId << " in session: " << SessionId);
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Commit transaction: " << TxId << " in session: " << SessionId);
 
     Table::CommitTransactionRequest request;
     request.set_session_id(SessionId);
@@ -412,7 +403,7 @@ void TQueryBase::CommitTransaction() {
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr& ev) {
-    LOG_D("CommitTransactionResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"CommitTransactionResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
 
     OnFinish(ev->Get()->Status, std::move(ev->Get()->Issues));
 
@@ -429,7 +420,7 @@ void TQueryBase::RollbackTransaction() const {
 
     Y_ABORT_UNLESS(SessionId);
     Y_ABORT_UNLESS(TxId);
-    LOG_D("Rollback transaction: " << TxId << " in session: " << SessionId);
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"Rollback transaction: " << TxId << " in session: " << SessionId);
 
     Table::RollbackTransactionRequest request;
     request.set_session_id(SessionId);
@@ -438,7 +429,7 @@ void TQueryBase::RollbackTransaction() const {
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvRollbackTransactionResponse::TPtr& ev) {
-    LOG_D("RollbackTransactionResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
+    LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() <<"RollbackTransactionResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
 
     // Continue finish
     if (DeleteSession) {

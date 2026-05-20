@@ -7,15 +7,6 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
-#define LOG_W(stream) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
-
 namespace NFq {
 
 NActors::TActorId MakeInternalServiceActorId() {
@@ -47,7 +38,7 @@ public:
 
     void Bootstrap() {
         Become(&TInternalService::StateFunc);
-        LOG_I("STARTED");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE,"STARTED");
     }
 
 private:

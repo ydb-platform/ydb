@@ -16,12 +16,6 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -79,7 +73,7 @@ public:
 
         auto it = Requests.find(ev->Cookie);
         if (it == Requests.end()) {
-            LOG_E("Request doesn't exist (SelfCheckResponse). Need to fix this bug urgently");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " <<"Request doesn't exist (SelfCheckResponse). Need to fix this bug urgently");
             return;
         }
         auto request = it->second;

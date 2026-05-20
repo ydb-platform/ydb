@@ -2,8 +2,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -32,7 +30,7 @@ bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationCont
         ? NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore
         : NKikimrSchemeOp::EPathStateNoChanges;
 
-    LOG_I("BuildLockSubOps for incremental restore"
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"BuildLockSubOps for incremental restore"
         << " opId: " << opId
         << " lock: " << lock
         << " workingDir: " << workingDir

@@ -15,17 +15,6 @@
 
 #include <queue>
 
-#define LOG_E(name, stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_W(name, stream) \
-    LOG_WARN_S (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_I(name, stream) \
-    LOG_INFO_S (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_D(name, stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_T(name, stream) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-
 namespace NYql::NDq {
 
 namespace {
@@ -137,7 +126,7 @@ public:
                 AllowLocalFiles));
         }
 
-        LOG_D("TS3ReadActor", "Bootstrap" << ", InputIndex: " << InputIndex << ", FileQueue: " << FileQueueActor << (UseRuntimeListing ? " (remote)" : " (local"));
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Bootstrap" << ", InputIndex: " << InputIndex << ", FileQueue: " << FileQueueActor << (UseRuntimeListing ? " (remote)" : " (local"));
 
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
@@ -183,7 +172,7 @@ public:
         auto id = object.GetPathIndex();
         const TString requestId = CreateGuidAsString();
         const auto& authInfo = Credentials.GetAuthInfo();
-        LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
             NS3Util::UrlEscapeRet(url),
             IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
@@ -258,7 +247,7 @@ private:
 
     void HandleObjectPathBatch(TEvS3Provider::TEvObjectPathBatch::TPtr& objectPathBatch) {
         if (!FileQueueEvents.OnEventReceived(objectPathBatch)) {
-            LOG_W("TS3ReadActor", "Duplicated TEvObjectPathBatch (likely resent) from " << FileQueueActor);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Duplicated TEvObjectPathBatch (likely resent) from " << FileQueueActor);
             return;
         }
 
@@ -268,7 +257,7 @@ private:
         ListedFiles += objectBatch.GetObjectPaths().size();
         IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
         if (IsFileQueueEmpty && !IsConfirmedFileQueueFinish) {
-            LOG_D("TS3ReadActor", "Confirm finish to " << FileQueueActor);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Confirm finish to " << FileQueueActor);
             SendPathBatchRequest();
             IsConfirmedFileQueueFinish = true;
         }
@@ -285,19 +274,19 @@ private:
     }
     void HandleObjectPathReadError(TEvS3Provider::TEvObjectPathReadError::TPtr& result) {
         if (!FileQueueEvents.OnEventReceived(result)) {
-            LOG_W("TS3ReadActor", "Duplicated TEvObjectPathReadError (likely resent) from " << FileQueueActor);
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Duplicated TEvObjectPathReadError (likely resent) from " << FileQueueActor);
             return;
         }
 
         IsFileQueueEmpty = true;
         if (!IsConfirmedFileQueueFinish) {
-            LOG_D("TS3ReadActor", "Confirm finish (with errors) to " << FileQueueActor);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Confirm finish (with errors) to " << FileQueueActor);
             SendPathBatchRequest();
             IsConfirmedFileQueueFinish = true;
         }
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
-        LOG_E("TS3ReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
         OnFatalError(std::move(issues), result->Get()->Record.GetFatalCode());
     }
@@ -367,7 +356,7 @@ private:
         const auto path = result->Get()->Path;
         const auto httpCode = result->Get()->Result.HttpResponseCode;
         const auto requestId = result->Get()->RequestId;
-        LOG_D("TS3ReadActor", "ID: " << id << ", Path: " << path << ", read size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode << ", request id: [" << requestId << "]");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "ID: " << id << ", Path: " << path << ", read size: " << result->Get()->Result.size() << ", HTTP response code: " << httpCode << ", request id: [" << requestId << "]");
         if (200 == httpCode || 206 == httpCode) {
             auto size = result->Get()->Result.size();
 
@@ -413,7 +402,7 @@ private:
         auto id = result->Get()->PathIndex;
         const auto requestId = result->Get()->RequestId;
         const auto path = result->Get()->Path;
-        LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString() << ", request id: [" << requestId << "]");
+        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString() << ", request id: [" << requestId << "]");
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
         OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
     }
@@ -423,17 +412,17 @@ private:
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        LOG_T("TS3ReadActor", "Handle disconnected FileQueue " << ev->Get()->NodeId);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Handle disconnected FileQueue " << ev->Get()->NodeId);
         FileQueueEvents.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        LOG_T("TS3ReadActor", "Handle connected FileQueue " << ev->Get()->NodeId);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Handle connected FileQueue " << ev->Get()->NodeId);
         FileQueueEvents.HandleNodeConnected(ev->Get()->NodeId);
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("TS3ReadActor", "Handle undelivered FileQueue ");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Handle undelivered FileQueue ");
         if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::UNAVAILABLE);
@@ -442,7 +431,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        LOG_D("TS3ReadActor", "PassAway");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3ReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway");
 
         if (Counters) {
             QueueDataSize->Sub(QueueTotalDataSize);

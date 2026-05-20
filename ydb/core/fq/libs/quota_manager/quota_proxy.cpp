@@ -11,17 +11,6 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
-#define LOG_W(stream) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
-#define LOG_T(stream) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
-
 namespace NFq {
 
 NActors::TActorId MakeQuotaProxyActorId() {
@@ -87,7 +76,7 @@ public:
 
     void Bootstrap() {
         Become(&TQuotaProxyService::StateFunc);
-        LOG_I("STARTED");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY,"STARTED");
     }
 
 private:

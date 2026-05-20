@@ -22,12 +22,6 @@
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 #include <yql/essentials/minikql/mkql_watermark.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-
 using namespace NActors;
 
 namespace NYql::NDq {
@@ -211,7 +205,7 @@ private:
             LastWatermark = *nextWatermark;
             if (WatermarkRequests.empty()) {
                 if (HasActiveCheckpoint) {
-                    LOG_T("Watermark delayed by checkpoint");
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Watermark delayed by checkpoint");
                 } else {
                     PauseInputs(*nextWatermark);
                 }
@@ -223,7 +217,7 @@ private:
             if (!WatermarkRequests.empty()) {
                 auto watermarkRequest = WatermarkRequests.front();
                 if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
-                    LOG_T("Task runner. Inject watermark " << watermarkRequest);
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Task runner. Inject watermark " << watermarkRequest);
                     TaskRunner->SetWatermarkIn(watermarkRequest);
                 }
             }
@@ -245,7 +239,7 @@ private:
             if (!WatermarkRequests.empty() && WatermarkRequests.front() == TaskRunner->GetWatermark().WatermarkIn) {
                 auto watermarkRequest = WatermarkRequests.front();
                 WatermarkRequests.pop_front();
-                LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequest
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Task runner. Watermarks. Injecting requested watermark " << watermarkRequest
                     << " to " << OutputsWithWatermarks.size() << " outputs ");
 
                 for (const auto& channelId : OutputsWithWatermarks) {
@@ -257,10 +251,10 @@ private:
                 watermarkInjectedToOutputs = watermarkRequest;
                 if (!WatermarkRequests.empty()) {
                     if (HasActiveCheckpoint) {
-                        LOG_T("Next watermark delayed by active checkpoint");
+                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Next watermark delayed by active checkpoint");
                     } else {
                         auto nextWatermarkRequest = WatermarkRequests.front();
-                        LOG_T("Task runner. Re-pause on watermark " << nextWatermarkRequest);
+                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Task runner. Re-pause on watermark " << nextWatermarkRequest);
                         PauseInputs(nextWatermarkRequest);
                     }
                 }
@@ -282,14 +276,14 @@ private:
                         TaskRunner->GetSink(sinkId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
                     }
                 } catch (const std::exception& e) {
-                    LOG_E("Failed to save state: " << e.what());
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
                 }
                 StartResumeByCheckpoint();
                 HasActiveCheckpoint = false;
                 if (!WatermarkRequests.empty()) {
                     auto nextWatermarkRequest = WatermarkRequests.front();
-                    LOG_T("Task runner. Pause by watermark " << nextWatermarkRequest);
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Task runner. Pause by watermark " << nextWatermarkRequest);
                     PauseInputs(nextWatermarkRequest);
                 }
             }
@@ -350,10 +344,10 @@ private:
             inputChannel->PauseByCheckpoint();
         }
         if (ev->Get()->WatermarkAfterPush) {
-            LOG_T("Adding " << *ev->Get()->WatermarkAfterPush);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Adding " << *ev->Get()->WatermarkAfterPush);
             inputChannel->AddWatermark(*ev->Get()->WatermarkAfterPush);
         } else {
-            LOG_T("No watermark ");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"No watermark ");
         }
 
         // run
@@ -391,7 +385,7 @@ private:
         auto wasFinished = ev->Get()->WasFinished;
         if (wasFinished) {
             channel->Finish();
-            LOG_I("output channel with id [" << channelId << "] finished prematurely");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"output channel with id [" << channelId << "] finished prematurely");
         }
         int maxChunks = std::numeric_limits<int>::max();
         bool changed = false;
@@ -459,7 +453,7 @@ private:
 
     void MaybeResumeByCheckpoint() {
         if (UnsentCheckpoints > 0) {
-            LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"Pending " << UnsentCheckpoints << " checkpoints to be sent");
             return;
         }
         for (const auto& inputId : InputsWithCheckpoints) {
@@ -520,7 +514,7 @@ private:
         ParentId = ev->Sender;
         auto settings = NDq::TDqTaskSettings(&ev->Get()->Task);
         TaskRunner = Factory(Alloc, settings, ev->Get()->StatsMode, [this](const TString& message) {
-            LOG_D(message);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<message);
         });
 
         auto& inputs = settings.GetInputs();
@@ -637,7 +631,7 @@ private:
         } else {
             err << ", quota manager NOT assigned";
         }
-        LOG_E("TMemoryLimitExceededException: " << err);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " <<"TMemoryLimitExceededException: " << err);
         TIssue issue(err);
         SetIssueCode(TIssuesIds::KIKIMR_PRECONDITION_FAILED, issue);
         return MakeHolder<TEvDq::TEvAbortExecution>(isHardLimit ? NYql::NDqProto::StatusIds::LIMIT_EXCEEDED : NYql::NDqProto::StatusIds::OVERLOADED, TVector<TIssue>{issue});

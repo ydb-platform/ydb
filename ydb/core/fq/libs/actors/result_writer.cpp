@@ -22,11 +22,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -59,7 +54,7 @@ public:
     static constexpr char ActorName[] = "YQ_RESULT_WRITER";
 
     void Bootstrap() {
-        LOG_I("Bootstrap");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " <<"Bootstrap");
         Become(&TResultWriter::StateFunc);
     }
 
@@ -77,7 +72,7 @@ private:
 
     void PassAway() {
         auto duration = (TInstant::Now()-StartTime);
-        LOG_I("FinishWrite, Records: " << RowIndex
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " <<"FinishWrite, Records: " << RowIndex
                 << " HasError: " << HasError
                 << " Size: " << Size
                 << " Rows: " << Rows
@@ -95,7 +90,7 @@ private:
     }
 
     void SendIssuesAndSetErrorFlag(const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode statusCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
-        LOG_E("ControlPlane WriteResult Issues: " << issues.ToString());
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " <<"ControlPlane WriteResult Issues: " << issues.ToString());
         Issues.AddIssues(issues);
         HasError = true;
         auto req = MakeHolder<TEvDqFailure>(statusCode, Issues);
@@ -123,7 +118,7 @@ private:
         queryResult.SetTruncated(Truncated);
         queryResult.SetRowsCount(Rows);
 
-        LOG_D("Send response to executer");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " <<"Send response to executer");
         Send(ExecuterId, new TEvQueryResponse(std::move(queryResult)));
     }
 
@@ -166,7 +161,7 @@ private:
 
                 auto duration = (TInstant::Now()-StartTime);
 
-                LOG_T("ChannelData, Records: " << RowIndex
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " <<"ChannelData, Records: " << RowIndex
                     << " HasError: " << HasError
                     << " Size: " << Size
                     << " Rows: " << Rows
@@ -222,7 +217,7 @@ private:
 
             auto duration = (TInstant::Now()-StartTime);
 
-            LOG_T("ChannelData Shift, Records: " << RowIndex
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " <<"ChannelData Shift, Records: " << RowIndex
                 << " HasError: " << HasError
                 << " Size: " << Size
                 << " Rows: " << Rows
@@ -328,7 +323,7 @@ private:
         try {
             ProcessData(ev);
         } catch (...) {
-            LOG_E(CurrentExceptionMessage());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " <<CurrentExceptionMessage());
             auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
             Send(ExecuterId, req.Release());
             HasError = true;

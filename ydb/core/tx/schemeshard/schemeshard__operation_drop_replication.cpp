@@ -4,11 +4,6 @@
 
 #include <ydb/core/tx/replication/controller/public_events.h>
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -57,7 +52,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -78,7 +73,7 @@ public:
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
 
-            LOG_D(DebugHint() << "Send TEvDropReplication to controller"
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "Send TEvDropReplication to controller"
                 << ": tabletId# " << tabletId
                 << ", ev# " << ev->ToString());
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
@@ -90,7 +85,7 @@ public:
     }
 
     bool HandleReply(NReplication::TEvController::TEvDropReplicationResult::TPtr& ev, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply " << ev->Get()->ToString());
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
@@ -100,7 +95,7 @@ public:
         case NKikimrReplication::TEvDropReplicationResult::NOT_FOUND:
             break;
         default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvDropReplicationResult"
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "Ignoring unexpected TEvDropReplicationResult"
                 << " tabletId# " << tabletId
                 << " status# " << static_cast<int>(status));
             return false;
@@ -113,7 +108,7 @@ public:
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_W(DebugHint() << "Ignoring duplicate TEvDropReplicationResult");
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "Ignoring duplicate TEvDropReplicationResult");
             return false;
         }
 
@@ -163,7 +158,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -176,7 +171,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan"
             << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -277,7 +272,7 @@ public:
         const auto& op = Transaction.GetDrop();
         const auto& name = op.GetName();
 
-        LOG_N("TDropReplication Propose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropReplication Propose"
             << ": opId# " << OperationId
             << ", path# " << workingDir << "/" << name);
 

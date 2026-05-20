@@ -19,24 +19,6 @@ using namespace NActors;
 
 namespace {
 
-#define LOG_D(s) \
-    LOG_DEBUG_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
-
-#define LOG_I(s) \
-    LOG_INFO_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
-
-#define LOG_E(s) \
-    LOG_ERROR_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
-
-#define LOG_C(s) \
-    LOG_CRIT_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
-
-#define LOG_W(s) \
-    LOG_WARN_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s);
-
-#define LOG_T(s) \
-    LOG_TRACE_S(*ActorSystem_,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " << s);
-
 class TDqChannelStorageActor : public IDqChannelStorageActor,
                                public NActors::TActorBootstrapped<TDqChannelStorageActor>
 {
@@ -81,7 +63,7 @@ protected:
     void FailWithError(const TString& error) {
         if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
-        LOG_E("Error: " << error);
+        LOG_ERROR_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " <<"Error: " << error);
         ErrorCallback_(TStringBuilder() << "[Channel spilling]" << error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
@@ -111,7 +93,7 @@ private:
 
     void HandleWork(TEvDqChannelSpilling::TEvPut::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_T("[TEvPut] blobId: " << msg.BlobId_);
+        LOG_TRACE_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " <<"[TEvPut] blobId: " << msg.BlobId_);
 
         auto opBegin = TInstant::Now();
 
@@ -123,7 +105,7 @@ private:
 
     void HandleWork(TEvDqChannelSpilling::TEvGet::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_T("[TEvGet] blobId: " << msg.BlobId_);
+        LOG_TRACE_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " <<"[TEvGet] blobId: " << msg.BlobId_);
 
         auto opBegin = TInstant::Now();
 
@@ -140,7 +122,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_T("[TEvWriteResult] blobId: " << msg.BlobId);
+        LOG_TRACE_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " <<"[TEvWriteResult] blobId: " << msg.BlobId);
 
         const auto it = WritingBlobs_.find(msg.BlobId);
         if (it == WritingBlobs_.end()) {
@@ -164,7 +146,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
+        LOG_TRACE_S(*ActorSystem_, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ", channelId: " << ChannelId_ << ". " <<"[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
         const auto it = LoadingBlobs_.find(msg.BlobId);
         if (it == LoadingBlobs_.end()) {

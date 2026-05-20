@@ -2,10 +2,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-
 namespace {
 
 using namespace NKikimr;
@@ -28,7 +24,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<DebugHint() << " ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -41,7 +37,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan" << ": step# " << step);
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<DebugHint() << "HandleReply TEvOperationPlan" << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -107,7 +103,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& secretName = alterSecretProto.GetName();
 
-        LOG_N("TAlterSecret Propose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TAlterSecret Propose"
             << ", path: " << parentPathStr << "/" << secretName
             << ", opId: " << OperationId
         );
@@ -200,13 +196,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterSecret AbortPropose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TAlterSecret AbortPropose"
             << ", opId: " << OperationId
         );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterSecret AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TAlterSecret AbortUnsafe"
             << ", opId: " << OperationId
             << ", forceDropId: " << forceDropTxId
         );

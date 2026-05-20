@@ -1,10 +1,6 @@
 #include "cdc_stream_heartbeat.h"
 #include "datashard_impl.h"
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
-
 namespace NKikimr::NDataShard {
 
 static TRowVersion AdjustVersion(const TRowVersion& version, TDuration interval) {
@@ -37,7 +33,7 @@ public:
             return true;
         }
 
-        LOG_I("Emit change records"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " <<"Emit change records"
             << ": edge# " << Edge
             << ", at tablet# " << Self->TabletID());
 
@@ -74,7 +70,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " <<"Enqueue " << ChangeRecords.size() << " change record(s)"
             << ": at tablet# " << Self->TabletID());
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
         Self->EmitHeartbeats();
@@ -83,7 +79,7 @@ public:
 }; // TTxCdcStreamEmitHeartbeats
 
 void TDataShard::EmitHeartbeats() {
-    LOG_D("Emit heartbeats"
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " <<"Emit heartbeats"
         << ": at tablet# " << TabletID());
 
     if (State != TShardState::Ready) {

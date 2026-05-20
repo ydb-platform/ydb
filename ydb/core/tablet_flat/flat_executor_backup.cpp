@@ -31,10 +31,6 @@
 #include <util/stream/file.h>
 #include <util/system/hp_timer.h>
 
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
-
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
 using namespace NTable;
@@ -241,7 +237,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Starting snapshot" << " Path# " << SnapshotPath);
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Starting snapshot" << " Path# " << SnapshotPath);
 
         DeleteOldBackups();
 
@@ -264,13 +260,13 @@ public:
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
             Send(Owner, new TEvSnapshotStats(stringOut.Size()));
-            LOG_D("Schema written" << " Bytes# " << stringOut.Size());
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Schema written" << " Bytes# " << stringOut.Size());
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
-            LOG_D("No tables to scan, finalizing");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"No tables to scan, finalizing");
             return Finalize();
         }
 
@@ -317,7 +313,7 @@ public:
                     continue;
                 }
     
-                LOG_N("Deleting incomplete backup" << " Path# " << child);
+                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Deleting incomplete backup" << " Path# " << child);
                 child.ForceDelete();
             }
 
@@ -326,11 +322,11 @@ public:
             });
 
             for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
-                LOG_N("Deleting old backup" << " Path# " << backups[i].second);
+                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Deleting old backup" << " Path# " << backups[i].second);
                 backups[i].second.ForceDelete();
             }
         } catch (const std::exception& e) {
-            LOG_E("Failed to delete old backups" << " Path# " << BackupPath << " Error# " << e.what());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Failed to delete old backups" << " Path# " << BackupPath << " Error# " << e.what());
         }
     }
 
@@ -338,7 +334,7 @@ public:
         if (success) {
             Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
         } else {
-            LOG_E("Snapshot failed" << " Error# " << error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Snapshot failed" << " Error# " << error);
             Send(Owner, new TEvSnapshotCompleted(error));
         }
 
@@ -353,7 +349,7 @@ public:
 
     void Handle(TEvWriteSnapshot::TPtr& ev) {
         const auto* msg = ev->Get();
-        LOG_D("Writing snapshot" << " TableId# " << msg->TableId << " Bytes# " << msg->SnapshotData.Size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Writing snapshot" << " TableId# " << msg->TableId << " Bytes# " << msg->SnapshotData.Size());
 
         auto it = Tables.find(msg->TableId);
         if (it == Tables.end()) {
@@ -393,7 +389,7 @@ public:
 
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
-        LOG_D("Table scan done" << " Done# " << DoneTables.size() << " Total# " << Tables.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Table scan done" << " Done# " << DoneTables.size() << " Total# " << Tables.size());
         if (DoneTables.size() == Tables.size()) {
             return Finalize();
         }
@@ -478,7 +474,7 @@ public:
 
         DeleteOldBackups();
 
-        LOG_N("Snapshot finalized" << " Bytes# " << WrittenBytes);
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Snapshot finalized" << " Bytes# " << WrittenBytes);
         return ReplyAndDie();
     }
 
@@ -836,7 +832,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Starting changelog" << " Path# " << ChangelogPath);
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Starting changelog" << " Path# " << ChangelogPath);
 
         // writing initial changelog and checksum files
         BufferCreatedAt = TActivationContext::Monotonic();
@@ -860,7 +856,7 @@ public:
         NJson::TJsonWriter writer(&out, BackupJsonConfig());
 
         const auto* msg = ev->Get();
-        LOG_D("Writing changelog" << " Step# " << msg->Step);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Writing changelog" << " Step# " << msg->Step);
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -988,7 +984,7 @@ public:
             return ReplyAndDie(msg->Error);
         }
 
-        LOG_D("Changelog IO completed"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Changelog IO completed"
             << " Bytes# " << IoInFlightBytes
             << " Latency# " << msg->Latency
             << " Lag# " << msg->Lag);
@@ -1000,7 +996,7 @@ public:
         IoInProgress = false;
 
         if (NeedNewBackup()) {
-            LOG_N("Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
             Send(Owner, new TEvStartNewBackup());
         }
 
@@ -1034,7 +1030,7 @@ public:
     }
 
     void StartIO(EOpenMode openMode = EOpenModeFlag::OpenExisting | EOpenModeFlag::ForAppend) {
-        LOG_D("Starting Changelog IO" << " Bytes# " << Buffer.Size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Starting Changelog IO" << " Bytes# " << Buffer.Size());
 
         IoInFlightBytes = Buffer.Size();
         IoInProgress = true;
@@ -1069,7 +1065,7 @@ public:
     }
 
     void ReplyAndDie(const TString& error) {
-        LOG_E("Changelog failed" << " Error# " << error);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Changelog failed" << " Error# " << error);
         Send(Owner, new TEvChangelogFailed(error));
         PassAway();
     }

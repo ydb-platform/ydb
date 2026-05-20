@@ -8,14 +8,6 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
-#define LOG_T(s) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << s)
-#define LOG_D(s) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << s)
-#define LOG_I(s) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << s)
-#define LOG_N(s) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << s)
-#define LOG_W(s) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << s)
-#define LOG_E(s) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << s)
-#define LOG_C(s) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() << s)
-
 namespace NYql::NDq {
 
 namespace {
@@ -64,7 +56,7 @@ class TDqPqInfoAggregationActor : public TActor<TDqPqInfoAggregationActor>, publ
             LastSentValue.SetCounterId(CounterId);
             ScheduleSend();
 
-            LOG_D("Created new counter, SendPeriod: " << SendPeriod << ", DeltaThreshold: " << DeltaThreshold);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Created new counter, SendPeriod: " << SendPeriod << ", DeltaThreshold: " << DeltaThreshold);
         }
 
         virtual ~TAggregatorBase() = default;
@@ -86,13 +78,13 @@ class TDqPqInfoAggregationActor : public TActor<TDqPqInfoAggregationActor>, publ
             const auto newValue = GetUpdateValue(value);
             const ui64 newSeqNo = value.GetSeqNo();
             const auto [it, inserted] = SenderValues.emplace(sender, TSenderInfo{.Value = newValue, .SeqNo = newSeqNo});
-            LOG_D("Update counter, sender: " << sender << ", seq no: " << newSeqNo << ", new value: " << newValue << ", old value: " << it->second.Value << ", is new: " << inserted);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Update counter, sender: " << sender << ", seq no: " << newSeqNo << ", new value: " << newValue << ", old value: " << it->second.Value << ", is new: " << inserted);
 
             std::optional<i64> oldValue;
             if (inserted) {
                 Y_VALIDATE(Self->Senders[sender].emplace(CounterId).second, "Duplicated CounterId: " << CounterId);
             } else if (it->second.SeqNo > newSeqNo) {
-                LOG_N("Skip update, seq no: " << newSeqNo << " < " << it->second.SeqNo);
+                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Skip update, seq no: " << newSeqNo << " < " << it->second.SeqNo);
                 return;
             } else {
                 oldValue = it->second.Value;
@@ -112,7 +104,7 @@ class TDqPqInfoAggregationActor : public TActor<TDqPqInfoAggregationActor>, publ
             if (const auto aggValue = GetAggValue()) {
                 LastSentValue.SetScalar(*aggValue);
                 LastSentValue.SetSeqNo(LastSentValue.GetSeqNo() + 1);
-                LOG_D("Send value: " << LastSentValue.GetScalar() << ", seq no: " << LastSentValue.GetSeqNo());
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Send value: " << LastSentValue.GetScalar() << ", seq no: " << LastSentValue.GetSeqNo());
 
                 for (const auto& [sender, _] : SenderValues) {
                     Self->Send(sender, new TPqInfoAggregationActorEvents::TEvOnAggregateUpdated(LastSentValue), IEventHandle::FlagTrackDelivery);
@@ -140,7 +132,7 @@ class TDqPqInfoAggregationActor : public TActor<TDqPqInfoAggregationActor>, publ
     private:
         bool TrySendValue() {
             if (const auto aggValue = GetAggValue()) {
-                LOG_D("Agg value: " << *aggValue << ", LastSentValue: " << LastSentValue.GetScalar());
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Agg value: " << *aggValue << ", LastSentValue: " << LastSentValue.GetScalar());
 
                 if (!LastSentValue.HasScalar() || std::abs(*aggValue - LastSentValue.GetScalar()) > DeltaThreshold) {
                     Send();
@@ -238,7 +230,7 @@ public:
     );
 
     bool OnUnhandledException(const std::exception& e) final {
-        LOG_E("Unhandled exception: " << e.what());
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Unhandled exception: " << e.what());
         return true;
     }
 
@@ -247,8 +239,8 @@ private:
         const auto& sender = ev->Sender;
         const auto& record = ev->Get()->Record;
         const auto& counterId = record.GetCounterId();
-        LOG_D("Received TEvUpdateCounter from: " << sender << ", counter: " << counterId);
-        LOG_T("Received TEvUpdateCounter from: " << sender << ", data: " << record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Received TEvUpdateCounter from: " << sender << ", counter: " << counterId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Received TEvUpdateCounter from: " << sender << ", data: " << record.ShortDebugString());
 
         if (record.GetActionCase() == NPq::NProto::TEvDqPqUpdateCounterValue::ACTION_NOT_SET) {
             RemoveSender(sender);
@@ -276,11 +268,11 @@ private:
 
     void Handle(TPrivateEvents::TEvSendStatistics::TPtr& ev) {
         const auto& counterId = ev->Get()->CounterId;
-        LOG_T("Received TEvSendStatistics, counterId: " << counterId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Received TEvSendStatistics, counterId: " << counterId);
 
         const auto it = AggregateValues.find(counterId);
         if (it == AggregateValues.end()) {
-            LOG_I("Aggregate value not found for periodic send: " << counterId);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Aggregate value not found for periodic send: " << counterId);
             return;
         }
 
@@ -291,24 +283,24 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         const auto& sender = ev->Sender;
         if (const auto reason = ev->Get()->Reason; reason != TEvents::TEvUndelivered::ReasonActorUnknown) {
-            LOG_W("Skip TEvUndelivered from: " << sender << ", reason: " << reason);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Skip TEvUndelivered from: " << sender << ", reason: " << reason);
             return;
         }
 
-        LOG_I("Received TEvUndelivered from: " << sender << ", actor unknown");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Received TEvUndelivered from: " << sender << ", actor unknown");
         RemoveSender(sender);
     }
 
     void Handle(TEvents::TEvPoison::TPtr& ev) {
-        LOG_I("Received TEvPoison from: " << ev->Sender);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Received TEvPoison from: " << ev->Sender);
         PassAway();
     }
 
     void RemoveSender(const TActorId& sender) {
-        LOG_I("Received removing counters for sender: " << sender);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Received removing counters for sender: " << sender);
         const auto it = Senders.find(sender);
         if (it == Senders.end()) {
-            LOG_I("Sender not found for removing: " << sender);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Sender not found for removing: " << sender);
             return;
         }
 
@@ -317,7 +309,7 @@ private:
             Y_VALIDATE(counterIt != AggregateValues.end(), "Aggregate value not found: " << counterId);
 
             if (counterIt->second->Remove(sender)) {
-                LOG_I("Aggregate value removed: " << counterId);
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, GetLogPrefix() <<"Aggregate value removed: " << counterId);
                 AggregateValues.erase(counterIt);
             }
         }

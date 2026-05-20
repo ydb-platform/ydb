@@ -19,11 +19,6 @@
 
 #include <deque>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -168,7 +163,7 @@ public:
     static constexpr char ActorName[] = "YQ_PINGER";
 
     void Bootstrap() {
-        LOG_T("Start Pinger");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Start Pinger");
         StartLeaseTime = TActivationContext::Now(); // Not accurate value, but it allows us to retry the first unsuccessful ping request.
         ScheduleNextPing();
         Become(&TPingerActor::StateFunc);
@@ -184,7 +179,7 @@ private:
     )
 
     void PassAway() override {
-        LOG_T("Stop Pinger");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Stop Pinger");
         NActors::TActorBootstrapped<TPingerActor>::PassAway();
     }
 
@@ -197,7 +192,7 @@ private:
 
     void Wakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
         if (FatalError) {
-            LOG_D("Got wakeup after fatal error. Ignore");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Got wakeup after fatal error. Ignore");
             return;
         }
 
@@ -237,7 +232,7 @@ private:
     void Handle(TEvents::TEvForwardPingRequest::TPtr& ev) {
         Y_ABORT_UNLESS(ev->Cookie != ContinueLeaseRequestCookie);
         if (Finishing) {
-            LOG_E("Attempt to send a ping request to the terminating actor " << ev->Get()->Request);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Attempt to send a ping request to the terminating actor " << ev->Get()->Request);
             Send(ReplyToSender ? ev->Sender : Parent, new TEvents::TEvForwardPingResponse(false, FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED), 0, ev->Cookie);
             return;
         }
@@ -247,10 +242,10 @@ private:
             SchedulerCookieHolder.Reset(nullptr);
         }
 
-        LOG_T("Forward ping request: " << ev->Get()->Request);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Forward ping request: " << ev->Get()->Request);
         if (FatalError) {
             if (Finishing) {
-                LOG_D("Got final ping request after fatal error");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Got final ping request after fatal error");
                 PassAway();
             }
         } else {
@@ -286,7 +281,7 @@ private:
 
     void Handle(TEvInternalService::TEvPingTaskResponse::TPtr& ev) {
         if (FatalError) {
-            LOG_D("Got ping response after fatal error. Ignore");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Got ping response after fatal error. Ignore");
             return;
         }
 
@@ -335,11 +330,11 @@ private:
         }
 
         if (success) {
-            LOG_T("Ping response success: " << ev->Get()->Result);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Ping response success: " << ev->Get()->Result);
             StartLeaseTime = now;
             auto action = ev->Get()->Result.action();
             if (action != FederatedQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
-                LOG_D("Query action: " << FederatedQuery::QueryAction_Name(action));
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Query action: " << FederatedQuery::QueryAction_Name(action));
                 SendQueryAction(action);
             }
 
@@ -355,14 +350,14 @@ private:
                 }
             }
         } else if (retryAfter) {
-            LOG_W("Ping response error: " << errorMessage << ". Retry after: " << *retryAfter);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Ping response error: " << errorMessage << ". Retry after: " << *retryAfter);
             Schedule(*retryAfter, new NActors::TEvents::TEvWakeup(continueLeaseRequest ? RetryContinueLeaseWakeupTag : RetryForwardPingRequestWakeupTag));
         } else {
             TRetryState* retryStateForLogging = retryState;
             if (!retryStateForLogging) {
                 retryStateForLogging = continueLeaseRequest ? &RetryState : &ForwardRequests.front().RetryState;
             }
-            LOG_E("Ping response error: " << errorMessage << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Ping response error: " << errorMessage << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
             auto action = ev->Get()->Status.IsSuccess() ? ev->Get()->Result.action() : FederatedQuery::QUERY_ACTION_UNSPECIFIED;
             if (ReplyToSender) {
                 for (const auto& forwardRequest: ForwardRequests) {
@@ -376,7 +371,7 @@ private:
         }
 
         if (Finishing && ForwardRequests.empty() && !Requested) {
-            LOG_D("Query finished");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<"Query finished");
             PassAway();
         }
     }
@@ -390,14 +385,14 @@ private:
             if (!retry && !reqInfo.RetryState) {
                 reqInfo.RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
             }
-            LOG_T((retry ? "Retry forward" : "Forward") << " request Private::PingTask");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<(retry ? "Retry forward" : "Forward") << " request Private::PingTask");
 
             Ping(reqInfo.Request->Get()->Request, reqInfo.Request->Cookie);
         }
     }
 
     void Ping(bool retry = false) {
-        LOG_T((retry ? "Retry request" : "Request") << " Private::PingTask");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " <<(retry ? "Retry request" : "Request") << " Private::PingTask");
 
         Y_ABORT_UNLESS(!Requested);
         Requested = true;

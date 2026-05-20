@@ -25,11 +25,6 @@
 
 #include <queue>
 
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
-#define LOG_W(stream) LOG_WARN_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " << stream)
-
 namespace NYql::NDq {
 
 namespace {
@@ -239,7 +234,7 @@ public:
 
     void Bootstrap() {
         Become(&TS3ApplicatorActor::StateFunc);
-        LOG_D("Bootstrapped with " << ExternalEffect.GetEffects().size() << " effect(s) to " << (Commit ? "COMMIT" : "ROLLBACK"));
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"Bootstrapped with " << ExternalEffect.GetEffects().size() << " effect(s) to " << (Commit ? "COMMIT" : "ROLLBACK"));
         for (auto& effect : ExternalEffect.GetEffects()) {
             NYql::NS3::TEffect sinkEffect;
             YQL_ENSURE(sinkEffect.ParseFromString(effect.GetData()), "S3Sink Effect is corrupted");
@@ -348,7 +343,7 @@ public:
                 RequestQueue.pop();
                 HttpRequestInflight++;
             } catch (const std::exception& e) {
-                LOG_E("Exception: " << e.what());
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"Exception: " << e.what());
                 Finish(true, TStringBuilder{} << "Error while processing HTTP request: " << e.what());
             }
         }
@@ -389,7 +384,7 @@ public:
         auto& result = ev->Get()->Result;
         if (!result.Issues) {
             if (result.Content.HttpResponseCode == 404) {
-                LOG_W("CommitMultipartUpload NOT FOUND " << ev->Get()->State->BuildUrl() << " (may be completed already)");
+                LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"CommitMultipartUpload NOT FOUND " << ev->Get()->State->BuildUrl() << " (may be completed already)");
                 return;
             }
             if (result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
@@ -397,13 +392,13 @@ public:
                 if (s3Result.IsError) {
                     Finish(true, s3Result.S3ErrorCode + ": " + s3Result.ErrorMessage);
                 } else {
-                    LOG_D("CommitMultipartUpload SUCCESS " << ev->Get()->State->BuildUrl());
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"CommitMultipartUpload SUCCESS " << ev->Get()->State->BuildUrl());
                 }
                 return;
             }
         }
         const TString& url = ev->Get()->State->BuildUrl();
-        LOG_D("CommitMultipartUpload ERROR " << url);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"CommitMultipartUpload ERROR " << url);
         if (RetryOperation(std::move(result), url, "CommitMultipartUpload")) {
             PushCommitMultipartUpload(ev->Get()->State);
         }
@@ -421,7 +416,7 @@ public:
             if (s3Result.IsError) {
                 Finish(true, s3Result.S3ErrorCode + ": " + s3Result.ErrorMessage);
             } else {
-                LOG_D("ListMultipartUploads SUCCESS " << ev->Get()->State->BuildUrl());
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListMultipartUploads SUCCESS " << ev->Get()->State->BuildUrl());
                 const auto& root = s3Result.GetRootNode();
                 if (root.Name() == "ListMultipartUploadsResult") {
                     const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
@@ -445,7 +440,7 @@ public:
                         auto url = ev->Get()->State->Url + key;
                         if (key.compare(pos, KeyPrefix.size(), KeyPrefix.c_str())) {
                             // unknown upload - skip and report
-                            LOG_W("ListMultipartUploads UNKNOWN Upload Url " << url);
+                            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListMultipartUploads UNKNOWN Upload Url " << url);
                             auto prefix = ev->Get()->State->Url + ev->Get()->State->Prefix;
                             if (!UnknownPrefixes.contains(prefix)) {
                                 UnknownPrefixes.insert(prefix);
@@ -480,7 +475,7 @@ public:
             return;
         }
         const TString& url = ev->Get()->State->BuildUrl();
-        LOG_D("ListMultipartUploads ERROR " << url);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListMultipartUploads ERROR " << url);
         if (RetryOperation(std::move(result), url, "ListMultipartUploads")) {
             PushListMultipartUploads(ev->Get()->State);
         }
@@ -495,16 +490,16 @@ public:
         auto& result = ev->Get()->Result;
         if (!result.Issues) {
             if (result.Content.HttpResponseCode == 404) {
-                LOG_W("AbortMultipartUpload NOT FOUND " << ev->Get()->State->BuildUrl() << " (may be aborted already)");
+                LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"AbortMultipartUpload NOT FOUND " << ev->Get()->State->BuildUrl() << " (may be aborted already)");
                 return;
             }
             if (result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
-                LOG_D("AbortMultipartUpload SUCCESS " << ev->Get()->State->BuildUrl());
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"AbortMultipartUpload SUCCESS " << ev->Get()->State->BuildUrl());
                 return;
             }
         }
         const TString& url = ev->Get()->State->BuildUrl();
-        LOG_D("AbortMultipartUpload ERROR " << url);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"AbortMultipartUpload ERROR " << url);
         if (RetryOperation(std::move(result), url, "AbortMultipartUpload")) {
             PushAbortMultipartUpload(ev->Get()->State);
         }
@@ -519,7 +514,7 @@ public:
         auto& result = ev->Get()->Result;
         if (!result.Issues) {
             if (result.Content.HttpResponseCode == 404) {
-                LOG_W("ListParts NOT FOUND " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListParts NOT FOUND " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
                 return;
             }
             if (result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
@@ -527,7 +522,7 @@ public:
                 if (s3Result.IsError) {
                     Finish(true, s3Result.S3ErrorCode + ": " + s3Result.ErrorMessage);
                 } else {
-                    LOG_D("ListParts SUCCESS " << ev->Get()->State->BuildUrl());
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListParts SUCCESS " << ev->Get()->State->BuildUrl());
                     const auto& root = s3Result.GetRootNode();
                     if (root.Name() == "ListPartsResult") {
                         const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
@@ -542,7 +537,7 @@ public:
                             PushListParts(ev->Get()->State);
                         } else {
                             if (state->Tags.empty()) {
-                                LOG_W("ListParts returned empty parts list for " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                                LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListParts returned empty parts list for " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
                                 return;
                             }
                             PushCommitMultipartUpload(state);
@@ -555,7 +550,7 @@ public:
             }
         }
         const TString& url = ev->Get()->State->BuildUrl();
-        LOG_D("ListParts ERROR " << url);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListParts ERROR " << url);
         if (RetryOperation(std::move(result), url, "ListParts")) {
             PushListParts(ev->Get()->State);
         }
@@ -567,7 +562,7 @@ public:
     }
 
     void CommitMultipartUpload(TCompleteMultipartUpload::TPtr state) {
-        LOG_D("CommitMultipartUpload BEGIN " << state->BuildUrl());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"CommitMultipartUpload BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
         Gateway->Upload(state->BuildUrl(),
             IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
@@ -582,7 +577,7 @@ public:
     }
 
     void ListMultipartUploads(TListMultipartUploads::TPtr state) {
-        LOG_D("ListMultipartUploads BEGIN " << state->BuildUrl());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListMultipartUploads BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
             IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
@@ -598,7 +593,7 @@ public:
     }
 
     void AbortMultipartUpload(TAbortMultipartUpload::TPtr state) {
-        LOG_D("AbortMultipartUpload BEGIN " << state->BuildUrl());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"AbortMultipartUpload BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
         Gateway->Delete(state->BuildUrl(),
             IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
@@ -611,7 +606,7 @@ public:
     }
 
     void ListParts(TListParts::TPtr state) {
-        LOG_D("ListParts BEGIN " << state->BuildUrl());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " TS3ApplicatorActor " <<"ListParts BEGIN " << state->BuildUrl());
         auto authInfo = GetAuthInfo(state->Token);
         Gateway->Download(state->BuildUrl(),
             IHTTPGateway::MakeYcHeaders(state->RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),

@@ -16,12 +16,6 @@ using namespace NActors;
 
 namespace NKikimr::NKqp {
 
-#define LOG_T(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-
 static std::atomic<ui64> MaxTaskSize = 48_MB;
 
 void SetMaxTaskSize(ui64 size) {
@@ -40,7 +34,7 @@ template <class TCollection>
 std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TIntrusivePtr<TUserRequestContext>& UserRequestContext, const TCollection& tasks) {
     for (const auto& task : tasks) {
         if (ui32 size = task.ByteSize(); size > GetMaxTaskSize()) {
-            LOG_E("Abort execution. Task #" << task.GetId() << " size is too big: " << size << " > " << GetMaxTaskSize());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Abort execution. Task #" << task.GetId() << " size is too big: " << size << " > " << GetMaxTaskSize());
             return std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED,
                 TStringBuilder() << "Datashard program size limit exceeded (" << size << " > " << GetMaxTaskSize() << ")");
         }
@@ -174,7 +168,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     if (isShutdown) {
         requestData.RetryNumber = ExecuterRetriesConfig.GetMaxRetryNumber();
         YQL_ENSURE(requestData.NodeId != target.NodeId());
-        LOG_D("Try to retry after NODE_SHUTTING_DOWN, run tasks locally, requestId: " << requestId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Try to retry after NODE_SHUTTING_DOWN, run tasks locally, requestId: " << requestId);
         requestData.NodeId = target.NodeId();
         TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
             CalcSendMessageFlagsForNode(target.NodeId()), requestId, nullptr, ExecuterSpan.GetTraceId()));
@@ -182,7 +176,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     }
 
     if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber()) {
-        LOG_E("Retry failed by retries limit, requestId: " << requestId);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Retry failed by retries limit, requestId: " << requestId);
         TMaybe<ui32> targetNode;
         for (size_t i = 0; i < ResourcesSnapshot.size(); ++i) {
             if (!TrackingNodes.contains(ResourcesSnapshot[i].GetNodeId())) {
@@ -191,7 +185,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
             }
         }
         if (targetNode) {
-            LOG_D("Try to retry to another node, nodeId: " << *targetNode << ", requestId: " << requestId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Try to retry to another node, nodeId: " << *targetNode << ", requestId: " << requestId);
             auto anotherTarget = MakeKqpNodeServiceID(*targetNode);
             requestData.NodeId = *targetNode;
             TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(anotherTarget, ExecuterId, ev.release(),
@@ -199,12 +193,12 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
             requestData.RetryNumber++;
             return true;
         }
-        LOG_E("Retry failed because all nodes are busy, requestId: " << requestId);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Retry failed because all nodes are busy, requestId: " << requestId);
         return false;
     }
 
     if (requestData.RetryNumber >= 1) {
-        LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
     }
 
     requestData.RetryNumber++;
@@ -376,7 +370,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             return nullptr;
         }
 
-        LOG_E("Not enough resources to execute query locally and no information about other nodes");
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Not enough resources to execute query locally and no information about other nodes");
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             "Not enough resources to execute query locally and no information about other nodes (estimation: "
             + ToString(LocalRunMemoryEst) + ";" + GetEstimationsInfo() + ")");
@@ -423,10 +417,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto ctx = TlsActivationContext->AsActorContext();
     if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
-        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<msg); });
     }
 
-    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<msg); });
 
     ui64 selfNodeId = ExecuterId.NodeId();
     TString selfNodeDC;
@@ -461,7 +455,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     }
 
     if (plan.empty()) {
-        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_E(msg); });
+        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<msg); });
 
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
@@ -596,7 +590,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
     }
     nComputeTasks = ComputeTasks.size();
 
-    LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
         << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"
         << ", localComputeTasks: " << TasksGraph.GetMeta().LocalComputeTasks
         << ", MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally
@@ -684,7 +678,7 @@ void TKqpPlanner::PrepareCheckpoints() {
             break;
         }
     }
-    LOG_D("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
@@ -753,7 +747,7 @@ bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     LastStats.emplace_back(std::move(it->second));
     PendingComputeActors.erase(it);
 
-    LOG_I("Compute actor has finished execution: " << computeActor.ToString());
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Compute actor has finished execution: " << computeActor.ToString());
 
     return true;
 }
@@ -861,7 +855,7 @@ void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui6
             TasksGraph.FillChannelDesc(*record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
         }
 
-        LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
         TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(computeActorId, ExecuterId, channelsInfoEv.Release()));
     }
 }
@@ -869,7 +863,7 @@ void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui6
 void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates) {
     YQL_ENSURE(task.ComputeActorId);
 
-    LOG_T("Collect channels updates for task: " << task.Id << " at actor " << task.ComputeActorId);
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Collect channels updates for task: " << task.Id << " at actor " << task.ComputeActorId);
 
     auto& selfUpdates = updates[task.ComputeActorId];
 
@@ -885,7 +879,7 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                 selfUpdates.emplace(channelId);
             }
 
-            LOG_T("Task: " << task.Id << ", input channelId: " << channelId << ", src task: " << channel.SrcTask
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Task: " << task.Id << ", input channelId: " << channelId << ", src task: " << channel.SrcTask
                 << ", at actor " << srcTask.ComputeActorId);
         }
     }
@@ -904,7 +898,7 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                     updates[dstTask.ComputeActorId].emplace(channelId);
                 }
 
-                LOG_T("Task: " << task.Id << ", output channelId: " << channelId << ", dst task: " << channel.DstTask
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Task: " << task.Id << ", output channelId: " << channelId << ", dst task: " << channel.DstTask
                     << ", at actor " << dstTask.ComputeActorId);
             }
         }
@@ -932,7 +926,7 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
         };
         event->Tasks.emplace_back(std::move(task));
     }
-    LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " <<"Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
     TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
     CheckpointsReadyStateSent = true;
 }

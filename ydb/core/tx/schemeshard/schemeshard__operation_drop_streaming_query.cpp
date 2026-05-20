@@ -1,8 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 namespace NKikimr::NSchemeShard {
@@ -19,7 +17,7 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -55,7 +53,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -179,7 +177,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDrop();
         const TString& name = dropDescription.GetName();
-        LOG_N("TDropStreamingQuery Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropStreamingQuery Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -205,11 +203,11 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropStreamingQuery AbortPropose: opId# " << OperationId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropStreamingQuery AbortPropose: opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropStreamingQuery AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropStreamingQuery AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
 };

@@ -16,12 +16,6 @@
 
 #include <library/cpp/json/json_reader.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -56,7 +50,7 @@ public:
                 .Build()
         );
         auto ticket = CredentialsProvider->GetAuthInfo();
-        LOG_D(httpRequest->GetObfuscatedData() << " using ticket " << NKikimr::MaskTicket(ticket));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " <<httpRequest->GetObfuscatedData() << " using ticket " << NKikimr::MaskTicket(ticket));
         httpRequest->Set("Authorization", ticket);
 
         auto httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy()));
@@ -67,7 +61,7 @@ public:
     void Handle(NYql::NDq::TEvHttpBase::TEvSendResult::TPtr& ev) {
         auto it = Requests.find(ev->Cookie);
         if (it == Requests.end()) {
-            LOG_E("Request doesn't exist (TEvSendResult). Need to fix this bug urgently");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " <<"Request doesn't exist (TEvSendResult). Need to fix this bug urgently");
             return;
         }
         auto request = it->second;
@@ -133,7 +127,7 @@ public:
         }
 
         if (forwardResponse->Issues) {
-            LOG_E(response.Response->Body);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringRestClient]: " <<response.Response->Body);
         }
         Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
     }

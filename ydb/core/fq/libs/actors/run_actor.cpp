@@ -81,13 +81,6 @@
 #include <util/string/split.h>
 #include <util/system/hostname.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
-#define LOG_QE(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " " << stream)
-#define LOG_QW(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -289,13 +282,13 @@ public:
 
     TString Plan2Json(const TString& ysonPlan) {
         if (!ysonPlan) {
-            LOG_QW("Can't convert plan from yson to json: plan is empty");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " " <<"Can't convert plan from yson to json: plan is empty");
             return {};
         }
         try {
             return NJson2Yson::ConvertYson2Json(ysonPlan);
         } catch (...) {
-            LOG_QE("Can't convert plan from yson to json: " << CurrentExceptionMessage());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << QueryId << " " <<"Can't convert plan from yson to json: " << CurrentExceptionMessage());
         }
         return {};
     }
@@ -372,7 +365,7 @@ public:
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
-        LOG_D("Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Start run actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
 
         FillConnections();
 
@@ -466,11 +459,11 @@ private:
     )
 
     void FillConnections() {
-        LOG_D("FillConnections");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"FillConnections");
 
         for (const auto& connection : Params.Connections) {
             if (!connection.content().name()) {
-                LOG_D("Connection with empty name " << connection.meta().id());
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Connection with empty name " << connection.meta().id());
                 continue;
             }
             YqConnections.emplace(connection.meta().id(), connection);
@@ -509,7 +502,7 @@ private:
 
     void CancelRunningQuery() {
         if (ReadRulesCreatorId) {
-            LOG_D("Cancel read rules creation");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Cancel read rules creation");
             Send(ReadRulesCreatorId, new NActors::TEvents::TEvPoison());
         }
 
@@ -525,7 +518,7 @@ private:
         }
 
         if (ControlId) {
-            LOG_D("Cancel running query");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Cancel running query");
             Send(ControlId, new NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, FederatedQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
         } else {
             QueryResponseArrived = true;
@@ -533,7 +526,7 @@ private:
     }
 
     void PassAway() override {
-        LOG_D("PassAway");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"PassAway");
         Send(FetcherId, new NActors::TEvents::TEvPoisonTaken());
         KillChildrenActors();
         NActors::TActorBootstrapped<TRunActor>::PassAway();
@@ -568,7 +561,7 @@ private:
 
         if (QueryStateUpdateRequest.resources().rate_limiter() == Fq::Private::TaskResources::PREPARE) {
             if (!RateLimiterResourceCreatorId) {
-                LOG_D("Start rate limiter resource creator");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Start rate limiter resource creator");
                 RateLimiterResourceCreatorId = Register(CreateRateLimiterResourceCreator(SelfId(), Params.Owner, Params.QueryId, Params.Scope, Params.TenantName));
             }
             return;
@@ -655,7 +648,7 @@ private:
     }
 
     void Fail(const TString& errorMessage) {
-        LOG_E("Fail for query " << Params.QueryId << ", finishing: " << Finishing << ", details: " << errorMessage);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Fail for query " << Params.QueryId << ", finishing: " << Finishing << ", details: " << errorMessage);
 
         if (YqConnections.empty()) {
             Issues.AddIssue("YqConnections array is empty");
@@ -687,7 +680,7 @@ private:
 
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
         Action = ev->Get()->Action;
-        LOG_D("New query action received: " << FederatedQuery::QueryAction_Name(Action));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"New query action received: " << FederatedQuery::QueryAction_Name(Action));
         switch (Action) {
         case FederatedQuery::ABORT:
         case FederatedQuery::ABORT_GRACEFULLY: // not fully implemented
@@ -755,7 +748,7 @@ private:
         THashMap<TString, TTopicIndependentConsumers> topicToIndependentConsumers;
         ui32 graphIndex = 0;
         for (auto& graphParams : DqGraphParams) {
-            LOG_D("Graph " << graphIndex);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Graph " << graphIndex);
             graphIndex++;
             const TString consumerNamePrefix = graphIndex == 1 ? Params.QueryId : TStringBuilder() << Params.QueryId << '-' << graphIndex; // Simple name in simple case
             for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
@@ -773,7 +766,7 @@ private:
                             srcDesc.SetConsumerName(consumerName);
                             settingsAny.PackFrom(srcDesc);
                             if (isNewConsumer) {
-                                LOG_D("Create consumer \"" << srcDesc.GetConsumerName() << "\" for topic \"" << srcDesc.GetTopicPath() << "\"");
+                                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Create consumer \"" << srcDesc.GetConsumerName() << "\" for topic \"" << srcDesc.GetTopicPath() << "\"");
                                 auto& consumer = *QueryStateUpdateRequest.mutable_resources()->add_topic_consumers();
                                 consumer.set_database_id(srcDesc.GetDatabaseId());
                                 consumer.set_database(srcDesc.GetDatabase());
@@ -858,7 +851,7 @@ private:
     }
 
     void Handle(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_T("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
         if (!ev->Get()->Success) { // Failed setting new status or lease was lost
             ResignQuery(NYql::NDqProto::StatusIds::UNAVAILABLE);
             return;
@@ -877,14 +870,14 @@ private:
     }
 
     void HandleFinish(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_T("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
         if (!ev->Get()->Success) { // Failed setting new status or lease was lost
             Fail("Failed to write finalizing status");
             return;
         }
 
         if (ev->Cookie == SaveFinalizingStatusCookie) {
-            LOG_D("Finalizing status is saved");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Finalizing status is saved");
             FinalizingStatusIsWritten = true;
             ContinueFinish();
         }
@@ -896,7 +889,7 @@ private:
             return;
         }
         if (ev->Get()->Issues) {
-            LOG_W("Effect Issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Effect Issues: " << ev->Get()->Issues.ToOneLineString());
             Issues.AddIssues(ev->Get()->Issues);
         }
         ++EffectApplicatorFinished;
@@ -908,7 +901,7 @@ private:
         for (const auto& dqGraph : DqGraphParams) {
             dqTasks += dqGraph.TasksSize();
         }
-        LOG_D("Overall dq tasks: " << dqTasks);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Overall dq tasks: " << dqTasks);
         if (dqTasks > MaxTasksPerOperation) {
             return TStringBuilder() << "Too many tasks per operation: " << dqTasks << ". Allowed: less than " << MaxTasksPerOperation;
         }
@@ -925,7 +918,7 @@ private:
     }
 
     void Handle(TEvents::TEvGraphParams::TPtr& ev) {
-        LOG_D("Graph (" << (ev->Get()->IsEvaluation ? "evaluation" : "execution") << ") with tasks: " << ev->Get()->GraphParams.TasksSize());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Graph (" << (ev->Get()->IsEvaluation ? "evaluation" : "execution") << ") with tasks: " << ev->Get()->GraphParams.TasksSize());
 
         if (Params.Resources.rate_limiter_path()) {
             const TString rateLimiterResource = GetRateLimiterResourcePath(Params.CloudId, Params.Scope.ParseFolder(), Params.QueryId);
@@ -946,7 +939,7 @@ private:
     }
 
     void Handle(TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr&) {
-        LOG_D("Coordinator saved zero checkpoint");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Coordinator saved zero checkpoint");
         Y_ABORT_UNLESS(ControlId);
         SetLoadFromCheckpointMode();
     }
@@ -969,7 +962,7 @@ private:
             GraphKey = "Precompute=" + ToString(it->second.Index);
         } else {
             if (ev->Sender != ExecuterId) {
-                LOG_E("TEvDqStats received from UNKNOWN Actor (TDqExecuter?) " << ev->Sender);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"TEvDqStats received from UNKNOWN Actor (TDqExecuter?) " << ev->Sender);
                 return;
             }
             GraphKey = "Graph=" + ToString(DqGraphIndex);
@@ -1208,7 +1201,7 @@ private:
             statistics = NJson2Yson::ConvertYson2Json(out.Str());
             return true;
         } catch (NYson::TYsonException& ex) {
-            LOG_E(ex.what());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<ex.what());
             return false;
         }
     }
@@ -1222,13 +1215,13 @@ private:
     TIssue WrapInternalIssues(const TIssues& issues) {
         NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(issues), QueryStateUpdateRequest.mutable_internal_issues());
         TString referenceId = GetEntityIdAsString(Params.Config.GetCommon().GetIdsPrefix(), EEntityType::UNDEFINED);
-        LOG_E(referenceId << ": " << issues.ToOneLineString());
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<referenceId << ": " << issues.ToOneLineString());
         return TIssue("Contact technical support and provide query information and this id: " + referenceId + "_" + Now().ToStringUpToSeconds());
     }
 
     void SaveQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
         auto& result = ev->Get()->Record;
-        LOG_D("Query response " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Query response " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
             << ". Result set index: " << DqGraphIndex
             << ". Issues count: " << result.IssuesSize()
             << ". Rows count: " << result.GetRowsCount());
@@ -1286,7 +1279,7 @@ private:
 
             QueryEvalStatusCode = result.GetStatusCode();
 
-            LOG_D("Query evaluation " << NYql::NDqProto::StatusIds_StatusCode_Name(QueryEvalStatusCode)
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Query evaluation " << NYql::NDqProto::StatusIds_StatusCode_Name(QueryEvalStatusCode)
                 << ". " << it->second.Index << " response. Issues count: " << result.IssuesSize()
                 << ". Rows count: " << result.GetRowsCount() << ", Sample count: " << result.SampleSize() << ", Truncated: " << result.GetTruncated());
 
@@ -1347,7 +1340,7 @@ private:
         }
 
         if (ev->Sender != ExecuterId) {
-           LOG_E("TEvQueryResponse received from UNKNOWN Actor (TDqExecuter?) " << ev->Sender);
+           LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"TEvQueryResponse received from UNKNOWN Actor (TDqExecuter?) " << ev->Sender);
            return;
         }
 
@@ -1355,7 +1348,7 @@ private:
 
         auto statusCode = ev->Get()->Record.GetStatusCode();
         if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-           LOG_E("StatusCode == NYql::NDqProto::StatusIds::UNSPECIFIED, it is not expected, the query will be failed.");
+           LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"StatusCode == NYql::NDqProto::StatusIds::UNSPECIFIED, it is not expected, the query will be failed.");
         }
 
         if (statusCode != NYql::NDqProto::StatusIds::SUCCESS) {
@@ -1374,7 +1367,7 @@ private:
         // Continue with the next graph
         QueryStateUpdateRequest.set_dq_graph_index(++DqGraphIndex);
         RunNextDqGraph();
-        LOG_D("Send save query response request to pinger");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Send save query response request to pinger");
         Send(Pinger, new TEvents::TEvForwardPingRequest(QueryStateUpdateRequest));
     }
 
@@ -1391,11 +1384,11 @@ private:
         }
 
         if (ev->Sender != ExecuterId) {
-           LOG_E("TEvQueryResponse received from UNKNOWN Actor (TDqExecuter?) when FINISHED " << ev->Sender);
+           LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"TEvQueryResponse received from UNKNOWN Actor (TDqExecuter?) when FINISHED " << ev->Sender);
            return;
         }
 
-        LOG_D("TEvQueryResponse received on finish");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"TEvQueryResponse received on finish");
         QueryResponseArrived = true;
         SaveQueryResponse(ev);
 
@@ -1403,11 +1396,11 @@ private:
     }
 
     void Handle(TEvents::TEvDataStreamsReadRulesCreationResult::TPtr& ev) {
-        LOG_D("Read rules creation finished. Issues: " << ev->Get()->Issues.Size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Read rules creation finished. Issues: " << ev->Get()->Issues.Size());
         ReadRulesCreatorId = {};
         if (ev->Get()->Issues) {
             AddIssueWithSubIssues("Problems with read rules creation", ev->Get()->Issues);
-            LOG_D(Issues.ToOneLineString());
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<Issues.ToOneLineString());
             Finish(FederatedQuery::QueryMeta::FAILED);
         } else {
             QueryStateUpdateRequest.mutable_resources()->set_topic_consumers_state(Fq::Private::TaskResources::READY);
@@ -1419,7 +1412,7 @@ private:
         ReadRulesCreatorId = {};
         if (ev->Get()->Issues) {
             TransientIssues.AddIssues(ev->Get()->Issues);
-            LOG_D(TransientIssues.ToOneLineString());
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<TransientIssues.ToOneLineString());
         }
         if (CanRunReadRulesDeletionActor()) {
             RunReadRulesDeletionActor();
@@ -1475,11 +1468,11 @@ private:
     }
 
     void Handle(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
-        LOG_D("Rate limiter resource creation finished. Success: " << ev->Get()->Status.IsSuccess());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Rate limiter resource creation finished. Success: " << ev->Get()->Status.IsSuccess());
         RateLimiterResourceCreatorId = {};
         if (!ev->Get()->Status.IsSuccess()) {
             AddIssueWithSubIssues("Problems with rate limiter resource creation", NYdb::NAdapters::ToYqlIssues(ev->Get()->Status.GetIssues()));
-            LOG_D(Issues.ToOneLineString());
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<Issues.ToOneLineString());
             Finish(FederatedQuery::QueryMeta::FAILED);
         } else {
             Params.Resources.set_rate_limiter_path(ev->Get()->Result.rate_limiter());
@@ -1490,14 +1483,14 @@ private:
     }
 
     void HandleFinish(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
-        LOG_D("Rate limiter resource creation finished. Success: " << ev->Get()->Status.IsSuccess() << ". Issues: " << ev->Get()->Status.GetIssues().ToOneLineString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Rate limiter resource creation finished. Success: " << ev->Get()->Status.IsSuccess() << ". Issues: " << ev->Get()->Status.GetIssues().ToOneLineString());
         RateLimiterResourceCreatorId = {};
 
         StartRateLimiterResourceDeleterIfCan();
     }
 
     void HandleFinish(NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
-        LOG_D("Rate limiter resource deletion finished. Success: " << ev->Get()->Status.IsSuccess() << ". Issues: " << ev->Get()->Status.GetIssues().ToOneLineString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Rate limiter resource deletion finished. Success: " << ev->Get()->Status.IsSuccess() << ". Issues: " << ev->Get()->Status.GetIssues().ToOneLineString());
         RateLimiterResourceDeleterId = {};
         RateLimiterResourceWasDeleted = true;
 
@@ -1506,7 +1499,7 @@ private:
 
     bool StartRateLimiterResourceDeleterIfCan() {
         if (!RateLimiterResourceDeleterId && !RateLimiterResourceCreatorId && FinalizingStatusIsWritten && QueryResponseArrived && Params.Config.GetRateLimiter().GetEnabled()) {
-            LOG_D("Start rate limiter resource deleter");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Start rate limiter resource deleter");
             RateLimiterResourceDeleterId = Register(CreateRateLimiterResourceDeleter(SelfId(), Params.Owner, Params.QueryId, Params.Scope, Params.TenantName));
             return true;
         }
@@ -1515,7 +1508,7 @@ private:
 
     TEvaluationGraphInfo RunEvalDqGraph(NFq::NProto::TGraphParams& dqGraphParams) {
 
-        LOG_D("RunEvalDqGraph");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"RunEvalDqGraph");
 
         FillGraphMemoryInfo(dqGraphParams);
 
@@ -1543,7 +1536,7 @@ private:
                         dqGraphParams.GetResultType(), empty, false).Release());
 
         } else {
-            LOG_D("ResultReceiver was NOT CREATED since ResultType is empty");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"ResultReceiver was NOT CREATED since ResultType is empty");
             info.ResultId = info.ExecuterId;
         }
 
@@ -1559,7 +1552,7 @@ private:
         PrepareResultFormatSettings(info.ResultFormatSettings, dqGraphParams, *dqConfiguration);
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
         Send(info.ExecuterId, new NYql::NDqs::TEvGraphRequest(request, info.ControlId, info.ResultId));
-        LOG_D("Evaluation Executer: " << info.ExecuterId << ", Controller: " << info.ControlId << ", ResultActor: " << info.ResultId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Evaluation Executer: " << info.ExecuterId << ", Controller: " << info.ControlId << ", ResultActor: " << info.ResultId);
         return info;
     }
 
@@ -1597,7 +1590,7 @@ private:
 
             PrepareResultFormatSettings(ResultFormatSettings, dqGraphParams, *dqConfiguration);
         } else {
-            LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"ResultWriter was NOT CREATED since ResultType is empty");
             resultId = ExecuterId;
             ClearResultFormatSettings();
         }
@@ -1651,7 +1644,7 @@ private:
 
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
         Send(ExecuterId, new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId));
-        LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId);
     }
 
     void PrepareResultFormatSettings(TMaybe<NCommon::TResultFormatSettings>& resultFormatSettings, NFq::NProto::TGraphParams& dqGraphParams, const TDqConfiguration& dqConfiguration) {
@@ -1818,14 +1811,14 @@ private:
     void WriteFinalizingStatus() {
         const FederatedQuery::QueryMeta::ComputeStatus finalizingStatus = GetFinalizingStatus();
         Params.Status = finalizingStatus;
-        LOG_D("Write finalizing status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(finalizingStatus));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Write finalizing status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(finalizingStatus));
         Fq::Private::PingTaskRequest request;
         request.set_status(finalizingStatus);
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SaveFinalizingStatusCookie);
     }
 
     void Finish(FederatedQuery::QueryMeta::ComputeStatus status) {
-        LOG_D("Is about to finish query with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Is about to finish query with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
         Finishing = true;
         FinalQueryStatus = status;
 
@@ -1845,7 +1838,7 @@ private:
     }
 
     void StartEffectApplicators() {
-        LOG_D("Apply effects with status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Apply effects with status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
         for (const auto& externalEffect : QueryStateUpdateRequest.resources().external_effects()) {
             auto providerName = externalEffect.GetProviderName();
             if (providerName == "S3Sink") {
@@ -1871,12 +1864,12 @@ private:
 
                 if (Params.Status == FederatedQuery::QueryMeta::ABORTING_BY_USER) {
                     for (auto& prefix : S3Prefixes) {
-                        LOG_W("Partial results are possible with prefix: " << prefix);
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Partial results are possible with prefix: " << prefix);
                         Issues.AddIssue(TIssue(TStringBuilder() << "Partial results are possible with prefix: " << prefix));
                     }
                 }
             } else {
-                LOG_E("Unknown effect applicator: " << providerName);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Unknown effect applicator: " << providerName);
             }
         }
     }
@@ -1912,12 +1905,12 @@ private:
     void ResignQuery(NYql::NDqProto::StatusIds::StatusCode statusCode) {
         QueryStateUpdateRequest.set_resign_query(true);
         QueryStateUpdateRequest.set_status_code(statusCode);
-        LOG_W("ResignQuery, status " << NYql::NDqProto::StatusIds::StatusCode_Name(statusCode));
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"ResignQuery, status " << NYql::NDqProto::StatusIds::StatusCode_Name(statusCode));
         SendPingAndPassAway();
     }
 
     void SendPingAndPassAway() {
-        LOG_D("SendPingAndPassAway, FinalQueryStatus " <<  FederatedQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"SendPingAndPassAway, FinalQueryStatus " <<  FederatedQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus));
         // Run ping.
         if (QueryStateUpdateRequest.resign_query()) { // Retry state => all issues are not fatal.
             TransientIssues.AddIssues(Issues);
@@ -1964,7 +1957,7 @@ private:
         //NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CoreEval, NYql::NLog::ELevel::TRACE);
         //NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CorePeepHole, NYql::NLog::ELevel::TRACE);
 
-        LOG_D("Compiling query ...");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Compiling query ...");
         NYql::TGatewaysConfig gatewaysConfig;
 
         SetupYqlCore(*gatewaysConfig.MutableYqlCore());
@@ -2112,7 +2105,7 @@ private:
     }
 
     void Handle(TEvents::TEvAsyncContinue::TPtr& ev) {
-        LOG_D("Compiling finished");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Compiling finished");
         NYql::TProgram::TStatus status = TProgram::TStatus::Error;
 
         const auto& f = ev->Get()->Future;
@@ -2313,7 +2306,7 @@ private:
     }
 
     void LogReceivedParams() {
-        LOG_D("Run actors params: { QueryId: " << Params.QueryId
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " <<"Run actors params: { QueryId: " << Params.QueryId
             << " CloudId: " << Params.CloudId
             << " UserId: " << Params.UserId
             << " Owner: " << Params.Owner

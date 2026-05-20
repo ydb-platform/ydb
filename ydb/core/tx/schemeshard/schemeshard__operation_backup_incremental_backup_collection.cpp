@@ -4,11 +4,6 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
 
-#define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_E(stream) LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection>;
@@ -126,12 +121,12 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateLongIncrementalBackupOp AbortPropose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateLongIncrementalBackupOp AbortPropose"
             << ": opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TCreateLongIncrementalBackupOp AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateLongIncrementalBackupOp AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << txId);
         context.OnComplete.DoneOperation(OperationId);

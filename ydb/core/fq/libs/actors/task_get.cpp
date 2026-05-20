@@ -18,11 +18,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/library/security/util.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " << stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -51,7 +46,7 @@ public:
     static constexpr char ActorName[] = "YQ_PRIVATE_GET_TASK";
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_E("TGetTaskRequestActor::OnUndelivered");
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " <<"TGetTaskRequestActor::OnUndelivered");
         auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
         response->Status = Ydb::StatusIds::GENERIC_ERROR;
         response->Issues.AddIssue("UNDELIVERED");
@@ -67,7 +62,7 @@ public:
     void Fail(const TString& message, Ydb::StatusIds::StatusCode reqStatus = Ydb::StatusIds::INTERNAL_ERROR) {
         Issues.AddIssue(message);
         const auto codeStr = Ydb::StatusIds_StatusCode_Name(reqStatus);
-        LOG_E(TStringBuilder()
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " <<TStringBuilder()
             << "Failed with code: " << codeStr
             << " Details: " << Issues.ToString());
         auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
@@ -83,14 +78,14 @@ public:
         OwnerId = request.owner_id();
         Host = request.host();
         Tenant = request.tenant();
-        LOG_D("Request CP::GetTask with size: " << request.ByteSize() << " bytes");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " <<"Request CP::GetTask with size: " << request.ByteSize() << " bytes");
         RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
         Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
     }
 
 private:
     void HandleResponse(NFq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev) { // YQ
-        LOG_D("Got CP::GetTask Response");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " <<"Got CP::GetTask Response");
 
         const auto& issues = ev->Get()->Issues;
         if (issues) {

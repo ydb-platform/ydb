@@ -64,12 +64,6 @@
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -197,7 +191,7 @@ public:
     static constexpr char ActorName[] = "YQ_PENDING_FETCHER";
 
     void PassAway() final {
-        LOG_D("Stop Fetcher");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "Stop Fetcher");
         Send(DatabaseResolver, new NActors::TEvents::TEvPoison());
         NActors::IActor::PassAway();
     }
@@ -219,7 +213,7 @@ public:
 
 private:
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        LOG_E("TYqlPendingFetcher::OnUndelivered");
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "TYqlPendingFetcher::OnUndelivered");
 
         HasRunningRequest = false;
     }
@@ -251,19 +245,19 @@ private:
 
     void Handle(TEvInternalService::TEvGetTaskResponse::TPtr& ev) {
         HasRunningRequest = false;
-        LOG_T("Got GetTask response from PrivateApi");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "Got GetTask response from PrivateApi");
         GetTaskCounters.LatencyMs->Collect((TInstant::Now() - StartGetTaskTime).MilliSeconds());
         GetTaskCounters.InFly->Dec();
         if (!ev->Get()->Status.IsSuccess()) {
             GetTaskCounters.Error->Inc();
-            LOG_E("Error with GetTask: "<< ev->Get()->Status.GetIssues().ToString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "Error with GetTask: " << ev->Get()->Status.GetIssues().ToString());
             return;
         }
         GetTaskCounters.Ok->Inc();
 
         const auto& res = ev->Get()->Result;
 
-        LOG_T("Tasks count: " << res.tasks().size());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "Tasks count: " << res.tasks().size());
         if (!res.tasks().empty()) {
             ProcessTask(res);
             HasRunningRequest = true;
@@ -309,7 +303,7 @@ private:
 
         auto itA = RunActorMap.find(runActorId);
         if (itA == RunActorMap.end()) {
-            LOG_W("Unknown RunActor " << runActorId << " destroyed");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "Unknown RunActor " << runActorId << " destroyed");
             return;
         }
         auto queryId = itA->second.QueryId;
@@ -326,7 +320,7 @@ private:
 
     void GetPendingTask() {
         FetcherGeneration++;
-        LOG_T("Request Private::GetTask" << ", Owner: " << GetOwnerId() << ", Host: " << HostName() << ", Tenant: " << TenantName);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "Request Private::GetTask" << ", Owner: " << GetOwnerId() << ", Host: " << HostName() << ", Tenant: " << TenantName);
         Fq::Private::GetTaskRequest request;
         request.set_owner_id(GetOwnerId());
         request.set_host(HostName());
@@ -354,7 +348,7 @@ private:
     }
 
     void RunTask(const Fq::Private::GetTaskResult::Task& task) {
-        LOG_D("NewTask:"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, "NewTask:"
               << " Scope: " << task.scope()
               << " Id: " << task.query_id().value()
               << " UserId: " << task.user_id()

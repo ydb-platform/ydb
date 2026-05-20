@@ -16,12 +16,6 @@
 #include <deque>
 #include <unordered_map>
 
-#define LOG_T(stream) LOG_TRACE_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_I(stream) LOG_INFO_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_W(stream) LOG_WARN_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-#define LOG_E(stream) LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER, stream)
-
 namespace NFq {
 namespace {
 
@@ -121,7 +115,7 @@ public:
 
     void Bootstrap() {
         Become(&TYqQuoterService::StateFunc);
-        LOG_I("Bootstraping with config: " << Config);
+        LOG_INFO_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"Bootstraping with config: " << Config);
         Config.MutableDatabase()->SetDatabase(NKikimr::CanonizePath(Config.GetDatabase().GetDatabase())); // Crutch for rate limiter grpc
         YdbConnection = NewYdbConnection(Config.GetDatabase(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
 
@@ -147,7 +141,7 @@ public:
         }
 
         const ui64 amount = ev->Get()->Reqs[0].Amount;
-        LOG_T("Quota request {\"" << quoter << "\", \"" << resource << "\"}. Amount: " << amount << ". Sender: " << ev->Sender);
+        LOG_TRACE_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"Quota request {\"" << quoter << "\", \"" << resource << "\"}. Amount: " << amount << ". Sender: " << ev->Sender);
 
         TResourceProcessor& proc = Resources[key];
         proc.RequiredAmount += amount;
@@ -158,7 +152,7 @@ public:
     }
 
     void AcquireResource(const TResourceKey& key, ui64 amount, ui64 cookie) {
-        LOG_T("Send acquire resource request to {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << amount << ". Cookie: " << cookie);
+        LOG_TRACE_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"Send acquire resource request to {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << amount << ". Cookie: " << cookie);
         auto asyncStatus = YdbConnection->RateLimiterClient.AcquireResource(key.first, key.second, NYdb::NRateLimiter::TAcquireResourceSettings().Amount(amount));
         Counters.InFlySubscribe->Inc();
         asyncStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](const NYdb::TAsyncStatus& status) {
@@ -167,7 +161,7 @@ public:
     }
 
     void ProcessRequests(TResourceProcessor& proc, const TResourceKey& key) {
-        LOG_T("Process requests for {\"" << key.first << "\", \"" << key.second << "\"}. Requests: " << proc.Requests.size()
+        LOG_TRACE_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"Process requests for {\"" << key.first << "\", \"" << key.second << "\"}. Requests: " << proc.Requests.size()
             << ". RateLimiterInflight: " << proc.RateLimiterRequests.size() << ". AvailableAmount: " << proc.AvailableAmount
             << ". RequiredAmount: " << proc.RequiredAmount << ". RequestedAmount: " << proc.RequestedAmount);
         while (!proc.Requests.empty() && proc.AvailableAmount >= proc.Requests.front()->Get()->Reqs[0].Amount) {
@@ -231,7 +225,7 @@ public:
             retryState = RetryPolicy->CreateRetryState();
         }
         if (const TMaybe<TDuration> delay = retryState->GetNextRetryDelay(ev->Get()->Status)) {
-            LOG_D("Scheduled retry in " << *delay << " for resource {\"" << key.first << "\", \"" << key.second << "\"}. Status: " << ev->Get()->Status.GetStatus() << " " << ev->Get()->Status.GetIssues().ToOneLineString());
+            LOG_DEBUG_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"Scheduled retry in " << *delay << " for resource {\"" << key.first << "\", \"" << key.second << "\"}. Status: " << ev->Get()->Status.GetStatus() << " " << ev->Get()->Status.GetIssues().ToOneLineString());
             Schedule(*delay, new TEvPrivate::TEvRetryQuotaRequest(key.first, key.second, ev->Get()->Amount, ev->Cookie));
             return true;
         } else {
@@ -244,7 +238,7 @@ public:
         Counters.InFlySubscribe->Dec();
         const TResourceKey key(ev->Get()->RateLimiter, ev->Get()->Resource);
         TResourceProcessor& proc = Resources[key];
-        LOG_T("Received quota for resource {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << ev->Get()->Amount << ". Cookie: " << ev->Cookie << ". Status: " << ev->Get()->Status.GetStatus() << " " << ev->Get()->Status.GetIssues().ToOneLineString());
+        LOG_TRACE_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"Received quota for resource {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << ev->Get()->Amount << ". Cookie: " << ev->Cookie << ". Status: " << ev->Get()->Status.GetStatus() << " " << ev->Get()->Status.GetIssues().ToOneLineString());
         if (ev->Get()->Status.IsSuccess()) {
             proc.RateLimiterRequests.erase(ev->Cookie);
             proc.RequestedAmount -= ev->Get()->Amount;
@@ -259,7 +253,7 @@ public:
     void Handle(TEvPrivate::TEvRetryQuotaRequest::TPtr& ev) {
         const TResourceKey key(ev->Get()->RateLimiter, ev->Get()->Resource);
         const ui64 cookie = ev->Get()->Cookie;
-        LOG_T("Retry acquire quota for resource {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << ev->Get()->Amount << ". Cookie: " << cookie);
+        LOG_TRACE_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"Retry acquire quota for resource {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << ev->Get()->Amount << ". Cookie: " << cookie);
         AcquireResource(key, ev->Get()->Amount, cookie);
     }
 
@@ -320,7 +314,7 @@ public:
             }
         }
         if (deletedRes || deletedSenders) {
-            LOG_I("CleanupEmpty. Deleted " << deletedRes << " resources and " << deletedSenders << " senders");
+            LOG_INFO_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::YQ_RATE_LIMITER,"CleanupEmpty. Deleted " << deletedRes << " resources and " << deletedSenders << " senders");
         }
         Counters.ResourceCount->Set(Resources.size());
         Counters.SenderCount->Set(SenderToResource.size());

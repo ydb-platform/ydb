@@ -2,9 +2,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace {
 
 using namespace NKikimr;
@@ -23,7 +20,7 @@ public:
     { }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -36,7 +33,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan"
             << ": step# " << step);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -111,7 +108,7 @@ public:
         const TString& workingDir = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_N("TDropExternalDataSource Propose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropExternalDataSource Propose"
             << ": opId# " << OperationId
             << ", path# " << workingDir << "/" << name);
 
@@ -190,12 +187,12 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropExternalDataSource AbortPropose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropExternalDataSource AbortPropose"
             << ": opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropExternalDataSource AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropExternalDataSource AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);

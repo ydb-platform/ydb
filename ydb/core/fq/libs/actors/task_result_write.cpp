@@ -14,11 +14,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ", " << stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ",  " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -47,7 +42,7 @@ public:
     static constexpr char ActorName[] = "YQ_PRIVATE_WRITE_RESULT_TASK";
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_E("TWriteTaskRequestActor::OnUndelivered");
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ", " <<"TWriteTaskRequestActor::OnUndelivered");
         Res->Status = Ydb::StatusIds::GENERIC_ERROR;
         Res->Issues.AddIssue("UNDELIVERED");
         Send(ev->Sender, Res.Release());
@@ -62,7 +57,7 @@ public:
     void Fail(const TString& message, Ydb::StatusIds::StatusCode reqStatus = Ydb::StatusIds::INTERNAL_ERROR) {
         Issues.AddIssue(message);
         const auto codeStr = Ydb::StatusIds_StatusCode_Name(reqStatus);
-        LOG_E(TStringBuilder()
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ", " <<TStringBuilder()
             << "Failed with code: " << codeStr
             << " Details: " << Issues.ToString());
         Res->Status = reqStatus;
@@ -76,7 +71,7 @@ public:
         auto request = Ev->Record;
         ResultId = request.result_id().value();
         RequestId = request.request_id();
-        LOG_D("Request CP::WriteTaskResult with size: " << request.ByteSize() << " bytes");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ",  " <<"Request CP::WriteTaskResult with size: " << request.ByteSize() << " bytes");
         RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
         Send(NFq::ControlPlaneStorageServiceActorId(),
             new NFq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, RequestId);
@@ -91,7 +86,7 @@ private:
     )
 
     void HandleResponse(NFq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
-        LOG_D("Got CP::WriteTaskResult Response");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ",  " <<"Got CP::WriteTaskResult Response");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
             Issues.AddIssues(issues);

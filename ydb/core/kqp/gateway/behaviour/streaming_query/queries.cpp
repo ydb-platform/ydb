@@ -29,14 +29,6 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() << stream)
-
 using namespace fmt::literals;
 using TExternalContext = NMetadata::NModifications::IOperationsManager::TExternalModificationContext;
 using TStatus = NKikimr::TYQLConclusionSpecialStatus<Ydb::StatusIds::StatusCode, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::INTERNAL_ERROR>;
@@ -349,12 +341,12 @@ protected:
     bool HandleResult(TEvPtr& ev, const TString& message) {
         const auto status = ev->Get()->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_D(message << " " << ev->Sender << " success");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<message << " " << ev->Sender << " success");
             return false;
         }
 
         const auto& issues = ev->Get()->Issues;
-        LOG_W(message << " " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<message << " " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
 
         FatalError(status, AddRootIssue(TStringBuilder() << message << " failed", issues));
         return true;
@@ -362,14 +354,14 @@ protected:
 
     void Finish(Ydb::StatusIds::StatusCode status) {
         if (BeforeFinish(status)) {
-            LOG_D("Do action before finish with status " << status);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Do action before finish with status " << status);
             return;
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_D("Successfully finished");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Successfully finished");
         } else {
-            LOG_W("Failed " << status << ", with issues: " << Issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Failed " << status << ", with issues: " << Issues.ToOneLineString());
         }
 
         OnFinish(status);
@@ -419,7 +411,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap. Database: " << Database);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Bootstrap. Database: " << Database);
         StartRequest();
 
         TBase::Become(&TDerived::StateFunc);
@@ -435,7 +427,7 @@ public:
             return;
         }
 
-        LOG_E("Scheme service is unavailable");
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Scheme service is unavailable");
         TBase::FatalError(Ydb::StatusIds::UNAVAILABLE, "Scheme service is unavailable");
     }
 
@@ -458,7 +450,7 @@ protected:
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
-            LOG_W("Schedule retry for error: " << issues.ToOneLineString() << " in " << *delay);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Schedule retry for error: " << issues.ToOneLineString() << " in " << *delay);
             TBase::Issues.AddIssues(std::move(issues));
             TBase::Schedule(*delay, new TEvents::TEvWakeup());
             return true;
@@ -506,7 +498,7 @@ public:
         }
 
         const auto& result = results[0];
-        LOG_D("Got scheme cache response: " << result.Status);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Got scheme cache response: " << result.Status);
 
         switch (result.Status) {
             case EStatus::Unknown:
@@ -554,7 +546,7 @@ public:
 
 protected:
     void StartRequest() final {
-        LOG_D("Describe streaming query in database: " << Database);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Describe streaming query in database: " << Database);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
@@ -613,7 +605,7 @@ public:
         TxId = response.GetTxId();
         SchemeShardTabletId = response.GetSchemeShardTabletId();
 
-        LOG_D("Got propose transaction " << NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType()) << " response"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Got propose transaction " << NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType()) << " response"
             << ", Status: " << status
             << ", SchemeShardStatus: " << NKikimrScheme::EStatus_Name(ssStatus)
             << ", TxId: " << TxId
@@ -650,7 +642,7 @@ public:
             case NTxProxy::TResultStatus::ProxyNotReady:
             case NTxProxy::TResultStatus::ProxyShardTryLater:
             case NTxProxy::TResultStatus::ProxyShardNotAvailable: {
-                LOG_W("Retry scheme transaction error: " << status << ", tablet id: " << SchemeShardTabletId << ", tx id: " << TxId);
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Retry scheme transaction error: " << status << ", tablet id: " << SchemeShardTabletId << ", tx id: " << TxId);
                 ScheduleRetry(response, TStringBuilder() << "proxy shard not available " << status);
                 break;
             }
@@ -690,7 +682,7 @@ public:
                 switch (static_cast<NKikimrScheme::EStatus>(ssStatus)) {
                     case NKikimrScheme::StatusMultipleModifications: {
                         // All operations are expected to be retriable in case of scheme shard temporary unavailable
-                        LOG_W("Retry scheme transaction, previous tx execution is not finished, tablet id: " << SchemeShardTabletId << ", failed tx id: " << TxId);
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Retry scheme transaction, previous tx execution is not finished, tablet id: " << SchemeShardTabletId << ", failed tx id: " << TxId);
                         ScheduleRetry(response, "multiple modifications");
                         break;
                     }
@@ -756,7 +748,7 @@ public:
             return;
         }
 
-        LOG_T("Tablet pipe successfully connected");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Tablet pipe successfully connected");
     }
 
     void HandleWaitCompletion(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
@@ -775,7 +767,7 @@ public:
     void HandleWaitCompletion(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         const auto completedTxId = ev->Get()->Record.GetTxId();
         Y_VALIDATE(completedTxId == TxId, "Unexpected completed tx id: " << completedTxId << ", expected tx: " << TxId);
-        LOG_D("Scheme transaction " << completedTxId << " successfully finished");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Scheme transaction " << completedTxId << " successfully finished");
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
@@ -786,7 +778,7 @@ public:
 
 protected:
     void StartRequest() final {
-        LOG_D("Start scheme transaction " << NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType()) << " in database: " << Database);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start scheme transaction " << NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType()) << " in database: " << Database);
 
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         *event->Record.MutableTransaction()->MutableModifyScheme() = SchemeTx;
@@ -815,7 +807,7 @@ private:
         Y_VALIDATE(TxId, "Can not subscribe on completion without tx id");
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(TxId));
 
-        LOG_D("Subscribe on scheme tx: " << TxId << " on scheme shard: " << SchemeShardTabletId << ", pipe id: " << SchemePipeActorId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Subscribe on scheme tx: " << TxId << " on scheme shard: " << SchemeShardTabletId << ", pipe id: " << SchemePipeActorId);
     }
 
     void ClosePipeClient() {
@@ -1004,7 +996,7 @@ public:
     {}
 
     void OnRunQuery() final {
-        LOG_D("Locking streaming query"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Locking streaming query"
             << ", OperationName: " << Settings.OperationName
             << ", OperationStartedAt: " << Settings.OperationStartedAt
             << ", OperationOwner: " << Settings.OperationOwner
@@ -1019,7 +1011,7 @@ public:
     void OnGetQueryInfo() {
         auto result = ParseQueryInfo();
         if (result.GetStatus() == Ydb::StatusIds::NOT_FOUND) {
-            LOG_D("Streaming query not found, CreateLockIfNotExists: " << Settings.CreateLockIfNotExists);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query not found, CreateLockIfNotExists: " << Settings.CreateLockIfNotExists);
 
             if (Settings.CreateLockIfNotExists) {
                 State.SetStatus(Settings.DefaultQueryStatus);
@@ -1039,7 +1031,7 @@ public:
         QueryExists = true;
         State = result.DetachResult();
         if (!State.HasOperationActorId()) {
-            LOG_D("Streaming query has no locks, creating new lock");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query has no locks, creating new lock");
             LockQuery();
             return;
         }
@@ -1051,13 +1043,13 @@ public:
 
         PreviousOperationStartedAt = NProtoInterop::CastFromProto(State.GetOperationStartedAt());
         PreviousOperationName = State.GetOperationName();
-        LOG_D("Streaming query under lock from " << PreviousOperationOwner << " started at " << PreviousOperationStartedAt << ", with operation name " << PreviousOperationName);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query under lock from " << PreviousOperationOwner << " started at " << PreviousOperationStartedAt << ", with operation name " << PreviousOperationName);
 
         if (!Settings.PreviousOperationOwner) {
             if (Settings.OperationStartedAt - PreviousOperationStartedAt <= LOCK_TIMEOUT) {
                 FinishUnderOperation();
             } else {
-                LOG_I("Streaming query lock " << PreviousOperationOwner << " expired, start check");
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query lock " << PreviousOperationOwner << " expired, start check");
                 CheckLockOwner = true;
                 Finish();
             }
@@ -1066,12 +1058,12 @@ public:
         }
 
         if (PreviousOperationOwner != *Settings.PreviousOperationOwner) {
-            LOG_I("Streaming query was locked by " << PreviousOperationOwner << " during lock check");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query was locked by " << PreviousOperationOwner << " during lock check");
             FinishUnderOperation();
             return;
         }
 
-        LOG_I("Remove expired lock from " << PreviousOperationOwner);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Remove expired lock from " << PreviousOperationOwner);
         LockQuery();
     }
 
@@ -1147,7 +1139,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Bootstrap");
         StartLockStreamingQueryRequestActor();
 
         Become(&TLockStreamingQueryTableActor::StateFunc);
@@ -1170,7 +1162,7 @@ public:
             return;
         }
 
-        LOG_D("Lock streaming query finished"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Lock streaming query finished"
             << ", State: " << LogQueryState(Info.State)
             << ", PreviousOwner: " << Info.PreviousOwner
             << ", PreviousOperationStartedAt: " << Info.PreviousOperationStartedAt
@@ -1190,16 +1182,16 @@ public:
             SubscribedOnSession = Info.PreviousOwner.NodeId();
         }
 
-        LOG_D("Start check alive for " << Info.PreviousOwner);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start check alive for " << Info.PreviousOwner);
         Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
         Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
     }
 
     void Handle(TEvPrivate::TEvCheckAliveResponse::TPtr& ev) {
         if (WaitLock) {
-            LOG_W("Streaming query " << ev->Sender << " owner was verified after started lock");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query " << ev->Sender << " owner was verified after started lock");
         } else {
-            LOG_I("Previous query owner " << ev->Sender << " is alive");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Previous query owner " << ev->Sender << " is alive");
             FatalError(Ydb::StatusIds::ABORTED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", try repeat request later")});
         }
     }
@@ -1208,13 +1200,13 @@ public:
         switch (static_cast<EWakeup>(ev->Get()->Tag)) {
             case EWakeup::RetryCheckAlive: {
                 WaitRetryCheckAlive = false;
-                LOG_D("Retry check alive request for " << Info.PreviousOwner);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Retry check alive request for " << Info.PreviousOwner);
                 Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
                 Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveTimeout)));
                 break;
             }
             case EWakeup::CheckAliveTimeout: {
-                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timeouted, retry check alive");
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Deliver streaming query owner " << Info.PreviousOwner << " check alive request timeouted, retry check alive");
                 RetryCheckAlive(/* longDelay */ false);
                 break;
             }
@@ -1224,16 +1216,16 @@ public:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         const auto reason = ev->Get()->Reason;
         if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
-            LOG_W("Streaming query operation owner " << ev->Sender << " not found, start lock");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query operation owner " << ev->Sender << " not found, start lock");
             StartLockStreamingQueryRequestActor(Info.PreviousOwner);
         } else {
-            LOG_W("Got delivery problem to " << ev->Sender << ", node with owner unavailable, reason: " << reason);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Got delivery problem to " << ev->Sender << ", node with owner unavailable, reason: " << reason);
             RetryCheckAlive(/* longDelay */ true);
         }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        LOG_W("Node " << ev->Get()->NodeId << " with streaming query operation owner was disconnected, retry check alive");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Node " << ev->Get()->NodeId << " with streaming query operation owner was disconnected, retry check alive");
         RetryCheckAlive(/* longDelay */ true);
     }
 
@@ -1264,7 +1256,7 @@ private:
             .CreateLockIfNotExists = Settings.CreateLockIfNotExists,
             .DefaultQueryStatus = Settings.DefaultQueryStatus,
         }));
-        LOG_D("Start TLockStreamingQueryRequestActor " << lockActorId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TLockStreamingQueryRequestActor " << lockActorId);
     }
 
     void RetryCheckAlive(bool longDelay) {
@@ -1285,11 +1277,11 @@ private:
         }
 
         if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
-            LOG_D("Schedule retry check alive in " << *delay);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Schedule retry check alive in " << *delay);
             Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RetryCheckAlive)));
             WaitRetryCheckAlive = true;
         } else {
-            LOG_W("Retry limit " << MAX_CHECK_ALIVE_RETRIES << " exceeded for streaming query operation owner check alive, start lock");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Retry limit " << MAX_CHECK_ALIVE_RETRIES << " exceeded for streaming query operation owner check alive, start lock");
             StartLockStreamingQueryRequestActor(Info.PreviousOwner);
         }
     }
@@ -1315,7 +1307,7 @@ public:
     {}
 
     void OnRunQuery() final {
-        LOG_D("Unlocking streaming query, OperationOwner: " << OperationOwner);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Unlocking streaming query, OperationOwner: " << OperationOwner);
         SetQueryResultHandler(&TUnlockStreamingQueryRequestActor::OnGetQueryInfo, "Get query info");
         ReadQueryInfo(TTxControl::BeginTx());
     }
@@ -1337,21 +1329,21 @@ public:
             }
 
             if (OperationOwner != currentOperationOwner) {
-                LOG_E("Streaming query was locked by " << currentOperationOwner << " during operation (expected owner: " << OperationOwner << ")");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query was locked by " << currentOperationOwner << " during operation (expected owner: " << OperationOwner << ")");
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
                 return;
             }
         } else {
-            LOG_E("Streaming query lock was lost");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query lock was lost");
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
             return;
         }
 
         if (State.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED) {
-            LOG_D("Delete streaming query from table");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Delete streaming query from table");
             RemoveQuery();
         } else {
-            LOG_D("Remove streaming query lock " << OperationOwner);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Remove streaming query lock " << OperationOwner);
             UnlockQuery();
         }
     }
@@ -1415,7 +1407,7 @@ public:
     {}
 
     void OnRunQuery() final {
-        LOG_D("Updating streaming query state to " << LogQueryState(State));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Updating streaming query state to " << LogQueryState(State));
         SetQueryResultHandler(&TUpdateStreamingQueryStateRequestActor::OnGetQueryInfo, "Get query info");
         ReadQueryInfo(TTxControl::BeginTx());
     }
@@ -1430,7 +1422,7 @@ public:
         const auto previousOwner = State.GetOperationActorId();
         const auto currentOwner = result.GetResult().GetOperationActorId();
         if (currentOwner != previousOwner) {
-            LOG_E("Streaming query was locked by " << currentOwner << " during operation (expected owner: " << previousOwner << ")");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Streaming query was locked by " << currentOwner << " during operation (expected owner: " << previousOwner << ")");
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
             return;
         }
@@ -1470,7 +1462,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Bootstrap");
         Become(&TCleanupStreamingQueryStateTableActor::StateFunc);
         ClearStreamingQueryExecutions();
     }
@@ -1496,7 +1488,7 @@ public:
             return;
         }
 
-        LOG_D("Cancel streaming query execution " << ev->Sender << " finished " << status << ", execution id: " << executionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Cancel streaming query execution " << ev->Sender << " finished " << status << ", execution id: " << executionId);
         if (status != Ydb::StatusIds::NOT_FOUND) {
             State.AddPreviousExecutionIds(executionId);
         }
@@ -1515,7 +1507,7 @@ public:
         }
 
         --OperationsToForget;
-        LOG_D("Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished " << status << ", execution id: " << executionId << ", remains: " << OperationsToForget);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished " << status << ", execution id: " << executionId << ", remains: " << OperationsToForget);
 
         if (OperationsToForget == 0) {
             State.ClearPreviousExecutionIds();
@@ -1531,7 +1523,7 @@ protected:
 private:
     void StartUpdateState(const TString& info) const {
         const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
-        LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
     void ClearStreamingQueryExecutions() {
@@ -1543,17 +1535,17 @@ private:
 
         if (State.HasCurrentExecutionId()) {
             const auto& executionId = State.GetCurrentExecutionId();
-            LOG_D("Cancel streaming query execution " << executionId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Cancel streaming query execution " << executionId);
             SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
             return;
         }
 
         if (State.PreviousExecutionIdsSize() > 0) {
-            LOG_D("Cleanup #" << State.PreviousExecutionIdsSize() << " previous executions");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Cleanup #" << State.PreviousExecutionIdsSize() << " previous executions");
 
             for (const auto& executionId : State.GetPreviousExecutionIds()) {
                 SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA), OperationsToForget++);
-                LOG_D("Forget streaming query execution #" << OperationsToForget << " " << executionId);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Forget streaming query execution #" << OperationsToForget << " " << executionId);
             }
             return;
         }
@@ -1594,7 +1586,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap. SS text revision: " << Settings.QueryTextRevision << ", last query execution revision: " << State.GetQueryTextRevision() << ", start new query: " << State.GetQueryText());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Bootstrap. SS text revision: " << Settings.QueryTextRevision << ", last query execution revision: " << State.GetQueryTextRevision() << ", start new query: " << State.GetQueryText());
 
         if (State.HasCurrentExecutionId()) {
             FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not start query, already started: " << State.GetCurrentExecutionId());
@@ -1629,7 +1621,7 @@ public:
         }
 
         PreviousGeneration = ev->Get()->Generation;
-        LOG_D("Load previous query execution state " << ev->Sender << " finished " << status << ", generation: " << PreviousGeneration << ", has saved state: " << PreviousPhysicalGraph.has_value());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Load previous query execution state " << ev->Sender << " finished " << status << ", generation: " << PreviousGeneration << ", has saved state: " << PreviousPhysicalGraph.has_value());
 
         PrepareToStart();
     }
@@ -1645,7 +1637,7 @@ public:
         }
 
         --OperationsToForget;
-        LOG_D("Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished " << status << ", execution id: " << executionId << ", remains: " << OperationsToForget);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Forget streaming query execution #" << ev->Cookie << " " << ev->Sender << " finished " << status << ", execution id: " << executionId << ", remains: " << OperationsToForget);
 
         if (OperationsToForget == 0) {
             auto& executionIds = *State.MutablePreviousExecutionIds();
@@ -1675,20 +1667,20 @@ public:
         }
 
         RequestStarted = true;
-        LOG_D("Script execution created: " << ev->Get()->ExecutionId << ", wait for saving query state");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Script execution created: " << ev->Get()->ExecutionId << ", wait for saving query state");
 
         GetScriptExecutionOperation();
     }
 
     void HandleStartQuery(TEvents::TEvWakeup::TPtr&) {
         const auto& executionId = State.GetCurrentExecutionId();
-        LOG_D("Get streaming query execution " << executionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Get streaming query execution " << executionId);
         SendToKqpProxy(std::make_unique<TEvGetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
     }
 
     void HandleStartQuery(TEvGetScriptExecutionOperationResponse::TPtr& ev) {
         const auto& info = *ev->Get();
-        LOG_D("Got script execution info, StateSaved: " << info.StateSaved << ", Ready: " << info.Ready);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Got script execution info, StateSaved: " << info.StateSaved << ", Ready: " << info.Ready);
 
         if (HandleResult(ev, "Query compilation / planing")) {
             return;
@@ -1755,7 +1747,7 @@ protected:
 private:
     void UpdateQueryState(const TString& info) const {
         const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
-        LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
     void PrepareToStart() {
@@ -1771,18 +1763,18 @@ private:
             StateLoaded = true;
             const auto& executionId = *State.GetPreviousExecutionIds().rbegin();
             SendToKqpProxy(std::make_unique<TEvGetScriptExecutionPhysicalGraph>(Context.GetDatabase(), executionId));
-            LOG_D("Load previous query state from execution: " << executionId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Load previous query state from execution: " << executionId);
             return;
         }
 
         if (State.PreviousExecutionIdsSize() > MAX_QUERY_EXECUTIONS) {
             const auto toCleanup = State.PreviousExecutionIdsSize() - MAX_QUERY_EXECUTIONS;
-            LOG_D("Cleanup #" << toCleanup << " previous executions (max executions: " << MAX_QUERY_EXECUTIONS << ")");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Cleanup #" << toCleanup << " previous executions (max executions: " << MAX_QUERY_EXECUTIONS << ")");
 
             for (ui64 i = 0; i < toCleanup; ++i) {
                 const auto& executionId = State.GetPreviousExecutionIds(i);
                 SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA), OperationsToForget++);
-                LOG_D("Forget streaming query execution #" << OperationsToForget << " " << executionId);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Forget streaming query execution #" << OperationsToForget << " " << executionId);
             }
             return;
         }
@@ -1842,7 +1834,7 @@ private:
         request.SetQuery(State.GetQueryText());
         request.SetTimeoutMs(TDuration::Max().MilliSeconds());
 
-        LOG_D("Send start streaming query request, execution id: " << State.GetCurrentExecutionId());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Send start streaming query request, execution id: " << State.GetCurrentExecutionId());
         SendToKqpProxy(std::move(ev));
     }
 
@@ -1861,10 +1853,10 @@ private:
         }
 
         if (const auto delay = GetOperationRetryState->GetNextRetryDelay()) {
-            LOG_D("Schedule get script execution operation in " << *delay);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Schedule get script execution operation in " << *delay);
             Schedule(*delay, new TEvents::TEvWakeup());
         } else {
-            LOG_W("Script execution operation not started after " << START_REQUEST_TIMEOUT << " send response");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Script execution operation not started after " << START_REQUEST_TIMEOUT << " send response");
             Issues.AddIssue(
                 NYql::TIssue(TStringBuilder() << "Streaming query not started after " << START_REQUEST_TIMEOUT << ", try to check query status later")
                     .SetCode(NYql::TIssuesIds::KIKIMR_TIMEOUT, NYql::TSeverityIds::S_INFO)
@@ -1934,7 +1926,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Bootstrap"
             << ". Has in SS: " << ExistsInSS
             << ", SS info: " << (Settings.SchemeInfo ? Settings.SchemeInfo->DebugString() : "null")
             << ", initial status: " << NKikimrKqp::TStreamingQueryState::EStatus_Name(State.GetStatus()));
@@ -2000,7 +1992,7 @@ public:
             return;
         }
 
-        LOG_D("Cancel streaming query execution " << ev->Sender << " finished " << status << ", execution id: " << executionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Cancel streaming query execution " << ev->Sender << " finished " << status << ", execution id: " << executionId);
         if (status != Ydb::StatusIds::NOT_FOUND) {
             State.AddPreviousExecutionIds(executionId);
         }
@@ -2059,7 +2051,7 @@ protected:
 private:
     void UpdateQueryState(const TString& info) const {
         const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
-        LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
     void RemoveQuery() {
@@ -2067,7 +2059,7 @@ private:
 
         if (State.HasCurrentExecutionId() || State.PreviousExecutionIdsSize() > 0) {
             const auto& cleanupActorId = Register(new TCleanupStreamingQueryStateTableActor(Context, QueryPath, State));
-            LOG_D("Start TCleanupStreamingQueryStateTableActor " << cleanupActorId << " (remove query)");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TCleanupStreamingQueryStateTableActor " << cleanupActorId << " (remove query)");
             return;
         }
 
@@ -2088,7 +2080,7 @@ private:
                 .UserToken = NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}),
                 .AllowNotFoundAfterRetry = true,
             }));
-            LOG_D("Start TExecuteTransactionSchemeActor " << executerId << " (drop streaming query)");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TExecuteTransactionSchemeActor " << executerId << " (drop streaming query)");
             return;
         }
 
@@ -2112,7 +2104,7 @@ private:
 
         if (State.HasCurrentExecutionId()) {
             const auto& executionId = State.GetCurrentExecutionId();
-            LOG_D("Cancel streaming query execution " << executionId << " (" << info << ")");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Cancel streaming query execution " << executionId << " (" << info << ")");
             SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
             return;
         }
@@ -2146,7 +2138,7 @@ private:
             .QueryTextRevision = QuerySettings.QueryTextRevision,
             .StreamingDisposition = QuerySettings.StreamingDisposition,
         }));
-        LOG_D("Start TStartStreamingQueryTableActor " << startActorId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TStartStreamingQueryTableActor " << startActorId);
     }
 
     void SyncQuery() {
@@ -2216,7 +2208,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Bootstrap");
 
         TBase::Become(&TDerived::StateFunc);
         DescribeQuery("start handling");
@@ -2237,7 +2229,7 @@ public:
         SchemeInfo = ev->Get()->Info;
         if (Context.GetUserToken() && Context.GetUserToken()->GetSerializedToken() && SchemeInfo && SchemeInfo->SecurityObject) {
             if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
-                LOG_W("Access denied for " << Context.GetUserToken()->GetUserSID() << ", access: " << Access);
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Access denied for " << Context.GetUserToken()->GetUserSID() << ", access: " << Access);
 
                 if (!securityObject.CheckAccess(NACLib::DescribeSchema, *Context.GetUserToken())) {
                     TBase::FatalError(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Streaming query " << TBase::QueryPath << " not found or you don't have access permissions");
@@ -2249,7 +2241,7 @@ public:
             }
         }
 
-        LOG_D("Describe streaming query success, SchemeInfo: " << (SchemeInfo ? SchemeInfo->DebugString() : "null"));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Describe streaming query success, SchemeInfo: " << (SchemeInfo ? SchemeInfo->DebugString() : "null"));
 
         OnQueryDescribed();
     }
@@ -2262,7 +2254,7 @@ public:
         const auto& info = ev->Get()->Info;
         IsLockCreated = info.LockCreated;
         QueryState = info.State;
-        LOG_D("Lock streaming query " << ev->Sender << " success"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Lock streaming query " << ev->Sender << " success"
             << ", IsLockCreated: " << IsLockCreated
             << ", QueryExists: " << info.QueryExists
             << ", QueryState: " << LogQueryState(QueryState));
@@ -2281,7 +2273,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCheckAliveRequest::TPtr& ev) {
-        LOG_N("Got check alive request from " << ev->Sender);
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Got check alive request from " << ev->Sender);
         TBase::Send(ev->Sender, new TEvPrivate::TEvCheckAliveResponse());
     }
 
@@ -2299,7 +2291,7 @@ protected:
             .CreateLockIfNotExists = createLockIfNotExists,
             .DefaultQueryStatus = defaultQueryStatus,
         }));
-        LOG_D("Start TLockStreamingQueryTableActor " << lockActorId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TLockStreamingQueryTableActor " << lockActorId);
     }
 
     bool BeforeFinish(Ydb::StatusIds::StatusCode status) final {
@@ -2309,7 +2301,7 @@ protected:
 
         TBase::Become(&TDerived::StateFunc);
         const auto& unlockActorId = TBase::Register(new TUnlockStreamingQueryRequestActor::TRetry(TBase::SelfId(), Context.GetDatabaseId(), TBase::QueryPath, TBase::SelfId()));
-        LOG_D("Start TUnlockStreamingQueryRequestActor " << unlockActorId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TUnlockStreamingQueryRequestActor " << unlockActorId);
 
         FinalStatus = status;
         return true;
@@ -2326,7 +2318,7 @@ protected:
     void DescribeQuery(const TString& info) {
         // Access by user token will be checked during scheme transaction execution
         const auto& describerId = TBase::Register(new TDescribeStreamingQuerySchemeActor(Context.GetDatabase(), TBase::QueryPath, NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
-        LOG_D("Start TDescribeStreamingQuerySchemeActor " << describerId << " (" << info << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TDescribeStreamingQuerySchemeActor " << describerId << " (" << info << ")");
     }
 
 private:
@@ -2405,13 +2397,13 @@ public:
         }
 
         TBase::SchemeInfo = ev->Get()->Info;
-        LOG_D("Describe streaming query success, scheme info: " << (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null"));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Describe streaming query success, scheme info: " << (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null"));
 
         const auto& syncActorId = TBase::Register(new TSyncStreamingQueryTableActor(TBase::Context, TBase::QueryPath, {
             .InitialState = TBase::QueryState,
             .SchemeInfo = TBase::SchemeInfo,
         }));
-        LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " (sync previous state)");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TSyncStreamingQueryTableActor " << syncActorId << " (sync previous state)");
     }
 
     void HandleSync(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
@@ -2424,7 +2416,7 @@ public:
             TBase::SchemeInfo = std::nullopt;
         }
 
-        LOG_D("Sync query with scheme shard success"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Sync query with scheme shard success"
             << ", QueryState: " << LogQueryState(TBase::QueryState)
             << ", query exists in SS: " << TBase::SchemeInfo.has_value());
 
@@ -2499,7 +2491,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        LOG_D("Sync query with scheme shard success, State: " << LogQueryState(QueryState));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Sync query with scheme shard success, State: " << LogQueryState(QueryState));
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
@@ -2521,7 +2513,7 @@ protected:
                 .InitialState = QueryState,
                 .SchemeInfo = *SchemeInfo,
             }));
-            LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " to finish creation");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TSyncStreamingQueryTableActor " << syncActorId << " to finish creation");
         }
     }
 
@@ -2554,7 +2546,7 @@ protected:
         const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, {
             .UserToken = Context.GetUserToken(),
         }));
-        LOG_D("Start TExecuteTransactionSchemeActor " << executerId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TExecuteTransactionSchemeActor " << executerId);
     }
 
 private:
@@ -2627,7 +2619,7 @@ public:
                     .PathId = SchemeInfo->PathId,
                 },
             }));
-            LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " to finish alter");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TSyncStreamingQueryTableActor " << syncActorId << " to finish alter");
         }
     }
 
@@ -2641,7 +2633,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        LOG_D("Sync query with scheme shard success, State: " << LogQueryState(QueryState));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Sync query with scheme shard success, State: " << LogQueryState(QueryState));
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
@@ -2672,7 +2664,7 @@ protected:
         const auto& executerId = Register(new TExecuteTransactionSchemeActor(Context.GetDatabase(), QueryPath, SchemeTx, {
             .UserToken = Context.GetUserToken(),
         }));
-        LOG_D("Start TExecuteTransactionSchemeActor " << executerId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TExecuteTransactionSchemeActor " << executerId);
     }
 
 private:
@@ -2789,7 +2781,7 @@ private:
         if (QueryExistsInTable) {
             // Clear query state
             const auto& cleanupActorId = Register(new TCleanupStreamingQueryStateTableActor(Context, QueryPath, QueryState));
-            LOG_D("Start TCleanupStreamingQueryStateTableActor " << cleanupActorId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TCleanupStreamingQueryStateTableActor " << cleanupActorId);
             return;
         }
 
@@ -2799,7 +2791,7 @@ private:
                 .UserToken = Context.GetUserToken(),
                 .AllowNotFoundAfterRetry = true,
             }));
-            LOG_D("Start TExecuteTransactionSchemeActor " << executerId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TExecuteTransactionSchemeActor " << executerId);
             return;
         }
 
@@ -2809,7 +2801,7 @@ private:
             QueryState.ClearSchemeInfo();
 
             const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, QueryState));
-            LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[StreamingQueries] " << LogPrefix() <<"Start TUpdateStreamingQueryStateRequestActor " << updaterId);
             return;
         }
 

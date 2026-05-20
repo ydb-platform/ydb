@@ -17,12 +17,6 @@
 #include <ydb/library/actors/core/log.h>
 
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -71,7 +65,7 @@ public:
     static constexpr char ActorName[] = "FQ_EXECUTER_ACTOR";
 
     void Start() {
-        LOG_I("Bootstrap");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Bootstrap");
         Become(&TExecuterActor::StateFunc);
         SendExecuteScript();
     }
@@ -87,13 +81,13 @@ public:
         pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
-            LOG_I("Information about the operation id and execution id is stored. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Information about the operation id and execution id is stored. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(OperationId, ExecutionId, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             // Without the idempotency key, we lose the running operation here
-            LOG_E("Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the operation id and execution id. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
@@ -102,14 +96,14 @@ public:
     void Handle(const TEvYdbCompute::TEvExecuteScriptResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_E("Can't execute script: " << ev->Get()->Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Can't execute script: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvExecuterResponse(ev->Get()->Issues, response.Status));
             FailedAndPassAway();
             return;
         }
         ExecutionId = response.ExecutionId;
         OperationId = response.OperationId;
-        LOG_I("Execution has been created. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ExecuterActor] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Execution has been created. ExecutionId: " << ExecutionId << " OperationId: " << OperationId.ToString());
         SendPingTask();
     }
 

@@ -5,9 +5,6 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -27,7 +24,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -40,7 +37,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan"
             << ": step# " << step);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -99,7 +96,7 @@ public:
             ? TTxId(op.GetLockTxId())
             : OperationId.GetTxId();
 
-        LOG_N("TCreateLock Propose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateLock Propose"
             << ": opId# " << OperationId
             << ", path# " << workingDir << "/" << op.GetName());
 
@@ -206,13 +203,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateLock AbortPropose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateLock AbortPropose"
             << ": opId# " << OperationId);
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Sub(1);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateLock AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateLock AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);

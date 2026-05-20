@@ -18,13 +18,6 @@ namespace NKikimr {
 namespace NKqp {
 namespace NRm {
 
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-
 class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInfoExchangerActor> {
     using TBase = TActorBootstrapped<TKqpResourceInfoExchangerActor>;
 
@@ -118,7 +111,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("Start KqpResourceInfoExchangerActor at " << SelfId());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Start KqpResourceInfoExchangerActor at " << SelfId());
 
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
 
@@ -163,7 +156,7 @@ private:
         }
 
         if (BoardState.Subscriber) {
-            LOG_I("Kill previous info exchanger subscriber for '" << BoardState.Path
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Kill previous info exchanger subscriber for '" << BoardState.Path
                 << "' at " << BoardState.Subscriber << ", reason: tenant updated");
             Send(BoardState.Subscriber, new TEvents::TEvPoison);
         }
@@ -179,7 +172,7 @@ private:
 
     void CreatePublisher() {
         if (BoardState.Publisher) {
-            LOG_I("Kill previous info exchanger publisher for '" << BoardState.Path
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Kill previous info exchanger publisher for '" << BoardState.Path
                 << "' at " << BoardState.Publisher << ", reason: tenant updated");
             Send(BoardState.Publisher, new TEvents::TEvPoison);
         }
@@ -369,7 +362,7 @@ private:
 private:
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed for config changes.");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Subscribed for config changes.");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -378,7 +371,7 @@ private:
         NKikimrConfig::TTableServiceConfig tableServiceConfig;
 
         tableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
-        LOG_D("Updated table service config.");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Updated table service config.");
 
         const auto& infoExchangerSettings = tableServiceConfig.GetResourceManager().GetInfoExchangerSettings();
         const auto& publisherSettings = infoExchangerSettings.GetPublisherSettings();
@@ -407,11 +400,11 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_C("Failed to deliver subscription request to config dispatcher.");
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Failed to deliver subscription request to config dispatcher.");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response.");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Failed to deliver config notification response.");
                 break;
 
             default:
@@ -426,7 +419,7 @@ private:
                 if (tenant.empty()) {
                     tenant = slot.GetAssignedTenant();
                 } else {
-                    LOG_E("Multiple tenants are served by the node: " << ev->Get()->Record.ShortDebugString());
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Multiple tenants are served by the node: " << ev->Get()->Record.ShortDebugString());
                 }
             }
         }
@@ -435,7 +428,7 @@ private:
         BoardState.Path = MakeKqpInfoExchangerBoardPath(tenant);
 
         if (auto *domain = AppData()->DomainsInfo->GetDomain(); domain->Name != ExtractDomain(tenant)) {
-            LOG_E("Can not find default state storage group for database " << BoardState.Tenant);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Can not find default state storage group for database " << BoardState.Tenant);
             return;
         }
 
@@ -458,20 +451,20 @@ private:
         CreatePublisher();
         CreateSubscriber();
 
-        LOG_I("Received tenant pool status for exchanger, serving tenant: " << BoardState.Tenant
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Received tenant pool status for exchanger, serving tenant: " << BoardState.Tenant
             << ", board: " << BoardState.Path);
     }
 
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            LOG_I("Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path);
             CreateSubscriber();
             return;
         }
 
-        LOG_D("Get board info from subscriber, serving tenant: " << BoardState.Tenant
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Get board info from subscriber, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path
                 << ", with size: " << ev->Get()->InfoEntries.size());
 
@@ -488,12 +481,12 @@ private:
 
     void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
         if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            LOG_I("Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Subcriber is not available for info exchanger, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path);
             CreateSubscriber();
             return;
         }
-        LOG_D("Get board info update from subscriber, serving tenant: " << BoardState.Tenant
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Get board info update from subscriber, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path
                 << ", with size: " << ev->Get()->Updates.size());
 
@@ -520,7 +513,7 @@ private:
     void Handle(TEvKqpResourceInfoExchanger::TEvSendResources::TPtr& ev) {
         auto nodeId = ev->Sender.NodeId();
 
-        LOG_D("Get resources info from node: " << nodeId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Get resources info from node: " << nodeId);
 
         const TVector<NKikimrKqp::TResourceExchangeNodeData> resourceInfos(
             ev->Get()->Record.GetSnapshot().begin(), ev->Get()->Record.GetSnapshot().end());

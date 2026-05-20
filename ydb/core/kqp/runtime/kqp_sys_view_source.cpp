@@ -31,9 +31,6 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 
 #define LOG_PREFIX "TKqpSysViewSource "
-#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " << msg)
-#define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " << msg)
-#define LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " << msg)
 
 class TKqpSysViewSource : public TActorBootstrapped<TKqpSysViewSource>, public IDqComputeActorAsyncInput {
 public:
@@ -56,7 +53,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<"Bootstrap");
 
         const auto& table = Settings->GetTable();
         TTableId tableId(table.GetOwnerId(), table.GetTableId(), table.GetSysView());
@@ -112,7 +109,7 @@ public:
         if (!scanActor) {
             auto issue = TStringBuilder()
                 << "Failed to create system view scan, table id: " << tableId;
-            LOG_E(issue);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<issue);
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex,
                 TIssues({TIssue(issue)}),
                 NDqProto::StatusIds::INTERNAL_ERROR));
@@ -120,7 +117,7 @@ public:
         }
 
         ScanActorId = Register(scanActor.Release());
-        LOG_D("Registered scan actor: " << ScanActorId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<"Registered scan actor: " << ScanActorId);
 
         // Send initial ack to start data flow
         Send(ScanActorId, new TEvKqpCompute::TEvScanDataAck(BufferSize));
@@ -138,13 +135,13 @@ public:
             hFunc(TEvKqpCompute::TEvScanData, Handle);
             hFunc(TEvKqpCompute::TEvScanError, Handle);
             default:
-                LOG_W("Unexpected event: " << ev->GetTypeRewrite());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<"Unexpected event: " << ev->GetTypeRewrite());
         }
     }
 
 private:
     void Handle(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-        LOG_D("Got scan init actor event");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<"Got scan init actor event");
         // Respond with ack so the scan actor knows we're ready
         Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(BufferSize));
     }
@@ -152,7 +149,7 @@ private:
     void Handle(TEvKqpCompute::TEvScanData::TPtr& ev) {
         auto& msg = *ev->Get();
 
-        LOG_D("Got scan data, rows: " << msg.Rows.size()
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<"Got scan data, rows: " << msg.Rows.size()
             << ", finished: " << msg.Finished
             << ", from: " << ev->Sender);
 
@@ -164,7 +161,7 @@ private:
         }
 
         if (msg.ArrowBatch && msg.ArrowBatch->num_rows() > 0) {
-            LOG_W("Arrow batches not supported in sys view source, ignoring");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<"Arrow batches not supported in sys view source, ignoring");
         }
 
         if (msg.Finished) {
@@ -181,7 +178,7 @@ private:
         Ydb::StatusIds::StatusCode status = msg.GetStatus();
         IssuesFromMessage(msg.GetIssues(), issues);
 
-        LOG_E("Got scan error, status: " << Ydb::StatusIds::StatusCode_Name(status)
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " <<"Got scan error, status: " << Ydb::StatusIds::StatusCode_Name(status)
             << ", issues: " << issues.ToOneLineString());
 
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues,

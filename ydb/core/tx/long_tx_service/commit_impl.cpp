@@ -7,12 +7,6 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#define TXLOG_LOG(priority, stream) \
-    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
-#define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
-#define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
-#define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
-
 namespace NKikimr {
 namespace NLongTxService {
     struct TRetryData {
@@ -65,7 +59,7 @@ namespace NLongTxService {
         }
 
         void SendAllocateTxId() {
-            TXLOG_DEBUG("Allocating TxId");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Allocating TxId");
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
             Become(&TThis::StateAllocateTxId);
         }
@@ -81,7 +75,7 @@ namespace NLongTxService {
             TxId = msg->TxId;
             Services = msg->Services;
             LogPrefix = TStringBuilder() << LogPrefix << " TxId# " << TxId << " ";
-            TXLOG_DEBUG("Allocated TxId");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Allocated TxId");
             PrepareTransaction();
         }
 
@@ -124,7 +118,7 @@ namespace NLongTxService {
                 return true;
             }
 
-            TXLOG_DEBUG("Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << data.GetWriteIdsStr());
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Sending TEvProposeTransaction to ColumnShard# " << tabletId << " WriteId# " << data.GetWriteIdsStr());
 
             SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_COMMIT,
@@ -149,12 +143,12 @@ namespace NLongTxService {
 
             if (!SelectedCoordinator) {
                 SelectedCoordinator = privateCoordinator;
-                TXLOG_DEBUG("Selected coordinator " << SelectedCoordinator);
+                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Selected coordinator " << SelectedCoordinator);
             }
 
             if (!SelectedCoordinator || SelectedCoordinator != privateCoordinator) {
                 TString error = "Unable to choose coordinator for all participants";
-                TXLOG_ERROR(error
+                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_ERROR, NKikimrServices::LONG_TX_SERVICE, LogPrefix << error
                     << ": previous coordinator " << SelectedCoordinator
                     << ", current coordinator " << privateCoordinator
                     << ", Tablet# " << tabletId);
@@ -172,7 +166,7 @@ namespace NLongTxService {
             const ui64 tabletId = msg->Record.GetOrigin();
             const NKikimrTxColumnShard::EResultStatus status = msg->Record.GetStatus();
 
-            TXLOG_DEBUG("Received TEvProposeTransactionResult from"
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvProposeTransactionResult from"
                 << " ColumnShard# " << tabletId
                 << " Status# " << NKikimrTxColumnShard::EResultStatus_Name(status));
 
@@ -215,7 +209,7 @@ namespace NLongTxService {
             const ui64 tabletId = msg->TabletId;
             Y_ABORT_UNLESS(tabletId != SelectedCoordinator);
 
-            TXLOG_DEBUG("Delivery problem"
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Delivery problem"
                 << " TabletId# " << tabletId
                 << " NotDelivered# " << msg->NotDelivered);
 
@@ -263,7 +257,7 @@ namespace NLongTxService {
                 WaitingShards.emplace(tabletId, TRetryData{});
             }
 
-            TXLOG_DEBUG("Sending TEvProposeTransaction to SelectedCoordinator# " << SelectedCoordinator);
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Sending TEvProposeTransaction to SelectedCoordinator# " << SelectedCoordinator);
             SendToTablet(SelectedCoordinator, std::move(req));
             Become(&TThis::StatePlan);
         }
@@ -285,11 +279,11 @@ namespace NLongTxService {
                 case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
                 case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
                     // This is just an informational status
-                    TXLOG_DEBUG("Received TEvProposeTransactionStatus from coordinator Status# " << msg->GetStatus());
+                    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvProposeTransactionStatus from coordinator Status# " << msg->GetStatus());
                     break;
 
                 case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
-                    TXLOG_DEBUG("Received TEvProposeTransactionStatus from coordinator Status# " << msg->GetStatus());
+                    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvProposeTransactionStatus from coordinator Status# " << msg->GetStatus());
                     PlanStep = msg->Record.GetStepId();
                     break;
 
@@ -303,7 +297,7 @@ namespace NLongTxService {
                     [[fallthrough]];
 
                 default: {
-                    TXLOG_ERROR("Received TEvProposeTransactionStatus from coordinator Status# " << msg->GetStatus());
+                    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_ERROR, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvProposeTransactionStatus from coordinator Status# " << msg->GetStatus());
                     NYql::TIssues issues;
                     issues.AddIssue("Coordinator did not accept this transaction");
                     return FinishWithError(Ydb::StatusIds::UNAVAILABLE, std::move(issues));
@@ -316,7 +310,7 @@ namespace NLongTxService {
             const ui64 tabletId = msg->Record.GetOrigin();
             const auto status = msg->Record.GetStatus();
 
-            TXLOG_DEBUG("Received TEvProposeTransactionResult from"
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvProposeTransactionResult from"
                 << " ColumnShard# " << tabletId
                 << " Status# " << NKikimrTxColumnShard::EResultStatus_Name(status));
 
@@ -359,7 +353,7 @@ namespace NLongTxService {
             const auto* msg = ev->Get();
             const ui64 tabletId = msg->TabletId;
 
-            TXLOG_DEBUG("Delivery problem"
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Delivery problem"
                 << " TabletId# " << tabletId
                 << " NotDelivered# " << msg->NotDelivered);
 
@@ -426,7 +420,7 @@ namespace NLongTxService {
                 return true;
             }
 
-            TXLOG_DEBUG("Ask TEvProposeTransactionResult from ColumnShard# " << tabletId
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Ask TEvProposeTransactionResult from ColumnShard# " << tabletId
                 << " for PlanStep# " << PlanStep << " TxId# " << TxId);
 
             SendToTablet(tabletId, MakeHolder<TEvColumnShard::TEvCheckPlannedTransaction>(

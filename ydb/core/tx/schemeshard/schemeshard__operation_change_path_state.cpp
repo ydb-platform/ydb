@@ -4,9 +4,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_states.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 class TChangePathStateOp: public TSubOperationWithContext {
@@ -47,7 +44,7 @@ public:
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         
-        LOG_I("TChangePathStateOp Propose"
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TChangePathStateOp Propose"
             << ", opId: " << OperationId
         );
 
@@ -91,13 +88,13 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TChangePathStateOp AbortPropose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TChangePathStateOp AbortPropose"
             << ", opId: " << OperationId);
         // Nothing to cleanup since Propose hasn't committed anything yet
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TChangePathStateOp AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TChangePathStateOp AbortUnsafe"
             << ", opId: " << OperationId
             << ", forceDropId: " << forceDropTxId
         );

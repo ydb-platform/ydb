@@ -12,13 +12,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <atomic>
 
-#define TXLOG_LOG(priority, stream) \
-    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
-#define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
-#define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
-#define TXLOG_WARN(stream) TXLOG_LOG(NActors::NLog::PRI_WARN, stream)
-#define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
-
 LWTRACE_USING(LONG_TX_SERVICE_PROVIDER)
 
 namespace NKikimr {
@@ -47,7 +40,7 @@ void TLongTxServiceActor::Bootstrap() {
     SnapshotsExchangeActorId = RegisterWithSameMailbox(snapshotExchangeActor);
     Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
 
-    TXLOG_NOTICE("Started, SelfId: " << SelfId());
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_NOTICE, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Started, SelfId: " << SelfId());
     Become(&TThis::StateWork);
 }
 
@@ -116,7 +109,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
     const auto* msg = ev->Get();
     const TString& databaseName = msg->Record.GetDatabaseName();
 
-    TXLOG_DEBUG("Received TEvBeginTx from " << ev->Sender);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvBeginTx from " << ev->Sender);
 
     switch (msg->Record.GetMode()) {
         case NKikimrLongTxService::TEvBeginTx::MODE_READ_ONLY:
@@ -145,7 +138,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
             tx.TxId = txId;
             tx.DatabaseName = databaseName;
             tx.State = ETxState::Active;
-            TXLOG_DEBUG("Created new LongTxId# " << txId);
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Created new LongTxId# " << txId);
             Send(ev->Sender, new TEvLongTxService::TEvBeginTxResult(txId), 0, ev->Cookie);
             return;
         }
@@ -161,7 +154,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
     const auto* msg = ev->Get();
 
-    TXLOG_DEBUG("Received TEvCommitTx from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvCommitTx from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
 
     TLongTxId txId = msg->GetLongTxId();
     if (!txId.IsWritable()) {
@@ -184,7 +177,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
     if (tx.ColumnShardWrites.empty()) {
         // There's nothing to commit, so just reply with success
         Send(ev->Sender, new TEvLongTxService::TEvCommitTxResult(Ydb::StatusIds::SUCCESS), 0, ev->Cookie);
-        TXLOG_DEBUG("Committed LongTxId# " << txId << " without side-effects");
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Committed LongTxId# " << txId << " without side-effects");
         Transactions.erase(it);
         return;
     }
@@ -203,13 +196,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTxResult::TPtr& ev) 
     ui32 nodeId = ev->Sender.NodeId();
     auto* node = ProxyNodes.FindPtr(nodeId);
     if (!node) {
-        TXLOG_DEBUG("Ignored unexpected TEvCommitTxResult from node " << nodeId);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Ignored unexpected TEvCommitTxResult from node " << nodeId);
         return;
     }
 
     auto it = node->ActiveRequests.find(ev->Cookie);
     if (it == node->ActiveRequests.end() || it->second.Type != ERequestType::Commit) {
-        TXLOG_DEBUG("Ignored unexpected TEvCommitTxResult from node " << nodeId << " with cookie " << ev->Cookie);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Ignored unexpected TEvCommitTxResult from node " << nodeId << " with cookie " << ev->Cookie);
         return;
     }
 
@@ -234,7 +227,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvCommitFinished::TPtr& ev) {
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTx::TPtr& ev) {
     const auto* msg = ev->Get();
 
-    TXLOG_DEBUG("Received TEvRollbackTx from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvRollbackTx from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
 
     TLongTxId txId = msg->GetLongTxId();
     if (!txId.IsWritable()) {
@@ -262,7 +255,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTx::TPtr& ev) {
     }
 
     Send(ev->Sender, new TEvLongTxService::TEvRollbackTxResult(Ydb::StatusIds::SUCCESS), 0, ev->Cookie);
-    TXLOG_DEBUG("Erased LongTxId# " << txId);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Erased LongTxId# " << txId);
     Transactions.erase(it);
 }
 
@@ -270,13 +263,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTxResult::TPtr& ev
     ui32 nodeId = ev->Sender.NodeId();
     auto* node = ProxyNodes.FindPtr(nodeId);
     if (!node) {
-        TXLOG_DEBUG("Ignored unexpected TEvRollbackTxResult from node " << nodeId);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Ignored unexpected TEvRollbackTxResult from node " << nodeId);
         return;
     }
 
     auto it = node->ActiveRequests.find(ev->Cookie);
     if (it == node->ActiveRequests.end() || it->second.Type != ERequestType::Rollback) {
-        TXLOG_DEBUG("Ignored unexpected TEvRollbackTxResult from node " << nodeId << " with cookie " << ev->Cookie);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Ignored unexpected TEvRollbackTxResult from node " << nodeId << " with cookie " << ev->Cookie);
         return;
     }
 
@@ -287,7 +280,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTxResult::TPtr& ev
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWrites::TPtr& ev) {
     const auto* msg = ev->Get();
 
-    TXLOG_DEBUG("Received TEvAttachColumnShardWrites from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvAttachColumnShardWrites from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
 
     TLongTxId txId = msg->GetLongTxId();
     if (!txId.IsWritable()) {
@@ -329,13 +322,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWritesRes
     ui32 nodeId = ev->Sender.NodeId();
     auto* node = ProxyNodes.FindPtr(nodeId);
     if (!node) {
-        TXLOG_DEBUG("Ignored unexpected TEvAttachColumnShardWritesResult from node " << nodeId);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Ignored unexpected TEvAttachColumnShardWritesResult from node " << nodeId);
         return;
     }
 
     auto it = node->ActiveRequests.find(ev->Cookie);
     if (it == node->ActiveRequests.end() || it->second.Type != ERequestType::AttachColumnShardWrites) {
-        TXLOG_DEBUG("Ignored unexpected TEvAttachColumnShardWritesResult from node " << nodeId << " with cookie " << ev->Cookie);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Ignored unexpected TEvAttachColumnShardWritesResult from node " << nodeId << " with cookie " << ev->Cookie);
         return;
     }
 
@@ -368,7 +361,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
 
     auto* msg = ev->Get();
     const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->DatabaseName);
-    TXLOG_DEBUG("Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
 
     LWTRACK(AcquireReadSnapshotRequest, msg->Orbit, databaseName);
 
@@ -404,14 +397,14 @@ void TLongTxServiceActor::ScheduleAcquireSnapshot(const TString& databaseName, T
         return;
     }
 
-    TXLOG_DEBUG("Scheduling TEvAcquireSnapshotFlush for database " << databaseName);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Scheduling TEvAcquireSnapshotFlush for database " << databaseName);
     Schedule(AcquireSnapshotBatchDelay, new TEvPrivate::TEvAcquireSnapshotFlush(databaseName));
     state.FlushPending = true;
 }
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) {
     const auto* msg = ev->Get();
-    TXLOG_DEBUG("Received TEvAcquireSnapshotFlush for database " << msg->DatabaseName);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvAcquireSnapshotFlush for database " << msg->DatabaseName);
 
     auto& state = DatabaseSnapshots[msg->DatabaseName];
     Y_ABORT_UNLESS(state.FlushPending);
@@ -423,7 +416,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) 
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& ev) {
     const auto* msg = ev->Get();
-    TXLOG_DEBUG("Received TEvAcquireSnapshotFinished, cookie = " << ev->Cookie);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvAcquireSnapshotFinished, cookie = " << ev->Cookie);
 
     auto* req = AcquireSnapshotInFlight.FindPtr(ev->Cookie);
     Y_ABORT_UNLESS(req, "Unexpected reply for request that is not inflight");
@@ -459,9 +452,9 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
                 tx.TxId = txId;
                 tx.DatabaseName = databaseName;
                 tx.State = ETxState::Active;
-                TXLOG_DEBUG("Created new read-write LongTxId# " << txId);
+                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Created new read-write LongTxId# " << txId);
             } else {
-                TXLOG_DEBUG("Created new read-only LongTxId# " << txId);
+                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Created new read-only LongTxId# " << txId);
             }
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(txId), 0, beginReq.Cookie);
         }
@@ -505,7 +498,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev) {
     auto* msg = ev->Get();
     ui64 lockId = msg->LockId;
     TInstant lockTimestamp = msg->LockTimestamp;
-    TXLOG_DEBUG("Received TEvRegisterLock for LockId# " << lockId << " LockTimestamp# " << lockTimestamp);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvRegisterLock for LockId# " << lockId << " LockTimestamp# " << lockTimestamp);
 
     Y_ABORT_UNLESS(lockId, "Unexpected registration of a zero LockId");
 
@@ -519,7 +512,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev) {
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) {
     auto* msg = ev->Get();
     ui64 lockId = msg->LockId;
-    TXLOG_DEBUG("Received TEvUnregisterLock for LockId# " << lockId);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvUnregisterLock for LockId# " << lockId);
 
     auto it = Locks.find(lockId);
     if (it == Locks.end()) {
@@ -594,7 +587,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
     auto& record = ev->Get()->Record;
     ui64 lockId = record.GetLockId();
     ui32 lockNode = record.GetLockNode();
-    TXLOG_DEBUG("Received TEvSubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvSubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
 
     if (!lockId) {
         SendViaSession(
@@ -692,7 +685,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     ui32 lockNode = record.GetLockNode();
     auto lockStatus = record.GetStatus();
     auto lockTimestamp = msg->GetLockTimestamp();
-    TXLOG_DEBUG("Received TEvLockStatus from " << ev->Sender
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvLockStatus from " << ev->Sender
             << " for LockId# " << lockId << " LockNode# " << lockNode
             << " LockStatus# " << lockStatus << " LockTimestamp# " << lockTimestamp);
 
@@ -782,7 +775,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
     auto& record = ev->Get()->Record;
     ui64 lockId = record.GetLockId();
     ui32 lockNode = record.GetLockNode();
-    TXLOG_DEBUG("Received TEvUnsubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvUnsubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
 
     if (!lockId) {
         return;
@@ -941,7 +934,7 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
 
 void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
-    TXLOG_DEBUG("Received TEvNodeConnected for NodeId# " << nodeId << " from session " << ev->Sender);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvNodeConnected for NodeId# " << nodeId << " from session " << ev->Sender);
 
     auto itNode = ProxyNodes.find(nodeId);
     if (itNode == ProxyNodes.end()) {
@@ -986,7 +979,7 @@ void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
 
 void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
-    TXLOG_DEBUG("Received TEvNodeDisconnected for NodeId# " << nodeId << " from session " << ev->Sender);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvNodeDisconnected for NodeId# " << nodeId << " from session " << ev->Sender);
     OnNodeDisconnected(nodeId, ev->Sender);
 }
 
@@ -1084,7 +1077,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvReconnect::TPtr& ev) {
 
 void TLongTxServiceActor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     auto* msg = ev->Get();
-    TXLOG_DEBUG("Received TEvUndelivered from " << ev->Sender << " cookie " << ev->Cookie
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvUndelivered from " << ev->Sender << " cookie " << ev->Cookie
         << " type " << msg->SourceType
         << " reason " << msg->Reason
         << " session " << ev->InterconnectSession);
@@ -1180,20 +1173,20 @@ TLongTxServiceActor::TLockStateHandle TLongTxServiceActor::GetAwaiterHandle(cons
     if (awaiterInfo.LockNodeId == SelfId().NodeId()) {
         auto lockIt = Locks.find(awaiterInfo.LockId);
         if (lockIt == Locks.end()) {
-            TXLOG_WARN("Local awaiter id: " << awaiterInfo.LockId << " not found");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Local awaiter id: " << awaiterInfo.LockId << " not found");
             return TLockStateHandle{};
         }
         return TLockStateHandle(lockIt->second);
     } else {
         auto& node = ConnectProxyNode(awaiterInfo.LockNodeId);
         if (node.State == EProxyState::Disconnected) {
-            TXLOG_WARN("Proxy node for remote awaiter id: " << awaiterInfo << " not found");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Proxy node for remote awaiter id: " << awaiterInfo << " not found");
             return TLockStateHandle{};
         }
 
         auto lockIt = node.Locks.find(awaiterInfo.LockId);
         if (lockIt == node.Locks.end()) {
-            TXLOG_WARN("Proxy lock for remote awaiter id: " << awaiterInfo << " not found");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Proxy lock for remote awaiter id: " << awaiterInfo << " not found");
             return TLockStateHandle{};
         }
         return TLockStateHandle(lockIt->second);
@@ -1212,7 +1205,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         auto existingIt = WaitEdges.find(addedEdge.Id);
         if (existingIt != WaitEdges.end()) {
             if (existingIt->second.Blocker.LockInfo(SelfId()) != addedEdge.Blocker) {
-                TXLOG_ERROR("Unexpected blocker: " << existingIt->second.Blocker.LockInfo(SelfId())
+                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_ERROR, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Unexpected blocker: " << existingIt->second.Blocker.LockInfo(SelfId())
                     << " for duplicate added edge id: " << addedEdge.Id
                     << ", expected: " << addedEdge.Blocker.LockId);
             }
@@ -1288,7 +1281,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             }
         }
 
-        TXLOG_DEBUG("Added wait edge id: " << addedEdge.Id
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Added wait edge id: " << addedEdge.Id
             << ", awaiter: " << awaiterInfo
             << ", blocker: " << addedEdge.Blocker);
     }
@@ -1303,7 +1296,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         Y_ABORT_UNLESS(it->second.Blocker);
 
         if (it->second.Awaiter.Impl != awaiter.Impl) {
-            TXLOG_ERROR("Unexpected awaiter: " << awaiterInfo
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_ERROR, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Unexpected awaiter: " << awaiterInfo
                 << " for removed edge id: " << id
                 << ", expected: " << awaiter.LockInfo(SelfId()));
             continue;
@@ -1314,7 +1307,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         WaitEdges.erase(it);
         actuallyRemoved.push_back(id);
 
-        TXLOG_DEBUG("Removed wait edge id: " << id
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Removed wait edge id: " << id
             << ", awaiter: " << awaiterInfo
             << ", blocker: " << blockerInfo);
     }
@@ -1465,7 +1458,7 @@ void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) {
     auto edgeId = TWaitEdgeId(ev->Sender, ev->Get()->RequestId);
-    TXLOG_DEBUG("Received TEvWaitingLockAdd for awaiter: " << ev->Get()->Lock
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvWaitingLockAdd for awaiter: " << ev->Get()->Lock
         << ", blocker: " << ev->Get()->OtherLock
         << ", edge id: " << edgeId);
 
@@ -1485,7 +1478,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) 
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev) {
     auto edgeId = TWaitEdgeId(ev->Sender, ev->Get()->RequestId);
-    TXLOG_DEBUG("Received TEvWaitingLockRemove for edge id: " << edgeId);
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvWaitingLockRemove for edge id: " << edgeId);
 
     auto edgeIt = WaitEdges.find(edgeId);
     if (edgeIt == WaitEdges.end()) {
@@ -1499,7 +1492,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr&
     const auto& record = ev->Get()->Record;
     TLockInfo awaiterInfo(record.GetLockId(), record.GetLockNode());
 
-    TXLOG_DEBUG("Received TEvUpdateLockWaitEdges from " << ev->Sender
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvUpdateLockWaitEdges from " << ev->Sender
         << " for awaiter: " << awaiterInfo
         << ", added count: " << record.GetAdded().size()
         << ", removed count: " << record.GetRemoved().size());
@@ -1711,7 +1704,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
                 continue;
             }
 
-            TXLOG_DEBUG("Breaking the wait edge id: " << edge.Id
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Breaking the wait edge id: " << edge.Id
                 << ", awaiter: " << edge.Awaiter.LockInfo(SelfId())
                 << ", blocker: " << edge.Blocker.LockInfo(SelfId()));
             edge.Broken = true;
@@ -1734,7 +1727,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {
     UpdateImmutableSnapshotsRegistry();
-    TXLOG_DEBUG("Scheduled next TEvSnapshotMaintenance event in "
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Scheduled next TEvSnapshotMaintenance event in "
         << AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds() << " seconds");
     Schedule(
         TDuration::Seconds(AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds()),
@@ -1743,7 +1736,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {
 
 void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {    
     if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
-        TXLOG_DEBUG("Snapshots locking is disabled, clearing local and remote snapshots storage");
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Snapshots locking is disabled, clearing local and remote snapshots storage");
         LocalSnapshotsStorage->Clear();
         RemoteSnapshotsStorage->Clear();
         AppData()->SnapshotRegistryHolder->Set(nullptr);
@@ -1752,7 +1745,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
 
     LocalSnapshotsStorage->CleanExpired();
     if (!RemoteSnapshotsStorage->IsReady()) {
-        TXLOG_DEBUG("Remote snapshots storage is not ready, skipping update");
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Remote snapshots storage is not ready, skipping update");
         return;
     }
 
@@ -1778,7 +1771,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     }
 
     AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
-    TXLOG_DEBUG("Updated immutable snapshots registry. "
+    LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Updated immutable snapshots registry. "
         << "Local snapshots count: " << localSnapshotsCount
         << ", Remote snapshots count: " << remoteSnapshotsCount);
 }

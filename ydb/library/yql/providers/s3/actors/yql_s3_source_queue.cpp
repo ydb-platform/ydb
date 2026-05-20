@@ -95,33 +95,6 @@
 
 #endif
 
-#define LOG_E(name, stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_W(name, stream) \
-    LOG_WARN_S (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_I(name, stream) \
-    LOG_INFO_S (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_D(name, stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_T(name, stream) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-
-#define LOG_CORO_E(stream) \
-    LOG_ERROR_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_W(stream) \
-    LOG_WARN_S (GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_I(stream) \
-    LOG_INFO_S (GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_D(stream) \
-    LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_T(stream) \
-    LOG_TRACE_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-
 namespace NYql::NDq {
 
 class TS3FileQueueActor : public NActors::TActorBootstrapped<TS3FileQueueActor> {
@@ -216,10 +189,10 @@ public:
             Schedule(PoisonTimeout, new NActors::TEvents::TEvPoison());
         }
         if (Directories.empty()) {
-            LOG_I("TS3FileQueueActor", "Bootstrap there is no directories to list, consumersCount=" << ConsumersCount);
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Bootstrap there is no directories to list, consumersCount=" << ConsumersCount);
             Become(&TS3FileQueueActor::NoMoreDirectoriesState);
         } else {
-            LOG_I("TS3FileQueueActor", "Bootstrap there are directories to list, consumersCount=" << ConsumersCount);
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Bootstrap there are directories to list, consumersCount=" << ConsumersCount);
             TryPreFetch();
             Become(&TS3FileQueueActor::ThereAreDirectoriesToListState);
         }
@@ -248,11 +221,11 @@ public:
     void HandleGetNextBatch(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
         ConnectedConsumers.insert(ev->Sender);
         if (HasEnoughToSend()) {
-            LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "HandleGetNextBatch sending right away");
             TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
             TryPreFetch();
         } else {
-            LOG_D("TS3FileQueueActor", "HandleGetNextBatch have not enough objects cached. Start fetching");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "HandleGetNextBatch have not enough objects cached. Start fetching");
             ScheduleRequest(ev->Sender, ev->Get()->Record.GetTransportMeta());
             TryFetch();
         }
@@ -261,14 +234,14 @@ public:
     void HandleNextListingChunkReceived(TEvPrivatePrivate::TEvNextListingChunkReceived::TPtr& ev) {
         Y_ENSURE(FetchingInProgress());
         ListingFuture = Nothing();
-        LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "HandleNextListingChunkReceived");
         if (SaveRetrievedResults(ev->Get()->ListingResult)) {
             AnswerPendingRequests(true);
             if (!HasPendingRequests) {
-                LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived no pending requests. Trying to prefetch");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "HandleNextListingChunkReceived no pending requests. Trying to prefetch");
                 TryPreFetch();
             } else {
-                LOG_D("TS3FileQueueActor", "HandleNextListingChunkReceived there are pending requests. Fetching more objects");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "HandleNextListingChunkReceived there are pending requests. Fetching more objects");
                 TryFetch();
             }
         } else {
@@ -282,14 +255,14 @@ public:
     }
 
     bool SaveRetrievedResults(const NS3Lister::TListResult& listingResult) {
-        LOG_T("TS3FileQueueActor", "SaveRetrievedResults");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "SaveRetrievedResults");
         if (std::holds_alternative<NS3Lister::TListError>(listingResult)) {
             MaybeIssues = std::get<NS3Lister::TListError>(listingResult).Issues;
             return false;
         }
 
         auto listingChunk = std::get<NS3Lister::TListEntries>(listingResult);
-        LOG_D("TS3FileQueueActor", "SaveRetrievedResults saving: " << listingChunk.Objects.size() << " entries");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "SaveRetrievedResults saving: " << listingChunk.Objects.size() << " entries");
         Y_ENSURE(listingChunk.Directories.empty());
         for (auto& object: listingChunk.Objects) {
             if (object.Path.EndsWith('/')) {
@@ -302,12 +275,12 @@ public:
                                     << "Size of object " << object.Path << " = "
                                     << object.Size
                                     << " and exceeds limit = " << FileSizeLimit;
-                LOG_E("TS3FileQueueActor", errorMessage);
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << errorMessage);
                 MaybeIssues = TIssues{TIssue{errorMessage}};
                 FatalCode = NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
                 return false;
             }
-            LOG_T("TS3FileQueueActor", "SaveRetrievedResults adding path: " << object.Path);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "SaveRetrievedResults adding path: " << object.Path);
             NS3::FileQueue::TObjectPath objectPath;
             objectPath.SetPath(object.Path);
             objectPath.SetSize(bytesUsed);
@@ -321,14 +294,14 @@ public:
     bool FetchingInProgress() const { return ListingFuture.Defined(); }
 
     void TransitToNoMoreDirectoriesToListState() {
-        LOG_I("TS3FileQueueActor", "TransitToNoMoreDirectoriesToListState no more directories to list");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TransitToNoMoreDirectoriesToListState no more directories to list");
         AnswerPendingRequests();
         Become(&TS3FileQueueActor::NoMoreDirectoriesState);
     }
 
     void TransitToErrorState() {
         Y_ENSURE(MaybeIssues.Defined());
-        LOG_I("TS3FileQueueActor", "TransitToErrorState an error occurred sending ");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TransitToErrorState an error occurred sending ");
         AnswerPendingRequests();
         Objects.clear();
         Directories.clear();
@@ -355,9 +328,8 @@ public:
 
     void HandleGetNextBatchForEmptyState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
         ConnectedConsumers.insert(ev->Sender);
-        LOG_T(
-            "TS3FileQueueActor",
-            "HandleGetNextBatchForEmptyState Giving away rest of Objects");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". "
+            << "HandleGetNextBatchForEmptyState Giving away rest of Objects");
         TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
     }
 
@@ -379,9 +351,8 @@ public:
 
     void HandleGetNextBatchForErrorState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
         ConnectedConsumers.insert(ev->Sender);
-        LOG_D(
-            "TS3FileQueueActor",
-            "HandleGetNextBatchForErrorState Giving away rest of Objects");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". "
+            << "HandleGetNextBatchForErrorState Giving away rest of Objects");
         Send(ev->Sender, new TEvS3Provider::TEvObjectPathReadError(*MaybeIssues, FatalCode, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
@@ -389,9 +360,8 @@ public:
     void HandleUpdateConsumersCount(TEvS3Provider::TEvUpdateConsumersCount::TPtr& ev) {
         ConnectedConsumers.insert(ev->Sender);
         if (!UpdatedConsumers.contains(ev->Sender)) {
-            LOG_D(
-                "TS3FileQueueActor",
-                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". "
+                << "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
             UpdatedConsumers.insert(ev->Sender);
             ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
         }
@@ -399,7 +369,7 @@ public:
     }
 
     void HandleRoundRobinStageTimeout() {
-        LOG_T("TS3FileQueueActor","Handle start stage timeout");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " <<"Handle start stage timeout");
         if (!RoundRobinStageFinished) {
             RoundRobinStageFinished = true;
             AnswerPendingRequests();
@@ -412,16 +382,16 @@ public:
         // consumers are alive, we can safely ignore the timeout and let the normal
         // shutdown path run.
         if (ConnectedConsumers.size() >= ConsumersCount) {
-            LOG_D("TS3FileQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "HandlePoison: consumers are active, ignoring PoisonTimeout");
             return;
         }
-        LOG_I("TS3FileQueueActor", "HandlePoison: no consumer messages received, shutting down");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "HandlePoison: no consumer messages received, shutting down");
         AnswerPendingRequests();
         PassAway();
     }
 
     void PassAway() override {
-        LOG_D("TS3FileQueueActor", "PassAway");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway");
         TBase::PassAway();
     }
 
@@ -447,7 +417,7 @@ private:
             ObjectsTotalSize -= totalSize;
         }
 
-        LOG_T("TS3FileQueueActor", "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "SendObjects Sending " << result.size() << " objects to consumer with id " << consumer);
         Send(consumer, new TEvS3Provider::TEvObjectPathBatch(std::move(result), HasNoMoreItems(), transportMeta));
 
         if (HasNoMoreItems()) {
@@ -489,18 +459,18 @@ private:
 
     bool TryFetch() {
         if (FetchingInProgress()) {
-            LOG_D("TS3FileQueueActor", "TryFetch fetching already in progress");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TryFetch fetching already in progress");
             return true;
         }
 
         if (MaybeLister.Defined() && (*MaybeLister)->HasNext()) {
-            LOG_D("TS3FileQueueActor", "TryFetch fetching from current lister");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TryFetch fetching from current lister");
             Fetch();
             return true;
         }
 
         if (!Directories.empty()) {
-            LOG_D("TS3FileQueueActor", "TryFetch fetching from new lister");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TryFetch fetching from new lister");
 
             auto object = Directories.back();
             Directories.pop_back();
@@ -523,7 +493,7 @@ private:
             return true;
         }
 
-        LOG_D("TS3FileQueueActor", "TryFetch couldn't start fetching");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TryFetch couldn't start fetching");
         MaybeLister = Nothing();
         TransitToNoMoreDirectoriesToListState();
         return false;
@@ -590,9 +560,9 @@ private:
     }
 
     void TryFinish(const NActors::TActorId& consumer, ui64 seqNo) {
-        LOG_T("TS3FileQueueActor", "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
         if (FinishingConsumerToLastSeqNo.contains(consumer)) {
-            LOG_T("TS3FileQueueActor", "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileQueueActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
             if (FinishingConsumerToLastSeqNo[consumer] < seqNo || SelfId().NodeId() == consumer.NodeId()) {
                 FinishedConsumers.insert(consumer);
                 if (FinishedConsumers.size() == ConsumersCount) {

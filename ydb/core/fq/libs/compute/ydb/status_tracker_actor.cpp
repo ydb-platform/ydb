@@ -23,12 +23,6 @@
 #include <ydb/library/actors/core/log.h>
 
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -91,7 +85,7 @@ public:
     static constexpr char ActorName[] = "FQ_STATUS_TRACKER";
 
     void Start() {
-        LOG_I("Become");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Become");
         Become(&TStatusTrackerActor::StateFunc);
         SendGetOperation();
     }
@@ -118,11 +112,11 @@ public:
         }
 
         if (ev.Get()->Get()->Success) {
-            LOG_I("Information about the status of operation is stored");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Information about the status of operation is stored");
             Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(Issues, Status, ExecStatus, ComputeStatus));
             CompleteAndPassAway();
         } else {
-            LOG_E("Error saving information about the status of operation");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Error saving information about the status of operation");
             Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the status of operation: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR, ExecStatus, ComputeStatus));
             FailedAndPassAway();
         }
@@ -132,20 +126,20 @@ public:
         const auto& response = *ev.Get()->Get();
 
         if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
-            LOG_I("Operation has been already removed");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Operation has been already removed");
             Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(response.Issues, response.Status, ExecStatus, ComputeStatus));
             CompleteAndPassAway();
             return;
         }
 
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_E("Can't get operation: " << response.Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Can't get operation: " << response.Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(response.Issues, response.Status, ExecStatus, ComputeStatus));
             FailedAndPassAway();
             return;
         }
 
-        LOG_D("Execution status: " << static_cast<int>(response.ExecStatus));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Execution status: " << static_cast<int>(response.ExecStatus));
         switch (response.ExecStatus) {
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
@@ -228,7 +222,7 @@ public:
 
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues);
         if (Builder.Issues) {
-            LOG_W(Builder.Issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<Builder.Issues.ToOneLineString());
             GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
@@ -243,13 +237,13 @@ public:
     }
 
     void Failed() {
-        LOG_I("Execution status: Failed, Status: " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Execution status: Failed, Status: " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
         FailedStatusCodeCounters->IncByScopeAndStatusCode(Params.Scope.ToString(), StatusCode, Issues);
         OnPingRequestStart();
 
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, std::nullopt, StatusCode);
         if (Builder.Issues) {
-            LOG_W(Builder.Issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<Builder.Issues.ToOneLineString());
             GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
@@ -259,13 +253,13 @@ public:
     }
 
     void Complete() {
-        LOG_I("Execution status: Complete " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Execution status: Complete " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
         OnPingRequestStart();
 
         ComputeStatus = ::FederatedQuery::QueryMeta::COMPLETING;
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(QueryStats, Issues, ComputeStatus, std::nullopt);
         if (Builder.Issues) {
-            LOG_W(Builder.Issues.ToOneLineString());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<Builder.Issues.ToOneLineString());
             GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         ReportPublicCounters(Builder.PublicStat);
@@ -277,7 +271,7 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         // Pinger may end (with ydb_run_actor); no one sends a poison pill to this status tracker.
         // Therefore we'll finish ourselves.
-        LOG_W("TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [StatusTracker] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
         FailedAndPassAway();
     }
 

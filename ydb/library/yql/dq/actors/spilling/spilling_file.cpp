@@ -29,14 +29,6 @@ namespace {
 // Read, write, and execute by owner only
 constexpr int DIR_MODE = S_IRWXU;
 
-#define LOG_D(s) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_I(s) LOG_INFO_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
-#define LOG_E(s) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_C(s) LOG_CRIT_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
-
-#define A_LOG_D(s) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, s)
-#define A_LOG_E(s) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, s)
-
 #define REMOVE_FILES 1
 
 // Local File Storage Events
@@ -84,7 +76,7 @@ public:
         ServiceActorId_ = MakeDqLocalFileSpillingServiceID(SelfId().NodeId());
         YQL_ENSURE(ServiceActorId_);
 
-        LOG_D("Register LocalFileSpillingActor " << SelfId() << " at service " << ServiceActorId_);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"Register LocalFileSpillingActor " << SelfId() << " at service " << ServiceActorId_);
         Send(ServiceActorId_, new TEvDqSpillingLocalFile::TEvOpenFile(TxId_, Details_, RemoveBlobsAfterRead_, SpillingType_), NActors::IEventHandle::FlagTrackDelivery);
 
         Become(&TDqLocalFileSpillingActor::WorkState);
@@ -230,7 +222,7 @@ public:
         const auto nodeId = SelfId().NodeId();
 
         Root_ /= (TStringBuilder() << NodePrefix_ << "_" << nodeId << "_" << sessionId);
-        LOG_I("Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"Init DQ local file spilling service at " << Root_ << ", actor: " << SelfId());
 
         try {
             if (Root_.IsSymlink()) {
@@ -239,7 +231,7 @@ public:
             Root_.ForceDelete();
             Root_.MkDirs(DIR_MODE);
         } catch (...) {
-            LOG_E(CurrentExceptionMessage());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,CurrentExceptionMessage());
             Become(&TDqLocalFileSpillingService::BrokenState);
             return;
         }
@@ -278,7 +270,7 @@ private:
     }
 
     void HandleBroken(const TActorId& from) {
-        LOG_E("Service is broken, send error to client " << from);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"Service is broken, send error to client " << from);
         Send(from, new TEvDqSpilling::TEvError("Service not started"));
     }
 
@@ -302,12 +294,12 @@ private:
 
     void HandleWork(TEvDqSpillingLocalFile::TEvOpenFile::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[OpenFile] TxId: " << msg.TxId << ", desc: " << msg.Description << ", from: " << ev->Sender
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[OpenFile] TxId: " << msg.TxId << ", desc: " << msg.Description << ", from: " << ev->Sender
             << ", removeBlobsAfterRead: " << msg.RemoveBlobsAfterRead);
 
         auto it = Files_.find(ev->Sender);
         if (it != Files_.end()) {
-            LOG_E("[OpenFile] Can not open file: already exists. TxId: " << msg.TxId << ", desc: " << msg.Description);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[OpenFile] Can not open file: already exists. TxId: " << msg.TxId << ", desc: " << msg.Description);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File already exists"));
             return;
@@ -323,16 +315,16 @@ private:
 
     void HandleWork(TEvDqSpillingLocalFile::TEvCloseFile::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[CloseFile] from: " << ev->Sender << ", error: " << msg.Error);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[CloseFile] from: " << ev->Sender << ", error: " << msg.Error);
 
         auto it = Files_.find(ev->Sender);
         if (it == Files_.end()) {
-            LOG_E("[CloseFile] Can not close file: not found. From: " << ev->Sender << ", error: " << msg.Error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[CloseFile] Can not close file: not found. From: " << ev->Sender << ", error: " << msg.Error);
             return;
         }
 
         if (it->second.CloseAt) {
-            LOG_E("[CloseFile] Can not close file: closing. From: " << ev->Sender << ", error: " << msg.Error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[CloseFile] Can not close file: closing. From: " << ev->Sender << ", error: " << msg.Error);
             return;
         }
 
@@ -358,7 +350,7 @@ private:
             }
 
             if (!RunOp("CloseFile", std::move(closeOp), fd)) {
-                LOG_E("[CloseFile] Can not run operation");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[CloseFile] Can not run operation");
             }
         } else {
             MoveFileToClosed(it);
@@ -367,11 +359,11 @@ private:
 
     void HandleWork(TEvPrivate::TEvCloseFileResponse::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[CloseFileResponse] from: " << msg.Client);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[CloseFileResponse] from: " << msg.Client);
 
         auto it = Files_.find(msg.Client);
         if (it == Files_.end()) {
-            LOG_E("[CloseFileResponse] Can not find file from: " << msg.Client);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[CloseFileResponse] Can not find file from: " << msg.Client);
             return;
         }
 
@@ -391,11 +383,11 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvWrite::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Write] from: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
         auto it = Files_.find(ev->Sender);
         if (it == Files_.end()) {
-            LOG_E("[Write] File not found. "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Write] File not found. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
@@ -405,7 +397,7 @@ private:
         auto& fd = it->second;
 
         if (fd.CloseAt) {
-            LOG_E("[Write] File already closed. "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Write] File already closed. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File already closed"));
@@ -415,7 +407,7 @@ private:
         auto& tc = Counters_->GetTypeCounters(fd.SpillingType);
 
         if (Config_.MaxFileSize && fd.TotalSize + msg.Blob.Size() > Config_.MaxFileSize) {
-            LOG_E("[Write] File size limit exceeded. "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Write] File size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             const auto usedMb = (fd.TotalSize + msg.Blob.Size()) / 1024 / 1024;
@@ -428,7 +420,7 @@ private:
         }
 
         if (Config_.MaxTotalSize && TotalSize_ + msg.Blob.Size() > Config_.MaxTotalSize) {
-            LOG_E("[Write] Total size limit exceeded. "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Write] Total size limit exceeded. "
                 << "From: " << ev->Sender << ", blobId: " << msg.BlobId << ", bytes: " << msg.Blob.Size());
 
             const auto usedMb = (TotalSize_ + msg.Blob.Size()) / 1024 / 1024;
@@ -457,7 +449,7 @@ private:
             auto fname = TStringBuilder() << fd.TxId << "_" << fd.Description << "_" << fd.NextPartListIndex++;
             fp->FileName = (Root_ / fname).GetPath();
 
-            LOG_D("[Write] create new FilePart " << fp->FileName);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Write] create new FilePart " << fp->FileName);
             newFile = true;
         } else {
             fd.Parts.emplace(msg.BlobId, fp);
@@ -480,7 +472,7 @@ private:
 
         if (!RunOp("Write", std::move(writeOp), fd)) {
             TString error = "[Write] Can not run operation";
-            LOG_E(error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,error);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError(error));
         } 
@@ -488,11 +480,11 @@ private:
 
     void HandleWork(TEvPrivate::TEvWriteFileResponse::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[WriteFileResponse] from: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[WriteFileResponse] from: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
         auto it = Files_.find(msg.Client);
         if (it == Files_.end()) {
-            LOG_E("[WriteFileResponse] Can not write file: not found. "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[WriteFileResponse] Can not write file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
@@ -524,7 +516,7 @@ private:
                 fp->FileHandle.Swap(msg.NewFileHandle);
             }
         } else {
-            LOG_E("[WriteFileResponse] File part not found. From: " << msg.Client << ", blobId: " << msg.BlobId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[WriteFileResponse] File part not found. From: " << msg.Client << ", blobId: " << msg.BlobId);
             if (!fd.Error) {
                 fd.Error = "File part not found";
             }
@@ -546,7 +538,7 @@ private:
             Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
         } else {
             TString error = "[WriteFileResponse] Can not run operation";
-            LOG_E(error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,error);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError(error));
             return;
@@ -555,11 +547,11 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvRead::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[Read] from: " << ev->Sender << ", blobId: " << msg.BlobId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Read] from: " << ev->Sender << ", blobId: " << msg.BlobId);
 
         auto it = Files_.find(ev->Sender);
         if (it == Files_.end()) {
-            LOG_E("[Read] Can not read file: not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Read] Can not read file: not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File not found"));
             return;
@@ -568,7 +560,7 @@ private:
         auto& fd = it->second;
 
         if (fd.CloseAt) {
-            LOG_E("[Read] Can not read file: closed. From: " << ev->Sender << ", blobId: " << msg.BlobId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Read] Can not read file: closed. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("Closed"));
             return;
@@ -576,7 +568,7 @@ private:
 
         auto partIt = fd.Parts.find(msg.BlobId);
         if (partIt == fd.Parts.end()) {
-            LOG_E("[Read] Can not read file: part not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Read] Can not read file: part not found. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("File part not found"));
 
@@ -590,7 +582,7 @@ private:
 
         auto blobIt = fp->Blobs.find(msg.BlobId);
         if (blobIt == fp->Blobs.end()) {
-            LOG_E("[Read] Can not read file: blob not found in the part. From: " << ev->Sender << ", blobId: " << msg.BlobId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[Read] Can not read file: blob not found in the part. From: " << ev->Sender << ", blobId: " << msg.BlobId);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("Blob not found in the file part"));
 
@@ -627,7 +619,7 @@ private:
 
         if (!RunOp("Read", std::move(readOp), fd)) {
             TString error = "[Read] Can not run operation";
-            LOG_E(error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,error);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError(error));
         } 
@@ -635,12 +627,12 @@ private:
 
     void HandleWork(TEvPrivate::TEvReadFileResponse::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[ReadFileResponse] from: " << msg.Client << ", blobId: " << msg.BlobId << ", removed: " << msg.Removed
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[ReadFileResponse] from: " << msg.Client << ", blobId: " << msg.BlobId << ", removed: " << msg.Removed
             << ", error: " << msg.Error);
 
         auto it = Files_.find(msg.Client);
         if (it == Files_.end()) {
-            LOG_E("[ReadFileResponse] Can not read file: not found. "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[ReadFileResponse] Can not read file: not found. "
                 << "From: " << msg.Client << ", blobId: " << msg.BlobId << ", error: " << msg.Error);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError("Internal error"));
@@ -694,7 +686,7 @@ private:
             Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
         } else {
             TString error = "[ReadFileResponse] Can not run operation";
-            LOG_E(error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,error);
 
             Send(ev->Sender, new TEvDqSpilling::TEvError(error));
             return;
@@ -790,7 +782,7 @@ private:
         const auto& sessionId = msg.SpillingSessionId;
         const auto& nodePrefix = this->NodePrefix_;
 
-        LOG_I("[RemoveOldTmp] removing at root: " << root);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[RemoveOldTmp] removing at root: " << root);
 
         const auto isDirOldTmp = [&nodePrefix, &nodeIdString, &sessionId](const TString& dirName) -> bool {            
             // dirName: node_<nodeId>_<sessionId>
@@ -814,7 +806,7 @@ private:
                 
                 const auto dirName = dirEntry.fts_name;
                 if (isDirOldTmp(dirName)) {
-                    LOG_D("[RemoveOldTmp] found old temporary at " << (root / dirName));
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[RemoveOldTmp] found old temporary at " << (root / dirName));
                     oldTmps.emplace_back(std::move(dirName));
                 }
             }
@@ -823,7 +815,7 @@ private:
                 (root / dirName).ForceDelete();
             }
         } catch (const yexception& e) {
-            LOG_E("[RemoveOldTmp] removing failed due to: " << e.what());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE,"[RemoveOldTmp] removing failed due to: " << e.what());
         }
     }
 
@@ -878,7 +870,7 @@ private:
             resp->Client = Client;
             resp->WaitTime = now - Ts;
 
-            A_LOG_D("[CloseFile async] from: " << Client << ", waitTime: " << resp->WaitTime);
+            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_COMPUTE,"[CloseFile async] from: " << Client << ", waitTime: " << resp->WaitTime);
 
             for (ui64 i = 0; i < FileHandles.size(); ++i) {
                 try {
@@ -887,7 +879,7 @@ private:
                     ::unlink(FileNames[i].c_str());
 #endif
                 } catch (const yexception& e) {
-                    A_LOG_E("[CloseFile async] error while closing file " << FileNames[i] << ": " << e.what());
+                    LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_COMPUTE,"[CloseFile async] error while closing file " << FileNames[i] << ": " << e.what());
                 }
             }
             resp->WorkTime = TInstant::Now() - now;
@@ -908,7 +900,7 @@ private:
 
         void Process(void*) override {
             auto now = TInstant::Now();
-            A_LOG_D("[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.Size()
+            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_COMPUTE,"[Write async] file: " << FileName << ", blobId: " << BlobId << ", bytes: " << Blob.Size()
                 << ", offset: " << (CreateFile ? 0 : GetFileLength(FileName)));
 
             auto resp = MakeHolder<TEvPrivate::TEvWriteFileResponse>();
@@ -927,7 +919,7 @@ private:
                 TUnbufferedFileOutput fout(file);
                 Blob.CopyTo(fout);
             } catch (const yexception& e) {
-                A_LOG_E("[Write async] file: " << FileName << ", io error: " << e.what());
+                LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_COMPUTE,"[Write async] file: " << FileName << ", io error: " << e.what());
                 resp->Error = e.what();
             }
             resp->WorkTime = TInstant::Now() - now;
@@ -949,7 +941,7 @@ private:
 
         void Process(void*) override {
             auto now = TInstant::Now();
-            A_LOG_D("[Read async] file: " << FileName << ", blobId: " << BlobId << ", offset: " << Offset
+            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_COMPUTE,"[Read async] file: " << FileName << ", blobId: " << BlobId << ", offset: " << Offset
                 << ", size: " << Size << ", remove: " << (bool) RemoveFile);
 
             auto resp = MakeHolder<TEvPrivate::TEvReadFileResponse>();
@@ -976,7 +968,7 @@ private:
                     resp->Removed = true;
                 }
             } catch (const yexception& e) {
-                A_LOG_E("[Read async] file: " << FileName << ", blobId: " << BlobId << ", offset: " << Offset
+                LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_COMPUTE,"[Read async] file: " << FileName << ", blobId: " << BlobId << ", offset: " << Offset
                     << ", error: " << e.what());
                 resp->Error = e.what();
             }

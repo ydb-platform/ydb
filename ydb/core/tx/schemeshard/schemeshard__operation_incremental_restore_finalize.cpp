@@ -8,10 +8,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
@@ -88,7 +84,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             CollectIndexImplTables(finalize, context, implTablesToUpdate);
 
             if (implTablesToUpdate.empty()) {
-                LOG_I(DebugHint() << " No index impl tables to update, skipping ConfigureParts");
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " No index impl tables to update, skipping ConfigureParts");
                 return true;
             }
 
@@ -98,7 +94,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
             for (const auto& tablePathId : implTablesToUpdate) {
                 if (!context.SS->Tables.contains(tablePathId)) {
-                    LOG_W(DebugHint() << " Table not found: " << tablePathId);
+                    LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " Table not found: " << tablePathId);
                     continue;
                 }
 
@@ -109,7 +105,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 context.SS->PersistAddAlterTable(db, tablePathId, table->AlterData);
 
-                LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " Preparing ALTER for table " << tablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
 
                 // Note: Parent index version update is deferred to TFinalizationPropose::SyncIndexSchemaVersions()
@@ -122,7 +118,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         txState->Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
                         txState->ShardsInProgress.insert(shardIdx);
                         
-                        LOG_I(DebugHint() << " Added shard " << shardIdx 
+                        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " Added shard " << shardIdx 
                               << " (tablet: " << context.SS->ShardInfos[shardIdx].TabletID << ") to txState");
                     }
                 }
@@ -135,7 +131,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 auto shardIdx = shard.Idx;
                 auto datashardId = context.SS->ShardInfos[shardIdx].TabletID;
 
-                LOG_I(DebugHint() << " Propose ALTER to datashard " << datashardId 
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " Propose ALTER to datashard " << datashardId 
                       << " shardIdx: " << shardIdx << " txid: " << OperationId);
 
                 const auto seqNo = context.SS->StartRound(*txState);
@@ -154,7 +150,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 }
 
                 if (!tablePathId) {
-                    LOG_W(DebugHint() << " Could not find table for shard " << shardIdx);
+                    LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " Could not find table for shard " << shardIdx);
                     continue;
                 }
 
@@ -180,7 +176,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 TPath path = TPath::Resolve(tablePath, context.SS);
                 if (!path.IsResolved()) {
-                    LOG_W("CollectIndexImplTables: Table not resolved: " << tablePath);
+                    LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CollectIndexImplTables: Table not resolved: " << tablePath);
                     continue;
                 }
 
@@ -191,7 +187,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 TPathId implTablePathId = path.Base()->PathId;
                 if (context.SS->Tables.contains(implTablePathId)) {
                     implTables.insert(implTablePathId);
-                    LOG_I("CollectIndexImplTables: Found index impl table: " << tablePath 
+                    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CollectIndexImplTables: Found index impl table: " << tablePath 
                           << " pathId: " << implTablePathId);
                 }
             }
@@ -218,7 +214,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         }
 
         bool ProgressState(TOperationContext& context) override {
-            LOG_I(DebugHint() << " ProgressState");
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " ProgressState");
 
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
@@ -246,8 +242,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
     private:
         void SyncIndexSchemaVersions(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
                                      TOperationContext& context) {
-            LOG_I("SyncIndexSchemaVersions: Starting schema version sync for restored indexes");
-            LOG_I("SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Starting schema version sync for restored indexes");
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
             
             NIceDb::TNiceDb db(context.GetDB());
             THashSet<TPathId> publishedMainTables;
@@ -262,7 +258,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 TPath path = TPath::Resolve(tablePath, context.SS);
                 if (!path.IsResolved()) {
-                    LOG_W("SyncIndexSchemaVersions: Table not resolved: " << tablePath);
+                    LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Table not resolved: " << tablePath);
                     continue;
                 }
 
@@ -272,13 +268,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 TPathId implTablePathId = path.Base()->PathId;
                 if (!context.SS->Tables.contains(implTablePathId)) {
-                    LOG_W("SyncIndexSchemaVersions: Table not found: " << implTablePathId);
+                    LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Table not found: " << implTablePathId);
                     continue;
                 }
 
                 auto table = context.SS->Tables.at(implTablePathId);
                 if (!table->AlterData) {
-                    LOG_W("SyncIndexSchemaVersions: No AlterData for table: " << implTablePathId);
+                    LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: No AlterData for table: " << implTablePathId);
                     continue;
                 }
 
@@ -286,7 +282,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 ui64 coordVersion = table->AlterData->CoordinatedSchemaVersion.GetOrElse(table->AlterVersion + 1);
 
                 // Finalize the alter - this commits AlterData to the main table state
-                LOG_I("SyncIndexSchemaVersions: Finalizing ALTER for table " << implTablePathId
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Finalizing ALTER for table " << implTablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
 
                 // Release AlterData tracking before FinishAlter resets it
@@ -301,7 +297,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 context.SS->ClearDescribePathCaches(path.Base());
                 context.OnComplete.PublishToSchemeBoard(OperationId, implTablePathId);
 
-                LOG_I("SyncIndexSchemaVersions: Finalized schema version for: " << tablePath);
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Finalized schema version for: " << tablePath);
 
                 // Also update the parent index version
                 TPath indexPath = path.Parent();
@@ -322,7 +318,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             }
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
 
-                            LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
+                            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Index AlterVersion updated from "
                                   << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
 
                             context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
@@ -334,7 +330,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                                     publishedMainTables.insert(mainTablePathId);
                                     context.SS->ClearDescribePathCaches(mainTablePath.Base());
                                     context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
-                                    LOG_I("SyncIndexSchemaVersions: Published main table: " << mainTablePathId);
+                                    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Published main table: " << mainTablePathId);
                                 }
                             }
                         }
@@ -342,7 +338,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 }
             }
 
-            LOG_I("SyncIndexSchemaVersions: Finished schema version sync");
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Finished schema version sync");
         }
 
         void CollectPathsToNormalize(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize, 
@@ -357,7 +353,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     if (auto* pathInfo = context.SS->PathsById.FindPtr(pathId)) {
                         if ((*pathInfo)->PathState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore) {
                             pathsToNormalize.push_back(pathId);
-                            LOG_I("Adding target table path to normalize: " << tablePath);
+                            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"Adding target table path to normalize: " << tablePath);
                         }
                     }
                 }
@@ -372,7 +368,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         if ((*pathInfo)->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore ||
                             (*pathInfo)->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore) {
                             pathsToNormalize.push_back(pathId);
-                            LOG_I("Adding backup table path to normalize: " << backupTablePath);
+                            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"Adding backup table path to normalize: " << backupTablePath);
                         }
                     }
                 }
@@ -394,13 +390,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     TIncrementalRestoreState::EState::Completed,
                     static_cast<ui32>(Ydb::StatusIds::SUCCESS));
 
-                LOG_I("Persisted incremental restore state as Completed for operation: " << originalOpId);
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"Persisted incremental restore state as Completed for operation: " << originalOpId);
             }
 
-            LOG_I("Keeping IncrementalRestoreOperations entry for operation: " << originalOpId << " - will be cleaned up on FORGET");
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"Keeping IncrementalRestoreOperations entry for operation: " << originalOpId << " - will be cleaned up on FORGET");
 
             context.SS->LongIncrementalRestoreOps.erase(TOperationId(originalOpId, 0));
-            LOG_I("Cleaned up long incremental restore ops for operation: " << originalOpId);
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"Cleaned up long incremental restore ops for operation: " << originalOpId);
 
             CleanupMappings(context.SS, originalOpId, context);
         }
@@ -426,7 +422,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 }
             }
             
-            LOG_I("Cleaned up mappings for operation: " << operationId);
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"Cleaned up mappings for operation: " << operationId);
         }
     };
 
@@ -444,7 +440,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         TDone(TOperationId id) : OperationId(id) {}
 
         bool ProgressState(TOperationContext& context) override {
-            LOG_I(DebugHint() << " ProgressState");
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " ProgressState");
             // Operation is already complete, nothing to do
             return true;
         }
@@ -457,7 +453,7 @@ public:
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         
-        LOG_I("TIncrementalRestoreFinalizeOp Propose"
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TIncrementalRestoreFinalizeOp Propose"
             << ", opId: " << OperationId
         );
 
@@ -493,12 +489,12 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TIncrementalRestoreFinalizeOp AbortPropose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TIncrementalRestoreFinalizeOp AbortPropose"
             << ", opId: " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TIncrementalRestoreFinalizeOp AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TIncrementalRestoreFinalizeOp AbortUnsafe"
             << ", opId: " << OperationId
             << ", forceDropId: " << forceDropTxId);
         

@@ -19,12 +19,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " << stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -85,7 +79,7 @@ public:
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle: {
-                LOG_T("Scope: " << Scope << " Single control plane mode has been chosen");
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Single control plane mode has been chosen");
                 const auto& singleConfig = Config.GetYdb().GetControlPlane().GetSingle();
                 *Result.mutable_connection() = singleConfig.GetConnection();
                 Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvSynchronizeRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope, singleConfig.GetConnection(), GetWorkloadManagerConfig(singleConfig)});
@@ -93,7 +87,7 @@ public:
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
             case NConfig::TYdbComputeControlPlane::kYdbcp:
-            LOG_T("Scope: " << Scope << " CMS or YDBCP mode has been chosen");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " CMS or YDBCP mode has been chosen");
             Send(NFq::ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvDescribeDatabaseRequest{Request.Get()->Get()->CloudId, Request.Get()->Get()->Scope});
             break;
         }
@@ -117,13 +111,13 @@ public:
         const auto& result = ev->Get()->Record;
 
         if (issues && issues.back().IssueCode == TIssuesIds::ACCESS_DENIED) {
-            LOG_T("Scope: " << Scope << " Couldn't find the information about database in control plane storage for this scope");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Couldn't find the information about database in control plane storage for this scope");
             Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvInvalidateSynchronizationRequest(Scope));
             return;
         }
 
         if (issues) {
-            LOG_E("Scope: " << Scope << " Describe database (control plane storage) has been failed. " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Describe database (control plane storage) has been failed. " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -135,7 +129,7 @@ public:
         auto client = Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database());
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after DescribeDatabaseRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -145,7 +139,7 @@ public:
     void Handle(TEvYdbCompute::TEvCheckDatabaseResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Issues) {
-            LOG_E("Scope: " << Scope << " The database existence check has been failed. " << response.Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " The database existence check has been failed. " << response.Issues.ToOneLineString());
             FailedAndPassAway(response.Issues);
             return;
         }
@@ -156,7 +150,7 @@ public:
 
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -177,7 +171,7 @@ public:
             : Clients->GetClient(Scope);
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -192,7 +186,7 @@ public:
 
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after InvalidateSynchronizationRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -207,7 +201,7 @@ public:
     void Handle(TEvControlPlaneStorage::TEvModifyDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
-            LOG_E("Scope: " << Scope << " The modification of the information about database has been failed. " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " The modification of the information about database has been failed. " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -230,7 +224,7 @@ public:
     void Handle(TEvYdbCompute::TEvCreateDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
-            LOG_E("Scope: " << Scope << " CreateDatabaseRequest (compute) has been failed. " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " CreateDatabaseRequest (compute) has been failed. " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -239,7 +233,7 @@ public:
         auto client = Clients->GetClient(Scope, Result.connection().endpoint(), Result.connection().database());
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after CreateDatabaseRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -249,7 +243,7 @@ public:
     void Handle(TEvControlPlaneStorage::TEvCreateDatabaseResponse::TPtr& ev) {
         const auto issues = ev->Get()->Issues;
         if (issues) {
-            LOG_E("Scope: " << Scope << " CreateDatabaseRequest (control plane storage) has been failed. " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " CreateDatabaseRequest (control plane storage) has been failed. " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -260,7 +254,7 @@ public:
 
         if (!client) {
             auto issues = NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Couldn't find a database client for scope " << Scope << ". Checking the existence of the database failed after CreateDatabaseRequest. Please contact internal support"}};
-            LOG_E("Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " Connection: " << Result.ShortDebugString() << " " << issues.ToOneLineString());
             FailedAndPassAway(issues);
             return;
         }
@@ -271,7 +265,7 @@ public:
     void Handle(TEvYdbCompute::TEvSynchronizeResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_E("Scope: " << Scope << " SynchronizeRequest has been failed. " << response.Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseControlPlane]: " <<"Scope: " << Scope << " SynchronizeRequest has been failed. " << response.Issues.ToOneLineString());
             FailedAndPassAway(response.Issues);
             return;
         }

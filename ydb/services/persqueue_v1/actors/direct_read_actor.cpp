@@ -18,8 +18,6 @@
 
 #include <utility>
 
-#define LOG_PREFIX "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX
-
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimrClient;
@@ -65,13 +63,13 @@ void TDirectReadSessionActor::Bootstrap(const TActorContext& ctx) {
 }
 
 void TDirectReadSessionActor::Handle(typename IContext::TEvNotifiedWhenDone::TPtr&, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " grpc closed");
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " grpc closed");
     Die(ctx);
 }
 
 bool TDirectReadSessionActor::ReadFromStreamOrDie(const TActorContext& ctx) {
     if (!Request->Read()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " grpc read failed at start");
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " grpc read failed at start");
         Die(ctx);
         return false;
     }
@@ -81,12 +79,12 @@ bool TDirectReadSessionActor::ReadFromStreamOrDie(const TActorContext& ctx) {
 void TDirectReadSessionActor::Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
     auto& request = ev->Get()->Record;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " grpc read done"
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " grpc read done"
         << ": success# " << ev->Get()->Success
         << ", data# " << request);
 
     if (!ev->Get()->Success) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << "grpc read failed");
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << "grpc read failed");
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
         return;
     }
@@ -129,7 +127,7 @@ bool TDirectReadSessionActor::WriteToStreamOrDie(const TActorContext& ctx, TServ
     }
 
     if (!res) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " grpc write failed at start");
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " grpc write failed at start");
         Die(ctx);
     }
 
@@ -139,7 +137,7 @@ bool TDirectReadSessionActor::WriteToStreamOrDie(const TActorContext& ctx, TServ
 
 void TDirectReadSessionActor::Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
     if (!ev->Get()->Success) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " grpc write failed");
+        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " grpc write failed");
         return Die(ctx);
     }
 }
@@ -166,7 +164,7 @@ void TDirectReadSessionActor::Die(const TActorContext& ctx) {
         Request->AuditLogRequestEnd(Ydb::StatusIds::SUCCESS);
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " proxy is DEAD");
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " proxy is DEAD");
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
     ctx.Send(NPQ::MakePQDReadCacheServiceActorId(), new TEvPQProxy::TEvDirectReadDataSessionDead(Session));
     TRlHelpers::PassAway(SelfId());
@@ -193,7 +191,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuth::TPtr& ev, const TActor
 
 
 void TDirectReadSessionActor::Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " got StartDirectRead from client"
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " got StartDirectRead from client"
         << ": sessionId# " << Session
         << ", assignId# " << ev->Get()->AssignId
         << ", lastDirectReadId# " << ev->Get()->LastDirectReadId
@@ -220,7 +218,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvDirectReadDataSessionConnect
 }
 
 void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << "got init request:" << ev->Get()->Request.DebugString());
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << "got init request:" << ev->Get()->Request.DebugString());
 
     if (Initing) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "got second init request");
@@ -281,7 +279,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason);
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " read init"
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " read init"
         << ": from# " << PeerName
         << ", request# " << ev->Get()->Request);
 
@@ -365,7 +363,7 @@ void TDirectReadSessionActor::InitSession(const TActorContext& ctx) {
 
 void TDirectReadSessionActor::CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason) {
     auto ctx = ActorContext();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, LOG_PREFIX << " Close session with reason: " << reason);
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "Direct read proxy " << ctx.SelfID.ToString() << ": " PQ_LOG_PREFIX << " Close session with reason: " << reason);
     if (code != PersQueue::ErrorCode::OK) {
         if (Errors) {
             ++(*Errors);

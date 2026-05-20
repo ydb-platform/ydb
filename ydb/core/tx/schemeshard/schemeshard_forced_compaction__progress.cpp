@@ -1,9 +1,6 @@
 
 #include "schemeshard_impl.h"
 
-#define LOG_T(stream) LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -18,7 +15,7 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
     }
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoExecute"
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " <<"TForcedCompaction::TTxProgress DoExecute"
             << ", ForcedCompactionsDoneShardsToPersist size: " << Self->ForcedCompactionsDoneShardsToPersist.size()
             << ", CancellingForcedCompactions size: " << Self->CancellingForcedCompactions.size());
         THashSet<TForcedCompactionInfo::TPtr> compactionsToPersist;
@@ -67,7 +64,7 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoComplete"
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " <<"TForcedCompaction::TTxProgress DoComplete"
             << ", ForcedCompactionsDoneShardsToPersist size: " << Self->ForcedCompactionsDoneShardsToPersist.size()
             << ", CancellingForcedCompactions size: " << Self->CancellingForcedCompactions.size());
         SideEffects.ApplyOnComplete(Self, ctx);
@@ -79,7 +76,7 @@ private:
             return;
         }
 
-        LOG_T("TForcedCompaction::TTxProgress SendNotifications: "
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " <<"TForcedCompaction::TTxProgress SendNotifications: "
             << ": id# " << info.Id
             << ", subscribers count# " << info.Subscribers.size());
 

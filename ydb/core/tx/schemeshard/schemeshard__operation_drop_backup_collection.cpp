@@ -6,9 +6,6 @@
 
 #include <algorithm>
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -40,7 +37,7 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
     auto plan = MakeHolder<TDropPlan>();
     plan->BackupCollectionId = bcPath.Base()->PathId;
     
-    LOG_I("DropPlan: Starting collection for backup collection: " << bcPath.PathString());
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"DropPlan: Starting collection for backup collection: " << bcPath.PathString());
     
     // 1. Find CDC streams on source tables (these are OUTSIDE the backup collection)
     // Group them by table for efficient multi-stream drops
@@ -131,7 +128,7 @@ TTxTransaction CreateTableDropTransaction(const TPath& tablePath) {
 
 // TODO: replace UGLY scan
 void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOperationContext& context, NIceDb::TNiceDb& db) {
-    LOG_I("CleanupIncrementalRestoreState for backup collection pathId: " << backupCollectionPathId);
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CleanupIncrementalRestoreState for backup collection pathId: " << backupCollectionPathId);
 
     TVector<ui64> statesToCleanup;
 
@@ -175,7 +172,7 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
         }
     }
 
-    LOG_I("CleanupIncrementalRestoreState: Cleaned up " << statesToCleanup.size() << " incremental restore states");
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CleanupIncrementalRestoreState: Cleaned up " << statesToCleanup.size() << " incremental restore states");
 }
 
 class TPropose : public TSubOperationState {
@@ -185,7 +182,7 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -197,7 +194,7 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -335,7 +332,7 @@ public:
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
-        LOG_N("TDropBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -380,7 +377,7 @@ public:
                 // but hasn't yet marked the path as "under deleting"
                 
                 for (const auto& [txId, txState] : context.SS->TxInFlight) {
-                    LOG_I("DropPlan: Found TxInFlight - txId: " << txId.GetTxId() 
+                    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"DropPlan: Found TxInFlight - txId: " << txId.GetTxId() 
                          << ", targetPathId: " << txState.TargetPathId 
                          << ", txType: " << (int)txState.TxType);
                          
@@ -433,11 +430,11 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropBackupCollection AbortPropose: opId# " << OperationId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropBackupCollection AbortPropose: opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropBackupCollection AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropBackupCollection AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -451,7 +448,7 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         NIceDb::TNiceDb db(context.GetDB());
         
@@ -464,7 +461,7 @@ public:
         }
         
         for (ui64 opId : operationsToCleanup) {
-            LOG_I(DebugHint() << "Cleaning up incremental restore state for operation: " << opId);
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "Cleaning up incremental restore state for operation: " << opId);
             
             db.Table<Schema::IncrementalRestoreOperations>()
                 .Key(opId)
@@ -495,7 +492,7 @@ public:
             }
         }
         
-        LOG_I(DebugHint() << "Cleaned up " << operationsToCleanup.size() << " incremental restore operations");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "Cleaned up " << operationsToCleanup.size() << " incremental restore operations");
         
         return true;
     }

@@ -3,10 +3,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-
 namespace {
 
 using namespace NKikimr;
@@ -49,7 +45,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<DebugHint() << " ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -62,7 +58,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<DebugHint() << "HandleReply TEvOperationPlan"
             << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -146,14 +142,14 @@ public:
 
         const TString& secretName = createSecretProto.GetName();
 
-        LOG_N("TCreateSecret Propose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TCreateSecret Propose"
             << ", path: " << parentPathStr << "/" << secretName
             << ", opId: " << OperationId
         );
 
         auto secretDescrWithoutSecretParts = createSecretProto;
         secretDescrWithoutSecretParts.ClearValue();
-        LOG_D("TCreateSecret Propose"
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TCreateSecret Propose"
             << ", path: " << parentPathStr << "/" << secretName
             << ", opId: " << OperationId
             << ", secretDescription (without secret parts): " << secretDescrWithoutSecretParts.ShortDebugString()
@@ -290,11 +286,11 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateSecret AbortPropose" << ", opId: " << OperationId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TCreateSecret AbortPropose" << ", opId: " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateSecret AbortUnsafe" << ", opId: " << OperationId << ", forceDropId: " << forceDropTxId);
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TCreateSecret AbortUnsafe" << ", opId: " << OperationId << ", forceDropId: " << forceDropTxId);
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -29,12 +29,6 @@ namespace NKikimr::NPQ {
 #endif
 
 
-#define LOG_PREFIX "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, LOG_PREFIX << message);
-
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
 static const ui32 INVALID_PARTITION_ID = Max<ui32>();
 
@@ -226,7 +220,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(code); delay.Defined()) {
-            DEBUG("Repeat the request to KQP in " << *delay);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"Repeat the request to KQP in " << *delay);
             Schedule(*delay, new TEvents::TEvWakeup());
         }
     }
@@ -258,7 +252,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
-        DEBUG("Start of a request to KQP for a WriteId. " <<
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"Start of a request to KQP for a WriteId. " <<
               "SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId);
 
@@ -278,7 +272,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     }
 
     void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& /*ctx*/) {
-        DEBUG("End of the request to KQP for the WriteId. " <<
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"End of the request to KQP for the WriteId. " <<
               "SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId <<
               " Status: " << ev->Get()->Record.GetYdbStatus());
@@ -296,7 +290,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
-        DEBUG("SessionId: " << Opts.SessionId <<
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId <<
               " WriteId: " << WriteId);
 
@@ -419,7 +413,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         Y_ENSURE(HasWriteId());
         Y_ENSURE(HasSupportivePartitionId());
 
-        DEBUG("Start of a request to KQP to save PartitionId. " <<
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"Start of a request to KQP to save PartitionId. " <<
               "SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId);
 
@@ -428,7 +422,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     }
 
     void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        DEBUG("End of a request to KQP to save PartitionId. " <<
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"End of a request to KQP to save PartitionId. " <<
               "SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId <<
               " Status: " << ev->Get()->Record.GetYdbStatus());
@@ -559,7 +553,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     /// Work
 
     STATEFN(StateWork) {
-        DEBUG("Received event: " << (*ev.Get()).GetTypeName())
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"Received event: " << (*ev.Get()).GetTypeName());
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPartitionWriter::TEvWriteRequest, Handle);
             hFunc(TEvPersQueue::TEvResponse, Handle);
@@ -583,7 +577,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         auto writeValid = (PendingWrite.empty() || PendingWrite.back().Cookie < cookie);
 
         if (!(pendingValid && reserveValid && writeValid)) {
-            ERROR("The cookie of WriteRequest is invalid. Cookie=" << cookie);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"The cookie of WriteRequest is invalid. Cookie=" << cookie);
             Disconnected(EErrorCode::InternalError);
             return false;
         }
@@ -677,14 +671,14 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     void EnqueueReservedAndProcess(ui64 cookie) {
         if (PendingReserve.empty()) {
-            ERROR("The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #01");
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"The state of the PartitionWriter is invalid. PendingReserve is empty. Marker #01");
             Disconnected(EErrorCode::InternalError);
             return;
         }
         auto it = PendingReserve.begin();
 
         if(it->first != cookie) {
-            ERROR("The order of reservation is invalid. Cookie=" << cookie << ", ReserveCookie=" << it->first);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"The order of reservation is invalid. Cookie=" << cookie << ", ReserveCookie=" << it->first);
             Disconnected(EErrorCode::InternalError);
             return;
         }
@@ -701,7 +695,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         while (rit != ReceivedReserve.end() && qit != ReceivedQuota.end()) {
             auto& request = rit->second;
             const auto cookie = rit->first;
-            TRACE("processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
             if (!request.QuotaCheckEnabled || request.QuotaAccepted) {
                 // A situation when a quota was not requested or was received while waiting for a reserve
                 Write(cookie, std::move(request));
@@ -710,7 +704,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
             }
 
             if (cookie != *qit) {
-                ERROR("The order of reservation and quota requests should be the same. ReserveCookie=" << cookie << ", QuotaCookie=" << *qit);
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"The order of reservation and quota requests should be the same. ReserveCookie=" << cookie << ", QuotaCookie=" << *qit);
                 Disconnected(EErrorCode::InternalError);
                 return;
             }
@@ -723,7 +717,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         while (rit != ReceivedReserve.end()) {
             auto& request = rit->second;
             const auto cookie = rit->first;
-            TRACE("processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"processing quota for request cookie=" << cookie << ", QuotaCheckEnabled=" << request.QuotaCheckEnabled << ", QuotaAccepted=" << request.QuotaAccepted);
             if (request.QuotaCheckEnabled && !request.QuotaAccepted) {
                 break;
             }
@@ -735,11 +729,11 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         while (qit != ReceivedQuota.end()) {
             auto cookie = *qit;
-            TRACE("processing quota for request cookie=" << cookie);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"processing quota for request cookie=" << cookie);
             auto pit = PendingReserve.find(cookie);
 
             if (pit == PendingReserve.end()) {
-                ERROR("The received quota does not apply to any request. Cookie=" << *qit);
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"The received quota does not apply to any request. Cookie=" << *qit);
                 Disconnected(EErrorCode::InternalError);
                 return;
             }
@@ -798,7 +792,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
             auto cookieWriteValid = (PendingWrite.empty() || PendingWrite.back().Cookie < cookie);
             if (!cookieWriteValid) {
-                ERROR("The cookie of Write is invalid. Cookie=" << cookie);
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"The cookie of Write is invalid. Cookie=" << cookie);
                 Disconnected(EErrorCode::InternalError);
                 return;
             }
@@ -836,11 +830,11 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         auto msg = ev->Get();
-        DEBUG("TEvClientConnected Status " << msg->Status << ", TabletId: " << msg->TabletId << ", NodeId " << msg->ServerId.NodeId() << ", Generation: " << msg->Generation);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"TEvClientConnected Status " << msg->Status << ", TabletId: " << msg->TabletId << ", NodeId " << msg->ServerId.NodeId() << ", Generation: " << msg->Generation);
         Y_DEBUG_ABORT_UNLESS(msg->TabletId == TabletId);
 
         if (msg->Status != NKikimrProto::OK) {
-            ERROR("received TEvClientConnected with status " << ev->Get()->Status);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"received TEvClientConnected with status " << ev->Get()->Status);
             Disconnected(EErrorCode::InternalError);
             return;
         }
@@ -851,13 +845,13 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         {
             if(*ExpectedGeneration != msg->Generation)
             {
-                INFO("received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
+                LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
                 Disconnected(EErrorCode::PartitionNotLocal);
                 return;
             }
             if (NActors::TActivationContext::ActorSystem()->NodeId != msg->ServerId.NodeId())
             {
-                INFO("received TEvClientConnected with wrong NodeId. Expected: " << NActors::TActivationContext::ActorSystem()->NodeId << ", received " << msg->ServerId.NodeId());
+                LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"received TEvClientConnected with wrong NodeId. Expected: " << NActors::TActivationContext::ActorSystem()->NodeId << ", received " << msg->ServerId.NodeId());
                 Disconnected(EErrorCode::PartitionNotLocal);
                 return;
             }
@@ -866,7 +860,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
-            DEBUG("received TEvClientDestroyed");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") " <<"received TEvClientDestroyed");
             Disconnected(EErrorCode::PartitionDisconnected);
         }
     }
@@ -1044,11 +1038,5 @@ IActor* CreatePartitionWriter(const TActorId& client,
                               const TPartitionWriterOpts& opts) {
     return new TPartitionWriter(client, tabletId, partitionId, opts);
 }
-
-#undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 }

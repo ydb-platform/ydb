@@ -15,12 +15,6 @@
 
 #include <util/generic/queue.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseMonitoring]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseMonitoring]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseMonitoring]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseMonitoring]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseMonitoring]: " << stream)
-
 namespace NFq {
 
 class TComputeDatabaseMonitoringActor : public NActors::TActorBootstrapped<TComputeDatabaseMonitoringActor> {
@@ -78,7 +72,7 @@ public:
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASE_MONITORING_ACTOR";
 
     void Bootstrap() {
-        LOG_E("Monitoring Bootstrap, client " << MonitoringClientActorId.ToString());
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseMonitoring]: " <<"Monitoring Bootstrap, client " << MonitoringClientActorId.ToString());
         Become(&TComputeDatabaseMonitoringActor::StateFunc);
         SendCpuLoadRequest();
     }
@@ -103,7 +97,7 @@ public:
     void Handle(TEvYdbCompute::TEvCpuLoadResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Issues) {
-            LOG_E("CPU Load Request FAILED: " << response.Issues.ToOneLineString());
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseMonitoring]: " <<"CPU Load Request FAILED: " << response.Issues.ToOneLineString());
         }
         Counters.CpuLoadRequestLatencyMs->Collect((TInstant::Now() - StartCpuLoad).MilliSeconds());
 

@@ -15,12 +15,6 @@
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-#define TXLOG_LOG(priority, stream) \
-    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
-#define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
-#define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
-#define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
-
 namespace NKikimr {
 namespace NLongTxService {
 
@@ -96,7 +90,7 @@ namespace {
 
         void Bootstrap() {
             if (ChildToSubtree.empty()) {
-                TXLOG_DEBUG("Leaf node");
+                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Leaf node");
                 PassAway();
                 return;
             }
@@ -121,7 +115,7 @@ namespace {
         void Handle(TParentEvent::TPtr& ev) {
             AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const auto childActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
-            TXLOG_DEBUG("Handling TParentEvent from " << ev->Sender
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Handling TParentEvent from " << ev->Sender
                 << " (NodeId: " << ev->Sender.NodeId()
                 << ", ChildActorId: " << childActorId << ")");
             if (!ChildToSubtree.contains(childActorId)) {
@@ -139,7 +133,7 @@ namespace {
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
             AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Get()->NodeId));
             const auto failedActorId = NodeIdToTreeNodeActorId.at(ev->Get()->NodeId);
-            TXLOG_DEBUG("Handling TEvNodeDisconnected for NodeId: " << ev->Get()->NodeId
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Handling TEvNodeDisconnected for NodeId: " << ev->Get()->NodeId
                 << ". Failed actor ID: " << failedActorId);
             if (!ChildToSubtree.contains(failedActorId)) {
                 return;
@@ -155,7 +149,7 @@ namespace {
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
             AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const TActorId failedActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
-            TXLOG_DEBUG("Handling TEvents::TEvUndelivered from " << ev->Sender << ".");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Handling TEvents::TEvUndelivered from " << ev->Sender << ".");
             if (!ChildToSubtree.contains(failedActorId)) {
                 return;
             }
@@ -178,7 +172,7 @@ namespace {
             subtree.erase(newRoot);
             AFL_ENSURE(ChildToSubtree.emplace(newRoot, std::move(subtree)).second);
 
-            TXLOG_DEBUG("Retrying subtree for child actor " << childActorId
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Retrying subtree for child actor " << childActorId
                 << ". New root for subtree: " << newRoot
                 << ". Subtree size: " << ChildToSubtree.at(newRoot).size() << ".");
             SendChildEvent(newRoot, ChildToSubtree.at(newRoot));
@@ -186,7 +180,7 @@ namespace {
         }
 
         void SendChildEvent(const TActorId actorId, const THashSet<TActorId>& childActorIds) {
-            TXLOG_DEBUG("Sending child event to actor " << actorId << " with " << childActorIds.size() << " children");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Sending child event to actor " << actorId << " with " << childActorIds.size() << " children");
             auto event = GetChildEvent();
 
             for (const auto& childActorId : childActorIds) {
@@ -201,7 +195,7 @@ namespace {
         }
 
         void PassAway() final {
-            TXLOG_DEBUG("Passing away, sending parent event to " << ParentActorId);
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Passing away, sending parent event to " << ParentActorId);
             auto event = GetParentEvent();
             TBase::Send(
                 ParentActorId,
@@ -236,7 +230,7 @@ namespace {
                 AddToCollectedSnapshots(remoteSnapshot);
             }
             LocalCollectionTime = AppData()->TimeProvider->Now();
-            TXLOG_DEBUG("Finished creating TSnapshotCollectorActor, local collection time: " << LocalCollectionTime.MilliSeconds());
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Finished creating TSnapshotCollectorActor, local collection time: " << LocalCollectionTime.MilliSeconds());
         }
 
         std::unique_ptr<TEvLongTxService::TEvCollectSnapshots> GetChildEvent() override {
@@ -244,7 +238,7 @@ namespace {
         }
 
         std::unique_ptr<TEvLongTxService::TEvCollectSnapshotsResult> GetParentEvent() override {
-            TXLOG_DEBUG("Creating TEvCollectSnapshotsResult event with "
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Creating TEvCollectSnapshotsResult event with "
                 << CollectedSnapshots.size() << " collected snapshots and border "
                 << SnapshotBorder.Step << ":" << SnapshotBorder.TxId);
             auto event = std::make_unique<TEvLongTxService::TEvCollectSnapshotsResult>();
@@ -305,7 +299,7 @@ namespace {
                 });
             }
 
-            TXLOG_DEBUG("Received TEvCollectSnapshotsResult from child with" << ev->Record.GetSnapshots().GetSnapshots().size()
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Received TEvCollectSnapshotsResult from child with" << ev->Record.GetSnapshots().GetSnapshots().size()
                 << " snapshots. Nodes count: " << ev->Record.GetSnapshots().GetNodesCollectionInfo().size()
                 << ". Updated border to " << SnapshotBorder.Step << ":" << SnapshotBorder.TxId);
         }
@@ -342,7 +336,7 @@ namespace {
         TSnapshotPropagatorActor(TActorId parentActorId, TEvLongTxService::TEvPropagateSnapshots* event, const TSubtreeSplitter& subtreeSplitter)
             : TTreeNodeActor(parentActorId, event, subtreeSplitter) {
             Snapshots_ = event->Record.GetSnapshots();
-            TXLOG_DEBUG("Initialized propagator actor with " << Snapshots_.GetSnapshots().size()
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Initialized propagator actor with " << Snapshots_.GetSnapshots().size()
                 << " snapshots and border " << Snapshots_.GetBorderStep()
                 << ":" << Snapshots_.GetBorderTxId());
         }
@@ -411,14 +405,14 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "TSnapshotsExchangerActor [Node " << SelfId().NodeId() << "] ";
-        TXLOG_DEBUG("Creating TSnapshotsExchangerActor with board path: " << BoardPath);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Creating TSnapshotsExchangerActor with board path: " << BoardPath);
         UpdateBoardRetrySettings();
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
         TBase::Become(&TThis::StatePrepare);
     }
 
     void PassAway() {
-        TXLOG_DEBUG("Passing away TSnapshotsExchangerActor");
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Passing away TSnapshotsExchangerActor");
         if (Publisher) {
             Send(Publisher, new TEvents::TEvPoison);
         }
@@ -458,10 +452,10 @@ private:
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev) {
         if (const auto& node = ev->Get()->Node) {
             SelfDataCenterId = node->Location.GetDataCenterId();
-            TXLOG_DEBUG("Self data center ID: " << SelfDataCenterId);
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Self data center ID: " << SelfDataCenterId);
         } else {
             SelfDataCenterId = TString();
-            TXLOG_DEBUG("No node info, setting empty data center ID");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "No node info, setting empty data center ID");
         }
 
         NKikimrLongTxService::TSnapshotExchangeBoardNodeInfo info;
@@ -563,11 +557,11 @@ private:
             }
         }
         AFL_ENSURE(PublisherIdToExchangeActorId.size() == ExchangeActorIdToDataCenterId.size());
-        TXLOG_DEBUG("Finished updating nodes, now know " << ExchangeActorIdToDataCenterId.size() << " other exchange actors");
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Finished updating nodes, now know " << ExchangeActorIdToDataCenterId.size() << " other exchange actors");
     }
 
     void Handle(TEvLongTxService::TEvCollectSnapshots::TPtr& ev) {
-        TXLOG_DEBUG("Handling TEvCollectSnapshots event from " << ev->Sender
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Handling TEvCollectSnapshots event from " << ev->Sender
             << " with " << ev->Get()->Record.GetTree().GetChildrenActorIds().size() << " children");
         auto* collectorActor = CreateSnapshotCollectorActor(
             LocalSnapshotsStorage->View(),
@@ -580,7 +574,7 @@ private:
     }
 
     void Handle(TEvLongTxService::TEvCollectSnapshotsResult::TPtr& ev) {
-        TXLOG_DEBUG("Handling TEvCollectSnapshotsResult event from " << ev->Sender
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Handling TEvCollectSnapshotsResult event from " << ev->Sender
             << " with " << ev->Get()->Record.GetSnapshots().GetSnapshots().size() << " snapshots"
             << " and border " << ev->Get()->Record.GetSnapshots().GetBorderStep()
             << ":" << ev->Get()->Record.GetSnapshots().GetBorderTxId());
@@ -602,12 +596,12 @@ private:
             }
             CollectionPropagationStarted = now;
         } else {
-            TXLOG_DEBUG("Snapshots locking is disabled, skipping propagation");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Snapshots locking is disabled, skipping propagation");
         }
     }
 
     void Handle(TEvLongTxService::TEvPropagateSnapshots::TPtr& ev) {
-        TXLOG_DEBUG("Handling TEvPropagateSnapshots event from " << ev->Sender);
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Handling TEvPropagateSnapshots event from " << ev->Sender);
         if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
             // Update remote snapshots storage and continue propagation
             THashMap<ui32, TInstant> nodeIdToCollectionTime;
@@ -636,7 +630,7 @@ private:
             }
 
             TRowVersion border(ev->Get()->Record.GetSnapshots().GetBorderStep(), ev->Get()->Record.GetSnapshots().GetBorderTxId());
-            TXLOG_DEBUG("Updating remote snapshots storage with " << remoteSnapshots.size()
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Updating remote snapshots storage with " << remoteSnapshots.size()
                 << " snapshots from " << nodeIdToCollectionTime.size() << "nodes."
                 << " Update border to " << border.Step << ":" << border.TxId);
             RemoteSnapshotsStorage->UpdateBorder(border);
@@ -647,7 +641,7 @@ private:
                 Counters.TimeSinceLastRemoteSnapshotsUpdateMs->Set(0);
             }
         } else {
-            TXLOG_DEBUG("Snapshots locking is disabled, skipping remote snapshots update");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Snapshots locking is disabled, skipping remote snapshots update");
         }
 
         auto* propagatorActor = CreateSnapshotPropagatorActor(
@@ -660,7 +654,7 @@ private:
     }
 
     void Handle(TEvLongTxService::TEvPropagateSnapshotsResult::TPtr&) {
-        TXLOG_DEBUG("Handling TEvPropagateSnapshotsResult event");
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Handling TEvPropagateSnapshotsResult event");
         // Finished propagating snapshots to cluster.
         AFL_ENSURE(UpdateInflight);
         UpdateInflight = false;
@@ -680,7 +674,7 @@ private:
 
         const bool isLeader = IsLeader();
         if (AppData()->FeatureFlags.GetEnableSnapshotsLocking() && isLeader && !UpdateInflight) {
-            TXLOG_DEBUG("Starting snapshot collection");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Starting snapshot collection");
             auto collectSnapshotsEvent = std::make_unique<TEvLongTxService::TEvCollectSnapshots>();
             FillTreeExchangeActors(collectSnapshotsEvent->Record.MutableTree());
 
@@ -689,14 +683,14 @@ private:
 
             CollectionPropagationStarted = AppData()->TimeProvider->Now();
         } else if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
-            TXLOG_DEBUG("Snapshots locking is disabled, skipping snapshot collection");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Snapshots locking is disabled, skipping snapshot collection");
         } else if (!isLeader) {
-            TXLOG_DEBUG("Not a leader, skipping snapshot collection");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Not a leader, skipping snapshot collection");
         } else {
             AFL_ENSURE(UpdateInflight);
-            TXLOG_DEBUG("Update already in flight, skipping snapshot collection");
+            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Update already in flight, skipping snapshot collection");
         }
-        TXLOG_DEBUG("Scheduling next TEvRemoteSnapshotsUpdate in "
+        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Scheduling next TEvRemoteSnapshotsUpdate in "
             << AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds() << " seconds");
         Schedule(
             TDuration::Seconds(AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds()),

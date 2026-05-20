@@ -14,13 +14,6 @@
 
 namespace NKikimr::NKqp {
 
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-
 using namespace NThreading;
 
 namespace {
@@ -120,7 +113,7 @@ private:
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         if (navigate->ErrorCount != 0) {
-            LOG_E(TStringBuilder() << "Navigate errors: " << navigate->ErrorCount);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION,TStringBuilder() << "Navigate errors: " << navigate->ErrorCount);
         }
 
         for (const auto& entry : navigate->ResultSet) {
@@ -136,7 +129,7 @@ private:
                     }
                 }
             } else {
-                LOG_E(TStringBuilder() << "Navigate error. Entry: " << entry.ToString());
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION,TStringBuilder() << "Navigate error. Entry: " << entry.ToString());
             }
         }
 

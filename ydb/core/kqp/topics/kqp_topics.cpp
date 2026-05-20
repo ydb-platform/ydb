@@ -8,7 +8,6 @@
 
 #include <util/generic/set.h>
 
-#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
 namespace NKikimr::NKqp::NTopic {
 
@@ -526,7 +525,7 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                 TTopicPartition key{path, partition.GetPartitionId()};
 
                 if (auto p = Operations_.find(key); p != Operations_.end()) {
-                    LOG_D(TStringBuilder() << "(topic, partition, tablet): "
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION,TStringBuilder() << "(topic, partition, tablet): "
                           << "'" << key.Topic_ << "'"
                           << ", " << partition.GetPartitionId()
                           << ", " << partition.GetTabletId());

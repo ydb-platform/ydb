@@ -17,19 +17,6 @@ using namespace NActors;
 
 namespace {
 
-#define LOG_D(s) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " << s)
-#define LOG_I(s) \
-    LOG_INFO_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ". " << s)
-#define LOG_E(s) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " << s)
-#define LOG_C(s) \
-    LOG_CRIT_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ". " << s)
-#define LOG_W(s) \
-    LOG_WARN_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ". " << s)
-#define LOG_T(s) \
-    LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " << s)
-
 class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStorageActor>,
                                public IDqComputeStorageActor
 {
@@ -76,7 +63,7 @@ protected:
     void FailWithError(const TString& error) {
         if (!ErrorCallback_) Y_ABORT("Error: %s", error.c_str());
 
-        LOG_E("Error: " << error);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " <<"Error: " << error);
         ErrorCallback_(TStringBuilder() << "[Compute spilling]" << error);
         SendInternal(SpillingActorId_, new TEvents::TEvPoison);
         PassAway();
@@ -154,7 +141,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvWriteResult::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_T("[TEvWriteResult] blobId: " << msg.BlobId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " <<"[TEvWriteResult] blobId: " << msg.BlobId);
 
 
         auto it = WritingBlobs_.find(msg.BlobId);
@@ -187,7 +174,7 @@ private:
 
     void HandleWork(TEvDqSpilling::TEvReadResult::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId_ << ". " <<"[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
         // Deletion is read without fetching the results. So, after the deletion library sends TEvReadResult event
         // Check if the intention was to delete and complete correct future in this case.

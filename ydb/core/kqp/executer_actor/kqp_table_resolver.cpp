@@ -14,11 +14,6 @@ using namespace NYql::NDq;
 
 namespace {
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-
 class TKqpTableResolver : public TActorBootstrapped<TKqpTableResolver> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -45,7 +40,7 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveNames);
             hFunc(TEvents::TEvPoison, HandleResolveNames);
             default: {
-                LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -57,7 +52,7 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveKeys);
             hFunc(TEvents::TEvPoison, HandleResolveKeys);
             default: {
-                LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -73,7 +68,7 @@ private:
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
             return;
         }
-        LOG_D("Navigated key sets: " << results.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"Navigated key sets: " << results.size());
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -222,7 +217,7 @@ private:
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
             return;
         }
-        LOG_D("Navigated key sets: " << results.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"Navigated key sets: " << results.size());
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -267,11 +262,11 @@ private:
         auto timer = std::make_unique<NCpuTime::TCpuTimer>(CpuTime);
 
         auto& results = ev->Get()->Request->ResultSet;
-        LOG_D("Resolved key sets: " << results.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"Resolved key sets: " << results.size());
 
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
-                LOG_E("Error resolving keys for entry: " << entry.ToString(*AppData()->TypeRegistry));
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"Error resolving keys for entry: " << entry.ToString(*AppData()->TypeRegistry));
 
                 TStringBuilder path;
                 if (auto it = TablePathsById.find(entry.KeyDescription->TableId); it != TablePathsById.end()) {
@@ -291,7 +286,7 @@ private:
                 AFL_ENSURE(partition.Range);
             }
 
-            LOG_D("Resolved key: " << entry.ToString(*AppData()->TypeRegistry));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"Resolved key: " << entry.ToString(*AppData()->TypeRegistry));
 
             auto& stageInfo = DecodeStageInfo(entry.UserData);
 
@@ -481,7 +476,7 @@ private:
 
 private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_C("TKqpTableResolver, unexpected event: " << eventType << ", at state:" << state << ", self: " << SelfId());
+        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " <<"TKqpTableResolver, unexpected event: " << eventType << ", at state:" << state << ", self: " << SelfId());
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issue));
     }

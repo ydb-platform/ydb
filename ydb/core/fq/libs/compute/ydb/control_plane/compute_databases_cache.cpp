@@ -11,12 +11,6 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-
 namespace NFq {
 
 class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeDatabasesCacheActor> {
@@ -76,7 +70,7 @@ public:
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASES_CACHE_ACTOR";
 
     void Bootstrap() {
-        LOG_E("Cache Bootstrap, client " << DatabaseClientActorId.ToString());
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " <<"Cache Bootstrap, client " << DatabaseClientActorId.ToString());
         InFlight = true;
         Counters.CacheReload.InFly->Inc();
         Send(DatabaseClientActorId, new TEvYdbCompute::TEvListDatabasesRequest());
@@ -94,7 +88,7 @@ public:
         TInstant startTime = TInstant::Now();
         Counters.CheckDatabaseRequest.InFly->Inc();
         const auto& path = ev->Get()->Path;
-        LOG_D("CheckDatabaseRequest, path: " << path << ", ready: " << Ready);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " <<"CheckDatabaseRequest, path: " << path << ", ready: " << Ready);
         if (!Ready) {
             PendingRequests.push_back({startTime, ev});
             return;
@@ -113,7 +107,7 @@ public:
 
         if (issues) {
             NotifyPendingRequests(issues);
-            LOG_E("ListDatabasesResponse was failed with issues: " << issues.ToOneLineString());
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " <<"ListDatabasesResponse was failed with issues: " << issues.ToOneLineString());
             Counters.CacheReload.Error->Inc();
             Counters.CacheReload.InFly->Dec();
             Counters.CacheReload.LatencyMs->Collect(DeltaMs(StartCacheReload));
@@ -123,7 +117,7 @@ public:
         Databases = response.Paths;
         Ready = true;
         NotifyPendingRequests();
-        LOG_D("Updated list of databases, count = " << Databases.size());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " <<"Updated list of databases, count = " << Databases.size());
         Counters.CacheReload.Ok->Inc();
         Counters.CacheReload.InFly->Dec();
         Counters.CacheReload.LatencyMs->Collect(DeltaMs(StartCacheReload));
@@ -133,7 +127,7 @@ public:
         TInstant startTime = TInstant::Now();
         Counters.AddDatabaseRequest.InFly->Inc();
         const auto& path = ev->Get()->Path;
-        LOG_D("AddDatabaseRequest, path: " << path << ", ready: " << Ready);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " <<"AddDatabaseRequest, path: " << path << ", ready: " << Ready);
         Databases.insert(path);
         Send(ev->Sender, new TEvYdbCompute::TEvAddDatabaseResponse{}, 0, ev->Cookie);
         Counters.AddDatabaseRequest.InFly->Dec();

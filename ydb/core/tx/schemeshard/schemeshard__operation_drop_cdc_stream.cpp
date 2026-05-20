@@ -3,10 +3,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-
 namespace NKikimr::NSchemeShard {
 
 namespace NCdc {
@@ -28,7 +24,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -41,7 +37,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan"
             << ": step# " << step);
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -111,7 +107,7 @@ public:
         const auto& op = Transaction.GetDrop();
         const auto& streamName = op.GetName();
 
-        LOG_N("TDropCdcStream Propose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropCdcStream Propose"
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << streamName);
 
@@ -212,7 +208,7 @@ public:
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TDropCdcStream AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropCdcStream AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << txId);
         context.OnComplete.DoneOperation(OperationId);
@@ -351,7 +347,7 @@ public:
         const auto& op = Transaction.GetDropCdcStream();
         const auto& tableName = op.GetTableName();
 
-        LOG_N("TDropCdcStreamAtTable Propose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropCdcStreamAtTable Propose"
             << ": opId# " << OperationId
             << ", table# " << workingDir << "/" << tableName 
             << ", streams# " << StreamNames.size());
@@ -472,12 +468,12 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropCdcStreamAtTable AbortPropose"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropCdcStreamAtTable AbortPropose"
             << ": opId# " << OperationId);
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TDropCdcStreamAtTable AbortUnsafe"
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropCdcStreamAtTable AbortUnsafe"
             << ": opId# " << OperationId
             << ", txId# " << txId);
         context.OnComplete.DoneOperation(OperationId);
@@ -665,7 +661,7 @@ bool CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperation
         streamNames.push_back(name);
     }
     
-    LOG_D("CreateDropCdcStream"
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CreateDropCdcStream"
         << ": opId# " << opId
         << ", table# " << tableName
         << ", streams# " << streamNames.size()

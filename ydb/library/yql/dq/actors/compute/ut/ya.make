@@ -32,10 +32,6 @@ PEERDIR(
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/public/ydb_issue
-<<<<<<< HEAD
-    yql/essentials/minikql/comp_nodes
-=======
->>>>>>> a18a5edd6e5 (Fix WBadDep in compute/yt unit tests after #40413 (#40620))
     yql/essentials/minikql/computation
     yql/essentials/providers/common/comp_nodes
     yql/essentials/sql/pg_dummy

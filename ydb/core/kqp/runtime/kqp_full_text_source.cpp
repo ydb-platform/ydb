@@ -747,7 +747,7 @@ class TArrowTokenStream {
     ui64 UnprocessedDocumentCount = 0;
     ui64 Bytes = 0;
     ui64 Rows = 0;
-    TDocId MaxKey = 0;
+    TDocId MaxKey = std::numeric_limits<TDocId>::min();
     bool MaxKeySet = false;
 
 public:
@@ -870,6 +870,8 @@ public:
     bool L2 = false;
     ui32 L2StreamIndex = 0;
     TDocId StartReadKeyFrom = std::numeric_limits<TDocId>::min();
+    // at the start we begin with the inclusive boundary
+    bool StartReadKeyFromInclusive = true;
 
     using TPtr = TIntrusivePtr<TWordReadState<TDocId>>;
 
@@ -912,7 +914,7 @@ public:
         TCell tokenCell(Word.data(), Word.size());
         std::vector<TCell> fromCells = {tokenCell, TCell::Make<TDocId>(StartReadKeyFrom)};
         std::vector<TCell> toCells = {tokenCell};
-        auto range = TTableRange(fromCells, true, toCells, false /*toInclusive*/);
+        auto range = TTableRange(fromCells, StartReadKeyFromInclusive, toCells, false /*toInclusive*/);
 
         auto rangePartition = Reader->GetRangePartitioning(range);
         for(const auto& [shardId, range] : rangePartition) {
@@ -3131,8 +3133,12 @@ public:
         auto& incomingWordInfo = Words[wordIndex];
         YQL_ENSURE(incomingWordInfo->L1);
 
+        const bool hasRows = msg->GetRowsCount() > 0;
         L1MergeAlgo->AddResult(wordIndex, std::move(msg));
-        incomingWordInfo->StartReadKeyFrom = L1MergeAlgo->GetMaxTokenKey(wordIndex) + 1;
+        if (hasRows) {
+            incomingWordInfo->StartReadKeyFrom = L1MergeAlgo->GetMaxTokenKey(wordIndex);
+            incomingWordInfo->StartReadKeyFromInclusive = false;
+        }
 
         if (finished) {
             if (!ContinueWordRead(incomingWordInfo)) {

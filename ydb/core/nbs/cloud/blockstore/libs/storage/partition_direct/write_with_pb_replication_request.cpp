@@ -24,26 +24,25 @@ const char* BoolToString(bool b)
 // Method takes n hosts from 'hosts'.
 // The code that calls this method must check work predicates by itself -
 //   here we have asserts.
-// mainCandidates hosts have a priority, usually there are handoffs.
-TVector<THostIndex> TakeNHosts(
+// mainCandidates hosts have a priority, usually they are handoffs.
+THostMask TakeNHosts(
     TVector<std::optional<THostIndex>> mainCandidates,
     THostMask& hosts,
     size_t n)
 {
     Y_ASSERT(n > 0);
     Y_ASSERT(hosts.Count() >= n);
-    TVector<THostIndex> res;
-    res.reserve(n);
+    THostMask res;
 
-    for (size_t i = 0; i < mainCandidates.size() && res.size() < n; ++i) {
+    for (size_t i = 0; i < mainCandidates.size() && res.Count() < n; ++i) {
         auto& host = mainCandidates[i];
         if (host && hosts.Get(*host)) {
-            res.push_back(*host);
+            res.Set(*host);
             hosts.Reset(*host);
         }
     }
-    while (res.size() < n) {
-        res.push_back(*hosts.begin());
+    while (res.Count() < n) {
+        res.Set(*hosts.begin());
         hosts.Reset(*hosts.begin());
     }
     return res;
@@ -55,6 +54,7 @@ TVector<THostIndex> TakeNHosts(
 
 TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    TChildLogTitle logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,
@@ -64,6 +64,7 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     NWilson::TTraceId traceId)
     : TBaseWriteRequestExecutor(
           actorSystem,
+          std::move(logTitle),
           vChunkConfig,
           directBlockGroup,
           vChunkRange,
@@ -151,7 +152,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         const auto host = pbufferResponse.HostIndex;
         AvailableHostsForDirectSending.Reset(host);
         if (!HasError(pbufferResponse.Error)) {
-            LOG_INFO(
+            LOG_DEBUG(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
                 "OnWriteToManyPBuffersResponse ok on host %d %s %s",
@@ -193,6 +194,9 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
 
     bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber <
                       QuorumDirectBlockGroupHostCount;
+
+    // We are relying on the IC layer: a reply will eventually arrive,
+    // and requests will not hang forever.
     if (!needToSend) {
         return;
     }
@@ -246,7 +250,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    LOG_INFO(
+    LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "OnWriteToManyPBuffersResponse DirectResponse on %d host %s %s",
@@ -291,7 +295,6 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    // const auto hedgingDelay = PbufferReplyTimeout * 0.9;
     DirectBlockGroup->Schedule(
         HedgingDelay,
         [weakSelf = weak_from_this()]()

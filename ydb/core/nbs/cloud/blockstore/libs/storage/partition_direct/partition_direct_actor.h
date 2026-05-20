@@ -2,6 +2,7 @@
 
 #include "direct_block_group.h"
 #include "part_counters.h"
+#include "partition_direct_events_private.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
@@ -102,9 +103,15 @@ private:
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void HandleUpdateVChunkConfig(
+        const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void Start(
         const NActors::TActorContext& ctx,
-        TDirectBlockGroupsConnections directBlockGroupsConnections);
+        TDirectBlockGroupsConnections directBlockGroupsConnections,
+        TVector<TVChunkConfig> vChunkConfigs);
 
     TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(
         TDirectBlockGroupsConnections directBlockGroupsConnections);

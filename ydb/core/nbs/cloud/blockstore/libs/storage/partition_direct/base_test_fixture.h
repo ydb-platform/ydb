@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -44,6 +45,11 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         FixtureVChunkIndex,
         FixtureHostCount,
         FixturePrimaryCount);
+    TLogTitle LogTitle{
+        GetCycleCount(),
+        TLogTitle::TVChunk{
+            .DiskId = "disk-id",
+            .VChunkIndex = VChunkConfig.VChunkIndex}};
 
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters{

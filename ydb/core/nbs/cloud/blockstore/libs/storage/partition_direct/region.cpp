@@ -27,6 +27,7 @@ TRegion::TRegion(
     IPartitionDirectService* partitionDirectService,
     ui32 regionIndex,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
+    const TVChunkConfigByIndex& vChunkConfigs,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
     NMonitoring::TDynamicCounterPtr counters)
@@ -41,10 +42,16 @@ TRegion::TRegion(
         NMonitoring::TDynamicCounterPtr vChunkCounters =
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
+        const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
+        const auto vChunkConfig =
+            persisted ? *persisted : TVChunkConfig::Make(vChunkIndex);
+        Y_ABORT_UNLESS(vChunkConfig.IsValid());
+        Y_ABORT_UNLESS(vChunkConfig.VChunkIndex == vChunkIndex);
+
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
             partitionDirectService,
-            TVChunkConfig::Make(vChunkIndex),
+            vChunkConfig,
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
             vChunkSize,

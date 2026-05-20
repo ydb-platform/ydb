@@ -10,10 +10,10 @@ using namespace NKikimr::NTabletFlatExecutor;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TPartitionActor::PrepareStorePartitionIds(
+bool TPartitionActor::PrepareUpdateVChunkConfig(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TStorePartitionIds& args)
+    TTxPartition::TUpdateVChunkConfig& args)
 {
     Y_UNUSED(ctx);
     Y_UNUSED(tx);
@@ -22,28 +22,23 @@ bool TPartitionActor::PrepareStorePartitionIds(
     return true;
 }
 
-void TPartitionActor::ExecuteStorePartitionIds(
+void TPartitionActor::ExecuteUpdateVChunkConfig(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TStorePartitionIds& args)
+    TTxPartition::TUpdateVChunkConfig& args)
 {
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    db.StoreDirectBlockGroupsConnections(args.DirectBlockGroupsConnections);
+    db.StoreVChunkConfig(args.VChunkConfig);
 }
 
-void TPartitionActor::CompleteStorePartitionIds(
+void TPartitionActor::CompleteUpdateVChunkConfig(
     const TActorContext& ctx,
-    TTxPartition::TStorePartitionIds& args)
+    TTxPartition::TUpdateVChunkConfig& args)
 {
-    // No persisted vchunk configs at first allocation: vchunks fall back to
-    // TVChunkConfig::Make().
-    Start(
-        ctx,
-        args.DirectBlockGroupsConnections,
-        {}   // vChunkConfigs
-    );
+    Y_UNUSED(ctx);
+    Y_UNUSED(args);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -873,7 +873,8 @@ private:
         if (handler) {
             // For old-style (non-IsHttpEvent) handlers the per-endpoint SID check is not done at
             // the monitoring layer, so we enforce it here based on EndpointAccess.
-            if (!handler->IsHttpEvent() && !CheckEndpointAccess(path, msg->UserToken)) {
+            // Database-level endpoints are validated by ValidateDatabaseScopedRequest instead.
+            if (!handler->IsHttpEvent() && !IsDatabaseAccessEndpoint(path) && !CheckEndpointAccess(path, msg->UserToken)) {
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", "Access denied"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                 return;
             }

@@ -171,6 +171,7 @@ def ydb_cluster_with_enforce_user_token(certificates):
     yield cluster
     cluster.stop()
 
+
 @pytest.fixture(scope='module')
 def ydb_cluster_without_enforce_user_token(certificates):
     configurator = create_ydb_configurator(
@@ -220,5 +221,3 @@ def ydb_cluster_with_external_access_controls(certificates):
     cluster.start()
     yield cluster
     cluster.stop()
-
-

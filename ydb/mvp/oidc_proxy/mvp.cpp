@@ -243,7 +243,9 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
 
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
     OpenIdConnectSettings.LocalEndpoint = StartupOptions.GetLocalEndpoint();
-    OpenIdConnectSettings.AuthFlowContextStore = std::make_shared<TAuthFlowContextStore>(TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME);
+    OpenIdConnectSettings.AuthCallbackContextStore = std::make_shared<TAuthCallbackContextStore>(
+        TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME,
+        OpenIdConnectSettings.AuthCallbackContextStoreMaxEntries);
     if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {
         ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
                             << "SessionServiceTokenName must be specified in oidc config.";

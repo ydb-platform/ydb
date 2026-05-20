@@ -45,19 +45,21 @@ namespace {
         s.WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort);
         s.ClientSecret = "0123456789abcdef";
         s.LocalEndpoint = "http://owner.test:8080";
-        s.AuthFlowContextStore = std::make_shared<TAuthFlowContextStore>(TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME);
+        s.AuthCallbackContextStore = std::make_shared<TAuthCallbackContextStore>(
+            TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME,
+            s.AuthCallbackContextStoreMaxEntries);
         return s;
     }
 
     static TPreparedAuthCallbackState PrepareAuthCallbackState(const TOpenIdConnectSettings& settings,
-                                                               TStringBuf forwardUrl,
+                                                               TStringBuf ownerEndpoint,
                                                                bool navigationRequest = true) {
         TPreparedAuthCallbackState callbackState = {
             .Context = TContext({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = navigationRequest}),
         };
         TState state = callbackState.Context.CreateStatePayload(TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME);
-        state.FlowId = settings.AuthFlowContextStore->Save(callbackState.Context.GetRequestedAddress());
-        state.ForwardUrl = TString(forwardUrl);
+        state.FlowId = settings.AuthCallbackContextStore->Save(callbackState.Context.GetRequestedAddress());
+        state.OwnerEndpoint = TString(ownerEndpoint);
         callbackState.EncodedState = EncodeState(state, settings.ClientSecret);
         return callbackState;
     }
@@ -904,8 +906,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .NavigationRequest = true});
         TState state = context.CreateStatePayload(TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME);
-        state.FlowId = settings.AuthFlowContextStore->Save(context.GetRequestedAddress());
-        state.ForwardUrl = settings.LocalEndpoint;
+        state.FlowId = settings.AuthCallbackContextStore->Save(context.GetRequestedAddress());
+        state.OwnerEndpoint = settings.LocalEndpoint;
         TStringBuilder request;
         request << "GET /callback?code=code_template#&state="
                 << EncodeState(state, settings.ClientSecret) << " HTTP/1.1\r\n";
@@ -1639,7 +1641,7 @@ Y_UNIT_TEST_SUITE(Utils) {
         sourcePayload.AntiForgeryToken = "state";
         sourcePayload.ExpirationTime = TInstant::Seconds(TInstant::Now().Seconds() + TDuration::Minutes(10).Seconds());
         sourcePayload.FlowId = "flow-id";
-        sourcePayload.ForwardUrl = "http://owner.test:8080";
+        sourcePayload.OwnerEndpoint = "http://owner.test:8080";
 
         const TString state = EncodeState(sourcePayload, settings.ClientSecret);
         const TCheckStateResult result = CheckState(state, settings.ClientSecret);

@@ -50,8 +50,16 @@ protected:
     void ReplyBadRequestAndPassAway(TString errorMessage);
 
 private:
-    void ContinueAfterResolvedContext(const TContext& context);
-    void ContinueAfterContextRestore(const TRestoreOidcContextResult& restoreContextResult);
+    void RestoreCookieContextFromRequest(TStringBuf cookieSuffix);
+    bool CanRetryRequestWithCookieContext() const;
+    void HandleInvalidState(TStringBuf errorMessage);
+    static TRestoreOidcContextResult CreateOwnerContextRestoreErrorResult(TString errorMessage);
+    void HandleContextRestoreFailure(const TRestoreOidcContextResult& restoreContextResult);
+    void RestoreSessionWithContext(const TContext& context);
+    void ProcessContextRestoreResult(const TRestoreOidcContextResult& restoreContextResult);
+    void RestoreContextFromLocalStore(TStringBuf flowId);
+    void RequestAuthCallbackContextFromOwner(TStringBuf flowId, TStringBuf ownerEndpoint, TStringBuf signedState);
+    void HandleOwnerContextResponseBody(TStringBuf responseBody);
     void HandleAuthCallbackContextResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
     void SendUnknownErrorResponseAndDie();
 

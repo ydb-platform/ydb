@@ -96,13 +96,13 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     authParams.InsertUnescaped("response_type", "code");
     authParams.InsertUnescaped("scope", "openid");
     TState state = context.CreateStatePayload(TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME);
-    if (settings.AuthFlowContextStore) {
-        state.FlowId = settings.AuthFlowContextStore->Save(context.GetRequestedAddress());
-        state.ForwardUrl = settings.LocalEndpoint;
+    if (settings.AuthCallbackContextStore) {
+        state.FlowId = settings.AuthCallbackContextStore->Save(context.GetRequestedAddress());
+        state.OwnerEndpoint = settings.LocalEndpoint;
         BLOG_D("X-Request-Id: " << requestId
             << ", Created oidc auth flow"
             << " (flow_id: " << NKikimr::MaskTicket(state.FlowId)
-            << ", forward_url: " << settings.LocalEndpoint
+            << ", owner_endpoint: " << settings.LocalEndpoint
             << ", navigation_request: " << context.IsNavigationRequest() << ")");
     } else {
         BLOG_D("X-Request-Id: " << requestId
@@ -228,7 +228,7 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
                                      .ErrorMessage = ""}, TContext({.RequestedAddress = requestedAddress}));
 }
 
-TRestoreOidcContextResult RestoreOidcContextFromStore(const TAuthFlowContextStorePtr& store, TStringBuf flowId) {
+TRestoreOidcContextResult RestoreOidcContextFromStore(const TAuthCallbackContextStorePtr& store, TStringBuf flowId) {
     TStringBuilder errorMessage;
     errorMessage << "Restore oidc context from store failed: ";
     if (!store) {
@@ -333,8 +333,8 @@ TString EncodeState(const TState& payload, TStringBuf signingKey) {
     if (!payload.FlowId.empty()) {
         json["flow_id"] = payload.FlowId;
     }
-    if (!payload.ForwardUrl.empty()) {
-        json["owner_endpoint"] = payload.ForwardUrl;
+    if (!payload.OwnerEndpoint.empty()) {
+        json["owner_endpoint"] = payload.OwnerEndpoint;
     }
     const TString stateContainer = NJson::WriteJson(json, false);
 
@@ -380,11 +380,11 @@ TDecodeStateResult DecodeState(TStringBuf encodedState) {
             if (jsonValue.GetValuePointer("flow_id", &jsonFlowId) && jsonFlowId->IsString()) {
                 result.Payload.FlowId = jsonFlowId->GetString();
             }
-            const NJson::TJsonValue* jsonForwardUrl = nullptr;
-            if (jsonValue.GetValuePointer("forward_url", &jsonForwardUrl) && jsonForwardUrl->IsString()) {
-                result.Payload.ForwardUrl = jsonForwardUrl->GetString();
-            } else if (jsonValue.GetValuePointer("owner_endpoint", &jsonForwardUrl) && jsonForwardUrl->IsString()) {
-                result.Payload.ForwardUrl = jsonForwardUrl->GetString();
+            const NJson::TJsonValue* jsonOwnerEndpoint = nullptr;
+            if (jsonValue.GetValuePointer("owner_endpoint", &jsonOwnerEndpoint) && jsonOwnerEndpoint->IsString()) {
+                result.Payload.OwnerEndpoint = jsonOwnerEndpoint->GetString();
+            } else if (jsonValue.GetValuePointer("forward_url", &jsonOwnerEndpoint) && jsonOwnerEndpoint->IsString()) {
+                result.Payload.OwnerEndpoint = jsonOwnerEndpoint->GetString();
             }
             const NJson::TJsonValue* jsonExpirationTime = nullptr;
             if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {
@@ -451,15 +451,15 @@ TString GenerateRandomBase64(size_t byteNumber) {
     return Base64EncodeUrlNoPadding(bytes);
 }
 
-TString CreateAuthCallbackContextRequestUrl(TStringBuf forwardUrl, TStringBuf state) {
+TString CreateAuthCallbackContextRequestUrl(TStringBuf ownerEndpoint, TStringBuf state) {
     TCgiParameters params;
     params.InsertUnescaped("state", state);
 
     TStringBuilder url;
-    url << forwardUrl;
-    if (forwardUrl.EndsWith('/') && GetAuthCallbackContextUrl().StartsWith('/')) {
+    url << ownerEndpoint;
+    if (ownerEndpoint.EndsWith('/') && GetAuthCallbackContextUrl().StartsWith('/')) {
         url << TStringBuf(GetAuthCallbackContextUrl()).SubStr(1);
-    } else if (!forwardUrl.EndsWith('/') && !GetAuthCallbackContextUrl().StartsWith('/')) {
+    } else if (!ownerEndpoint.EndsWith('/') && !GetAuthCallbackContextUrl().StartsWith('/')) {
         url << "/" << GetAuthCallbackContextUrl();
     } else {
         url << GetAuthCallbackContextUrl();

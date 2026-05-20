@@ -55,7 +55,7 @@ void THandlerAuthCallbackContext::Bootstrap() {
         return;
     }
 
-    const TRestoreOidcContextResult restoreContextResult = RestoreOidcContextFromStore(Settings.AuthFlowContextStore, flowId);
+    const TRestoreOidcContextResult restoreContextResult = RestoreOidcContextFromStore(Settings.AuthCallbackContextStore, flowId);
     if (!restoreContextResult.IsSuccess()) {
         ReplyContextRestoreFailureAndPassAway(flowId, restoreContextResult);
         return;
@@ -67,7 +67,7 @@ void THandlerAuthCallbackContext::Bootstrap() {
 
 NHttp::THttpOutgoingResponsePtr THandlerAuthCallbackContext::CreateTextResponse(TStringBuf status, TStringBuf message, TStringBuf body) const {
     NHttp::THeadersBuilder responseHeaders;
-    SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     if (!body.empty()) {
         responseHeaders.Set("Content-Type", "text/plain");
     }
@@ -79,7 +79,7 @@ NHttp::THttpOutgoingResponsePtr THandlerAuthCallbackContext::CreateJsonResponse(
     json["requested_address"] = requestedAddress;
 
     NHttp::THeadersBuilder responseHeaders;
-    SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     responseHeaders.Set("Content-Type", "application/json; charset=utf-8");
     return Request->CreateResponse("200", "OK", responseHeaders, NJson::WriteJson(json, false));
 }
@@ -87,7 +87,7 @@ NHttp::THttpOutgoingResponsePtr THandlerAuthCallbackContext::CreateJsonResponse(
 void THandlerAuthCallbackContext::ReplyContextRestoreFailureAndPassAway(TStringBuf flowId, const TRestoreOidcContextResult& restoreContextResult) {
     BLOG_D("Get oidc auth callback context failed for flow "
         << NKikimr::MaskTicket(flowId) << ": " << restoreContextResult.Status.ErrorMessage);
-    if (!Settings.AuthFlowContextStore) {
+    if (!Settings.AuthCallbackContextStore) {
         ReplyAndPassAway(CreateTextResponse("503", "Service Unavailable", "Auth flow context store is not configured"));
         return;
     }

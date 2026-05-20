@@ -68,7 +68,14 @@ TExprBase UnwrapPredicate(TExprBase node) {
         if (const auto just = node.Maybe<TCoJust>()) {
             node = just.Cast().Input();
         } else if (const auto coalesce = node.Maybe<TCoCoalesce>()) {
-            node = coalesce.Cast().Predicate();
+            auto castNode = coalesce.Cast();
+            if (!castNode.Value().Maybe<TCoBool>()) {
+                break;
+            }
+            if (FromString<bool>(castNode.Value().Cast<TCoBool>().Literal().Value())) {
+                break;
+            }
+            node = castNode.Predicate();
         } else if (const auto optionalIf = node.Maybe<TCoOptionalIf>()) {
             node = optionalIf.Cast().Predicate();
         } else {

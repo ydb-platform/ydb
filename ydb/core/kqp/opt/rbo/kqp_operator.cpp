@@ -157,7 +157,7 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
         res["Limit"] = *limit;
     }
 
-    if (OriginalPredicate) {
+    if (OriginalPredicate && !RangeInfo) {
         res["Predicate"] = OriginalPredicate->ToExplainString();
     }
 
@@ -190,7 +190,6 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
         if (RangeInfo->ExpectedMaxRanges) {
             res["ReadRangesExpectedSize"] = ::ToString(*RangeInfo->ExpectedMaxRanges);
         }
-        res["ReadRangesPointPrefixLen"] = ::ToString(RangeInfo->PointPrefixLen);
     }
     for (const auto& column : Columns) {
         if (!addedColumns.contains(column)) {

@@ -706,7 +706,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), plan);
-        UNIT_ASSERT_C(readOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), plan);
+        UNIT_ASSERT_C(!readOp->GetMapSafe().contains("Predicate"), plan);
+        UNIT_ASSERT_C(!readOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), plan);
 
         auto disjointPlan = ExecuteExplain(session, R"(
             PRAGMA YqlSelect = 'force';
@@ -718,6 +719,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a (-∞, 5)"), disjointPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a [10, +∞)"), disjointPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "b"), disjointPlan);
+        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("Predicate"), disjointPlan);
+        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), disjointPlan);
     }
 
     Y_UNIT_TEST(ExplainAnalyzeRangePushdown) {

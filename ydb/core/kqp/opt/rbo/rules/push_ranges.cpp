@@ -579,7 +579,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         .KeyColumns = keyColumns,
         .ReadRangeDescriptions = BuildReadRangeDescriptions(ranges, keyColumns, buildResult.UsedPrefixLen),
         .UsedPrefixLen = buildResult.UsedPrefixLen,
-        .PointPrefixLen = buildResult.PointPrefixLen,
         .ExpectedMaxRanges = buildResult.ExpectedMaxRanges
             ? TMaybe<size_t>(*buildResult.ExpectedMaxRanges)
             : TMaybe<size_t>(),

@@ -354,7 +354,6 @@ public:
         TVector<TString> KeyColumns;  // all table key columns (with or without alias prefix)
         TVector<TString> ReadRangeDescriptions;
         size_t UsedPrefixLen = 0;     // how many leading key columns are range-constrained
-        size_t PointPrefixLen = 0;
         TMaybe<size_t> ExpectedMaxRanges;
     };
 

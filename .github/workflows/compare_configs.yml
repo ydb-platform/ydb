@@ -59,7 +59,7 @@ jobs:
         set -xe
         cd ./ydb/tests/library/compatibility/configs
         if [[ -z "${{inputs.branches}}" ]]; then
-            BRANCH_LIST="stable-26-1-1 stable-26-1 stable-26-2-1 stable-26-2 current"
+            BRANCH_LIST="stable-26-1-1 stable-26-1 stable-26-2-1 stable-26-2 prestable-26-3 current"
         else
             BRANCH_LIST="${{inputs.branches}}"
         fi

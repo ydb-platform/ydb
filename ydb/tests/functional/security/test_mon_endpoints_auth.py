@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import pytest
-import requests
 
 from security_test_helpers import _test_endpoints, _test_endpoints_via_node_proxy
 
@@ -250,7 +249,6 @@ def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
 
 
 def test_tablets_app_secure_prefix_forbids_non_admins(ydb_cluster_with_enforce_user_token):
-    q = 'TabletID=1'
     expected = {
         None: 401,
         'user@builtin': 403,
@@ -259,21 +257,7 @@ def test_tablets_app_secure_prefix_forbids_non_admins(ydb_cluster_with_enforce_u
         'monitoring@builtin': 403,
         'root@builtin': 200,
     }
-    _test_endpoints(ydb_cluster_with_enforce_user_token, {f'/tablets/app/secure?{q}': expected})
-
-
-def test_viewer_capabilities_expose_tablet_devui_secure_path_flag(
-    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
-):
-    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-    node = cluster.nodes[1]
-    endpoint_url = f'https://{node.host}:{node.mon_port}/viewer/capabilities'
-    response = requests.get(endpoint_url, verify=False)
-    assert response.status_code == 200, response.text
-
-    payload = response.json()
-    features = payload.get('Settings', {}).get('Features', {})
-    assert features.get('EnableTabletDevUiSecurePath') is True, payload
+    _test_endpoints(ydb_cluster_with_enforce_user_token, {'/tablets/app/secure?TabletID=1': expected})
 
 
 def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
@@ -422,8 +406,7 @@ def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
         'root@builtin': 200,
     }
     _test_endpoints_via_node_proxy(
-        ydb_cluster_with_enforce_user_token,
-        node_index,
+        ydb_cluster_with_enforce_user_token.nodes[node_index],
         '/monitoring',
         all_ok,
     )

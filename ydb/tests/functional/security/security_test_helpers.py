@@ -24,8 +24,7 @@ def _test_endpoints(cluster, expected_results):
             _test_endpoint(endpoint_url, endpoint_path, token, expected_status)
 
 
-def _test_endpoints_via_node_proxy(cluster, node_index, path_suffix, expected_statuses_by_token):
-    node = cluster.nodes[node_index]
+def _test_endpoints_via_node_proxy(node, path_suffix, expected_statuses_by_token):
     base_url = f"https://{node.host}:{node.mon_port}"
     node_id = node.node_id
     full_path = f"/node/{node_id}{path_suffix}"

@@ -8,10 +8,13 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 def _tablet_id_from_partition_stats(pool, table_path):
+    database = table_path.rsplit('/', 1)[0]
+    partition_stats_path = f'{database}/.sys/partition_stats'
+
     def fetch_tablet_id(session):
         query = f"""
             SELECT TabletId
-            FROM `.sys/partition_stats`
+            FROM `{partition_stats_path}`
             WHERE Path = "{table_path}"
             LIMIT 1;
         """
@@ -98,7 +101,7 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
     q = f'TabletID={datashard_tablet_id}'
     q_mutating_page = f'{q}&page=volatile-txs'
     q_mutating_action = f'{q}&action=key-access-sample'
-    forbidden_on_app = {
+    all_forbidden = {
         None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
@@ -106,7 +109,7 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
         'monitoring@builtin': 403,
         'root@builtin': 403,
     }
-    monitoring_on_app = {
+    monitoring_allowed_sids_ok = {
         None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
@@ -114,15 +117,7 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
         'monitoring@builtin': 200,
         'root@builtin': 200,
     }
-    mon_ok = {
-        None: 401,
-        'user@builtin': 403,
-        'database@builtin': 403,
-        'viewer@builtin': 403,
-        'monitoring@builtin': 200,
-        'root@builtin': 200,
-    }
-    admin_only_on_secure_app_path = {
+    admin_allowed_sids_ok = {
         None: 401,
         'user@builtin': 403,
         'database@builtin': 403,
@@ -130,12 +125,12 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
         'monitoring@builtin': 403,
         'root@builtin': 200,
     }
-    expected_on_app = forbidden_on_app if secure_path_mode else monitoring_on_app
+    expected_on_app = all_forbidden if secure_path_mode else monitoring_allowed_sids_ok
     return {
         # New secure path for DataShard DevUI. Should be admin-only in both modes.
-        f'/tablets/app/secure?{q}': admin_only_on_secure_app_path,
-        f'/tablets/app/secure?{q_mutating_page}': admin_only_on_secure_app_path,
-        f'/tablets/app/secure?{q_mutating_action}': admin_only_on_secure_app_path,
+        f'/tablets/app/secure?{q}': admin_allowed_sids_ok,
+        f'/tablets/app/secure?{q_mutating_page}': admin_allowed_sids_ok,
+        f'/tablets/app/secure?{q_mutating_action}': admin_allowed_sids_ok,
         # Legacy path behavior depends on the feature flag:
         # - secure_path_mode=False: monitoring/root may access (legacy compatibility)
         # - secure_path_mode=True: denied for everyone, including root (force secure path usage)
@@ -143,7 +138,7 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id, secure_path_mo
         f'/tablets/app?{q_mutating_page}': expected_on_app,
         f'/tablets/app?{q_mutating_action}': expected_on_app,
         # Tablets summary page keeps monitoring-level access.
-        f'/tablets?{q}': mon_ok,
+        f'/tablets?{q}': monitoring_allowed_sids_ok,
     }
 
 

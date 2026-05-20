@@ -26,6 +26,10 @@ namespace NKikimr::NDataShard {
             TryFromString(str, limit);
         }
 
+        const TStringBuf tabletDevUiAppPrefix = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+            : TStringBuf("app");
+
         TStringStream html;
 
         HTML(html) {
@@ -34,7 +38,7 @@ namespace NKikimr::NDataShard {
                     html << "Volatile Transactions";
                     SMALL() {
                         html << "&nbsp;";
-                        html << "<a href=\"" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << TabletID() << "\">";
+                        html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID() << "\">";
                         html << "Back to tablet " << TabletID();
                         html << "</a>";
                     }
@@ -66,7 +70,7 @@ namespace NKikimr::NDataShard {
                         const auto& info = VolatileTxManager.VolatileTxs.at(txId);
                         TABLER() {
                             TABLED() {
-                                html << "<a href=\"" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << TabletID()
+                                html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID()
                                     << "&page=volatile-txs&TxId=" << txId << "\">"
                                     << txId << "</a>";
                             }
@@ -107,6 +111,10 @@ namespace NKikimr::NDataShard {
 
         const auto& info = it->second;
 
+        const TStringBuf tabletDevUiAppPrefix = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+            : TStringBuf("app");
+
         TStringStream html;
 
         auto containerString = [](const auto& v, const auto& elemConv) -> TString {
@@ -125,7 +133,7 @@ namespace NKikimr::NDataShard {
         };
 
         auto linkToTxId = [&](ui64 txId) -> TString {
-            return TStringBuilder() << "<a href=\"" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << TabletID()
+            return TStringBuilder() << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID()
                 << "&page=volatile-txs&TxId=" << txId << "\">" << txId << "</a>";
         };
 
@@ -139,12 +147,12 @@ namespace NKikimr::NDataShard {
                     html << "Volatile Transaction " << txId;
                     SMALL() {
                         html << "&nbsp;";
-                        html << "<a href=\"" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << TabletID()
+                        html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID()
                             << "&page=volatile-txs\">";
                         html << "Back to volatile transactions";
                         html << "</a>";
                         html << "&nbsp;";
-                        html << "<a href=\"" << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << TabletID() << "\">";
+                        html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID() << "\">";
                         html << "Back to tablet " << TabletID();
                         html << "</a>";
                     }

@@ -499,10 +499,13 @@ void TChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr&
         return;
     }
 
+    const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
+    const auto tabletAppPath = securePathMode ? ETabletAppPath::Secure : ETabletAppPath::Plain;
+
     TStringStream html;
 
     HTML(html) {
-        Header(html, "Change sender", tabletId);
+        Header(html, "Change sender", tabletId, tabletAppPath);
 
         SimplePanel(html, "Info", [this](IOutputStream& html) {
             HTML(html) {
@@ -513,9 +516,7 @@ void TChangeSender::RenderHtmlPage(ui64 tabletId, NMon::TEvRemoteHttpInfo::TPtr&
             }
         });
 
-        SimplePanel(html, "Partition senders", [this, tabletId, &ctx](IOutputStream& html) {
-            const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
-            const auto tabletAppPath = securePathMode ? ETabletAppPath::Secure : ETabletAppPath::Plain;
+        SimplePanel(html, "Partition senders", [this, tabletId, tabletAppPath](IOutputStream& html) {
             HTML(html) {
                 TABLE_CLASS("table table-hover") {
                     TABLEHEAD() {

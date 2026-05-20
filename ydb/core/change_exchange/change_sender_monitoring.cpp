@@ -4,9 +4,8 @@
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/printf.h>
 #include <util/string/split.h>
-#include <util/system/yassert.h>
+#include <util/generic/yexception.h>
 
 namespace NKikimr::NChangeExchange {
 
@@ -20,7 +19,7 @@ TStringBuf TabletAppRelativePath(ETabletAppPath tabletAppPath) {
             return TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
     }
 
-    Y_ABORT("Unknown ETabletAppPath value");
+    Y_ENSURE(false, "unreachable");
 }
 
 } // namespace
@@ -102,12 +101,14 @@ TPathId ParsePathId(TStringBuf str) {
     return TPathId(ownerId, localPathId);
 }
 
-TString TabletPath(ui64 tabletId) {
-    return Sprintf("app?TabletID=%" PRIu64, tabletId);
+TString TabletPath(ui64 tabletId, ETabletAppPath tabletAppPath) {
+    const TStringBuf prefix = TabletAppRelativePath(tabletAppPath);
+    return TStringBuilder() << prefix << "?TabletID=" << tabletId;
 }
 
-void PathLink(IOutputStream& str, const TPathId& pathId) {
-    const TString path = TStringBuilder() << "app"
+void PathLink(IOutputStream& str, const TPathId& pathId, ETabletAppPath tabletAppPath) {
+    const TStringBuf prefix = TabletAppRelativePath(tabletAppPath);
+    const TString path = TStringBuilder() << prefix
         << "?TabletID=" << pathId.OwnerId
         << "&Page=" << "PathInfo"
         << "&OwnerPathId=" << pathId.OwnerId

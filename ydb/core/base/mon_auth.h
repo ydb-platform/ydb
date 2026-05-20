@@ -2,18 +2,6 @@
 
 #include <util/generic/strbuf.h>
 
-namespace NActors {
-
-struct TActorContext;
-
-namespace NMon {
-
-struct TEvRemoteHttpInfo;
-
-} // namespace NMon
-
-} // namespace NActors
-
 namespace NKikimr {
 
 // Access model for mutating tablet DevUI requests under `/tablets/app/`:

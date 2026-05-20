@@ -380,7 +380,7 @@ public:
             }
         }
         AuditCtx.LogOnReceived();
-        if (TString forbiddenReason = GetSecureTabletDevUiForbiddenReason(); !forbiddenReason.empty()) {
+        if (const TString forbiddenReason = GetSecureTabletDevUiForbiddenReason(); !forbiddenReason.empty()) {
             return ReplyForbiddenAndPassAway(forbiddenReason);
         }
         SendRequest();

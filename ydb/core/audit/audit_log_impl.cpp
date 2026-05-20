@@ -208,7 +208,6 @@ private:
 
     void HandleWriteAuditLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
         EscapeNonUtf8LogParts(ev);
-        auto time = ev->Get()->Time;
         auto sortedParts = ev->Get()->Parts;
 
         auto cmpToSort = [](const std::pair<TString, TString>& lhs, const std::pair<TString, TString>& rhs) {
@@ -233,7 +232,7 @@ private:
             const auto builderIndex = static_cast<size_t>(logBackends.first);
             const auto builder = builderIndex < AuditLogItemBuilders.size() && AuditLogItemBuilders[builderIndex] != nullptr
                 ? AuditLogItemBuilders[builderIndex] : AuditLogItemBuilders[DefaultAuditLogItemBuilder];
-            const auto auditLogItem = builder(time, sortedParts);
+            const auto auditLogItem = builder(ev->Get()->Time, sortedParts);
             if (!auditLogItem.empty()) {
                 WriteLog(auditLogItem, logBackends.second);
             }

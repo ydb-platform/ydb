@@ -4764,12 +4764,50 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         });
     }
 
-    Y_UNIT_TEST(WithNonJsonPredicate) {
+    Y_UNIT_TEST(NonJsonPredicate) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
-            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') AND Data = "d1")");
-            ValidateAutoSelect(db, R"(Data = "d1" AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
-            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND Data = "d1")");
+            ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Data = 'd1'");
+            ValidateAutoSelect(db, "Data = 'd1' AND JSON_EXISTS(Text, '$.k1')");
+
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Data = 'd1'");
+            ValidateNoAutoSelect(db, "Data = 'd1' OR JSON_EXISTS(Text, '$.k1')");
+
+            ValidateAutoSelect(db, "Data = 'd1' AND JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')");
+            ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Data = 'd1' AND JSON_EXISTS(Text, '$.k2')");
+            ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND Data = 'd1'");
+
+            ValidateNoAutoSelect(db, "Data = 'd1' OR JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Data = 'd1' OR JSON_EXISTS(Text, '$.k2')");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') OR Data = 'd1'");
+
+            ValidateNoAutoSelect(db, "Data = 'd1' OR JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2')");
+            ValidateAutoSelect(db, "Data = 'd1' AND JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')");
+
+            ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Data = 'd1' AND JSON_EXISTS(Text, '$.k2')");
+            ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Data = 'd1' OR JSON_EXISTS(Text, '$.k2')");
+
+            ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND Data = 'd1'");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR Data = 'd1'");
         });
+    }
+
+    Y_UNIT_TEST(KeyPredicate) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, "JsonDocument", /* withIndex */ true);
+
+        ValidateNoAutoSelect(db, "Key > 5 AND JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Key > 5");
+
+        ValidateNoAutoSelect(db, "Key > 5 OR JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Key > 5");
+
+        ValidateNoAutoSelect(db, "Key = 1 AND JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Key = 1");
+
+        ValidateNoAutoSelect(db, "Key = 1 OR JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Key = 1");
     }
 
     Y_UNIT_TEST(TwoJsonIndexes) {
@@ -4798,6 +4836,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
 
         ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1')", "json_idx_extra");
         ValidateAutoSelect(db, "JSON_EXISTS(Extra, '$.k1')", "json_idx_extra");
+
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Extra, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Extra, '$.k1')");
     }
 
     Y_UNIT_TEST(MixedIndexes) {
@@ -4866,18 +4907,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }
 
         ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
-    }
-
-    Y_UNIT_TEST(KeyPredicate) {
-        auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        CreateTestTable(db, "JsonDocument", /* withIndex */ true);
-
-        ValidateNoAutoSelect(db, "Key > 5 AND JSON_EXISTS(Text, '$.k1')");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Key > 5");
-        ValidateNoAutoSelect(db, "Key > 5 OR JSON_EXISTS(Text, '$.k1')");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Key > 5");
     }
 }
 

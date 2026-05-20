@@ -16,157 +16,165 @@
   ```yaml
   static_erasure: mirror-3-dc
   host_configs:
-    - drive:
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-          type: SSD
-      host_config_id: 1
-    hosts:
-    - host: static-node-1.ydb-cluster.com
-      host_config_id: 1
-      walle_location:
-        body: 1
-        data_center: "zone-a"
-        rack: "1"
-    - host: static-node-2.ydb-cluster.com
-      host_config_id: 1
-      walle_location:
-        body: 2
-        data_center: "zone-b"
-        rack: "2"
-    - host: static-node-3.ydb-cluster.com
-      host_config_id: 1
-      walle_location:
-        body: 3
-        data_center: "zone-d"
-        rack: "3"
-    domains_config:
+  - drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      type: SSD
+    host_config_id: 1
+  hosts:
+  - host: static-node-1.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
+  - host: static-node-2.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 2
+      data_center: 'zone-b'
+      rack: '2'
+  - host: static-node-3.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 3
+      data_center: 'zone-d'
+      rack: '3'
+  domains_config:
     security_config:
-    enforce_user_token_requirement: true
-    default_users:
-      - name: "root"
-        password: ""
-    default_access:
-      - "+(F):root"
+      enforce_user_token_requirement: true
+      default_users:
+        - name: "root"
+          password: ""
+      default_access:
+        - "+(F):root"
     domain:
     - name: Root
-    storage_pool_types:
-    - kind: ssd
-    pool_config:
-    box_id: 1
-    erasure_species: mirror-3-dc
-    kind: ssd
-    geometry:
-      realm_level_begin: 10
-      realm_level_end: 20
-      domain_level_begin: 10
-      domain_level_end: 256
-    pdisk_filter:
-      - property:
-          - type: SSD
-    vdisk_kind: Default
-   state_storage:
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: mirror-3-dc
+          kind: ssd
+          geometry:
+            realm_level_begin: 10
+            realm_level_end: 20
+            domain_level_begin: 10
+            domain_level_end: 256
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
     - ring:
         node: [1, 2, 3]
         nto_select: 3
-        ssid: 1
-    table_service_config:
+      ssid: 1
+  table_service_config:
     sql_version: 1
-    actor_system_config:
+  actor_system_config:
     executor:
-      - name: System
-        threads: 2
-        type: BASIC
-      - name: User
-        threads: 3
-        type: BASIC
-      - name: Batch
-        threads: 2
-        type: BASIC
-      - name: IO
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: IO
-      - name: IC
-        spin_threshold: 10
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: BASIC
+    - name: System
+      threads: 2
+      type: BASIC
+    - name: User
+      threads: 3
+      type: BASIC
+    - name: Batch
+      threads: 2
+      type: BASIC
+    - name: IO
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: IO
+    - name: IC
+      spin_threshold: 10
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: BASIC
     scheduler:
       progress_threshold: 10000
       resolution: 256
       spin_threshold: 0
-   blob_storage_config:
+  blob_storage_config:
     service_set:
       groups:
-        - erasure_species: mirror-3-dc
-          rings:
-            - fail_domains:
-                - vdisk_locations:
-                    - node_id: static-node-1.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                    - node_id: static-node-1.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-                    - node_id: static-node-1.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-                - vdisk_locations:
-                    - node_id: static-node-2.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                    - node_id: static-node-2.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-                    - node_id: static-node-2.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-                - vdisk_locations:
-                    - node_id: static-node-3.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                    - node_id: static-node-3.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-                    - node_id: static-node-3.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-    channel_profile_config:
+      - erasure_species: mirror-3-dc
+        rings:
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+  channel_profile_config:
     profile:
-      - channel:
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-        profile_id: 0
-    interconnect_config:
-    start_tcp: true
-    encryption_mode: OPTIONAL
-    path_to_certificate_file: "/opt/ydb/certs/node.crt"
-    path_to_private_key_file: "/opt/ydb/certs/node.key"
-    path_to_ca_file: "/opt/ydb/certs/ca.crt"
-   grpc_config:
-    cert: "/opt/ydb/certs/node.crt"
-    key: "/opt/ydb/certs/node.key"
-    ca: "/opt/ydb/certs/ca.crt"
-    services_enabled:
+    - channel:
+      - erasure_species: mirror-3-dc
+        pdisk_category: 0
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 0
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 0
+        storage_pool_kind: ssd
+      profile_id: 0
+  interconnect_config:
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+  grpc_config:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
       - legacy
-    client_certificate_authorization:
-      request_client_certificate: true
-      client_certificate_definitions:
-        - member_groups: ["registerNode@cert"]
-          subject_terms:
-            - short_name: "O"
-              values: ["YDB"]
+  client_certificate_authorization:
+    request_client_certificate: false
+    client_certificate_definitions:
+      - member_groups: ["registerNode@cert"]
+        subject_terms:
+        - short_name: "O"
+          values: ["YDB"]
   ```
 
 - mirror-3-dc-9nodes
@@ -583,7 +591,11 @@
 
 ## Скопируйте ключи и сертификаты TLS на каждый сервер {#tls-copy-cert}
 
-Подготовленные ключи и сертификаты TLS необходимо скопировать в защищенный каталог на каждом из узлов кластера {{ ydb-short-name }}. Ниже приведен пример команд для создания защищенного каталога и копирования файлов с ключами и сертификатами.
+Подготовленные ключи и сертификаты TLS необходимо скопировать в защищённый каталог на каждом из узлов кластера {{ ydb-short-name }}.
+
+Подробности подготовки — в разделе [{#T}](deployment-preparation.md#tls-certificates). На каждом сервере скопируйте `ca.crt` и файлы этого хоста в один каталог и выполните команды ниже из него.
+
+Ниже приведён пример создания защищённого каталога и копирования:
 
 ```bash
 sudo mkdir -p /opt/ydb/certs
@@ -656,9 +668,10 @@ sudo chmod 700 /opt/ydb/certs
 
 После запуска статических узлов проверьте их работоспособность через встроенный веб-интерфейс {{ ydb-short-name }} (Embedded UI):
 
-1. Откройте в браузере адрес `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` — FQDN сервера, на котором запущен любой статический узел;
-2. Перейдите на вкладку **Nodes**;
-3. Убедитесь, что в списке отображаются все 3 статических узла.
+1. Откройте в браузере адрес `https://<static-node.ydb.tech>:8765`, где `<static-node.ydb.tech>` — FQDN сервера, на котором запущен любой статический узел;
+2. Если браузер запросит логин и пароль, войдите под учётной записью `root` с пустым паролем — на этом этапе развёртывания пароль для `root` ещё не задан;
+3. Перейдите на вкладку **Nodes**;
+4. Убедитесь, что в списке отображаются все 3 статических узла.
 
 ![Ручная установка, запущенные статические узлы](../../_assets/manual_installation_1.png)
 
@@ -673,14 +686,14 @@ sudo chmod 700 /opt/ydb/certs
 Сначала получите авторизационный токен для регистрации запросов. Для этого выполните приведённую ниже команду.
 
 ```bash
-/opt/ydb/bin/ydb --ca-file ca.crt -e grpcs://`hostname -f`:2135 -d /Root --user root --no-password auth get-token -f > auth_token
+/opt/ydb/bin/ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://`hostname -f`:2135 -d /Root --user root --no-password auth get-token -f > auth_token
 ```
 
 Инициализируйте кластер, используя полученный токен
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydbd --ca-file /opt/ydb/certs/ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
     admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
 echo $?
 ```
@@ -699,7 +712,7 @@ echo $?
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydbd --ca-file /opt/ydb/certs/ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
     admin database /Root/testdb create ssd:8
 echo $?
 ```
@@ -713,6 +726,10 @@ echo $?
 - `ssd:8` - задает пул хранения для базы данных и количество групп в нем. Имя пула (`ssd`) должно соответствовать типу диска, указанному в конфигурации кластера (например, в `default_disk_type`), и является регистронезависимым. Число после двоеточия — это количество выделяемых групп хранения.
 
 ## Запустите динамические узлы {#start-dynnode}
+
+Первый динамический узел запустите на одном из серверов кластера, где уже подготовлены каталоги `/opt/ydb/certs` и `/opt/ydb/cfg` и работает статический узел. Совмещение статического и динамического узла на одном сервере допустимо (см. [{#T}](deployment-preparation.md#requirements)).
+
+Для топологий из примера (`mirror-3-dc-3nodes` — три сервера, `mirror-3-dc-9nodes` — девять) для отказоустойчивости и масштабирования запустите дополнительные динамические узлы на тех же серверах, что и статические — по одному на каждом из оставшихся хостов.
 
 {% list tabs group=manual-systemd %}
 
@@ -792,11 +809,11 @@ echo $?
 
 {% endlist %}
 
-Запустите дополнительные динамические узлы на других серверах для масштабирования и обеспечения отказоустойчивости базы данных.
-
 ## Настройка учетных записей {#security-setup}
 
 1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../../../reference/ydb-cli/install.md).
+
+В командах ниже `<node.ydb.tech>` — FQDN сервера с запущенным динамическим узлом базы `/Root/testdb` (порт gRPC `2136`). При выполнении команд по SSH на этом сервере можно указать endpoint: `grpcs://$(hostname -f):2136`.
 
 1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
 
@@ -821,13 +838,13 @@ echo $?
         yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
     ```
 
-В перечисленных выше примерах команд `<node.ydb.tech>` — FQDN сервера, на котором запущен любой динамический узел, обслуживающий базу `/Root/testdb`. При подключении по SSH к динамическому узлу {{ ydb-short-name }} удобно использовать конструкцию `grpcs://$(hostname -f):2136` для получения FQDN.
-
 При выполнении команд создания учётных записей и присвоения групп клиент {{ ydb-short-name }} CLI будет запрашивать ввод пароля пользователя `root`. Избежать многократного ввода пароля можно, создав профиль подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../../reference/ydb-cli/profile/index.md).
 
 ## Протестируйте работу с созданной базой {#try-first-db}
 
 1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../../../reference/ydb-cli/install.md).
+
+В командах ниже `<node.ydb.tech>` — тот же FQDN динамического узла базы `/Root/testdb`, что в разделе [{#T}](#security-setup).
 
 1. Создайте тестовую строковую (`test_row_table`) или колоночную таблицу (`test_column_table`):
 
@@ -849,11 +866,9 @@ echo $?
 
 {% endlist %}
 
-Где `<node.ydb.tech>` — FQDN сервера, на котором запущен динамический узел, обслуживающий базу `/Root/testdb`.
-
 ## Проверка доступа ко встроенному web-интерфейсу
 
-Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<node.ydb.tech>:8765`, где `<node.ydb.tech>` — FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
+Для проверки доступа ко встроенному web-интерфейсу {{ ydb-short-name }} достаточно открыть в Web-браузере страницу с адресом `https://<static-node.ydb.tech>:8765`, где `<static-node.ydb.tech>` — FQDN сервера, на котором запущен любой статический узел {{ ydb-short-name }}.
 
 В Web-браузере должно быть настроено доверие в отношении центра регистрации, выпустившего сертификаты для кластера {{ ydb-short-name }}, в противном случае будет отображено предупреждение об использовании недоверенного сертификата.
 

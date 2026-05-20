@@ -39,6 +39,11 @@ namespace NKikimr::NBlobDepot {
                 EvDeleteResult,
                 EvScanFound,
                 EvScanContinue,
+<<<<<<< HEAD
+=======
+                EvDeleteThrottleWakeup,
+                EvPutThrottleWakeup,
+>>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             };
         };
 

@@ -509,11 +509,10 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
         StartSchemeCache(runtime);
 
-        auto sender1 = runtime.AllocateEdgeActor(0);
-        auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
-
+        THashMap<ui32, ui32> indexByNodeId;
         for (size_t i = 0; i < nodeCount; ++i) {
-            UNIT_ASSERT(runtime.GetNodeId(i) == i + 1);
+            indexByNodeId[runtime.GetNodeId(i)] = i;
+            UNIT_ASSERT(runtime.GetNodeId(i) != 0);
         }
 
         // Sleep to allow nodes to discover each other
@@ -532,24 +531,18 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                     rootNode = ev->Sender.NodeId();
                 }
 
-                if (ev->Sender.NodeId() == rootNode && ev->Recipient.NodeId() != ev->Sender.NodeId()) {
-                
-                    if (dropCounter == 0) {
-                        ++dropCounter;
-                        Cerr << "Disconnecting node " << ev->Recipient.NodeId() << Endl;
-                        auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(ev->Recipient.NodeId());
-                        runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), ev->Sender.NodeId() - 1, true);
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
+                if (dropCounter == 0 && ev->Sender.NodeId() == rootNode && ev->Recipient.NodeId() != ev->Sender.NodeId()) {
+                    ++dropCounter;
+                    auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(ev->Recipient.NodeId());
+                    runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), indexByNodeId.at(ev->Sender.NodeId()), true);
+                    return TTestActorRuntime::EEventAction::DROP;
                 }
 
                 if (splitNetwork && ev->Recipient.NodeId() != ev->Sender.NodeId()) {
-                    if (((ev->Recipient.NodeId() - 1) < nodeCount / 2 && (ev->Sender.NodeId() - 1) >= nodeCount / 2)
-                            || ((ev->Recipient.NodeId() - 1) >= nodeCount / 2 && (ev->Sender.NodeId() - 1) < nodeCount / 2)) {
+                    if ((indexByNodeId.at(ev->Recipient.NodeId()) < (nodeCount / 2)) != (indexByNodeId.at(ev->Sender.NodeId()) < (nodeCount / 2))) {
                         ++dropCounter;
-                        Cerr << "Disconnecting node " << ev->Recipient.NodeId() << Endl;
                         auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(ev->Recipient.NodeId());
-                        runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), ev->Sender.NodeId() - 1, true);
+                        runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), indexByNodeId.at(ev->Sender.NodeId()), true);
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                 }
@@ -566,6 +559,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         NKqp::TSnapshotHandle handle1;
         TRowVersion snapshot1;
         {
+            auto sender1 = runtime.AllocateEdgeActor(0);
+            auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
             runtime.Send(
                 new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
@@ -586,18 +581,33 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
         splitNetwork = true;
 
-        handle1.Reset();
+        // Create a snapshot at rootNode 
+        NKqp::TSnapshotHandle handle2;
+        TRowVersion snapshot2;
+        {
+            auto sender2 = runtime.AllocateEdgeActor(indexByNodeId.at(rootNode));
+            auto service2 = MakeLongTxServiceID(rootNode);
+            runtime.Send(
+                new IEventHandle(service2, sender2,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                indexByNodeId.at(rootNode), true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender2);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            handle2 = std::move(msg->SnapshotHandle);
+            snapshot2 = msg->Snapshot;
+        }
 
         SimulateSleep(runtime, TDuration::Seconds(5));
 
         UNIT_ASSERT(dropCounter > 1);
         for (size_t i = 0; i < nodeCount / 2; ++i) {
-            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1)
-                    == runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1));
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2)
+                    == runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2));
         }
         for (size_t i = nodeCount / 2; i < nodeCount; ++i) {
-            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1)
-                    != runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1));
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2)
+                    != runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2));
         }
     }
 

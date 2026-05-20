@@ -101,6 +101,7 @@ namespace {
         }
 
         void Bootstrap() {
+            LogPrefix = TStringBuilder() << "TTreeNodeActor [Node " << TBase::SelfId().NodeId() << "] ";
             if (ChildToSubtree.empty()) {
                 TXLOG_DEBUG("Leaf node");
                 PassAway();

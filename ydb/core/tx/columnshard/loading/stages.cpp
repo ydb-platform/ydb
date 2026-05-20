@@ -150,6 +150,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
             NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
             if (backupTx.ParseFromString(serializedBackupTx)) {
                 Self->LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
+                Self->LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
             }
         }
         if (!rowset.Next()) {

@@ -69,7 +69,12 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     NIceDb::TNiceDb db(txc.DB);
 
     const auto tableId = owner.TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
-    owner.LastCompletedBackupTransactions[schemeShardLocalPathId.GetRawValue()] = backupTx;
+    const ui64 schemeShardLocalPathIdValue = schemeShardLocalPathId.GetRawValue();
+    if (const auto* previousBackupTx = owner.LastCompletedBackupTransactions.FindPtr(schemeShardLocalPathIdValue)) {
+        owner.LastCompletedBackupTransactionsByTxId.erase(previousBackupTx->GetTxId());
+    }
+    owner.LastCompletedBackupTransactions[schemeShardLocalPathIdValue] = backupTx;
+    owner.LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
 
     db.Table<Schema::TableInfoV1>()
         .Key(tableId.GetRawValue(), schemeShardLocalPathId.GetRawValue())

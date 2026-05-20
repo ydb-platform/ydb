@@ -1,4 +1,4 @@
-* Added `--partition-write-speed-messages-per-second` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
+* Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
 * Added CPU Time statistics to benchmarks run commands.
 * `ydb sql`: add `--resource-pool` option
 * `ydb` interactive mode add `SET resource_pool` command

@@ -406,7 +406,7 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1024)
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
-        config.Opts->AddLongOption("partition-write-speed-messages-per-second", "Partition write speed in messages per second")
+        config.Opts->AddLongOption("partition-write-speed-mps", "Partition write speed in messages per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedMessagesPerSecond_);
         config.Opts->AddLongOption("partition-write-burst-messages", "Partition write burst in messages")
@@ -515,7 +515,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
-        config.Opts->AddLongOption("partition-write-speed-messages-per-second", "Partition write speed in messages per second")
+        config.Opts->AddLongOption("partition-write-speed-mps", "Partition write speed in messages per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedMessagesPerSecond_);
         config.Opts->AddLongOption("partition-write-burst-messages", "Partition write burst in messages")

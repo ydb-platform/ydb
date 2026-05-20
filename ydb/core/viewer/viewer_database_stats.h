@@ -405,7 +405,7 @@ public:
                     incompleteStorageStats = true;
                 } else {
                     for (const auto& record : response->Record.GetVDiskStateInfo()) {
-                        const auto& itGroup = StorageGroups.find(record.GetVDiskId().GetGroupID());
+                        auto itGroup = StorageGroups.find(record.GetVDiskId().GetGroupID());
                         if (itGroup == StorageGroups.end()) {
                             continue;
                         }

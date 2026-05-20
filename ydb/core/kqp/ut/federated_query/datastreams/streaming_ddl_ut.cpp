@@ -1049,14 +1049,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }, /* sort  */ true);
     }
 
-    Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, TStreamingTestFixture) {
+    Y_UNIT_TEST_QUAD_F(StreamingQueryWithStreamLookupJoin, WithFeatureFlag, WithFullscanFlag, TStreamingTestFixture) {
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
-            if (WithFeatureFlag) {
-                setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
-                setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(true);
-            }
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(WithFeatureFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(WithFullscanFlag);
         }
 
         const auto connectorClient = SetupMockConnectorClient();
@@ -1091,7 +1089,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = WithFeatureFlag ? 7 : 0,
+                .ListSplitsCount = WithFeatureFlag ? (WithFullscanFlag ? 7 : 4) : 0,
                 .ValidateListSplitsArgs = false
             });
 
@@ -1101,11 +1099,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 SetupMockConnectorTableData(connectorClient, {
                     .TableName = ydbTable,
                     .Columns = columns,
-                    .NumberReadSplits = 6,
+                    .NumberReadSplits = (WithFullscanFlag ? 6 : 3),
                     .ValidateReadSplitsArgs = false,
                     .ResultFactory = [&]() {
                         readSplitsCount += 1;
-                        const auto payloadColumn = readSplitsCount <= 4
+                        const auto payloadColumn = readSplitsCount <= (WithFullscanFlag ? 4 : 2)
                             ? std::vector<std::string>{"P1", "P2", "P3"}
                             : std::vector<std::string>{"P4", "P5", "P6"};
 

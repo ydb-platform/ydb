@@ -49,6 +49,26 @@ namespace NKikimr::NBlobDepot {
 
         TS3Locator AllocateS3Locator(ui32 len);
 
+        // Throttling state for S3 SlowDown responses on agent put requests. Puts are issued by agents (one per
+        // node), but throttling is centralized at the tablet by postponing TEvPrepareWriteS3Result.
+        static constexpr ui32 MaxWritesInFlight = 32;
+        static constexpr ui32 SuccessesPerWriteConcurrencyStepUp = 3;
+
+        TBackoff PutBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
+        TMonotonic PutThrottleUntil;
+        bool PutWakeupScheduled = false;
+        ui32 CurrentMaxWritesInFlight = MaxWritesInFlight;
+        ui32 ConsecutiveSuccessfulWriteBatches = 0;
+        ui32 S3WritesInFlight = 0;
+        std::deque<TEvBlobDepot::TEvPrepareWriteS3::TPtr> PendingPrepareWrites;
+
+        void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+        void NotifyPutSlowDown();
+        void HandlePutThrottleWakeup();
+        void RunPendingPrepareWritesIfPossible();
+        void OnS3WriteInFlightAdded(ui32 count);
+        void OnS3WriteInFlightRemoved(bool success);
+
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TUploaderActor;
         struct TEvUploadResult;

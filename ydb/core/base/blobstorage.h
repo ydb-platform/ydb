@@ -1090,6 +1090,11 @@ struct TEvBlobStorage {
         const bool IgnoreBlock = false;
         const bool AlreadyEncrypted = false; // when set to true, no encryption is required
         const bool ReduceInterpileTraffic = false;
+<<<<<<< HEAD
+=======
+        const bool IsZeroEntry = false;
+        const bool FailOnSlowDown = false; // when set, fail the request with ERROR/"SlowDown" instead of retrying
+>>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
@@ -1104,6 +1109,11 @@ struct TEvBlobStorage {
             bool IgnoreBlock = false;
             bool AlreadyEncrypted = false;
             bool ReduceInterpileTraffic = false;
+<<<<<<< HEAD
+=======
+            bool IsZeroEntry = false;
+            bool FailOnSlowDown = false;
+>>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
@@ -1117,6 +1127,11 @@ struct TEvBlobStorage {
             , IgnoreBlock(origin.IgnoreBlock)
             , AlreadyEncrypted(origin.AlreadyEncrypted)
             , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
+<<<<<<< HEAD
+=======
+            , IsZeroEntry(origin.IsZeroEntry)
+            , FailOnSlowDown(origin.FailOnSlowDown)
+>>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             , ExtraBlockChecks(origin.ExtraBlockChecks)
             , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}
@@ -1131,6 +1146,11 @@ struct TEvBlobStorage {
             , IgnoreBlock(parameters.IgnoreBlock)
             , AlreadyEncrypted(parameters.AlreadyEncrypted)
             , ReduceInterpileTraffic(parameters.ReduceInterpileTraffic)
+<<<<<<< HEAD
+=======
+            , IsZeroEntry(parameters.IsZeroEntry)
+            , FailOnSlowDown(parameters.FailOnSlowDown)
+>>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());

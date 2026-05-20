@@ -1,16 +1,315 @@
 #include "leaked_blobs.h"
 
-#include <ydb/core/keyvalue/keyvalue_const.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
-#include <ydb/core/tx/columnshard/data_accessor/manager.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
-#include <ydb/core/tx/columnshard/tables_manager.h>
+#include <contrib/ydb/core/tx/columnshard/columnshard_schema.h>
+#include <contrib/ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <contrib/ydb/core/tx/columnshard/tables_manager.h>
+#include <contrib/ydb/core/tablet_flat/flat_database.h>
 
-#include <ydb/library/actors/core/actor.h>
-
+#include <util/string/cast.h>
+#include <util/string/split.h>
 #include <util/string/vector.h>
+
+#include <algorithm>
+#include <array>
+
+namespace NKikimr::NOlap {
+
+namespace {
+bool TryParseLogPriority(const TStringBuf value, NActors::NLog::EPriority& out) {
+    TString normalized(value);
+    normalized.to_upper();
+    static const std::array<NActors::NLog::EPriority, 9> priorities = {
+        NActors::NLog::PRI_TRACE,
+        NActors::NLog::PRI_DEBUG,
+        NActors::NLog::PRI_INFO,
+        NActors::NLog::PRI_NOTICE,
+        NActors::NLog::PRI_WARN,
+        NActors::NLog::PRI_ERROR,
+        NActors::NLog::PRI_CRIT,
+        NActors::NLog::PRI_ALERT,
+        NActors::NLog::PRI_EMERG
+    };
+    for (const auto priority : priorities) {
+        if (normalized == NActors::NLog::PriorityToString(NActors::NLog::EPrio(priority))) {
+            out = priority;
+            return true;
+        }
+    }
+    return false;
+}
+
+ui64 CalcPercentile(TVector<ui64> values, const ui32 percentile) {
+    if (values.empty()) {
+        return 0;
+    }
+    std::sort(values.begin(), values.end());
+    const size_t idx = (values.size() * percentile + 99) / 100 - 1;
+    return values[idx];
+}
+
+TVector<ui64> ConvertToUi64(const TVector<ui32>& values) {
+    TVector<ui64> result;
+    result.reserve(values.size());
+    for (const ui32 value : values) {
+        result.emplace_back(value);
+    }
+    return result;
+}
+} // namespace
+
+TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::TInitContext& info)
+    : TBase(info)
+    , Channels(info.GetStorageInfo()->Channels)
+    , DsGroupSelector(info.GetStorageInfo()) {
+}
+
+TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
+    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    using namespace NColumnShard;
+
+    ReadParamsFromDescription();
+    ++NumberOfRestarts;
+    if (NumberOfRestarts % 10 == 0) {
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "event", "experiment_progress")("number_of_restarts", NumberOfRestarts)("initialized", ExperimentInitialized)(
+            "stage", ExperimentStage)("iteration", ExperimentIteration)("fresh_start_index", ExperimentFreshStartIndex)(
+            "portion_ids_count", ExperimentPortionIds.size())("requests_per_table_per_stage", RequestsPerTablePerStage)(
+            "pending_path_id", PendingExperimentOperation.PathId.GetRawValue())(
+            "pending_portion_id", PendingExperimentOperation.PortionId)(
+            "pending_table", PendingExperimentOperation.UseIndexColumnsV2 ? "IndexColumnsV2" : "IndexPortions")(
+            "pending_waits", PendingExperimentOperation.Waits);
+    }
+
+    AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+    NIceDb::TNiceDb db(txc.DB);
+    NColumnShard::TTablesManager tablesManager(
+        controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId);
+    if (!tablesManager.InitFromDB(db, nullptr)) {
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "error", "can't initialize tables manager");
+        return TConclusionStatus::Fail("Can't load index");
+    }
+    if (!tablesManager.HasPrimaryIndex()) {
+        return std::vector<INormalizerTask::TPtr>{};
+    }
+
+    auto conclusion = DoExperiment(db);
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    PrintExperimentResult();
+    return std::vector<INormalizerTask::TPtr>{};
+}
+
+void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
+    if (ParamsInitialized) {
+        return;
+    }
+    ParamsInitialized = true;
+
+    const TString& description = GetUniqueDescription();
+    TVector<TStringBuf> tokens;
+    StringSplitter(description).Split(';').SkipEmpty().Collect(&tokens);
+    for (ui32 i = 1; i < tokens.size(); ++i) {
+        const TStringBuf token = tokens[i];
+        const size_t eqPos = token.find('=');
+        AFL_VERIFY(eqPos != TStringBuf::npos)("error", "invalid param format, expected key=value")("token", token)("description", description);
+
+        const TStringBuf key = token.SubStr(0, eqPos);
+        const TStringBuf value = token.SubStr(eqPos + 1);
+        if (key == "requests_per_table_per_stage") {
+            const auto parsed = TryFromString<size_t>(TString(value));
+            AFL_VERIFY(parsed.Defined())("error", "cannot parse requests_per_table_per_stage")("value", TString(value))("description", description);
+            AFL_VERIFY(*parsed > 0)("error", "requests_per_table_per_stage has to be > 0")("value", *parsed)("description", description);
+            RequestsPerTablePerStage = *parsed;
+        } else if (key == "fresh_portions_window") {
+            const auto parsed = TryFromString<size_t>(TString(value));
+            AFL_VERIFY(parsed.Defined())("error", "cannot parse fresh_portions_window")("value", TString(value))("description", description);
+            AFL_VERIFY(*parsed > 0)("error", "fresh_portions_window has to be > 0")("value", *parsed)("description", description);
+            FreshPortionsWindow = *parsed;
+        } else if (key == "log_level") {
+            NActors::NLog::EPriority parsedPriority = NActors::NLog::PRI_WARN;
+            AFL_VERIFY(TryParseLogPriority(value, parsedPriority))(
+                "error", "cannot parse log_level")("value", TString(value))("description", description);
+            LogLevel = parsedPriority;
+        } else {
+            AFL_VERIFY(false)("error", "unknown param key")("key", key)("description", description);
+        }
+    }
+
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+        "fresh_portions_window", FreshPortionsWindow)(
+        "requests_per_table_per_stage", RequestsPerTablePerStage)(
+        "log_level", static_cast<ui32>(LogLevel));
+}
+
+TConclusionStatus TLeakedBlobsNormalizer::DoExperiment(NIceDb::TNiceDb& db) {
+    const size_t operationsPerTableInStage = RequestsPerTablePerStage;
+    const size_t operationsPerStage = operationsPerTableInStage * 2;
+
+    if (ExperimentFinished) {
+        return TConclusionStatus::Success();
+    }
+
+    if (!ExperimentInitialized) {
+        auto rowset = db.Table<NColumnShard::Schema::IndexPortions>().Select();
+        if (!rowset.IsReady()) {
+            return TConclusionStatus::Fail("Experiment: IndexPortions is not ready");
+        }
+
+        TVector<std::pair<TInternalPathId, ui64>> portionIds;
+        while (!rowset.EndOfSet()) {
+            const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexPortions::PathId>());
+            const auto portionId = rowset.GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
+            portionIds.emplace_back(pathId, portionId);
+            if (!rowset.Next()) {
+                return TConclusionStatus::Fail("Experiment: IndexPortions is not fully loaded");
+            }
+        }
+
+        ExperimentPortionIds = std::move(portionIds);
+        ExperimentFreshStartIndex =
+            ExperimentPortionIds.size() > FreshPortionsWindow ? ExperimentPortionIds.size() - FreshPortionsWindow : 0;
+        ExperimentInitialized = true;
+    }
+
+    while (ExperimentStage < 4) {
+        if (ExperimentIteration >= operationsPerStage) {
+            ++ExperimentStage;
+            ExperimentIteration = 0;
+            PendingExperimentOperation.Active = false;
+            continue;
+        }
+
+        if (ExperimentPortionIds.empty()) {
+            ExperimentStage = 4;
+            break;
+        }
+
+        if (!PendingExperimentOperation.Active) {
+            size_t beginIndex = (ExperimentStage == 1 || ExperimentStage == 3) ? ExperimentFreshStartIndex : 0;
+            size_t endIndex = ExperimentPortionIds.size();
+            if (beginIndex >= endIndex) {
+                beginIndex = 0;
+            }
+
+            ExperimentRandomState = ExperimentRandomState * 6364136223846793005ULL + 1;
+            const size_t randomIndex = beginIndex + (ExperimentRandomState % (endIndex - beginIndex));
+            const auto& [pathId, portionId] = ExperimentPortionIds[randomIndex];
+
+            PendingExperimentOperation.Active = true;
+            PendingExperimentOperation.FreshRange = (ExperimentStage == 1 || ExperimentStage == 3);
+            if (ExperimentStage <= 1) {
+                PendingExperimentOperation.UseIndexColumnsV2 = ((ExperimentIteration % 2) == 0);
+            } else {
+                PendingExperimentOperation.UseIndexColumnsV2 = (ExperimentIteration < operationsPerTableInStage);
+            }
+            PendingExperimentOperation.PathId = pathId;
+            PendingExperimentOperation.PortionId = portionId;
+            PendingExperimentOperation.Waits = 0;
+            PendingExperimentOperation.StartedAt = TMonotonic::Now();
+        }
+
+        bool ready = false;
+        if (PendingExperimentOperation.UseIndexColumnsV2) {
+            auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>()
+                              .Key(PendingExperimentOperation.PathId.GetRawValue(), PendingExperimentOperation.PortionId)
+                              .Select();
+            if (rowset.IsReady()) {
+                if (rowset.EndOfSet()) {
+                    return TConclusionStatus::Fail(TStringBuilder() << "Experiment: missing IndexColumnsV2 row for pathId="
+                                                                    << PendingExperimentOperation.PathId.GetRawValue() << " portionId="
+                                                                    << PendingExperimentOperation.PortionId);
+                }
+                Y_UNUSED(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());
+                ready = rowset.Next();
+            }
+        } else {
+            auto rowset = db.Table<NColumnShard::Schema::IndexPortions>()
+                              .Key(PendingExperimentOperation.PathId.GetRawValue(), PendingExperimentOperation.PortionId)
+                              .Select();
+            if (rowset.IsReady()) {
+                if (rowset.EndOfSet()) {
+                    return TConclusionStatus::Fail(TStringBuilder() << "Experiment: missing IndexPortions row for pathId="
+                                                                    << PendingExperimentOperation.PathId.GetRawValue() << " portionId="
+                                                                    << PendingExperimentOperation.PortionId);
+                }
+                Y_UNUSED(rowset.GetValue<NColumnShard::Schema::IndexPortions::PathId>());
+                ready = rowset.Next();
+            }
+        }
+
+        if (!ready) {
+            ++PendingExperimentOperation.Waits;
+            return TConclusionStatus::Fail("Experiment: selected key is not ready");
+        }
+
+        const ui64 latencyMicros = (TMonotonic::Now() - PendingExperimentOperation.StartedAt).MicroSeconds();
+        TExperimentMetrics* metrics = nullptr;
+        if (ExperimentStage == 0) {
+            metrics = PendingExperimentOperation.UseIndexColumnsV2 ? &AllRowsColumnsMetrics : &AllRowsPortionsMetrics;
+        } else if (ExperimentStage == 1) {
+            metrics = PendingExperimentOperation.UseIndexColumnsV2 ? &FreshRowsColumnsMetrics : &FreshRowsPortionsMetrics;
+        } else if (ExperimentStage == 2) {
+            metrics =
+                PendingExperimentOperation.UseIndexColumnsV2 ? &AllRowsColumnsSequentialMetrics : &AllRowsPortionsSequentialMetrics;
+        } else {
+            metrics = PendingExperimentOperation.UseIndexColumnsV2 ? &FreshRowsColumnsSequentialMetrics
+                                                                    : &FreshRowsPortionsSequentialMetrics;
+        }
+        metrics->LatencyMicros.emplace_back(latencyMicros);
+        metrics->Waits.emplace_back(PendingExperimentOperation.Waits);
+
+        PendingExperimentOperation.Active = false;
+        ++ExperimentIteration;
+    }
+
+    ExperimentFinished = true;
+    return TConclusionStatus::Success();
+}
+
+void TLeakedBlobsNormalizer::PrintExperimentResult() const {
+    auto printMetrics = [&](const TString& scenario, const TString& table, const TExperimentMetrics& metrics) {
+        const auto waitsAsUi64 = ConvertToUi64(metrics.Waits);
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "event", "experiment_result")("scenario", scenario)("table", table)("samples", metrics.LatencyMicros.size())(
+            "latency_us_p50", CalcPercentile(metrics.LatencyMicros, 50))("latency_us_p90", CalcPercentile(metrics.LatencyMicros, 90))(
+            "latency_us_p95", CalcPercentile(metrics.LatencyMicros, 95))("latency_us_p99", CalcPercentile(metrics.LatencyMicros, 99))(
+            "latency_us_p100", CalcPercentile(metrics.LatencyMicros, 100))("waits_p50", CalcPercentile(waitsAsUi64, 50))(
+            "waits_p90", CalcPercentile(waitsAsUi64, 90))("waits_p95", CalcPercentile(waitsAsUi64, 95))(
+            "waits_p99", CalcPercentile(waitsAsUi64, 99))("waits_p100", CalcPercentile(waitsAsUi64, 100));
+    };
+
+    printMetrics("all_rows_random", "IndexColumnsV2", AllRowsColumnsMetrics);
+    printMetrics("all_rows_random", "IndexPortions", AllRowsPortionsMetrics);
+    printMetrics("fresh_window_random", "IndexColumnsV2", FreshRowsColumnsMetrics);
+    printMetrics("fresh_window_random", "IndexPortions", FreshRowsPortionsMetrics);
+    printMetrics("all_rows_random_columns_then_portions", "IndexColumnsV2", AllRowsColumnsSequentialMetrics);
+    printMetrics("all_rows_random_columns_then_portions", "IndexPortions", AllRowsPortionsSequentialMetrics);
+    printMetrics("fresh_rows_random_columns_then_portions", "IndexColumnsV2", FreshRowsColumnsSequentialMetrics);
+    printMetrics("fresh_rows_random_columns_then_portions", "IndexPortions", FreshRowsPortionsSequentialMetrics);
+}
+
+}   // namespace NKikimr::NOlap
+#include "leaked_blobs.h"
+
+#include <contrib/ydb/core/keyvalue/keyvalue_const.h>
+#include <contrib/ydb/core/tx/columnshard/columnshard_schema.h>
+#include <contrib/ydb/core/tx/columnshard/common/path_id.h>
+#include <contrib/ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <contrib/ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <contrib/ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
+#include <contrib/ydb/core/tx/columnshard/tables_manager.h>
+#include <contrib/ydb/core/tablet_flat/flat_database.h>
+
+#include <contrib/ydb/library/actors/core/actor.h>
+
+#include <util/string/cast.h>
+#include <util/string/split.h>
+#include <util/string/vector.h>
+
+#include <algorithm>
+#include <array>
 
 namespace NKikimr::NOlap {
 
@@ -19,13 +318,18 @@ private:
     THashSet<TLogoBlobID> Leaks;
     const ui64 TabletId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
+    const bool PrintLeakedBlobIds;
+    const NActors::NLog::EPriority LogLevel;
     ui64 LeakeadBlobsSize;
 
 public:
-    TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, NColumnShard::TBlobGroupSelector dsGroupSelector)
+    TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, NColumnShard::TBlobGroupSelector dsGroupSelector,
+        const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Leaks(std::move(leaks))
         , TabletId(tabletId)
-        , DsGroupSelector(dsGroupSelector) {
+        , DsGroupSelector(dsGroupSelector)
+        , PrintLeakedBlobIds(printLeakedBlobIds)
+        , LogLevel(logLevel) {
         LeakeadBlobsSize = 0;
         for (const auto& blob : Leaks) {
             LeakeadBlobsSize += blob.BlobSize();
@@ -36,31 +340,44 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Leaks) {
             TUnifiedBlobId blobId(DsGroupSelector.GetGroup(i), i);
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")("blob_id", blobId.ToStringLegacy());
             db.Table<NColumnShard::Schema::BlobsToDeleteWT>().Key(blobId.ToStringLegacy(), TabletId).Update();
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")("removed_blobs", Leaks.size());
 
         return true;
     }
 
     void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)(
+            "normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("event", "apply_on_complete")("changes", DebugStringImpl(PrintLeakedBlobIds));
     }
 
     ui64 GetSize() const override {
         return Leaks.size();
     }
 
-    TString DebugString() const override {
+    TString DebugStringImpl(bool printLeakedBlobIds) const {
         TStringBuilder sb;
         sb << "tablet=" << TabletId;
         sb << ";leaked_blob_count=" << Leaks.size();
         sb << ";leaked_blobs_size=" << LeakeadBlobsSize;
-        auto blobSampleEnd = Leaks.begin();
-        for (ui64 i = 0; i < 10 && blobSampleEnd != Leaks.end(); ++i, ++blobSampleEnd) {
+        if (printLeakedBlobIds) {
+            sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), Leaks.end(), ",") << "]";
+        } else {
+            auto blobSampleEnd = Leaks.begin();
+            for (ui64 i = 0; i < 10 && blobSampleEnd != Leaks.end(); ++i, ++blobSampleEnd) {
+            }
+            sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), blobSampleEnd, ",");
+            if (blobSampleEnd != Leaks.end()) {
+                sb << ",...";
+            }
+            sb << "]";
         }
-        sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), blobSampleEnd, ",") << "]";
         return sb;
+    }
+
+    TString DebugString() const override {
+        // we do not want to print millions of blob ids twice, see ApplyOnComplete
+        return DebugStringImpl(false);
     }
 };
 
@@ -71,6 +388,8 @@ private:
     THashSet<TLogoBlobID> BSBlobIds;
     TActorId CSActorId;
     ui64 CSTabletId;
+    bool PrintLeakedBlobIds = false;
+    NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
     i32 WaitingCount = 0;
     THashSet<ui32> WaitingRequests;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
@@ -79,24 +398,32 @@ private:
         if (WaitingCount) {
             return;
         }
-        AFL_VERIFY(CSBlobIds.size() <= BSBlobIds.size())("cs", CSBlobIds.size())("bs", BSBlobIds.size())(
-                                         "error", "have to use broken blobs repair");
+        AFL_VERIFY(CSBlobIds.size() <= BSBlobIds.size())("cs", CSBlobIds.size())("bs", BSBlobIds.size())("error", "have to use broken blobs repair");
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
         }
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "event", "found leaked blobs")("leaked_blobs_count", BSBlobIds.size());
         TActorContext::AsActorContext().Send(
-            CSActorId, std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
-                           std::make_shared<TLeakedBlobsNormalizerChanges>(std::move(BSBlobIds), CSTabletId, DsGroupSelector)));
+            CSActorId, 
+            std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
+                std::make_shared<TLeakedBlobsNormalizerChanges>(
+                    std::move(BSBlobIds), CSTabletId, DsGroupSelector, PrintLeakedBlobIds, LogLevel
+                )
+            )
+        );
         PassAway();
     }
 
 public:
     TRemoveLeakedBlobsActor(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, TActorId csActorId, ui64 csTabletId,
-        const NColumnShard::TBlobGroupSelector& dsGroupSelector)
+        const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIds(std::move(csBlobIDs))
         , CSActorId(csActorId)
         , CSTabletId(csTabletId)
+        , PrintLeakedBlobIds(printLeakedBlobIds)
+        , LogLevel(logLevel)
         , DsGroupSelector(dsGroupSelector) {
     }
 
@@ -147,19 +474,24 @@ class TRemoveLeakedBlobsTask: public INormalizerTask {
     ui64 TabletId;
     TActorId ActorId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
+    bool PrintLeakedBlobIds = false;
+    NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
 public:
     TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, ui64 tabletId, TActorId actorId,
-        const NColumnShard::TBlobGroupSelector& dsGroupSelector)
+        const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIDs(std::move(csBlobIDs))
         , TabletId(tabletId)
         , ActorId(actorId)
-        , DsGroupSelector(dsGroupSelector) {
+        , DsGroupSelector(dsGroupSelector)
+        , PrintLeakedBlobIds(printLeakedBlobIds)
+        , LogLevel(logLevel) {
     }
     void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
         NActors::TActivationContext::Register(
-            new TRemoveLeakedBlobsActor(std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, DsGroupSelector));
+            new TRemoveLeakedBlobsActor(
+                std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
     }
 };
 
@@ -172,121 +504,473 @@ TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::T
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
+    ReadParamsFromDescription();
+    ++NumberOfRestarts;
+    if (NumberOfRestarts % 10 == 0) {
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "event", "experiment_progress")("number_of_restarts", NumberOfRestarts)("initialized", ExperimentInitialized)(
+            "stage", ExperimentStage)("iteration", ExperimentIteration)("fresh_start_index", ExperimentFreshStartIndex)(
+            "portion_ids_count", ExperimentPortionIds.size())("requests_per_table_per_stage", RequestsPerTablePerStage)(
+            "pending_path_id", PendingExperimentOperation.PathId.GetRawValue())(
+            "pending_portion_id", PendingExperimentOperation.PortionId)(
+            "pending_table", PendingExperimentOperation.UseIndexColumnsV2 ? "IndexColumnsV2" : "IndexPortions")(
+            "pending_waits", PendingExperimentOperation.Waits);
+    }
     AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
     NIceDb::TNiceDb db(txc.DB);
-    const bool ready = (int)Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme()) &
-                       (int)Schema::Precharge<Schema::IndexColumnsV2>(db, txc.DB.GetScheme()) &
-                       (int)Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme()) &
-                       (int)Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme());
-    if (!ready) {
-        return TConclusionStatus::Fail("Not ready");
-    }
 
     NColumnShard::TTablesManager tablesManager(
         controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId);
-
     if (!tablesManager.InitFromDB(db, nullptr)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
-
     if (!tablesManager.HasPrimaryIndex()) {
         return std::vector<INormalizerTask::TPtr>{};
     }
 
-    THashSet<TLogoBlobID> csBlobIDs;
-    auto conclusion = LoadPortionBlobIds(tablesManager, db, csBlobIDs);
+    auto conclusion = DoExperiment(db);
     if (conclusion.IsFail()) {
         return conclusion;
     }
-
-    return std::vector<INormalizerTask::TPtr>{ std::make_shared<TRemoveLeakedBlobsTask>(
-        std::move(Channels), std::move(csBlobIDs), TabletId, TabletActorId, DsGroupSelector) };
+    PrintExperimentResult();
+    return std::vector<INormalizerTask::TPtr>{}; 
 }
+
 
 TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
-    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashSet<TLogoBlobID>& result) {
-    TDbWrapper wrapper(db.GetDatabase(), &DsGroupSelector);
-    if (Portions.empty()) {
-        THashMap<ui64, std::unique_ptr<TPortionInfoConstructor>> portionsLocal;
-        if (!wrapper.LoadPortions(
-                {}, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                    const TIndexInfo& indexInfo =
-                        portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
-                    AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
-                    const ui64 portionId = portion->GetPortionIdVerified();
-                    AFL_VERIFY(portionsLocal.emplace(portionId, std::move(portion)).second);
-                })) {
-            return TConclusionStatus::Fail("repeated read db");
+    TDbWrapper& wrapper, 
+    const TVersionedIndex& versionedIndex
+) {
+    while (!BatchCursor.IsFinished()) {
+        TConclusionStatus conclusion = TConclusionStatus::Success();
+        switch (BatchCursor.GetStep()) {
+            case TProcessPortionsStep::Portions:
+                conclusion = LoadPortions(wrapper, versionedIndex);
+                break;
+            case TProcessPortionsStep::Indices:
+                conclusion = LoadIndices(wrapper);
+                break;
+            case TProcessPortionsStep::Columns:
+                conclusion = LoadColumns(wrapper);
+                break;
+            case TProcessPortionsStep::Finished:
+                AFL_VERIFY(false)("error", "finished step");
         }
-        Portions = std::move(portionsLocal);
-    }
-    if (Records.empty()) {
-        THashMap<ui64, TColumnChunkLoadContextV2::TBuildInfo> recordsLocal;
-        if (!wrapper.LoadColumns(std::nullopt, [&](TColumnChunkLoadContextV2&& chunk) {
-                const ui64 portionId = chunk.GetPortionId();
-                AFL_VERIFY(recordsLocal.emplace(portionId, chunk.CreateBuildInfo()).second);
-            })) {
-            return TConclusionStatus::Fail("repeated read db");
-        }
-        Records = std::move(recordsLocal);
-    }
-    if (Indexes.empty()) {
-        THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesLocal;
-        if (!wrapper.LoadIndexes(
-                std::nullopt, [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
-                    const ui64 portionId = indexChunk.GetPortionId();
-                    indexesLocal[portionId].emplace_back(std::move(indexChunk));
-                })) {
-            return TConclusionStatus::Fail("repeated read db");
-        }
-        Indexes = std::move(indexesLocal);
-    }
-    if (BlobsToDelete.empty()) {
-        THashSet<TUnifiedBlobId> blobsToDelete;
-        auto rowset = db.Table<NColumnShard::Schema::BlobsToDeleteWT>().Select();
-        if (!rowset.IsReady()) {
-            return TConclusionStatus::Fail("Not ready: BlobsToDeleteWT");
-        }
-        while (!rowset.EndOfSet()) {
-            const TString& blobIdStr = rowset.GetValue<NColumnShard::Schema::BlobsToDeleteWT::BlobId>();
-            TString error;
-            TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(blobIdStr, &DsGroupSelector, error);
-            AFL_VERIFY(blobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-            blobsToDelete.emplace(blobId);
-            if (!rowset.Next()) {
-                return TConclusionStatus::Fail("Local table is not loaded: BlobsToDeleteWT");
-            }
-        }
-        BlobsToDelete = std::move(blobsToDelete);
-    }
-    AFL_VERIFY(Portions.size() == Records.size())("portions", Portions.size())("records", Records.size());
-    THashSet<TLogoBlobID> resultLocal;
-    for (auto&& i : Portions) {
-        auto itRecords = Records.find(i.first);
-        AFL_VERIFY(itRecords != Records.end());
-        auto itIndexes = Indexes.find(i.first);
-        std::vector<TIndexChunkLoadContext> indexes;
-        if (itIndexes != Indexes.end()) {
-            indexes = std::move(itIndexes->second);
-        }
-        std::shared_ptr<TPortionDataAccessor> accessor =
-            TPortionAccessorConstructor::BuildForLoading(i.second->Build(), std::move(itRecords->second), std::move(indexes));
-        THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-        accessor->FillBlobIdsByStorage(blobIdsByStorage, tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex());
-        auto it = blobIdsByStorage.find(NBlobOperations::TGlobal::DefaultStorageId);
-        if (it == blobIdsByStorage.end()) {
-            continue;
-        }
-        for (auto&& c : it->second) {
-            resultLocal.emplace(c.GetLogoBlobId());
-        }
-        for (const auto& c : BlobsToDelete) {
-            resultLocal.emplace(c.GetLogoBlobId());
+        if (conclusion.IsFail()) {
+            return conclusion;
         }
     }
-    std::swap(resultLocal, result);
     return TConclusionStatus::Success();
 }
+
+TConclusionStatus TLeakedBlobsNormalizer::LoadPortions(
+    TDbWrapper& wrapper,
+    const TVersionedIndex& versionedIndex
+) {
+    auto allProcessed = wrapper.LoadPortions(
+        [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+            auto schema = portion->GetSchema(versionedIndex);
+            auto portionTier = metaProto.GetTierName();
+            auto howToProcessPortion = DefineHowToProcessPortion(portionTier, schema);
+            if (howToProcessPortion != THowToProcessPortion::Skip) {
+                BatchCursor.AddPortion(portion->GetPathId(), portion->GetPortionIdVerified(), schema, portionTier, howToProcessPortion == THowToProcessPortion::All);
+            }
+
+            BatchCursor.OnPortionLoaded(portion->GetPathId(), portion->GetPortionIdVerified());
+            Stats.OnPortionLoaded(howToProcessPortion);
+            return !BatchCursor.IsFull();
+        },
+        BatchCursor.GetNextLoadPortionKey().first, 
+        BatchCursor.GetNextLoadPortionKey().second
+    );
+    if (allProcessed) {
+        BatchCursor.NoMorePortions();
+    }
+    if (BatchCursor.IsFull() || allProcessed) {
+        BatchCursor.NextStep();
+        return TConclusionStatus::Success();
+    } else {
+        Stats.OnStoppedOnPortions();
+        return TConclusionStatus::Fail("LoadPortions: Portions are not ready yet");
+    }
+}
+
+TConclusionStatus TLeakedBlobsNormalizer::LoadIndices(TDbWrapper& wrapper) {
+    auto allProcessed = wrapper.LoadIndexes(
+        [&](const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&& indexChunk) {
+            Stats.OnIndexLoaded();
+            BatchCursor.MoveCurrentPortionTo(pathId, portionId);
+            if (BatchCursor.NeedToSkip(pathId, portionId)) {
+                return;
+            }
+            TPortionToProcess& portion = BatchCursor.GetCurrentPortion();
+            
+            if (portion.IsInDefaultStorage(indexChunk.GetEntityId())) {
+                if (indexChunk.GetBlobRangeAddress()) {
+                    Result.emplace(indexChunk.GetBlobRangeAddress()->GetBlobId().GetLogoBlobId());
+                    Stats.OnIndexHasItsOwnBlob();
+                } else if (indexChunk.GetBlobRangeLink16()) {
+                    // if the portion is in default storage, we will take all its column blobs anyway
+                    // so no need to add index idxs for checking
+                    if (!portion.IsInDefaultStorage()) {
+                        portion.AddDeferredIndexBlobIdx(indexChunk.GetBlobRangeLink16()->GetBlobIdxVerified());
+                    }
+                    Stats.OnIndexNeedColumnV2();
+                } else {
+                    Stats.OnIndexInplaced();
+                }
+            } else {
+                Stats.OnIndexInForeignStorage();
+            }
+            return;
+        },
+        BatchCursor.StartPathId(),
+        BatchCursor.StartPortionId(),
+        BatchCursor.EndPathId(),
+        BatchCursor.EndPortionId()
+    );
+
+    if (allProcessed) {
+        BatchCursor.NextStep();
+        return TConclusionStatus::Success();
+    } else {
+        Stats.OnStoppedOnIndices();
+        return TConclusionStatus::Fail("LoadIndexes: Indexes are not ready yet");
+    }
+}
+
+TConclusionStatus TLeakedBlobsNormalizer::LoadColumns(TDbWrapper& wrapper) {
+    auto allProcessed = wrapper.LoadColumns(
+        [&](TColumnChunkLoadContextV2&& columnChunk) {
+            Stats.OnColumnLoaded();
+            const auto pathId = columnChunk.GetPathId();
+            const auto portionId = columnChunk.GetPortionId();
+            BatchCursor.MoveCurrentPortionTo(pathId, portionId);
+            if (BatchCursor.NeedToSkip(pathId, portionId)) {
+                return;
+            }
+            TPortionToProcess& portion = BatchCursor.GetCurrentPortion();
+            const auto& blobIds = columnChunk.GetBlobIds();
+            if (!portion.GetDeferredIndexBlobIdxs().empty()) {
+                for (auto& idx : portion.GetDeferredIndexBlobIdxs()) {
+                    AFL_VERIFY(idx < blobIds.size())("idx", idx)("blob_ids_size", blobIds.size())("path_id", portion.GetPathId())("portion_id", portion.GetPortionId());
+                    Result.emplace(blobIds[idx].GetLogoBlobId());
+                }
+            } else {
+                for (auto& blobId : blobIds) {
+                    Result.emplace(blobId.GetLogoBlobId());
+                }
+            }
+        },
+        BatchCursor.StartPathId(),
+        BatchCursor.StartPortionId(),
+        BatchCursor.EndPathId(),
+        BatchCursor.EndPortionId()
+    );
+
+    if (allProcessed) {
+        BatchCursor.NextStep();
+        return TConclusionStatus::Success();
+    } else {
+        Stats.OnStoppedOnColumns();
+        return TConclusionStatus::Fail("LoadColumns: Columns are not ready yet");
+    }
+}
+
+TConclusionStatus TLeakedBlobsNormalizer::LoadBlobsToDelete(NIceDb::TNiceDb& db) {
+    auto rowset = db.Table<NColumnShard::Schema::BlobsToDeleteWT>().Select();
+    if (!rowset.IsReady()) {
+        Stats.OnStoppedOnBlobsToDelete();
+        return TConclusionStatus::Fail("Not ready: BlobsToDeleteWT");
+    }
+    while (!rowset.EndOfSet()) {
+        Stats.OnBlobsToDeleteLoaded();
+        const TString& blobIdStr = rowset.GetValue<NColumnShard::Schema::BlobsToDeleteWT::BlobId>();
+        TString error;
+        TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(blobIdStr, &DsGroupSelector, error);
+        AFL_VERIFY(blobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+        Result.emplace(blobId.GetLogoBlobId());
+        if (!rowset.Next()) {
+            Stats.OnStoppedOnBlobsToDelete();
+            return TConclusionStatus::Fail("Local table is not loaded: BlobsToDeleteWT");
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+THowToProcessPortion TLeakedBlobsNormalizer::DefineHowToProcessPortion(
+    const TString& portionTier,
+    const ISnapshotSchema::TPtr& schema
+) const {
+    const TString& effectiveTier = portionTier.empty() ? NBlobOperations::TGlobal::DefaultStorageId : portionTier;
+    const TIndexInfo& indexInfo = schema->GetIndexInfo();
+    if (effectiveTier == NBlobOperations::TGlobal::DefaultStorageId) {
+        return THowToProcessPortion::All;
+    }
+    for (auto&& entityId : indexInfo.GetEntityIds()) {
+        auto entityStorageId = indexInfo.GetEntityStorageId(entityId, effectiveTier);
+        if (entityStorageId == NBlobOperations::TGlobal::DefaultStorageId) {
+            return THowToProcessPortion::OnlyIndices;
+        }
+    }
+    return THowToProcessPortion::Skip;
+}
+
+namespace {
+bool TryParseLogPriority(const TStringBuf value, NActors::NLog::EPriority& out) {
+    TString normalized(value);
+    normalized.to_upper();
+    static const std::array<NActors::NLog::EPriority, 9> priorities = {
+        NActors::NLog::PRI_TRACE,
+        NActors::NLog::PRI_DEBUG,
+        NActors::NLog::PRI_INFO,
+        NActors::NLog::PRI_NOTICE,
+        NActors::NLog::PRI_WARN,
+        NActors::NLog::PRI_ERROR,
+        NActors::NLog::PRI_CRIT,
+        NActors::NLog::PRI_ALERT,
+        NActors::NLog::PRI_EMERG
+    };
+    for (const auto priority : priorities) {
+        if (normalized == NActors::NLog::PriorityToString(NActors::NLog::EPrio(priority))) {
+            out = priority;
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
+void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
+    if (ParamsInitialized) {
+        return;
+    }
+    ParamsInitialized = true;
+
+    const TString& description = GetUniqueDescription();
+
+    TVector<TStringBuf> tokens;
+    StringSplitter(description).Split(';').SkipEmpty().Collect(&tokens);
+    for (ui32 i = 1; i < tokens.size(); ++i) {
+        const TStringBuf token = tokens[i];
+        const size_t eqPos = token.find('=');
+        AFL_VERIFY(eqPos != TStringBuf::npos)("error", "invalid param format, expected key=value")("token", token)("description", description);
+
+        const TStringBuf key = token.SubStr(0, eqPos);
+        const TStringBuf value = token.SubStr(eqPos + 1);
+        if (key == "batch_size") {
+            const auto parsed = TryFromString<size_t>(TString(value));
+            AFL_VERIFY(parsed.Defined())("error", "cannot parse batch_size")("value", TString(value))("description", description);
+            AFL_VERIFY(*parsed > 0)("error", "batch_size has to be > 0")("value", *parsed)("description", description);
+            BatchSize = *parsed;
+        } else if (key == "requests_per_table_per_stage") {
+            const auto parsed = TryFromString<size_t>(TString(value));
+            AFL_VERIFY(parsed.Defined())("error", "cannot parse requests_per_table_per_stage")("value", TString(value))("description", description);
+            AFL_VERIFY(*parsed > 0)("error", "requests_per_table_per_stage has to be > 0")("value", *parsed)("description", description);
+            RequestsPerTablePerStage = *parsed;
+        } else if (key == "fresh_portions_window") {
+            const auto parsed = TryFromString<size_t>(TString(value));
+            AFL_VERIFY(parsed.Defined())("error", "cannot parse fresh_portions_window")("value", TString(value))("description", description);
+            AFL_VERIFY(*parsed > 0)("error", "fresh_portions_window has to be > 0")("value", *parsed)("description", description);
+            FreshPortionsWindow = *parsed;
+        } else if (key == "print_leaked_blob_ids") {
+            if (value == "true") {
+                PrintLeakedBlobIds = true;
+            } else if (value == "false") {
+                PrintLeakedBlobIds = false;
+            } else {
+                AFL_VERIFY(false)("error", "cannot parse print_leaked_blob_ids")("value", TString(value))("description", description);
+            }
+        } else if (key == "log_level") {
+            NActors::NLog::EPriority parsedPriority = NActors::NLog::PRI_WARN;
+            AFL_VERIFY(TryParseLogPriority(value, parsedPriority))(
+                "error", "cannot parse log_level")("value", TString(value))("description", description);
+            LogLevel = parsedPriority;
+        } else {
+            AFL_VERIFY(false)("error", "unknown param key")("key", key)("description", description);
+        }
+    }
+
+    BatchCursor = TBatchCursor(BatchSize);
+    Stats.SetLogLevel(LogLevel);
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+        "batch_size", BatchSize)("fresh_portions_window", FreshPortionsWindow)(
+        "requests_per_table_per_stage", RequestsPerTablePerStage)("print_leaked_blob_ids", PrintLeakedBlobIds)(
+        "log_level", static_cast<ui32>(LogLevel));
+}
+
+void TLeakedBlobsStats::PrintToLog() const {
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("event", "stats")("stopped_on_portions", StoppedOnPortions)("stopped_on_indices", StoppedOnIndices)("stopped_on_columns", StoppedOnColumns)("stopped_on_blobs_to_delete", StoppedOnBlobsToDelete)("portions_loaded", PortionsLoaded)("portions_skipped", PortionsSkipped)("portions_only_indices_in_bs", PortionsOnlyIndicesInBs)("portions_in_bs", PortionsInBs)("indices_loaded", IndicesLoaded)("indices_inplaced", IndicesInplaced)("indices_in_foreign_storage", IndicesInForeignStorage)("indices_need_column_v2", IndicesNeedColumnV2)("indices_have_its_own_blob", IndicesHaveItsOwnBlob)("columns_loaded", ColumnsLoaded)("blobs_to_delete_loaded", BlobsToDeleteLoaded)("completed", Completed);
+}
+
+namespace {
+ui64 CalcPercentile(TVector<ui64> values, const ui32 percentile) {
+    if (values.empty()) {
+        return 0;
+    }
+    std::sort(values.begin(), values.end());
+    const size_t idx = (values.size() * percentile + 99) / 100 - 1;
+    return values[idx];
+}
+
+TVector<ui64> ConvertToUi64(const TVector<ui32>& values) {
+    TVector<ui64> result;
+    result.reserve(values.size());
+    for (const ui32 v : values) {
+        result.emplace_back(v);
+    }
+    return result;
+}
+
+}
+
+TConclusionStatus TLeakedBlobsNormalizer::DoExperiment(NIceDb::TNiceDb& db) {
+    const size_t operationsPerTableInStage = RequestsPerTablePerStage;
+    const size_t operationsPerStage = operationsPerTableInStage * 2;
+
+    if (ExperimentFinished) {
+        return TConclusionStatus::Success();
+    }
+
+    if (!ExperimentInitialized) {
+        auto rowset = db.Table<NColumnShard::Schema::IndexPortions>().Select();
+        if (!rowset.IsReady()) {
+            return TConclusionStatus::Fail("Experiment: IndexPortions is not ready");
+        }
+
+        TVector<std::pair<TInternalPathId, ui64>> portionIds;
+        while (!rowset.EndOfSet()) {
+            const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexPortions::PathId>());
+            const auto portionId = rowset.GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
+            portionIds.emplace_back(pathId, portionId);
+            if (!rowset.Next()) {
+                return TConclusionStatus::Fail("Experiment: IndexPortions is not fully loaded");
+            }
+        }
+
+        ExperimentPortionIds = std::move(portionIds);
+        ExperimentFreshStartIndex =
+            ExperimentPortionIds.size() > FreshPortionsWindow ? ExperimentPortionIds.size() - FreshPortionsWindow : 0;
+        ExperimentInitialized = true;
+    }
+
+    while (ExperimentStage < 4) {
+        if (ExperimentIteration >= operationsPerStage) {
+            ++ExperimentStage;
+            ExperimentIteration = 0;
+            PendingExperimentOperation.Active = false;
+            continue;
+        }
+
+        if (ExperimentPortionIds.empty()) {
+            ExperimentStage = 4;
+            break;
+        }
+
+        if (!PendingExperimentOperation.Active) {
+            size_t beginIndex = (ExperimentStage == 1 || ExperimentStage == 3) ? ExperimentFreshStartIndex : 0;
+            size_t endIndex = ExperimentPortionIds.size();
+            if (beginIndex >= endIndex) {
+                beginIndex = 0;
+            }
+
+            ExperimentRandomState = ExperimentRandomState * 6364136223846793005ULL + 1;
+            const size_t randomIndex = beginIndex + (ExperimentRandomState % (endIndex - beginIndex));
+            const auto& [pathId, portionId] = ExperimentPortionIds[randomIndex];
+
+            PendingExperimentOperation.Active = true;
+            PendingExperimentOperation.FreshRange = (ExperimentStage == 1 || ExperimentStage == 3);
+            if (ExperimentStage <= 1) {
+                PendingExperimentOperation.UseIndexColumnsV2 = ((ExperimentIteration % 2) == 0);
+            } else {
+                PendingExperimentOperation.UseIndexColumnsV2 = (ExperimentIteration < operationsPerTableInStage);
+            }
+            PendingExperimentOperation.PathId = pathId;
+            PendingExperimentOperation.PortionId = portionId;
+            PendingExperimentOperation.Waits = 0;
+            PendingExperimentOperation.StartedAt = TMonotonic::Now();
+        }
+
+        bool ready = false;
+        if (PendingExperimentOperation.UseIndexColumnsV2) {
+            auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>()
+                              .Key(PendingExperimentOperation.PathId.GetRawValue(), PendingExperimentOperation.PortionId)
+                              .Select();
+            if (rowset.IsReady()) {
+                if (rowset.EndOfSet()) {
+                    return TConclusionStatus::Fail(TStringBuilder() << "Experiment: missing IndexColumnsV2 row for pathId="
+                                                                    << PendingExperimentOperation.PathId.GetRawValue() << " portionId="
+                                                                    << PendingExperimentOperation.PortionId);
+                }
+                Y_UNUSED(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());
+                ready = rowset.Next();
+            }
+        } else {
+            auto rowset = db.Table<NColumnShard::Schema::IndexPortions>()
+                              .Key(PendingExperimentOperation.PathId.GetRawValue(), PendingExperimentOperation.PortionId)
+                              .Select();
+            if (rowset.IsReady()) {
+                if (rowset.EndOfSet()) {
+                    return TConclusionStatus::Fail(TStringBuilder() << "Experiment: missing IndexPortions row for pathId="
+                                                                    << PendingExperimentOperation.PathId.GetRawValue() << " portionId="
+                                                                    << PendingExperimentOperation.PortionId);
+                }
+                Y_UNUSED(rowset.GetValue<NColumnShard::Schema::IndexPortions::PathId>());
+                ready = rowset.Next();
+            }
+        }
+
+        if (!ready) {
+            ++PendingExperimentOperation.Waits;
+            return TConclusionStatus::Fail("Experiment: selected key is not ready");
+        }
+
+        const ui64 latencyMicros = (TMonotonic::Now() - PendingExperimentOperation.StartedAt).MicroSeconds();
+        TExperimentMetrics* metrics = nullptr;
+        if (ExperimentStage == 0) {
+            metrics = PendingExperimentOperation.UseIndexColumnsV2 ? &AllRowsColumnsMetrics : &AllRowsPortionsMetrics;
+        } else if (ExperimentStage == 1) {
+            metrics = PendingExperimentOperation.UseIndexColumnsV2 ? &FreshRowsColumnsMetrics : &FreshRowsPortionsMetrics;
+        } else if (ExperimentStage == 2) {
+            metrics =
+                PendingExperimentOperation.UseIndexColumnsV2 ? &AllRowsColumnsSequentialMetrics : &AllRowsPortionsSequentialMetrics;
+        } else {
+            metrics = PendingExperimentOperation.UseIndexColumnsV2 ? &FreshRowsColumnsSequentialMetrics
+                                                                    : &FreshRowsPortionsSequentialMetrics;
+        }
+        metrics->LatencyMicros.emplace_back(latencyMicros);
+        metrics->Waits.emplace_back(PendingExperimentOperation.Waits);
+
+        PendingExperimentOperation.Active = false;
+        ++ExperimentIteration;
+    }
+
+    ExperimentFinished = true;
+    return TConclusionStatus::Success();
+}
+
+void TLeakedBlobsNormalizer::PrintExperimentResult() const {
+    auto printMetrics = [&](const TString& scenario, const TString& table, const TExperimentMetrics& metrics) {
+        const auto waitsAsUi64 = ConvertToUi64(metrics.Waits);
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "event", "experiment_result")("scenario", scenario)("table", table)("samples", metrics.LatencyMicros.size())(
+            "latency_us_p50", CalcPercentile(metrics.LatencyMicros, 50))("latency_us_p90", CalcPercentile(metrics.LatencyMicros, 90))(
+            "latency_us_p95", CalcPercentile(metrics.LatencyMicros, 95))("latency_us_p99", CalcPercentile(metrics.LatencyMicros, 99))(
+            "latency_us_p100", CalcPercentile(metrics.LatencyMicros, 100))("waits_p50", CalcPercentile(waitsAsUi64, 50))(
+            "waits_p90", CalcPercentile(waitsAsUi64, 90))("waits_p95", CalcPercentile(waitsAsUi64, 95))(
+            "waits_p99", CalcPercentile(waitsAsUi64, 99))("waits_p100", CalcPercentile(waitsAsUi64, 100));
+    };
+
+    printMetrics("all_rows_random", "IndexColumnsV2", AllRowsColumnsMetrics);
+    printMetrics("all_rows_random", "IndexPortions", AllRowsPortionsMetrics);
+    printMetrics("fresh_window_random", "IndexColumnsV2", FreshRowsColumnsMetrics);
+    printMetrics("fresh_window_random", "IndexPortions", FreshRowsPortionsMetrics);
+    printMetrics("all_rows_random_columns_then_portions", "IndexColumnsV2", AllRowsColumnsSequentialMetrics);
+    printMetrics("all_rows_random_columns_then_portions", "IndexPortions", AllRowsPortionsSequentialMetrics);
+    printMetrics("fresh_rows_random_columns_then_portions", "IndexColumnsV2", FreshRowsColumnsSequentialMetrics);
+    printMetrics("fresh_rows_random_columns_then_portions", "IndexPortions", FreshRowsPortionsSequentialMetrics);
+}
+
 
 }   // namespace NKikimr::NOlap

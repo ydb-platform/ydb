@@ -1284,16 +1284,16 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 g
         Connected = true;
         LOG_D(LogPrefix << "CONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
     } else {
-        PeerActorId = sender;
-        PeerGenMajor.store(genMajor);
+        if (PeerActorId == sender && PeerGenMajor.load() == genMajor) {
+            LOG_D(LogPrefix << "RECONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
+        } else {
+            PeerActorId = sender;
+            PeerGenMajor.store(genMajor);
+            LOG_W(LogPrefix << "RECONNECTED, PeerActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
+        }
         PeerGenMinor.store(genMinor);
         ConfirmedSeqNo = seqNo;
         FailInputs(PeerActorId, PeerGenMajor.load());
-        if (PeerActorId == sender && PeerGenMajor.load() == genMajor) {
-            LOG_D(LogPrefix << "RECONNECTED, PeerActorId=" << sender << "PG=" << genMajor << '.' << genMinor);
-        } else {
-            LOG_W(LogPrefix << "RECONNECTED, PeerActorId=" << sender << "PG=" << genMajor << '.' << genMinor);
-        }
     }
 }
 
@@ -1408,7 +1408,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
     }
     ui64 inflightBytes = InflightBytes.load();
 
-    Y_ABORT_UNLESS(inflightBytes >= deltaBytes, "%s, inflightBytes=%d, deltaBytes=%d", LogPrefix.c_str(), inflightBytes, deltaBytes);
+    Y_ABORT_UNLESS(inflightBytes >= deltaBytes, "%s, inflightBytes=%" PRIu64 ", deltaBytes=%" PRIu64, LogPrefix.c_str(), inflightBytes, deltaBytes);
 
     while (inflightBytes - deltaBytes < Limits.RemoteSessionInflightBytes) {
         std::shared_ptr<TOutputDescriptor> waiter;
@@ -1859,7 +1859,7 @@ void TNodeState::DoReconciliation() {
     if (ReconciliationCount >= Limits.ReconciliationCount) {
         // give up and request destroy
         LOG_E(LogPrefix << "RECONCILIATION FAILURE x" << ReconciliationCount);
-        Terminating = true;
+        Terminating.store(true);
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
             new TEvPrivate::TEvFreeNodeSession(NodeId)));
         return;

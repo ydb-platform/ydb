@@ -46,6 +46,7 @@ jobs:
             echo "::group::automerge iteration ${iteration}"
             ./automerge.py || echo "::warning::automerge iteration ${iteration} failed with exit code $?"
             echo "::endgroup::"
-            (( SECONDS < end_time )) && sleep 300
+            remaining=$(( end_time - SECONDS ))
+            (( remaining > 0 )) && sleep $(( remaining < 300 ? remaining : 300 ))
             iteration=$(( iteration + 1 ))
           done

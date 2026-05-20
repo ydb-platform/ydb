@@ -105,6 +105,7 @@ class PrAutomerger:
                 return False
         finally:
             os.chdir(original_dir)
+            shutil.rmtree("merge-repo", ignore_errors=True)
 
     def merge_pr(self, pr: PullRequest):
         self.logger.info("start merge %s into %s", pr, pr.base.ref)

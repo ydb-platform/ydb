@@ -145,7 +145,9 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
     while (!rowset.EndOfSet()) {
         auto schemeShardLocalPathId = rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>();
-        auto serializedBackupTx = rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>();
+        const auto serializedBackupTx = rowset.HaveValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            ? rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            : TString{};
         if (serializedBackupTx) {
             NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
             if (backupTx.ParseFromString(serializedBackupTx)) {
@@ -166,7 +168,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme());
+    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme()) && Schema::Precharge<Schema::TableInfoV1>(db, txc.DB.GetScheme());
 }
 
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

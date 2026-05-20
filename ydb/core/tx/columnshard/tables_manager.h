@@ -205,6 +205,12 @@ public:
         pathInfo.IsReadOnly = isReadOnly;
     }
 
+    void SetLastCompletedBackupTransaction(const TSchemeShardLocalPathId& schemeShardLocalPathId, TString serializedBackupTx) {
+        auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        it->second.LastCompletedBackupTransaction = std::move(serializedBackupTx);
+    }
+
     void AddVersion(const NOlap::TSnapshot& snapshot) {
         Versions.insert(snapshot);
     }
@@ -582,6 +588,14 @@ public:
     bool InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info);
 
     const TTableInfo& GetTable(const TInternalPathId pathId, const bool withDeleted = false) const;
+
+    void SetLastCompletedBackupTransaction(const TSchemeShardLocalPathId schemeShardLocalPathId, TString serializedBackupTx) {
+        const auto internalPathId = ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
+        auto* table = Tables.FindPtr(internalPathId);
+        AFL_VERIFY(table);
+        table->SetLastCompletedBackupTransaction(schemeShardLocalPathId, std::move(serializedBackupTx));
+    }
+
     ui64 GetMemoryUsage() const;
     TInternalPathId GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
     THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(

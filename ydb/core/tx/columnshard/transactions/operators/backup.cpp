@@ -69,16 +69,17 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     NIceDb::TNiceDb db(txc.DB);
 
     const auto tableId = owner.TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
-    const ui64 schemeShardLocalPathIdValue = schemeShardLocalPathId.GetRawValue();
-    if (const auto* previousBackupTx = owner.LastCompletedBackupTransactions.FindPtr(schemeShardLocalPathIdValue)) {
+    if (const auto* previousBackupTx = owner.LastCompletedBackupTransactions.FindPtr(schemeShardLocalPathId)) {
         owner.LastCompletedBackupTransactionsByTxId.erase(previousBackupTx->GetTxId());
     }
-    owner.LastCompletedBackupTransactions[schemeShardLocalPathIdValue] = backupTx;
+    const TString serializedBackupTx = backupTx.SerializeAsString();
+    owner.LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
     owner.LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
+    owner.TablesManager.SetLastCompletedBackupTransaction(schemeShardLocalPathId, serializedBackupTx);
 
     db.Table<Schema::TableInfoV1>()
         .Key(tableId.GetRawValue(), schemeShardLocalPathId.GetRawValue())
-        .Update(NIceDb::TUpdate<Schema::TableInfoV1::LastCompletedBackupTransaction>(backupTx.SerializeAsString()));
+        .Update(NIceDb::TUpdate<Schema::TableInfoV1::LastCompletedBackupTransaction>(serializedBackupTx));
 
     return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext());
 }

@@ -4763,13 +4763,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
 }
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
-    Y_UNIT_TEST(Basic) {
+    Y_UNIT_TEST(JsonExists) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
-            ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.key'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))");
+        });
+    }
+
+    Y_UNIT_TEST(JsonValue) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Bool)");
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) == 10");
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) == -10");
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) != 10");
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) >= 10");
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) BETWEEN 10 AND 20");
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) NOT BETWEEN 10 AND 20");
+            ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) IN (1, 2, 3, 4)");
         });
     }
 

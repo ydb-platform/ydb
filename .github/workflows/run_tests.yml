@@ -37,19 +37,11 @@ on:
         required: false
         type: string
         default: ''
-<<<<<<< HEAD
-=======
-      blacklist_paths:
-        description: 'Newline-separated list of paths or patterns to blacklist; provide all required paths/patterns explicitly'
-        required: false
-        type: string
-        default: ''
       test_threads:
         description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false
         type: string
         default: '52'
->>>>>>> a7fe471a13f (ci: test threads param, fix orphan ydbd (#40742))
 
   workflow_dispatch:
     inputs:

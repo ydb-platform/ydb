@@ -209,7 +209,7 @@ public:
 
     virtual std::variant<TFmrError, TStatistics> SortedMerge(
         const TSortedMergeTaskParams& params,
-        const std::unordered_map<TFmrTableId, TClusterConnection>& /*clusterConnections*/,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
         std::shared_ptr<std::atomic<bool>> cancelFlag
     ) override {
         auto sortedMergeJobFunc = [&, cancelFlag] () -> TStatistics {
@@ -230,8 +230,10 @@ public:
             );
             TMaybe<TMutex> mutex = TMutex();
             std::vector<IBlockIterator::TPtr> blockIterators;
+            std::vector<NYT::TRawTableReaderPtr> ytReaders;
+
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
-                if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                if (const auto* fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
                     blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
                         fmrInput->TableId,
                         fmrInput->TableRanges,
@@ -247,12 +249,26 @@ public:
                         Settings_.FmrReaderSettings.ReadAheadChunks
                     ));
                 } else {
-                    throw TFmrNonRetryableJobException() << "YtTables unsupported inside SortedMerge task";
+                    const auto& ytTableTaskRef = std::get<TYtTableTaskRef>(inputTableRef);
+                    auto readers = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
+                    for (auto& reader : readers) {
+                        ytReaders.push_back(std::move(reader));
+                    }
                 }
             }
 
-            NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators);
-            ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+            YQL_ENSURE(blockIterators.empty() || ytReaders.empty(),
+                "SortedMerge task cannot mix FMR and YT table inputs");
+
+            if (!ytReaders.empty()) {
+                // Single YT table case: input is already sorted, read directly
+                for (auto& ytReader : ytReaders) {
+                    ParseRecords(ytReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+                }
+            } else {
+                NYT::TRawTableReaderPtr mergeReader = MakeIntrusive<TSortedMergeReader>(blockIterators);
+                ParseRecords(mergeReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
+            }
 
             tableDataServiceWriter->Flush();
             return TStatistics({{output, tableDataServiceWriter->GetStats()}});

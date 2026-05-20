@@ -222,6 +222,9 @@ private:
                             if (pdisk.HasEnforcedDynamicSlotSize()) {
                                 pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
                             }
+                            if (pdisk.HasSlotSizeInUnits()) {
+                                pm.SetSlotSizeInUnits(pdisk.GetSlotSizeInUnits());
+                            }
                             vm.SetAllocatedSize(0);
                             disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
                         }

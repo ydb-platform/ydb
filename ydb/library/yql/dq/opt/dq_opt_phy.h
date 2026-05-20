@@ -181,4 +181,11 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedOverStageInput(NNodes::TExprBas
 
 NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteStreamLookupJoin(NNodes::TExprBase node, TExprContext& ctx);
 
+NNodes::TExprBase DqPushWatermarkGeneratorToStage(
+    NNodes::TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap
+);
+
 } // namespace NYql::NDq

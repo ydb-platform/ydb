@@ -5,9 +5,9 @@
 namespace NKikimr::NMiniKQL {
 
 TWatermarkTracker::TWatermarkTracker(
-    ui64 delay,
+    ui64 lag,
     ui64 granularity)
-    : Delay_(delay)
+    : Delay_(lag)
     , Granularity_(granularity)
 {
     Y_ABORT_UNLESS(granularity > 0);

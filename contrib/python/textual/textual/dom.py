@@ -40,8 +40,8 @@ from textual.css._error_tools import friendly_list
 from textual.css.constants import VALID_DISPLAY, VALID_VISIBILITY
 from textual.css.errors import DeclarationError, StyleValueError
 from textual.css.match import match
-from textual.css.parse import parse_declarations, parse_selectors
-from textual.css.query import InvalidQueryFormat, NoMatches, TooManyMatches
+from textual.css.parse import is_id_selector, parse_declarations, parse_selectors
+from textual.css.query import InvalidQueryFormat, NoMatches, TooManyMatches, WrongType
 from textual.css.styles import RenderStyles, Styles
 from textual.css.tokenize import IDENTIFIER
 from textual.css.tokenizer import TokenError
@@ -49,7 +49,7 @@ from textual.message_pump import MessagePump
 from textual.reactive import Reactive, ReactiveError, _Mutated, _watch
 from textual.style import Style as VisualStyle
 from textual.timer import Timer
-from textual.walk import walk_breadth_first, walk_depth_first
+from textual.walk import walk_breadth_first, walk_breadth_search_id, walk_depth_first
 from textual.worker_manager import WorkerManager
 
 if TYPE_CHECKING:
@@ -64,9 +64,6 @@ if TYPE_CHECKING:
     from textual.screen import Screen
     from textual.widget import Widget
     from textual.worker import Worker, WorkType, ResultType
-
-    # Unused & ignored imports are needed for the docs to link to these objects:
-    from textual.css.query import WrongType  # type: ignore  # noqa: F401
 
 from typing_extensions import Literal
 
@@ -224,7 +221,7 @@ class DOMNode(MessagePump):
         self._has_hover_style: bool = False
         self._has_focus_within: bool = False
         self._has_order_style: bool = False
-        """The node has an ordered dependent pseudo-style (`:odd`, `:even`, `:first-of-type`, `:last-of-type`)"""
+        """The node has an ordered dependent pseudo-style (`:odd`, `:even`, `:first-of-type`, `:last-of-type`, `:first-child`, `:last-child`)"""
         self._has_odd_or_even: bool = False
         """The node has the pseudo class `odd` or `even`."""
         self._reactive_connect: (
@@ -234,6 +231,17 @@ class DOMNode(MessagePump):
         self._query_one_cache: LRUCache[QueryOneCacheKey, DOMNode] = LRUCache(1024)
 
         super().__init__()
+
+    def _get_dom_base(self) -> DOMNode:
+        """Get the DOM base node (typically self).
+
+        All DOM queries on this node will use the return value as the root node.
+        This method allows the App to query the default screen, and not the active screen.
+
+        Returns:
+            DOMNode.
+        """
+        return self
 
     def set_reactive(
         self, reactive: Reactive[ReactiveType], value: ReactiveType
@@ -399,6 +407,11 @@ class DOMNode(MessagePump):
             The node's children.
         """
         return self._nodes
+
+    @property
+    def is_empty(self) -> bool:
+        """Are there no displayed children?"""
+        return not any(child.display for child in self._nodes)
 
     def sort_children(
         self,
@@ -1380,10 +1393,11 @@ class DOMNode(MessagePump):
         from textual.css.query import DOMQuery, QueryType
         from textual.widget import Widget
 
+        node = self._get_dom_base()
         if isinstance(selector, str) or selector is None:
-            return DOMQuery[Widget](self, filter=selector)
+            return DOMQuery[Widget](node, filter=selector)
         else:
-            return DOMQuery[QueryType](self, filter=selector.__name__)
+            return DOMQuery[QueryType](node, filter=selector.__name__)
 
     if TYPE_CHECKING:
 
@@ -1411,10 +1425,11 @@ class DOMNode(MessagePump):
         from textual.css.query import DOMQuery, QueryType
         from textual.widget import Widget
 
+        node = self._get_dom_base()
         if isinstance(selector, str) or selector is None:
-            return DOMQuery[Widget](self, deep=False, filter=selector)
+            return DOMQuery[Widget](node, deep=False, filter=selector)
         else:
-            return DOMQuery[QueryType](self, deep=False, filter=selector.__name__)
+            return DOMQuery[QueryType](node, deep=False, filter=selector.__name__)
 
     if TYPE_CHECKING:
 
@@ -1449,10 +1464,30 @@ class DOMNode(MessagePump):
         """
         _rich_traceback_omit = True
 
+        base_node = self._get_dom_base()
+
         if isinstance(selector, str):
             query_selector = selector
         else:
             query_selector = selector.__name__
+
+        if is_id_selector(query_selector):
+            cache_key = (base_node._nodes._updates, query_selector, expect_type)
+            cached_result = base_node._query_one_cache.get(cache_key)
+            if cached_result is not None:
+                return cached_result
+            if (
+                node := walk_breadth_search_id(
+                    base_node, query_selector[1:], with_root=False
+                )
+            ) is not None:
+                if expect_type is not None and not isinstance(node, expect_type):
+                    raise WrongType(
+                        f"Node matching {query_selector!r} is the wrong type; expected type {expect_type.__name__!r}, found {node}"
+                    )
+                base_node._query_one_cache[cache_key] = node
+                return node
+            raise NoMatches(f"No nodes match {query_selector!r} on {base_node!r}")
 
         try:
             selector_set = parse_selectors(query_selector)
@@ -1462,23 +1497,25 @@ class DOMNode(MessagePump):
             ) from None
 
         if all(selectors.is_simple for selectors in selector_set):
-            cache_key = (self._nodes._updates, query_selector, expect_type)
-            cached_result = self._query_one_cache.get(cache_key)
+            cache_key = (base_node._nodes._updates, query_selector, expect_type)
+            cached_result = base_node._query_one_cache.get(cache_key)
             if cached_result is not None:
                 return cached_result
         else:
             cache_key = None
 
-        for node in walk_depth_first(self, with_root=False):
+        for node in walk_breadth_first(base_node, with_root=False):
             if not match(selector_set, node):
                 continue
             if expect_type is not None and not isinstance(node, expect_type):
-                continue
+                raise WrongType(
+                    f"Node matching {query_selector!r} is the wrong type; expected type {expect_type.__name__!r}, found {node}"
+                )
             if cache_key is not None:
-                self._query_one_cache[cache_key] = node
+                base_node._query_one_cache[cache_key] = node
             return node
 
-        raise NoMatches(f"No nodes match {selector!r} on {self!r}")
+        raise NoMatches(f"No nodes match {query_selector!r} on {base_node!r}")
 
     if TYPE_CHECKING:
 
@@ -1518,6 +1555,8 @@ class DOMNode(MessagePump):
         """
         _rich_traceback_omit = True
 
+        base_node = self._get_dom_base()
+
         if isinstance(selector, str):
             query_selector = selector
         else:
@@ -1531,32 +1570,32 @@ class DOMNode(MessagePump):
             ) from None
 
         if all(selectors.is_simple for selectors in selector_set):
-            cache_key = (self._nodes._updates, query_selector, expect_type)
-            cached_result = self._query_one_cache.get(cache_key)
+            cache_key = (base_node._nodes._updates, query_selector, expect_type)
+            cached_result = base_node._query_one_cache.get(cache_key)
             if cached_result is not None:
                 return cached_result
         else:
             cache_key = None
 
-        children = walk_depth_first(self, with_root=False)
+        children = walk_breadth_first(base_node, with_root=False)
         iter_children = iter(children)
         for node in iter_children:
             if not match(selector_set, node):
                 continue
             if expect_type is not None and not isinstance(node, expect_type):
-                continue
+                raise WrongType(
+                    f"Node matching {query_selector!r} is the wrong type; expected type {expect_type.__name__!r}, found {node}"
+                )
             for later_node in iter_children:
                 if match(selector_set, later_node):
-                    if expect_type is not None and not isinstance(node, expect_type):
-                        continue
                     raise TooManyMatches(
                         "Call to query_one resulted in more than one matched node"
                     )
             if cache_key is not None:
-                self._query_one_cache[cache_key] = node
+                base_node._query_one_cache[cache_key] = node
             return node
 
-        raise NoMatches(f"No nodes match {selector!r} on {self!r}")
+        raise NoMatches(f"No nodes match {query_selector!r} on {base_node!r}")
 
     if TYPE_CHECKING:
 
@@ -1589,6 +1628,7 @@ class DOMNode(MessagePump):
         Returns:
             A DOMNode or subclass if `expect_type` is provided.
         """
+        base_node = self._get_dom_base()
         if isinstance(selector, str):
             query_selector = selector
         else:
@@ -1600,8 +1640,8 @@ class DOMNode(MessagePump):
             raise InvalidQueryFormat(
                 f"Unable to parse {query_selector!r} as a query; check for syntax errors"
             ) from None
-        if self.parent is not None:
-            for node in self.parent.ancestors_with_self:
+        if base_node.parent is not None:
+            for node in base_node.parent.ancestors_with_self:
                 if not match(selector_set, node):
                     continue
                 if expect_type is not None and not isinstance(node, expect_type):
@@ -1647,6 +1687,17 @@ class DOMNode(MessagePump):
     def set_class(self, add: bool, *class_names: str, update: bool = True) -> Self:
         """Add or remove class(es) based on a condition.
 
+        This can condense the four lines required to implement the equivalent branch into a single line.
+
+        Example:
+            ```python
+            #if foo:
+            #    self.add_class("-foo")
+            #else:
+            #    self.remove_class("-foo")
+            self.set_class(foo, "-foo")
+            ```
+
         Args:
             add: Add the classes if True, otherwise remove them.
             update: Also update styles.
@@ -1655,9 +1706,9 @@ class DOMNode(MessagePump):
             Self.
         """
         if add:
-            self.add_class(*class_names, update=update and self.is_attached)
+            self.add_class(*class_names, update=update)
         else:
-            self.remove_class(*class_names, update=update and self.is_attached)
+            self.remove_class(*class_names, update=update)
         return self
 
     def set_classes(self, classes: str | Iterable[str]) -> Self:
@@ -1678,6 +1729,8 @@ class DOMNode(MessagePump):
 
         Should be called whenever CSS classes / pseudo classes change.
         """
+        if not self.is_attached:
+            return
         try:
             self.app.update_styles(self)
         except NoActiveAppError:
@@ -1800,7 +1853,8 @@ class DOMNode(MessagePump):
         See [actions](/guide/actions#dynamic-actions) for how to use this method.
 
         """
-        self.screen.refresh_bindings()
+        if self._is_mounted:
+            self.screen.refresh_bindings()
 
     async def action_toggle(self, attribute_name: str) -> None:
         """Toggle an attribute on the node.

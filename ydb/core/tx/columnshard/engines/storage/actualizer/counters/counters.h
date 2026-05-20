@@ -1,16 +1,19 @@
 #pragma once
-#include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
 class TPortionCategoryCounterAgents: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+
 public:
     const std::shared_ptr<NColumnShard::TValueAggregationAgent> RecordsCount;
     const std::shared_ptr<NColumnShard::TValueAggregationAgent> Count;
     const std::shared_ptr<NColumnShard::TValueAggregationAgent> Bytes;
+
     TPortionCategoryCounterAgents(NColumnShard::TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, "category", categoryName)
         , RecordsCount(TBase::GetValueAutoAggregations("ByGranule/Portions/RecordsCount"))
@@ -25,9 +28,9 @@ private:
     std::shared_ptr<NColumnShard::TValueAggregationClient> RecordsCount;
     std::shared_ptr<NColumnShard::TValueAggregationClient> Count;
     std::shared_ptr<NColumnShard::TValueAggregationClient> Bytes;
+
 public:
-    TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
-    {
+    TPortionCategoryCounters(TPortionCategoryCounterAgents& agents) {
         RecordsCount = agents.RecordsCount->GetClient();
         Count = agents.Count->GetClient();
         Bytes = agents.Bytes->GetClient();
@@ -54,8 +57,8 @@ private:
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsLatenessEviction;
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsLatenessDelete;
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsToSyncSchema;
-public:
 
+public:
     TGlobalCounters()
         : TBase("Actualizer")
     {
@@ -103,7 +106,6 @@ public:
         , PortionsToSyncSchema(TGlobalCounters::BuildPortionsToSyncSchemaAggregation())
     {
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

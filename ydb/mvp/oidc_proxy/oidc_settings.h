@@ -10,6 +10,7 @@ namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings {
     static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
+    static const inline TStringBuf YDB_OIDC_COOKIE_BACKGROUND_SUFFIX = "_background";
     static const inline TString SESSION_COOKIE = "session_cookie";
     static const inline TString IMPERSONATED_COOKIE = "impersonated_cookie";
 
@@ -20,6 +21,7 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
     static constexpr inline TDuration DEFAULT_REQUEST_TIMEOUT = TDuration::Seconds(120);
+    static constexpr inline TDuration DEFAULT_AUTH_STATE_LIFETIME = TDuration::Minutes(10);
 
     static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
     static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;

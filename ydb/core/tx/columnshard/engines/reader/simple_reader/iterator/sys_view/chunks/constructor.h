@@ -45,6 +45,7 @@ private:
 
     virtual std::shared_ptr<NReader::NCommon::IDataSource> DoExtractNextImpl(
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) override;
+
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {
         while (TBase::GetConstructorsCount()) {
             bool usage = false;
@@ -57,13 +58,14 @@ private:
             break;
         }
     }
+
     virtual TString DoDebugString() const override {
         return Default<TString>();
     }
 
 public:
-    TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine, const ui64 tabletId,
-        const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
+    TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine,
+        const ui64 tabletId, const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
         const ERequestSorting sorting);
 };
 

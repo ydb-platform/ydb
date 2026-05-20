@@ -5,7 +5,6 @@
 #include "type_utils.h"
 #include "coro_tasks.h"
 
-#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>

@@ -1,10 +1,11 @@
 #pragma once
 #include "abstract/blob_set.h"
 #include "abstract/common.h"
-#include <ydb/core/tx/columnshard/defs.h>
+
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/util/gen_step.h>
 
 namespace NKikimr::NTable {
@@ -33,7 +34,8 @@ public:
     virtual void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
     virtual void EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
 
-    [[nodiscard]] virtual bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) = 0;
+    [[nodiscard]] virtual bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete,
+        std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) = 0;
 
     virtual void AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
     virtual void RemoveTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
@@ -47,12 +49,12 @@ public:
     virtual void RemoveBorrowedBlob(const TString& storageId, const TUnifiedBlobId& blobId) = 0;
 };
 
-
-class TBlobManagerDb : public IBlobManagerDb {
+class TBlobManagerDb: public IBlobManagerDb {
 public:
     explicit TBlobManagerDb(NTable::TDatabase& db)
         : Database(db)
-    {}
+    {
+    }
 
     [[nodiscard]] bool LoadLastGcBarrier(TGenStep& lastCollectedGenStep) override;
     void SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) override;
@@ -69,7 +71,8 @@ public:
     void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
     void EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
 
-    [[nodiscard]] bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) override;
+    [[nodiscard]] bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete,
+        const TTabletId selfTabletId) override;
 
     void AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
     void RemoveTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
@@ -91,4 +94,4 @@ private:
     NTable::TDatabase& Database;
 };
 
-}
+}   // namespace NKikimr::NOlap

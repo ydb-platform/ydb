@@ -6,13 +6,13 @@
 
 namespace NKikimrReplication {
     class TReplicationLocationConfig;
-} // namespace NKikimrReplication::NMetricsConfig
+}
 
 namespace NKikimr::NReplication::NController {
 
 extern const TString ReplicationConsumerName;
 
-class TTargetWithStreamStats: public TTargetBaseStats {
+class TTargetWithStreamStats: public ITargetBaseStats {
 protected:
     struct TMultiSlidingWindow {
         NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> Minute;
@@ -50,7 +50,8 @@ public:
     TMultiSlidingWindow WriteRows;
     TMultiSlidingWindow DecompressionCpuTime;
     TInstant CollectionStartTime;
-};
+
+}; // TTargetWithStreamStats
 
 class TTargetWithStreamCounters {
 protected:
@@ -64,8 +65,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr WriteRows;
     NMonitoring::TDynamicCounters::TCounterPtr WriteErrors;
 
-    virtual bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value);
     virtual ~TTargetWithStreamCounters() = default;
+    virtual bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value);
 };
 
 class TTargetWithStream: public TTargetBase {
@@ -89,7 +90,6 @@ public:
     IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
 
     void SetLocation();
-
 
 protected:
     THolder<NKikimrReplication::TReplicationLocationConfig> Location;

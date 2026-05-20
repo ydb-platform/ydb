@@ -1,13 +1,12 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: opt_set_quantifier */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
 SELECT DISTINCT
     (i_product_name)
 FROM
-    plato.item i1
+    plato.item AS i1
 WHERE
     i_manufact_id BETWEEN 742 AND 742 + 40
     AND (

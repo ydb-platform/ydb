@@ -67,9 +67,9 @@ private:
     //! Open a map or a list for the given stack entry.
     void OpenEntry(const TYPathStack::TEntry& entry)
     {
-        if (std::holds_alternative<TString>(entry)) {
+        if (std::holds_alternative<std::string>(entry)) {
             Writer_.WriteBeginMap();
-            Writer_.WriteBinaryString(std::get<TString>(entry));
+            Writer_.WriteBinaryString(std::get<std::string>(entry));
             Writer_.WriteKeyValueSeparator();
         } else {
             Writer_.WriteBeginList();
@@ -84,7 +84,7 @@ private:
     //! Close a map or a list for the given stack entry.
     void CloseEntry(const TYPathStack::TEntry& entry)
     {
-        if (std::holds_alternative<TString>(entry)) {
+        if (std::holds_alternative<std::string>(entry)) {
             Writer_.WriteEndMap();
         } else {
             Writer_.WriteEndList();
@@ -129,13 +129,13 @@ private:
         const auto& oldStackFirstDifferingItem = oldStackItems[firstDifferingItemIndex];
         const auto& newStackFirstDifferingItem = newStackItems[firstDifferingItemIndex];
         YT_VERIFY(
-            std::holds_alternative<TString>(oldStackFirstDifferingItem) ==
-            std::holds_alternative<TString>(newStackFirstDifferingItem));
+            std::holds_alternative<std::string>(oldStackFirstDifferingItem) ==
+            std::holds_alternative<std::string>(newStackFirstDifferingItem));
 
-        if (std::holds_alternative<TString>(oldStackFirstDifferingItem)) {
+        if (std::holds_alternative<std::string>(oldStackFirstDifferingItem)) {
             // Switch key to a proper key.
             Writer_.WriteItemSeparator();
-            Writer_.WriteBinaryString(std::get<TString>(newStackFirstDifferingItem));
+            Writer_.WriteBinaryString(std::get<std::string>(newStackFirstDifferingItem));
             Writer_.WriteKeyValueSeparator();
         } else {
             // If current index and desired index are not adjacent, we must

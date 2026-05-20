@@ -11,6 +11,7 @@
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -98,23 +99,8 @@ TProgram::TStatus SyncExecution(
     Params2&&... params) {
     TProgram::TFutureStatus future =
         (program->*method)(std::forward<Params2>(params)...);
-    YQL_ENSURE(future.Initialized());
-    future.Wait();
-    HandleFutureException(future);
 
-    TProgram::TStatus status = future.GetValue();
-    while (status == TProgram::TStatus::Async) {
-        auto continueFuture = program->ContinueAsync();
-        continueFuture.Wait();
-        HandleFutureException(continueFuture);
-        status = continueFuture.GetValue();
-    }
-
-    if (status == TProgram::TStatus::Error) {
-        program->Print(program->ExprStream(), program->PlanStream());
-    }
-
-    return status;
+    return WaitExecution(TIntrusivePtr<TProgram>(program), future);
 }
 
 std::function<TString(const TString&, const TString&)> BuildDefaultTokenResolver(TCredentials::TPtr credentials) {
@@ -2102,7 +2088,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }
-
+    if (GatewaysConfig_) {
+        typeAnnotationContext->RuntimeSettings = CreateRuntimeSettingsFromProto(GatewaysConfig_->GetRuntimeSettings(), username, Credentials_);
+    }
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning
         // could be overridden by pragma later
@@ -2275,6 +2263,27 @@ bool TProgram::NeedWaitForActiveProcesses() {
     }
 
     return false;
+}
+
+TProgram::TStatus WaitExecution(TProgramPtr program, TProgram::TFutureStatus futureStatus) {
+    YQL_ENSURE(program);
+    YQL_ENSURE(futureStatus.Initialized());
+    futureStatus.Wait();
+    HandleFutureException(futureStatus);
+
+    TProgram::TStatus status = futureStatus.GetValue();
+    while (status == TProgram::TStatus::Async) {
+        auto continueFuture = program->ContinueAsync();
+        continueFuture.Wait();
+        HandleFutureException(continueFuture);
+        status = continueFuture.GetValue();
+    }
+
+    if (status == TProgram::TStatus::Error) {
+        program->Print(program->ExprStream(), program->PlanStream());
+    }
+
+    return status;
 }
 
 } // namespace NYql

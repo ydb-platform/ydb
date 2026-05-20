@@ -19,6 +19,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/sql/settings/translation_sql_flags.h>
 #include <yql/essentials/sql/sql.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -411,6 +412,9 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    TTypeAnnotationContext();
+    ~TTypeAnnotationContext() override;
+
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
     TLangVersion LangVer = MinLangVersion;
@@ -464,7 +468,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
-    bool WindowNewPipeline = false;
+    bool WindowNewPipeline = true;
     bool ForceDq = false;
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
     EFallbackPolicy DqFallbackPolicy = EFallbackPolicy::Default;
@@ -506,6 +510,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TLineageSettings LineageSettings;
     bool FuzzUntypedLambda = false;
     bool FuzzUniversal = false;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

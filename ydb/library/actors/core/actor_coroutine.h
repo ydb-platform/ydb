@@ -2,16 +2,27 @@
 
 #include <util/system/context.h>
 #include <util/system/event.h>
-#include <util/system/filemap.h>
-
 #include "actor_bootstrapped.h"
+#include "coro_stack_pool.h"
 #include "event_local.h"
 
+#include <memory>
 #include <thread>
 
 namespace NActors {
 
     class TActorCoro;
+
+    struct TUsePooledStack {
+        ui32 StackSize;
+    };
+
+    template <ui32 StackSize>
+    constexpr TUsePooledStack UsePooledStack() noexcept {
+        static_assert(StackSize && ((StackSize & (StackSize - 1u)) == 0));
+        static_assert(StackSize < (1 << 20));
+        return {StackSize};
+    }
 
 #ifndef CORO_THROUGH_THREADS
 #   ifdef _tsan_enabled_
@@ -31,7 +42,7 @@ namespace NActors {
         TActivationContext *ActivationContext = nullptr;
         std::thread WorkerThread;
 #else
-        TMappedAllocation Stack;
+        std::unique_ptr<IStackMem> Stack;
         TContClosure FiberClosure;
         TExceptionSafeContext FiberContext;
         TExceptionSafeContext* ActorSystemContext = nullptr;
@@ -99,6 +110,10 @@ namespace NActors {
 
     public:
         TActorCoroImpl(size_t stackSize, bool allowUnhandledDtor = false);
+        TActorCoroImpl(TUsePooledStack stack, bool allowUnhandledDtor = false);
+#if !CORO_THROUGH_THREADS
+        TActorCoroImpl(std::unique_ptr<IStackMem> stack, bool allowUnhandledDtor = false);
+#endif
         // specify stackSize explicitly for each actor; don't forget about overflow control gap
 
         virtual ~TActorCoroImpl() = default;

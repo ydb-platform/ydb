@@ -1,4 +1,5 @@
 #include "create_topic_operation.h"
+#include "schema_propose.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -113,7 +114,6 @@ TResult ApplyChangesInt(
         pqTabletConfig->SetDC(converter->GetCluster());
         pqTabletConfig->SetProducer(converter->GetLegacyProducer());
         pqTabletConfig->SetTopic(converter->GetLegacyLogtype());
-        pqTabletConfig->SetIdent(converter->GetLegacyProducer());
     }
 
     const auto& channelProfiles = pqConfig.GetChannelProfiles();
@@ -190,14 +190,33 @@ TResult ApplyChangesInt(
         pqTabletConfig->SetMetricsLevel(request.metrics_level());
     }
 
+    if (request.partition_write_speed_messages_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_speed_messages_per_second can't be negative, provided " << request.partition_write_speed_messages_per_second()};
+    } else if (request.partition_write_speed_messages_per_second() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_speed_messages_per_second can't be greater than" << DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND << ", provided " << request.partition_write_speed_messages_per_second()};
+    } else if (request.partition_write_speed_messages_per_second() == 0) {
+        partConfig->SetWriteSpeedInMessagesPerSecond(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+    } else {
+        partConfig->SetWriteSpeedInMessagesPerSecond(request.partition_write_speed_messages_per_second());
+    }
+
+    if (request.partition_write_burst_messages() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be negative, provided " << request.partition_write_burst_messages()};
+    } else if (request.partition_write_burst_messages() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be greater than" << DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND << ", provided " << request.partition_write_burst_messages()};
+    } else if (request.partition_write_burst_messages() == 0) {
+        partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
+    } else {
+        partConfig->SetBurstSizeInMessages(request.partition_write_burst_messages());
+    }
+
     return {};
 }
 
 
 struct TCreateTopicStrategy: public ICreateTopicStrategy {
-    TCreateTopicStrategy(Ydb::Topic::CreateTopicRequest&& request, TString&& localDc)
+    TCreateTopicStrategy(Ydb::Topic::CreateTopicRequest&& request)
         : Request(std::move(request))
-        , LocalDc(std::move(localDc))
     {
     }
 
@@ -206,27 +225,15 @@ struct TCreateTopicStrategy: public ICreateTopicStrategy {
     }
 
     TResult ApplyChanges(
+        const TString& localCluster,
         const TString& database,
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig
-    ) override {
-        auto result = ApplyChangesInt(database, Request, modifyScheme, targetConfig, LocalDc);
-        if (!result) {
-            return result;
-        }
-
-        const auto& config = targetConfig.GetPQTabletConfig();
-        if (!LocalDc.empty() && config.GetLocalDC() && config.GetDC() != LocalDc) {
-            auto error = TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC()
-                                        << "' instead of " << LocalDc;
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
-        }
-
-        return {};
+    ) const override {
+        return ApplyChangesInt(database, Request, modifyScheme, targetConfig, localCluster);
     }
 
     Ydb::Topic::CreateTopicRequest Request;
-    const TString LocalDc;
 };
 
 } // namespace
@@ -236,8 +243,27 @@ NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCrea
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
         .UserToken = std::move(settings.UserToken),
-        .Strategy = std::make_unique<TCreateTopicStrategy>(std::move(settings.Request), std::move(settings.LocalDc)),
+        .IfNotExists = settings.IfNotExists,
+        .PrepareOnly = settings.PrepareOnly,
+        .Strategy = std::make_unique<TCreateTopicStrategy>(std::move(settings.Request)),
         .Cookie = settings.Cookie,
+    });
+}
+
+TResult ProposeCreateTopic(
+    NKikimrSchemeOp::TModifyScheme& modifyScheme,
+    Ydb::Topic::CreateTopicRequest request,
+    const TString& database,
+    const TString& workingDir,
+    const TString& name
+) {
+    std::unique_ptr<ICreateTopicStrategy> strategy = std::make_unique<TCreateTopicStrategy>(std::move(request));
+    return ProposeCreateTopic(modifyScheme, TProposeCreateTopicSettings{
+        .Database = database,
+        .WorkingDir = workingDir,
+        .Name = name,
+        .Strategy = strategy.get(),
+        .IfNotExists = true,
     });
 }
 

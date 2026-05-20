@@ -12,8 +12,11 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
+#include <library/cpp/json/json_writer.h>
+
 #include <util/string/strip.h>
 #include <util/string/printf.h>
+#include <util/system/env.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -78,7 +81,10 @@ TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
 
 } // anonymous namespace
 
-TModelHandler::TModelHandler(const TSettings& settings) {
+TModelHandler::TModelHandler(const TSettings& settings)
+    : ConfigurationManager(settings.ConfigurationManager)
+    , AuditEnabled(TryGetEnv("YDB_CLI_AI_AUDIT_LOG").Defined())
+{
     SetupModel(settings.Profile, settings);
     SetupTools(settings);
 }
@@ -101,11 +107,34 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                 onFinishWaiting();
             }
             Cerr << Endl << Colors.Red() << e.what() << Colors.OldColor() << Endl;
+
+            if (AuditEnabled) {
+                NJson::TJsonValue auditInfo;
+                auditInfo["seq"] = AuditSeq++;
+                auditInfo["error"] = e.what();
+                YDB_CLI_LOG(Info, "[AUDIT] fatal_error " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
+            }
             break;
+        }
+
+        if (AuditEnabled) {
+            NJson::TJsonValue auditInfo;
+            auditInfo["seq"] = AuditSeq++;
+            auditInfo["input_tokens"] = output.Usage.InputTokens;
+            auditInfo["output_tokens"] = output.Usage.OutputTokens;
+            auditInfo["cached_input_tokens"] = output.Usage.CachedInputTokens;
+            YDB_CLI_LOG(Info, "[AUDIT] model_usage " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
         }
 
         if (!output.Text && output.ToolCalls.empty()) {
             Cout << Colors.Yellow() << "Model answer is empty, try to reformulate question." << Colors.OldColor() << Endl;
+
+            if (AuditEnabled) {
+                NJson::TJsonValue auditInfo;
+                auditInfo["seq"] = AuditSeq++;
+                auditInfo["error"] = "Model answer is empty.";
+                YDB_CLI_LOG(Info, "[AUDIT] fatal_error " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
+            }
             break;
         }
 
@@ -117,6 +146,13 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                 }
             }
             ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
+
+            if (AuditEnabled) {
+                NJson::TJsonValue auditInfo;
+                auditInfo["seq"] = AuditSeq++;
+                auditInfo["text"] = StripStringRight(output.Text);
+                YDB_CLI_LOG(Info, "[AUDIT] agent_response " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
+            }
         }
 
         bool interrupted = false;
@@ -142,7 +178,7 @@ void TModelHandler::ClearContext() {
     Model->ClearContext();
 }
 
-IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const {
+IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) {
     IModel::TToolResponse response = {.ToolCallId = toolCall.Id};
 
     const auto it = Tools.find(toolCall.Name);
@@ -178,6 +214,17 @@ IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall
     if (!result->IsSuccess) {
         YDB_CLI_LOG(Notice, "Tool call failed: " << result->ToolResult);
     }
+
+    if (AuditEnabled) {
+        NJson::TJsonValue auditInfo;
+        auditInfo["seq"] = AuditSeq++;
+        auditInfo["name"] = toolCall.Name;
+        auditInfo["success"] = result->IsSuccess;
+        auditInfo["args"] = toolCall.Parameters;
+        auditInfo["result"] = result->ToolResult;
+        YDB_CLI_LOG(Info, "[AUDIT] tool_call " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
+    }
+
     response.IsSuccess = result->IsSuccess;
     response.Text = std::move(result->ToolResult);
 
@@ -210,6 +257,11 @@ void TModelHandler::SetupModel(TAiModelConfig::TPtr profile, const TSettings& se
                         "Do NOT add any other connection parameters (like -p, --endpoint, --database) unless they are explicitly present in this prefix. If no connection options are provided, it means the environment is already configured (e.g., via default profile or environment variables).\n";
     }
 
+    if (!ConfigurationManager->IsSystemPromptEnabled()) {
+        YDB_CLI_LOG(Warning, "System prompt is disabled by configuration");
+        systemPrompt = "";
+    }
+
     switch (*apiType) {
         case TAiPresets::EApiType::OpenAI:
             Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = *apiKey, .SystemPrompt = systemPrompt});
@@ -224,18 +276,29 @@ void TModelHandler::SetupModel(TAiModelConfig::TPtr profile, const TSettings& se
 
 void TModelHandler::SetupTools(const TSettings& settings) {
     Y_VALIDATE(Model, "Model must be initialized before initializing tools");
+    Y_VALIDATE(settings.LazyDriver, "TModelHandler requires a non-null LazyDriver in settings");
 
-    Tools = {
-        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver})},
-        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver})},
-        {"explain_query", CreateExplainQueryTool({.Driver = settings.Driver})},
-        {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver})},
+    for (const auto& [name, tool] : std::vector<std::pair<TString, ITool::TPtr>>{
+        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
+        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .LazyDriver = settings.LazyDriver})},
+        {"explain_query", CreateExplainQueryTool({.LazyDriver = settings.LazyDriver})},
+        {"describe", CreateDescribeTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
         {"ydb_help", CreateYdbHelpTool({.UsageInfoGetter = settings.UsageInfoGetter})},
-        {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt, .Driver = settings.Driver})},
-    };
+        {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt})},
+    }) {
+        const auto autoAction = settings.ConfigurationManager->GetToolAutoAction(name);
+        if (autoAction == TInteractiveConfigurationManager::EToolAutoAction::Hide) {
+            YDB_CLI_LOG(Warning, "Skipping tool " << name << " because it is hidden by configuration");
+            continue;
+        }
 
-    for (const auto& [name, tool] : Tools) {
+        if (autoAction != TInteractiveConfigurationManager::EToolAutoAction::Ask) {
+            YDB_CLI_LOG(Warning, "Skipping ask prompt for " << name << " tool, do action: " << autoAction);
+            tool->SetAutoAction(autoAction);
+        }
+
         Model->RegisterTool(name, tool->GetParametersSchema(), tool->GetDescription());
+        Y_VALIDATE(Tools.emplace(name, tool).second, "Tool " << name << " already registered");
     }
 }
 

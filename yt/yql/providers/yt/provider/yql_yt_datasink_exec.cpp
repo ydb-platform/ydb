@@ -372,6 +372,7 @@ private:
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)
+                .RuntimeSettings(State_->Types->RuntimeSettings)
                 .AdditionalSecurityTags(addSecTags)
                 .LayersPaths(std::move(finalCypressPaths))
             );

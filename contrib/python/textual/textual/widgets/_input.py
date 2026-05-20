@@ -12,6 +12,7 @@ from typing_extensions import Literal
 
 from textual import events
 from textual.expand_tabs import expand_tabs_inline
+from textual.screen import Screen
 from textual.scroll_view import ScrollView
 from textual.strip import Strip
 
@@ -97,7 +98,10 @@ class Input(ScrollView):
             show=False,
         ),
         Binding(
-            "ctrl+right", "cursor_right_word", "Move cursor right a word", show=False
+            "ctrl+right",
+            "cursor_right_word",
+            "Move cursor right a word",
+            show=False,
         ),
         Binding(
             "ctrl+shift+right",
@@ -106,6 +110,7 @@ class Input(ScrollView):
             show=False,
         ),
         Binding("backspace", "delete_left", "Delete character left", show=False),
+        Binding("ctrl+shift+a", "select_all", "Select all", show=False),
         Binding("home,ctrl+a", "home", "Go to start", show=False),
         Binding("end,ctrl+e", "end", "Go to end", show=False),
         Binding("shift+home", "home(True)", "Select line start", show=False),
@@ -136,6 +141,7 @@ class Input(ScrollView):
     | ctrl+right | Move the cursor one word to the right. |
     | backspace | Delete the character to the left of the cursor. |
     | ctrl+shift+right | Move cursor right a word and select. |
+    | ctrl+shift+a | Select all text in the input. |
     | home,ctrl+a | Go to the beginning of the input. |
     | end,ctrl+e | Go to the end of the input. |
     | shift+home | Select up to the input start. |
@@ -176,6 +182,15 @@ class Input(ScrollView):
         height: 3;
         scrollbar-size-horizontal: 0;
 
+        &.-textual-compact {
+            border: none !important;
+            height: 1;
+            padding: 0;
+            &.-invalid {
+                background-tint: $error 20%;
+            }
+        }
+
         &:focus {
             border: tall $border;
             background-tint: $foreground 5%;
@@ -196,12 +211,12 @@ class Input(ScrollView):
         }
         &.-invalid:focus {
             border: tall $error;
-        }    
+        }
 
         &:ansi {
             background: ansi_default;
             color: ansi_default;
-            &>.input--cursor {     
+            &>.input--cursor {
                 text-style: reverse;
             }
             &>.input--placeholder, &>.input--suggestion {
@@ -213,8 +228,7 @@ class Input(ScrollView):
             }
             &.-invalid:focus {
                 border: tall ansi_red;
-            }  
-            
+            }
         }
     }
 
@@ -252,6 +266,8 @@ class Input(ScrollView):
     """The maximum length of the input, in characters."""
     valid_empty = var(False)
     """Empty values should pass validation."""
+    compact = reactive(False, toggle_class="-textual-compact")
+    """Make the input compact (without borders)."""
 
     @dataclass
     class Changed(Message):
@@ -341,6 +357,7 @@ class Input(ScrollView):
         classes: str | None = None,
         disabled: bool = False,
         tooltip: RenderableType | None = None,
+        compact: bool = False,
     ) -> None:
         """Initialise the `Input` widget.
 
@@ -365,6 +382,7 @@ class Input(ScrollView):
             classes: Optional initial classes for the widget.
             disabled: Whether the input is disabled or not.
             tooltip: Optional tooltip.
+            compact: Enable compact style (without borders).
         """
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
 
@@ -430,6 +448,8 @@ class Input(ScrollView):
         if tooltip is not None:
             self.tooltip = tooltip
 
+        self.compact = compact
+
         self.select_on_focus = select_on_focus
 
     def _position_to_cell(self, position: int) -> int:
@@ -447,13 +467,18 @@ class Input(ScrollView):
     def _cursor_offset(self) -> int:
         """The cell offset of the cursor."""
         offset = self._position_to_cell(self.cursor_position)
-        if self._cursor_at_end:
+        if self.cursor_at_end:
             offset += 1
         return offset
 
     @property
-    def _cursor_at_end(self) -> bool:
-        """Flag to indicate if the cursor is at the end"""
+    def cursor_at_start(self) -> bool:
+        """Flag to indicate if the cursor is at the start."""
+        return self.cursor_position == 0
+
+    @property
+    def cursor_at_end(self) -> bool:
+        """Flag to indicate if the cursor is at the end."""
         return self.cursor_position == len(self.value)
 
     def check_consume_key(self, key: str, character: str | None) -> bool:
@@ -476,6 +501,7 @@ class Input(ScrollView):
         return Selection(clamp(start, 0, value_length), clamp(end, 0, value_length))
 
     def _watch_selection(self, selection: Selection) -> None:
+        self.app.clear_selection()
         self.app.cursor_position = self.cursor_screen_offset
         if not self._initial_value:
             self.scroll_to_region(
@@ -495,7 +521,7 @@ class Input(ScrollView):
 
     @property
     def cursor_screen_offset(self) -> Offset:
-        """The offset of the cursor of this input in screen-space. (x, y)/(column, row)"""
+        """The offset of the cursor of this input in screen-space. (x, y)/(column, row)."""
         x, y, _width, _height = self.content_region
         scroll_x, _ = self.scroll_offset
         return Offset(x + self._cursor_offset - scroll_x, y)
@@ -518,6 +544,10 @@ class Input(ScrollView):
         if self._initial_value:
             self.cursor_position = len(self.value)
             self._initial_value = False
+        else:
+            # Force a re-validation of the selection to ensure it accounts for
+            # the length of the new value
+            self.selection = self.selection
 
     def _watch_valid_empty(self) -> None:
         """Repeat validation when valid_empty changes."""
@@ -574,6 +604,7 @@ class Input(ScrollView):
             return Strip.blank(self.size.width)
 
         console = self.app.console
+        console_options = self.app.console_options
         max_content_width = self.scrollable_content_region.width
 
         if not self.value:
@@ -590,7 +621,7 @@ class Input(ScrollView):
 
             strip = Strip(
                 console.render(
-                    placeholder, console.options.update_width(max_content_width + 1)
+                    placeholder, console_options.update_width(max_content_width + 1)
                 )
             )
         else:
@@ -618,12 +649,12 @@ class Input(ScrollView):
                 if self._cursor_visible:
                     cursor_style = self.get_component_rich_style("input--cursor")
                     cursor = self.cursor_position
-                    if not show_suggestion and self._cursor_at_end:
+                    if not show_suggestion and self.cursor_at_end:
                         result.pad_right(1)
                     result.stylize(cursor_style, cursor, cursor + 1)
 
             segments = list(
-                console.render(result, console.options.update_width(self.content_width))
+                console.render(result, console_options.update_width(self.content_width))
             )
 
             strip = Strip(segments)
@@ -662,9 +693,19 @@ class Input(ScrollView):
 
     def _toggle_cursor(self) -> None:
         """Toggle visibility of cursor."""
-        self._cursor_visible = not self._cursor_visible
+        if self.screen.is_active:
+            self._cursor_visible = not self._cursor_visible
+        else:
+            self._cursor_visible = True
 
     def _on_mount(self, event: Mount) -> None:
+        def text_selection_started(screen: Screen) -> None:
+            """Signal callback to unselect when arbitrary text selection starts."""
+            self.selection = Selection.cursor(self.cursor_position)
+
+        self.screen.text_selection_started_signal.subscribe(
+            self, text_selection_started, immediate=True
+        )
         self._blink_timer = self.set_interval(
             0.5,
             self._toggle_cursor,
@@ -735,11 +776,18 @@ class Input(ScrollView):
         self._selecting = True
         self.capture_mouse()
 
-    async def _on_mouse_up(self, event: events.MouseUp) -> None:
+    def _end_selecting(self) -> None:
+        """End selecting if it is currently active."""
         if self._selecting:
             self._selecting = False
             self.release_mouse()
             self._restart_blink()
+
+    async def _on_mouse_release(self, _event: events.MouseRelease) -> None:
+        self._end_selecting()
+
+    async def _on_mouse_up(self, _event: events.MouseUp) -> None:
+        self._end_selecting()
 
     async def _on_mouse_move(self, event: events.MouseMove) -> None:
         if self._selecting:
@@ -819,7 +867,7 @@ class Input(ScrollView):
         if select:
             self.selection = Selection(start, end + 1)
         else:
-            if self._cursor_at_end and self._suggestion:
+            if self.cursor_at_end and self._suggestion:
                 self.value = self._suggestion
                 self.cursor_position = len(self.value)
             else:
@@ -827,6 +875,15 @@ class Input(ScrollView):
                     self.cursor_position += 1
                 else:
                     self.cursor_position = max(start, end)
+
+    def select_all(self) -> None:
+        """Select all of the text in the Input."""
+        self.selection = Selection(0, len(self.value))
+        self._suggestion = ""
+
+    def action_select_all(self) -> None:
+        """Select all of the text in the Input."""
+        self.select_all()
 
     def action_home(self, select: bool = False) -> None:
         """Move the cursor to the start of the input.

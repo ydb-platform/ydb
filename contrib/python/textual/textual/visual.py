@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from itertools import islice
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Callable, Protocol
 
 import rich.repr
 from rich.console import Console, ConsoleOptions, RenderableType
@@ -29,6 +30,22 @@ if TYPE_CHECKING:
 def is_visual(obj: object) -> bool:
     """Check if the given object is a Visual or supports the Visual protocol."""
     return isinstance(obj, Visual) or hasattr(obj, "textualize")
+
+
+@dataclass(frozen=True)
+class RenderOptions:
+    """Additional options passed to `Visual.render_strips`."""
+
+    get_style: Callable[[str | Style], Style]
+    """Callable to get a style."""
+    rules: RulesMap
+    """Mapping of style rules."""
+    selection: Selection | None = None
+    """Text selection information."""
+    selection_style: Style | None = None
+    """Style of text selection."""
+    post_style: Style | None = None
+    """Optional style to apply post render."""
 
 
 # Note: not runtime checkable currently, as I've found that to be slow
@@ -86,7 +103,7 @@ def visualize(widget: Widget, obj: object, markup: bool = True) -> Visual:
             return Content.from_markup(obj) if markup else Content(obj)
 
         if is_renderable(obj):
-            if isinstance(obj, Text) and widget.allow_select:
+            if isinstance(obj, Text):
                 return Content.from_rich_text(obj, console=widget.app.console)
 
             # If its is a Rich renderable, wrap it with a RichVisual
@@ -112,23 +129,15 @@ class Visual(ABC):
 
     @abstractmethod
     def render_strips(
-        self,
-        rules: RulesMap,
-        width: int,
-        height: int | None,
-        style: Style,
-        selection: Selection | None = None,
-        selection_style: Style | None = None,
+        self, width: int, height: int | None, style: Style, options: RenderOptions
     ) -> list[Strip]:
         """Render the Visual into an iterable of strips.
 
         Args:
-            rules: A mapping of style rules, such as the Widgets `styles` object.
             width: Width of desired render.
             height: Height of desired render or `None` for any height.
             style: The base style to render on top of.
-            selection: Selection information, if applicable, otherwise `None`.
-            selection_style: Selection style if `selection` is not `None`.
+            options: Additional render options.
 
         Returns:
             An list of Strips.
@@ -144,12 +153,27 @@ class Visual(ABC):
 
         Args:
             rules: A mapping of style rules, such as the Widgets `styles` object.
-            container_width: The size of the container in cells.
+            container_width: The width of the container, used by Rich Renderables.
+                May be ignored for Textual Visuals.
 
         Returns:
             A width in cells.
 
         """
+
+    def get_minimal_width(self, rules: RulesMap) -> int:
+        """Get a minimal width (the smallest width before data loss occurs).
+
+        Args:
+            rules: A mapping of style rules, such as the Widgets `styles` object.
+            container_width: The width of the container, used by Rich Renderables.
+                May be ignored for Textual Visuals.
+
+        Returns:
+            A width in cells.
+
+        """
+        return 1
 
     @abstractmethod
     def get_height(self, rules: RulesMap, width: int) -> int:
@@ -172,7 +196,9 @@ class Visual(ABC):
         height: int | None,
         style: Style,
         *,
+        apply_selection: bool = True,
         pad: bool = False,
+        post_style: Style | None = None,
     ) -> list[Strip]:
         """High level function to render a visual to strips.
 
@@ -182,7 +208,9 @@ class Visual(ABC):
             width: Desired width (in cells).
             height: Desired height (in lines) or `None` for no limit.
             style: A (Visual) Style instance.
+            apply_selection: Automatically apply selection styles?
             pad: Pad to desired width?
+            post_style: Optional Style to apply to strips after rendering.
 
         Returns:
             A list of Strips containing the render.
@@ -197,18 +225,21 @@ class Visual(ABC):
             selection_style = None
 
         strips = visual.render_strips(
-            widget.styles,
             width,
             height,
             style,
-            selection,
-            selection_style,
+            RenderOptions(
+                widget._get_style,
+                widget.styles,
+                selection if apply_selection else None,
+                selection_style,
+            ),
         )
         strips = [strip._apply_link_style(widget.link_style) for strip in strips]
 
         if height is None:
             height = len(strips)
-        rich_style = style.rich_style
+        rich_style = (style + Style(reverse=False)).rich_style
         if pad:
             strips = [strip.extend_cell_length(width, rich_style) for strip in strips]
         content_align = widget.styles.content_align
@@ -261,11 +292,11 @@ class RichVisual(Visual):
         width = measure(
             console, self._renderable, container_width, container_width=container_width
         )
-
         return width
 
     def get_height(self, rules: RulesMap, width: int) -> int:
-        console = active_app.get().console
+        app = active_app.get()
+        console = app.console
         renderable = self._renderable
         if isinstance(renderable, Text):
             height = len(
@@ -277,7 +308,8 @@ class RichVisual(Visual):
                 )
             )
         else:
-            options = console.options.update_width(width).update(highlight=False)
+            console_options = app.console_options
+            options = console_options.update_width(width).update(highlight=False)
             segments = console.render(renderable, options)
             # Cheaper than counting the lines returned from render_lines!
             height = sum([text.count("\n") for text, _, _ in segments])
@@ -285,23 +317,29 @@ class RichVisual(Visual):
         return height
 
     def render_strips(
-        self,
-        rules: RulesMap,
-        width: int,
-        height: int | None,
-        style: Style,
-        selection: Selection | None = None,
-        selection_style: Style | None = None,
+        self, width: int, height: int | None, style: Style, options: RenderOptions
     ) -> list[Strip]:
-        console = active_app.get().console
-        options = console.options.update(
+        """Render the Visual into an iterable of strips. Part of the Visual protocol.
+
+        Args:
+            width: Width of desired render.
+            height: Height of desired render or `None` for any height.
+            style: The base style to render on top of.
+            options: Additional render options.
+
+        Returns:
+            An list of Strips.
+        """
+        app = active_app.get()
+        console = app.console
+        console_options = app.console_options.update(
             highlight=False,
             width=width,
             height=height,
         )
         rich_style = style.rich_style
         renderable = self._widget.post_render(self._renderable, rich_style)
-        segments = console.render(renderable, options.update_width(width))
+        segments = console.render(renderable, console_options.update_width(width))
         strips = [
             Strip(line)
             for line in islice(
@@ -340,17 +378,25 @@ class Padding(Visual):
         )
 
     def get_height(self, rules: RulesMap, width: int) -> int:
-        return self._visual.get_height(rules, width) + self._spacing.height
+        return (
+            self._visual.get_height(rules, width - self._spacing.width)
+            + self._spacing.height
+        )
 
     def render_strips(
-        self,
-        rules: RulesMap,
-        width: int,
-        height: int | None,
-        style: Style,
-        selection: Selection | None = None,
-        selection_style: Style | None = None,
+        self, width: int, height: int | None, style: Style, options: RenderOptions
     ) -> list[Strip]:
+        """Render the Visual into an iterable of strips. Part of the Visual protocol.
+
+        Args:
+            width: Width of desired render.
+            height: Height of desired render or `None` for any height.
+            style: The base style to render on top of.
+            options: Additional render options.
+
+        Returns:
+            An list of Strips.
+        """
         padding = self._spacing
         top, right, bottom, left = self._spacing
         render_width = width - (left + right)
@@ -358,12 +404,10 @@ class Padding(Visual):
             return []
 
         strips = self._visual.render_strips(
-            rules,
             render_width,
             None if height is None else height - padding.height,
             style,
-            selection,
-            selection_style,
+            options,
         )
 
         if padding:

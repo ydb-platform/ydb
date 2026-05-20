@@ -1,9 +1,9 @@
 #include "alter_topic_operation.h"
 #include "schema_operation.h"
 
+#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
 namespace NKikimr::NPQ::NSchema {
@@ -31,7 +31,7 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        ReplyAndDie(Ydb::StatusIds::INTERNAL_ERROR, exc.what());
+        Send(ParentId, new TEvCreateTopicResponse(Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
     }
 
 private:
@@ -59,7 +59,11 @@ private:
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
             case NDescriber::EStatus::SUCCESS: {
-                return DoAlter();
+                if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                    return DoAlter();
+                } else {
+                    return DoGetClustersList();
+                }
             }
             case NDescriber::EStatus::NOT_FOUND: {
                 if (Settings.IfExists) {
@@ -79,6 +83,32 @@ private:
     STFUNC(DescribeState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
+    }
+
+private:
+    void DoGetClustersList() {
+        LOG_D("DoGetClustersList");
+        Become(&TAlterTopicOperationActor::GetClustersListState);
+        Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
+    }
+
+    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
+        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: "
+            << (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error"));
+
+        auto& response = *ev->Get();
+        if (response.Success) {
+            ClustersList = std::move(response.ClustersList);
+        }
+
+        return DoAlter();
+    }
+
+    STFUNC(GetClustersListState) {
+        switch(ev->GetTypeRewrite()) {
+            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -107,6 +137,7 @@ private:
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
         modifyScheme.SetWorkingDir(workingDir);
         modifyScheme.SetAllowAccessToPrivatePaths(true);
+        modifyScheme.SetSuccessOnNotExist(Settings.IfExists);
 
         auto* config = modifyScheme.MutableAlterPersQueueGroup();
 
@@ -116,7 +147,13 @@ private:
             applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
         }
 
-        auto result = Settings.Strategy->ApplyChanges(TopicInfo, modifyScheme, *config, TopicInfo.Info->Description);
+        auto result = Settings.Strategy->ApplyChanges(
+            GetLocalClusterName(ClustersList),
+            TopicInfo,
+            modifyScheme,
+            *config,
+            TopicInfo.Info->Description
+        );
         if (result) {
             result = ValidateConfig(config->GetPQTabletConfig(), EOperation::Alter);
         }
@@ -127,12 +164,16 @@ private:
 
         ModifyScheme = modifyScheme;
 
-        RegisterWithSameMailbox(CreateSchemaOperation(
-            SelfId(),
-            TopicInfo.RealPath,
-            std::move(proposal),
-            Settings.Cookie
-        ));
+        if (Settings.PrepareOnly) {
+            return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
+        } else {
+            RegisterWithSameMailbox(CreateSchemaOperation(
+                SelfId(),
+                TopicInfo.RealPath,
+                std::move(proposal),
+                Settings.Cookie
+            ));
+        }
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
@@ -151,7 +192,7 @@ private:
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
         LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
-        if (errorCode == Ydb::StatusIds::SUCCESS) {
+        if (errorCode == Ydb::StatusIds::SUCCESS && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }
         Send(ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
@@ -164,6 +205,7 @@ private:
 
     NDescriber::TTopicInfo TopicInfo;
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
+    NPQ::NClusterTracker::TClustersList::TConstPtr ClustersList;
 };
 
 }

@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
 /***
  * All the methods to compute metadata and statistics are collected in this file
@@ -14,22 +15,6 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
-TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
-    if (!keyColumns) {
-        return {};
-    }
-
-    TVector<TInfoUnit> result;
-    for (const auto& key : keyColumns->Data) {
-        auto it = std::find_if(outputColumns.begin(), outputColumns.end(), [&key](const TInfoUnit& iu) {
-            return key == iu.GetColumnName();
-        });
-
-        Y_ENSURE(it != outputColumns.end());
-        result.push_back(*it);
-    }
-    return result;
-}
 
 void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusivePtr<IOperator>& right, TVector<TString>& leftAliases,
                           TVector<TString>& rightAliases, TVector<TString>& unionOfAliases) {
@@ -59,6 +44,34 @@ void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusive
     std::sort(rightAliases.begin(), rightAliases.end());
     std::set_union(leftAliasSet.begin(), leftAliasSet.end(), rightAliasSet.begin(), rightAliasSet.end(),
             std::back_inserter(unionOfAliases));
+}
+
+TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
+    auto leftKeys = join->GetLeftInput()->Props.Metadata->KeyColumns;
+    if (join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
+        return leftKeys;
+    }
+
+    auto rightKeys = join->GetRightInput()->Props.Metadata->KeyColumns;
+    if (join->JoinKind == "RightSemi" || join->JoinKind == "RightOnly") {
+        return rightKeys;
+    }
+    
+    if (leftKeys.empty() || rightKeys.empty()) {
+        return {};
+    }
+
+    if(IUSetDiff(leftKeys, rightKeys).empty()) {
+        return rightKeys;
+    }
+    else if (IUSetDiff(rightKeys, leftKeys).empty()) {
+        return leftKeys;
+    }
+    else {
+        auto concatKeys = leftKeys;
+        AddUnique<TInfoUnit>(rightKeys, concatKeys);
+        return concatKeys;
+    }
 }
 }
 
@@ -158,6 +171,12 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
             break;
     }
     Props.Metadata->StorageType = storageType;
+
+    if (storageType == EStorageType::ColumnStorage && !tableData.Metadata->PartitionedByColumns.empty()) {
+        for (const auto& columnName : tableData.Metadata->PartitionedByColumns) {
+            Props.Metadata->ShuffledByColumns.emplace_back(Alias, columnName);
+        }
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Inferred metadata for table: " << path.Value();
 }
@@ -264,24 +283,32 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     auto renamesWithTransform = GetRenamesWithTransforms(planProps);
 
-    for (const auto& column : inputMetadata.KeyColumns) {
-        const auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(), [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
-            // Check that a key column has been renamed into something new
-            return column == rename.second;
-        });
-
-        if (it != renamesWithTransform.end()) {
-            // Add the new name to column list
-            Props.Metadata->KeyColumns.push_back(it->first);
-        } else {
-            Props.Metadata->KeyColumns.push_back(column);
+    auto resolveRename = [&](const TInfoUnit& column) -> const TInfoUnit* {
+        for (const auto& [to, from] : renamesWithTransform) {
+            if (column == from) {
+                return &to;
+            }
         }
+        return nullptr;
+    };
 
-        if (Project && it == renamesWithTransform.end()) {
-            Props.Metadata->KeyColumns = {};
-            break;
+    auto propagateColumns = [&](const TVector<TInfoUnit>& inputColumns,
+                                TVector<TInfoUnit>& outputColumns) {
+        for (const auto& column : inputColumns) {
+            if (const auto* renamed = resolveRename(column)) {
+                outputColumns.push_back(*renamed);
+            } else if (!Project) {
+                outputColumns.push_back(column);
+            } else {
+                // Column not preserved by any order-maintaining mapping — guarantee broken
+                outputColumns = {};
+                break;
+            }
         }
-    }
+    };
+
+    propagateColumns(inputMetadata.KeyColumns,        Props.Metadata->KeyColumns);
+    propagateColumns(inputMetadata.ShuffledByColumns, Props.Metadata->ShuffledByColumns);
 
     // Build lineage data
     Props.Metadata->ColumnLineage = {};
@@ -336,25 +363,27 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         return;
     }
 
-    Props.Metadata = GetInput()->Props.Metadata;
+    const auto& inputMetadata = *GetInput()->Props.Metadata;
 
+    Props.Metadata = TRBOMetadata();
+
+    Props.Metadata->StorageType = inputMetadata.StorageType;
     // Compute logical cardinality info. Its the same as input cardinality, except in the case
     // where the group-by list is empty, then we always produce a single tuple
-    if (KeyColumns.empty()) {
-        Props.Metadata->LogicalCard = ELogicalCardinality::One;
-    }
-
+    Props.Metadata->LogicalCard = KeyColumns.empty() ? ELogicalCardinality::One : inputMetadata.LogicalCard;
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
-    // Aggregate acts list a source in terms of lineage
-    // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
-    Props.Metadata->ColumnLineage = {};
+    Props.Metadata->ShuffledByColumns = {};
+
+    // Aggregate acts like a source in terms of lineage.
+    // FIXME: We currently delete all lineage of columns before Aggregate,
+    // maybe this is suboptimal in some future cases?
     TString alias = "_aggregate";
     int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, alias);
     for (const auto & iu : GetOutputIUs()) {
-        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, alias, iu.GetColumnName(), duplicateId));
+        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, "", iu.GetColumnName(), duplicateId));
     }
 }
 
@@ -426,7 +455,7 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         FindCardHint(unionOfAliases, *hints.BytesHints));
 
     Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
-    Props.Metadata->KeyColumns = ConvertKeyColumns(CBOStats.KeyColumns, GetOutputIUs());
+    Props.Metadata->KeyColumns = ComputeKeysAfterJoin(this);
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 
@@ -438,6 +467,38 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
+
+    NKqp::EJoinAlgoType algo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
+    if (algo == NKqp::EJoinAlgoType::MapJoin) {
+        // Build side is always right (broadcast), so left-family output keeps the left distribution.
+        // For right-family joins be conservative: output rows are right-side rows, so left-side
+        // shuffling is not a valid distribution claim for the result.
+        const bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
+        if (!rightSided) {
+            Props.Metadata->ShuffledByColumns = GetLeftInput()->Props.Metadata->ShuffledByColumns;
+        }
+    } else if (algo == NKqp::EJoinAlgoType::GraceJoin) {
+        // Both sides will be partitioned by their respective join keys,
+        // but the columns by which they are shuffled may not survive after the join.
+
+        // For example, if you do a right semi join, the columns from the right
+        // table won't be available.
+
+        // For consistency, we'll take join keys from the right table for the "right"
+        // family of joins (including ones like a simple right join in which
+        // we can probably take either) and columns from the left keys otherwise.
+
+        // TODO: Later down the line, we should store ordering id instead of a column
+        // list. This will allow us to not discard compatible joins, when one of
+        // the equal columns is dropped by a projection later.
+
+        bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
+        for (const auto& [leftKey, rightKey] : JoinKeys) {
+            Props.Metadata->ShuffledByColumns.push_back(rightSided ? rightKey : leftKey);
+        }
+    }
+    // Currently there are no other algos.
+    // If any other are added, leave ShuffledByColumns empty (unknown distribution) - the safest default.
 }
 
 void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {

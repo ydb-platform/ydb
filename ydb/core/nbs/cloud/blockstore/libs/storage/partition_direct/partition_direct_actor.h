@@ -1,11 +1,12 @@
 #pragma once
 
+#include "direct_block_group.h"
+#include "part_counters.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_counters.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -40,6 +41,7 @@ class TPartitionActor
     };
 
 private:
+    TLogTitle LogTitle;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;
@@ -48,10 +50,12 @@ private:
     bool DdiskBlockGroupAllocated = false;
 
 public:
-    static constexpr size_t NumDirectBlockGroups = 32;
     TPartitionActor(
         const NActors::TActorId& tablet,
         NKikimr::TTabletStorageInfo* info);
+
+    ~TPartitionActor() override;
+    void PassAway() override;
 
     static constexpr ui32 LogComponent = NKikimrServices::NBS_PARTITION;
     using TCounters = TPartitionCounters;

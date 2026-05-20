@@ -20,7 +20,10 @@ TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
 TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , Settings_(settings)
-    , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
+    , SessionPool_(
+        Settings_.SessionPoolSettings_.MaxActiveSessions_,
+        Settings_.SessionPoolSettings_.MinPoolSize_
+    )
 {
     auto clientCollector = DbDriverState_->StatCollector.GetClientStatCollector("Table");
     OperationStatCollector_ = clientCollector.OperationStatCollector;
@@ -34,7 +37,35 @@ TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, 
     }
 
     SetStatCollector(clientCollector);
-    SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Table"));
+    SessionPool_.SetStatCollector(
+        DbDriverState_->StatCollector.GetSessionPoolStatCollector(
+            "Table",
+            Settings_.PoolName_
+        )
+    );
+}
+
+std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryRootSpan() {
+    return NObservability::TRequestSpan::CreateForClientRetry(
+        "Table",
+        Tracer_,
+        DbDriverState_
+    );
+}
+
+std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAttemptSpan(
+    std::uint32_t attempt
+    , std::int64_t backoffMs
+    , const std::shared_ptr<NObservability::TRequestSpan>& parent
+) {
+    return NObservability::TRequestSpan::CreateForRetryAttempt(
+        "Table",
+        Tracer_,
+        DbDriverState_,
+        attempt,
+        backoffMs,
+        parent
+    );
 }
 
 TTableClient::TImpl::~TImpl() {
@@ -385,9 +416,10 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
-    auto obs = MakeObservation("GetSession");
+    auto obs = MakeObservation("CreateSession");
+    const auto createStartTime = std::chrono::steady_clock::now();
 
-    auto createSessionExtractor = [createSessionPromise, self, standalone, obs]
+    auto createSessionExtractor = [createSessionPromise, self, standalone, obs, createStartTime]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Ydb::Table::CreateSessionResult result;
             if (any) {
@@ -399,12 +431,14 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
                     session.SessionImpl_->MarkActive();
                 }
                 self->DbDriverState_->StatCollector.IncSessionsOnHost(status.Endpoint);
+                const double elapsedSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - createStartTime).count();
+                self->SessionPool_.RecordConnectionCreateTime(elapsedSec);
             } else {
                 // We do not use SessionStatusInterception for CreateSession request
                 session.SessionImpl_->MarkBroken();
             }
+            obs->End(status.Status, status.Endpoint);
             TCreateSessionResult val(TStatus(std::move(status)), std::move(session));
-            obs->End(val.GetStatus());
             createSessionPromise.SetValue(std::move(val));
         };
 
@@ -778,7 +812,7 @@ TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const TSession& session, co
 
     return future.Apply([obs](NThreading::TFuture<TStatus> f) mutable {
         auto status = f.ExtractValue();
-        obs->End(status.GetStatus());
+        obs->End(status.GetStatus(), status.GetEndpoint());
         return status;
     });
 }
@@ -806,9 +840,9 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
                 txId = result.tx_meta().id();
             }
 
+            obs->End(status.Status, status.Endpoint);
             TBeginTransactionResult beginTxResult(TStatus(std::move(status)),
                 TTransaction(session, txId));
-            obs->End(beginTxResult.GetStatus());
             promise.SetValue(std::move(beginTxResult));
         };
 
@@ -835,7 +869,7 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     request.set_tx_id(TStringType{txId});
     request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
 
-    auto obs = MakeObservation("CommitTransaction");
+    auto obs = MakeObservation("Commit");
 
     auto promise = NewPromise<TCommitTransactionResult>();
 
@@ -851,8 +885,8 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
                 }
             }
 
+            obs->End(status.Status, status.Endpoint);
             TCommitTransactionResult commitTxResult(TStatus(std::move(status)), queryStats);
-            obs->End(commitTxResult.GetStatus());
             promise.SetValue(std::move(commitTxResult));
         };
 
@@ -878,7 +912,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     request.set_session_id(TStringType{session.GetId()});
     request.set_tx_id(TStringType{txId});
 
-    auto obs = MakeObservation("RollbackTransaction");
+    auto obs = MakeObservation("Rollback");
 
     auto future = RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),
@@ -888,7 +922,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
 
     return future.Apply([obs](TAsyncStatus fut) {
         auto status = fut.GetValue();
-        obs->End(status.GetStatus());
+        obs->End(status.GetStatus(), status.GetEndpoint());
         return status;
     });
 }
@@ -1165,8 +1199,8 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     auto promise = NewPromise<TBulkUpsertResult>();
     auto extractor = [promise, obs](google::protobuf::Any* any, TPlainStatus status) mutable {
         Y_UNUSED(any);
+        obs->End(status.Status, status.Endpoint);
         TBulkUpsertResult val(TStatus(std::move(status)));
-        obs->End(val.GetStatus());
         promise.SetValue(std::move(val));
     };
 
@@ -1216,8 +1250,8 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     auto extractor = [promise, obs]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Y_UNUSED(any);
+            obs->End(status.Status, status.Endpoint);
             TBulkUpsertResult val(TStatus(std::move(status)));
-            obs->End(val.GetStatus());
             promise.SetValue(std::move(val));
         };
 

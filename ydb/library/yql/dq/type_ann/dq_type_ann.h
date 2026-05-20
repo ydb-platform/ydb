@@ -29,6 +29,7 @@ IGraphTransformer::TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TEx
 IGraphTransformer::TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqTransform(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx);
 
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(NYql::TTypeAnnotationContext& typesCtx);
 
@@ -73,6 +74,7 @@ struct TDqStageSettings {
     TDqStageSettings& SetShuffleEliminated() { IsShuffleEliminated = true; return *this; }
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
+    static TDqStageSettings New(const TString& stageGIUD);
     static TDqStageSettings New();
 
     static TDqStageSettings Parse(const NNodes::TDqStageBase& node);

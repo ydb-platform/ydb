@@ -4,7 +4,7 @@
 #include "sql.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
@@ -439,8 +439,8 @@ public:
         EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
-    bool StrictWarningAsError = false;
-    bool WindowNewPipeline = false;
+    bool StrictWarningAsError = true;
+    bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;

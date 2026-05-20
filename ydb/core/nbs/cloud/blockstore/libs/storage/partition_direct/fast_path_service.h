@@ -1,5 +1,6 @@
 #pragma once
 
+#include "direct_block_group.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
@@ -22,9 +23,11 @@ class TFastPathService
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const TStorageConfigPtr StorageConfig;
     const TString DiskId;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
+    const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;
@@ -34,8 +37,10 @@ private:
 
     TVolumeCounters Counters;
     TVolumeConfigPtr VolumeConfig;
-    const EWriteMode WriteMode;
-    TDuration PBufferReplyTimeout;
+
+    TAdaptiveLock DumpLock;
+    size_t DumpCount = 0;
+    TMap<size_t, TDBGDumpResponse> DebugDumps;
 
 public:
     TFastPathService(
@@ -50,7 +55,9 @@ public:
         ITimerPtr timer,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 
-    ~TFastPathService() override = default;
+    ~TFastPathService() override;
+
+    void Run();
 
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
@@ -78,6 +85,9 @@ public:
 
 private:
     ui64 GenerateSequenceNumber();
+    void ScheduleDirtyMapDebugPrint();
+    void QueryDirtyMapDebugDump();
+    void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

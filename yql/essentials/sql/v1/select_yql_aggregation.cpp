@@ -1,13 +1,14 @@
 #include "select_yql_aggregation.h"
 
 #include "context.h"
+#include "select_yql_window.h"
 
 namespace NSQLTranslationV1 {
 
-class TYqlAggregation final: public INode, private TYqlAggregationArgs {
+class TYqlAggregation final: public IYqlWindowLikeNode, private TYqlAggregationArgs {
 public:
     TYqlAggregation(TPosition position, TYqlAggregationArgs&& args)
-        : INode(std::move(position))
+        : IYqlWindowLikeNode(std::move(position))
         , TYqlAggregationArgs(std::move(args))
         , Aggregation_(BuildAggregationByType(
               Type,
@@ -36,7 +37,7 @@ public:
         Apply_ = L(std::move(Apply_), Factory());
 
         if (IsWindow()) {
-            Apply_ = L(std::move(Apply_), Q(WindowName_));
+            Apply_ = L(std::move(Apply_), Q(GetWindowName()));
         }
 
         Apply_ = L(std::move(Apply_), Options());
@@ -52,10 +53,6 @@ public:
 
     TNodePtr DoClone() const override {
         return new TYqlAggregation(*this);
-    }
-
-    void SetWindowName(TString name) {
-        WindowName_ = std::move(name);
     }
 
 private:
@@ -108,7 +105,6 @@ private:
     }
 
     const TAggregationPtr Aggregation_;
-    TString WindowName_;
     TNodePtr Apply_;
 };
 
@@ -134,11 +130,8 @@ TNodeResult BuildYqlAggregation(TPosition position, TYqlAggregationArgs&& args) 
     return TNonNull(TNodePtr(new TYqlAggregation(std::move(position), std::move(args))));
 }
 
-TNodePtr WrapYqlAggregationOverWindow(TNodePtr node, TString windowName) {
-    auto* x = dynamic_cast<TYqlAggregation*>(node.Get());
-    YQL_ENSURE(x, "YqlAggregation expected");
-    x->SetWindowName(std::move(windowName));
-    return node;
+TNodePtr BuildYqlGrouping(TPosition position, TVector<TNodePtr> args) {
+    return new TCallNodeImpl(position, "YqlGrouping", std::move(args));
 }
 
 } // namespace NSQLTranslationV1

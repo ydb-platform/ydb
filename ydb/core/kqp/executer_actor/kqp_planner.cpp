@@ -8,6 +8,8 @@
 #include <util/generic/set.h>
 
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
+#include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
+#include <ydb/core/kqp/common/control.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 using namespace NActors;
@@ -20,19 +22,27 @@ namespace NKikimr::NKqp {
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 
+static std::atomic<ui64> MaxTaskSize = 48_MB;
+
+void SetMaxTaskSize(ui64 size) {
+    MaxTaskSize.store(size, std::memory_order_relaxed);
+}
+
+ui64 GetMaxTaskSize() {
+    return MaxTaskSize.load(std::memory_order_relaxed);
+}
+
 using namespace NYql;
 
 namespace {
 
-const ui64 MaxTaskSize = 48_MB;
-
 template <class TCollection>
 std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TIntrusivePtr<TUserRequestContext>& UserRequestContext, const TCollection& tasks) {
     for (const auto& task : tasks) {
-        if (ui32 size = task.ByteSize(); size > MaxTaskSize) {
-            LOG_E("Abort execution. Task #" << task.GetId() << " size is too big: " << size << " > " << MaxTaskSize);
-            return std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED,
-                TStringBuilder() << "Datashard program size limit exceeded (" << size << " > " << MaxTaskSize << ")");
+        if (ui32 size = task.ByteSize(); size > GetMaxTaskSize()) {
+            LOG_E("Abort execution. Task #" << task.GetId() << " size is too big: " << size << " > " << GetMaxTaskSize());
+            return std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED,
+                TStringBuilder() << "Datashard program size limit exceeded (" << size << " > " << GetMaxTaskSize() << ")");
         }
     }
     return nullptr;
@@ -505,7 +515,17 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     }
 
     taskDesc->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
-    auto startResult = CaFactory_->CreateKqpComputeActor({
+
+    auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+
+    auto rmResult = ResourceManager_->AllocateResources(
+        *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
+
+    if (!rmResult) {
+        return rmResult.GetFailReason();
+    }
+
+    auto actorId = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
         .LockTxId = TasksGraph.GetMeta().LockTxId,
@@ -513,6 +533,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .LockMode = TasksGraph.GetMeta().LockMode,
         .Task = taskDesc,
         .TxInfo = TxInfo,
+        .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
+        .ChannelQuotaManager = nullptr,
         .ReportStatsSettings = Nothing(),
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
@@ -531,13 +553,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .Query = Query,
     });
 
-    if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&startResult)) {
-        return rmResult->GetFailReason();
-    }
-
-    TActorId* actorId = std::get_if<TActorId>(&startResult);
-    Y_ABORT_UNLESS(actorId);
-    Y_ABORT_UNLESS(AcknowledgeCA(taskId, *actorId, nullptr));
+    Y_ABORT_UNLESS(AcknowledgeCA(taskId, actorId, nullptr));
 
     for (auto& output : task.Outputs) {
         for (auto channelId : output.Channels) {
@@ -649,12 +665,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
 void TKqpPlanner::PrepareCheckpoints() {
     const auto isStreamingQuery = UserRequestContext && UserRequestContext->IsStreamingQuery;
-
-    if (!isStreamingQuery) {
-        return;
-    }
-
-    const auto enableCheckpoints = static_cast<bool>(CheckpointCoordinatorId);
+    const auto enableCheckpoints = isStreamingQuery && static_cast<bool>(CheckpointCoordinatorId);
     TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, EnableWatermarks);
 
     if (!enableCheckpoints) {

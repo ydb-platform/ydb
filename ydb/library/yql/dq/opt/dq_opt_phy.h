@@ -72,7 +72,8 @@ NNodes::TExprBase DqBuildPartitionsStage(
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage = true,
     TTypeAnnotationContext* typeCtx = nullptr,
-    bool enableShuffleElimination = false
+    bool enableShuffleElimination = false,
+    bool useSortForPartitionsByKeys = false
 );
 
 NNodes::TExprBase DqBuildPartitionStage(
@@ -180,5 +181,12 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedOverStageInput(NNodes::TExprBas
     const TTypeAnnotationContext& typeAnnCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage);
 
 NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteStreamLookupJoin(NNodes::TExprBase node, TExprContext& ctx);
+
+NNodes::TExprBase DqPushWatermarkGeneratorToStage(
+    NNodes::TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap
+);
 
 } // namespace NYql::NDq

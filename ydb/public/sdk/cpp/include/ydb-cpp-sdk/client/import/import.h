@@ -37,8 +37,8 @@ enum class EIndexPopulationMode {
 };
 
 struct TImportItemProgress {
-    uint32_t PartsTotal;
-    uint32_t PartsCompleted;
+    uint32_t PartsTotal = 0;
+    uint32_t PartsCompleted = 0;
     TInstant StartTime;
     TInstant EndTime;
 };
@@ -79,7 +79,7 @@ class TImportFromS3Response : public TOperation {
 public:
     struct TMetadata {
         TImportFromS3Settings Settings;
-        EImportProgress Progress;
+        EImportProgress Progress = EImportProgress::Unspecified;
         std::vector<TImportItemProgress> ItemsProgress;
     };
 
@@ -184,7 +184,7 @@ class TImportFromFsResponse : public TOperation {
 public:
     struct TMetadata {
         TImportFromFsSettings Settings;
-        EImportProgress Progress;
+        EImportProgress Progress = EImportProgress::Unspecified;
         std::vector<TImportItemProgress> ItemsProgress;
     };
 

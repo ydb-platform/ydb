@@ -285,9 +285,9 @@ message TEvTabletStateUpdate {
     optional NActorsProto.TActorId UserActorId = 4;
 }
 
-message TEvCompactTables {
+message TEvMoveData {
 }
 
-message TEvCompactTablesResponse {
+message TEvMoveDataResponse {
     optional uint64 TabletId = 1;
 }

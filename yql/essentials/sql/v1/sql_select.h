@@ -47,6 +47,7 @@ private:
     TNodePtr JoinExpr(ISource*, const TRule_join_constraint& node);
     TSourcePtr ProcessCore(const TRule_process_core& node, const TWriteSettings& settings, TPosition& selectPos);
     TSourcePtr ReduceCore(const TRule_reduce_core& node, const TWriteSettings& settings, TPosition& selectPos);
+    TSourcePtr CombineCore(const TRule_combine_core& node, const TWriteSettings& settings, TPosition& selectPos);
 
     struct TSelectKindPlacement {
         bool IsFirstInSelectOp = false;
@@ -54,7 +55,7 @@ private:
     };
 
     TSourcePtr SelectCore(const TRule_select_core& node, const TWriteSettings& settings, TPosition& selectPos,
-                          TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrederBy, bool& selectOpAssumeOrderBy);
+                          TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrderBy, bool& selectOpAssumeOrderBy);
 
     struct TSelectKindResult {
         TSourcePtr Source;

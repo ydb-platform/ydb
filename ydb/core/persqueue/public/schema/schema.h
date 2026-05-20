@@ -1,14 +1,17 @@
 #pragma once
 
-#include <library/cpp/threading/future/core/future.h>
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 namespace NACLib {
+
 class TUserToken;
-}
+
+} // namespace NACLib
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -62,6 +65,7 @@ struct TAlterTopicSettings {
     Ydb::Topic::AlterTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IfExists = false;
+    bool PrepareOnly = false;
     ui64 Cookie = 0;
 };
 
@@ -122,11 +126,13 @@ struct TCreateTopicSettings {
     TString PeerName;
     Ydb::Topic::CreateTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TString LocalDc;
+    bool IfNotExists = true;
+    bool PrepareOnly = false;
     ui64 Cookie = 0;
 };
 
 NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCreateTopicSettings&& settings);
+NActors::IActor* CreateCreateTopicActor(NThreading::TPromise<TCreateTopicResponse>&& promise, TCreateTopicSettings&& settings);
 
 //
 // Drop Topic

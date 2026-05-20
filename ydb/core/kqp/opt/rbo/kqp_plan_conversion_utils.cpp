@@ -416,7 +416,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
     }
 
     const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
-    return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Final, distinctAll, node->Pos());
+    return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Undefined, distinctAll, node->Pos());
 }
 
 } // namespace NKqp

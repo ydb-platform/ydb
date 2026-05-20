@@ -6,9 +6,11 @@ SRCS(
     columnar_statistics_ut.cpp
     columnar_ut.cpp
     logical_type_short_notation_ut.cpp
+    pipe_ut.cpp
     record_codegen_ut.cpp
     serialization_ut.cpp
     unversioned_row_ut.cpp
+    yson_struct_v3_schema_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

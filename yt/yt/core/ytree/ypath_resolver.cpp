@@ -32,7 +32,7 @@ DEFINE_ENUM(EExpectedItem,
     (Value)
 );
 
-using TResult = std::variant<bool, i64, ui64, double, TString>;
+using TResult = std::variant<bool, i64, ui64, double, std::string>;
 
 std::optional<TResult> TryParseValue(TYsonPullParserCursor* cursor)
 {
@@ -46,7 +46,7 @@ std::optional<TResult> TryParseValue(TYsonPullParserCursor* cursor)
         case EYsonItemType::DoubleValue:
             return (*cursor)->UncheckedAsDouble();
         case EYsonItemType::StringValue:
-            return TString((*cursor)->UncheckedAsString());
+            return std::string((*cursor)->UncheckedAsString());
         default:
             return std::nullopt;
     }
@@ -67,7 +67,7 @@ TResult ParseValue(TYsonPullParserCursor* cursor)
         tokenizer.GetInput());
 }
 
-std::pair<EExpectedItem, std::optional<TString>> NextToken(TTokenizer* tokenizer)
+std::pair<EExpectedItem, std::optional<std::string>> NextToken(TTokenizer* tokenizer)
 {
     switch (tokenizer->Advance()) {
         case ETokenType::EndOfStream:
@@ -173,12 +173,24 @@ struct TScalarTypeTraits
 { };
 
 template <>
+struct TScalarTypeTraits<std::string>
+{
+    static std::optional<std::string> TryCast(const NDetail::TResult& result)
+    {
+        if (const auto* value = std::get_if<std::string>(&result)) {
+            return *value;
+        }
+        return std::nullopt;
+    }
+};
+
+template <>
 struct TScalarTypeTraits<TString>
 {
     static std::optional<TString> TryCast(const NDetail::TResult& result)
     {
-        if (const auto* value = std::get_if<TString>(&result)) {
-            return *value;
+        if (const auto* value = std::get_if<std::string>(&result)) {
+            return TString(*value);
         }
         return std::nullopt;
     }
@@ -274,6 +286,7 @@ template std::optional<i64> TryGetValue<i64>(TStringBuf yson, const TYPath& ypat
 template std::optional<ui64> TryGetValue<ui64>(TStringBuf yson, const TYPath& ypath);
 template std::optional<bool> TryGetValue<bool>(TStringBuf yson, const TYPath& ypath);
 template std::optional<double> TryGetValue<double>(TStringBuf yson, const TYPath& ypath);
+template std::optional<std::string> TryGetValue<std::string>(TStringBuf yson, const TYPath& ypath);
 template std::optional<TString> TryGetValue<TString>(TStringBuf yson, const TYPath& ypath);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -298,14 +311,14 @@ std::optional<double> TryGetDouble(TStringBuf yson, const TYPath& ypath)
     return TryGetValueImpl<double>(yson, ypath);
 }
 
-std::optional<TString> TryGetString(TStringBuf yson, const TYPath& ypath)
+std::optional<std::string> TryGetString(TStringBuf yson, const TYPath& ypath)
 {
-    return TryGetValueImpl<TString>(yson, ypath);
+    return TryGetValueImpl<std::string>(yson, ypath);
 }
 
-std::optional<TString> TryGetAny(TStringBuf yson, const TYPath& ypath)
+std::optional<std::string> TryGetAny(TStringBuf yson, const TYPath& ypath)
 {
-    return TryGetValueImpl<TString>(yson, ypath, /*isAny*/ true);
+    return TryGetValueImpl<std::string>(yson, ypath, /*isAny*/ true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -321,6 +334,7 @@ template std::optional<i64> TryParseValue<i64>(TYsonPullParserCursor* cursor);
 template std::optional<ui64> TryParseValue<ui64>(TYsonPullParserCursor* cursor);
 template std::optional<bool> TryParseValue<bool>(TYsonPullParserCursor* cursor);
 template std::optional<double> TryParseValue<double>(TYsonPullParserCursor* cursor);
+template std::optional<std::string> TryParseValue<std::string>(TYsonPullParserCursor* cursor);
 template std::optional<TString> TryParseValue<TString>(TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -360,7 +374,7 @@ bool ParseMapOrAttributesUntilKey(TYsonPullParserCursor* cursor, TStringBuf key)
     return false;
 }
 
-TString ParseAnyValue(TYsonPullParserCursor* cursor)
+std::string ParseAnyValue(TYsonPullParserCursor* cursor)
 {
     TStringStream stream;
     {

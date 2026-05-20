@@ -30,6 +30,8 @@ private:
 
     struct TExPoison {};
 
+    using TPDiskEntry = std::decay_t<decltype(std::declval<TControllerSystemViewsState>().PDisks)>::value_type;
+
 public:
     TStorageStatsCoroCalculatorImpl(
         const TControllerSystemViewsState& systemViewsState,
@@ -112,8 +114,7 @@ public:
             }
         }
 
-        using T = std::decay_t<decltype(SystemViewsState.PDisks)>::value_type;
-        std::unordered_map<TBoxId, std::vector<const T*>> boxes;
+        std::unordered_map<TBoxId, std::vector<const TPDiskEntry*>> boxes;
         for (const auto& kv : SystemViewsState.PDisks) {
             if (kv.second.HasBoxId()) {
                 boxes[kv.second.GetBoxId()].push_back(&kv);
@@ -125,98 +126,24 @@ public:
             TStringInput s(entry.GetPDiskFilterData());
             Load(&s, filters);
 
+            const TBlobStorageGroupType erasureType(TBlobStorageGroupType::ErasureSpeciesByName(entry.GetErasureSpecies()));
+            const ui32 currentGroupsCreated = entry.GetCurrentGroupsCreated();
+
             for (const auto& [boxId, pdisks] : boxes) {
-                TBlobStorageGroupType type(TBlobStorageGroupType::ErasureSpeciesByName(entry.GetErasureSpecies()));
-                TGroupMapper mapper(TGroupGeometryInfo(type, NKikimrBlobStorage::TGroupGeometry())); // default geometry
+                TStats stats = CalculateStats(erasureType, currentGroupsCreated, filters, pdisks,
+                        /*considerDriveStatus=*/false,
+                        /*considerDecommitStatus=*/true,
+                        /*considerMaintenanceStatus=*/false);
+                TStats immediateStats = CalculateStats(erasureType, currentGroupsCreated, filters, pdisks,
+                        /*considerDriveStatus=*/true,
+                        /*considerDecommitStatus=*/true,
+                        /*considerMaintenanceStatus=*/true);
 
-                for (const auto& kv : pdisks) {
-                    const auto& [pdiskId, pdisk] = *kv;
-                    for (const auto& filter : filters) {
-                        const auto sharedWithOs = pdisk.HasSharedWithOs() ? MakeMaybe(pdisk.GetSharedWithOs()) : Nothing();
-                        const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
-                        if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
-                            const TNodeLocation& location = HostRecordMap->GetLocation(pdiskId.NodeId);
-                            const bool usable = pdisk.GetDecommitStatus() == "DECOMMIT_NONE";
-                            const bool ok = mapper.RegisterPDisk({
-                                .PDiskId = pdiskId,
-                                .Location = location,
-                                .Usable = usable,
-                                .NumSlots = pdisk.GetNumActiveSlots(),
-                                .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
-                                .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
-                                .Groups = {},
-                                .SpaceAvailable = 0,
-                                .Operational = true,
-                                .Decommitted = false, // this flag applies only to group reconfiguration
-                            });
-                            Y_ABORT_UNLESS(ok);
-                            break;
-                        }
-                    }
-                }
+                entry.SetAvailableGroupsToCreate(entry.GetAvailableGroupsToCreate() + stats.GroupsToCreate);
+                entry.SetAvailableSizeToCreate(entry.GetAvailableSizeToCreate() + stats.SizeToCreate);
 
-                // calculate number of groups we can create without accounting reserve
-                TGroupMapper::TGroupDefinition group;
-                TGroupMapperError error;
-                std::deque<ui64> groupSizes;
-                while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 1u, 0, false, {}, error)) {
-                    std::vector<TGroupDiskInfo> disks;
-                    std::deque<NKikimrBlobStorage::TPDiskMetrics> pdiskMetrics;
-                    std::deque<NKikimrBlobStorage::TVDiskMetrics> vdiskMetrics;
-
-                    for (const auto& realm : group) {
-                        for (const auto& domain : realm) {
-                            for (const auto& pdiskId : domain) {
-                                if (const auto it = SystemViewsState.PDisks.find(pdiskId); it != SystemViewsState.PDisks.end()) {
-                                    const NKikimrSysView::TPDiskInfo& pdisk = it->second;
-                                    auto& pm = *pdiskMetrics.emplace(pdiskMetrics.end());
-                                    auto& vm = *vdiskMetrics.emplace(vdiskMetrics.end());
-                                    if (pdisk.HasTotalSize()) {
-                                        pm.SetTotalSize(pdisk.GetTotalSize());
-                                    }
-                                    if (pdisk.HasEnforcedDynamicSlotSize()) {
-                                        pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
-                                    }
-                                    vm.SetAllocatedSize(0);
-                                    disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
-                                }
-                            }
-                        }
-                    }
-
-                    NKikimrSysView::TGroupInfo groupInfo;
-                    CalculateGroupUsageStats(&groupInfo, disks, type);
-                    groupSizes.push_back(groupInfo.GetAvailableSize());
-
-                    group.clear();
-
-                    Yield();
-                }
-
-                std::sort(groupSizes.begin(), groupSizes.end());
-
-                // adjust it according to reserve
-                const ui32 total = groupSizes.size() + entry.GetCurrentGroupsCreated();
-                ui32 reserve = GroupReserveMin;
-                while (reserve < groupSizes.size() && (reserve - GroupReserveMin) * 1000000 / total < GroupReservePart) {
-                    ++reserve;
-                }
-                reserve = Min<ui32>(reserve, groupSizes.size());
-
-                // cut sizes
-                while (reserve >= 2) {
-                    groupSizes.pop_front();
-                    groupSizes.pop_back();
-                    reserve -= 2;
-                }
-
-                if (reserve) {
-                    groupSizes.pop_front();
-                }
-
-                entry.SetAvailableGroupsToCreate(entry.GetAvailableGroupsToCreate() + groupSizes.size());
-                entry.SetAvailableSizeToCreate(entry.GetAvailableSizeToCreate() + std::accumulate(groupSizes.begin(),
-                    groupSizes.end(), ui64(0)));
+                entry.SetImmediateGroupsToCreate(entry.GetImmediateGroupsToCreate() + immediateStats.GroupsToCreate);
+                entry.SetImmediateSizeToCreate(entry.GetImmediateSizeToCreate() + immediateStats.SizeToCreate);
             }
         }
 
@@ -224,9 +151,119 @@ public:
     }
 
 private:
+    struct TStats {
+        ui32 GroupsToCreate;
+        ui64 SizeToCreate;
+    };
+
+private:
     void Yield() {
         Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
         WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &TStorageStatsCoroCalculatorImpl::ProcessUnexpectedEvent);
+    }
+
+    TStats CalculateStats(
+            TBlobStorageGroupType erasureType,
+            ui32 currentGroupsCreated,
+            const TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter>& filters,
+            const std::vector<const TPDiskEntry*>& pdisks,
+            bool considerDriveStatus,
+            bool considerDecommitStatus,
+            bool considerMaintenanceStatus) {
+        TGroupMapper mapper(TGroupGeometryInfo(erasureType, NKikimrBlobStorage::TGroupGeometry())); // default geometry
+
+        for (const auto& kv : pdisks) {
+            const auto& [pdiskId, pdisk] = *kv;
+            for (const auto& filter : filters) {
+                const auto sharedWithOs = pdisk.HasSharedWithOs() ? MakeMaybe(pdisk.GetSharedWithOs()) : Nothing();
+                const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
+                if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
+                    const TNodeLocation& location = HostRecordMap->GetLocation(pdiskId.NodeId);
+                    const bool usable = (!considerDriveStatus || !pdisk.HasStatusV2() || pdisk.GetStatusV2() == "ACTIVE") &&
+                            (!considerDecommitStatus || !pdisk.HasDecommitStatus() || pdisk.GetDecommitStatus() == "DECOMMIT_NONE") &&
+                            (!considerMaintenanceStatus || !pdisk.HasMaintenanceStatus() || pdisk.GetMaintenanceStatus() == "NO_REQUEST");
+                    const bool ok = mapper.RegisterPDisk({
+                        .PDiskId = pdiskId,
+                        .Location = location,
+                        .Usable = usable,
+                        .NumSlots = pdisk.GetNumActiveSlots(),
+                        .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
+                        .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
+                        .Groups = {},
+                        .SpaceAvailable = 0,
+                        .Operational = true,
+                        .Decommitted = false, // this flag applies only to group reconfiguration
+                    });
+                    Y_ABORT_UNLESS(ok);
+                    break;
+                }
+            }
+        }
+
+        // calculate number of groups we can create without accounting reserve
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        std::deque<ui64> groupSizes;
+        while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 1u, 0, false, {}, error)) {
+            std::vector<TGroupDiskInfo> disks;
+            std::deque<NKikimrBlobStorage::TPDiskMetrics> pdiskMetrics;
+            std::deque<NKikimrBlobStorage::TVDiskMetrics> vdiskMetrics;
+
+            for (const auto& realm : group) {
+                for (const auto& domain : realm) {
+                    for (const auto& pdiskId : domain) {
+                        if (const auto it = SystemViewsState.PDisks.find(pdiskId); it != SystemViewsState.PDisks.end()) {
+                            const NKikimrSysView::TPDiskInfo& pdisk = it->second;
+                            auto& pm = *pdiskMetrics.emplace(pdiskMetrics.end());
+                            auto& vm = *vdiskMetrics.emplace(vdiskMetrics.end());
+                            if (pdisk.HasTotalSize()) {
+                                pm.SetTotalSize(pdisk.GetTotalSize());
+                            }
+                            if (pdisk.HasEnforcedDynamicSlotSize()) {
+                                pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
+                            }
+                            vm.SetAllocatedSize(0);
+                            disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
+                        }
+                    }
+                }
+            }
+
+            NKikimrSysView::TGroupInfo groupInfo;
+            CalculateGroupUsageStats(&groupInfo, disks, erasureType);
+            groupSizes.push_back(groupInfo.GetAvailableSize());
+
+            group.clear();
+
+            Yield();
+        }
+
+        std::sort(groupSizes.begin(), groupSizes.end());
+
+        // adjust it according to reserve
+        const ui32 total = static_cast<ui32>(groupSizes.size()) + currentGroupsCreated;
+        ui32 reserve = GroupReserveMin;
+        while (reserve < groupSizes.size() && (reserve - GroupReserveMin) * 1000000 / total < GroupReservePart) {
+            ++reserve;
+        }
+        reserve = Min<ui32>(reserve, groupSizes.size());
+
+        // cut sizes
+        while (reserve >= 2) {
+            groupSizes.pop_front();
+            groupSizes.pop_back();
+            reserve -= 2;
+        }
+
+        if (reserve) {
+            groupSizes.pop_front();
+        }
+
+        return TStats{
+            .GroupsToCreate = static_cast<ui32>(groupSizes.size()),
+            .SizeToCreate = std::accumulate(groupSizes.begin(), groupSizes.end(),
+                    static_cast<ui64>(0))
+        };
     }
 
 private:

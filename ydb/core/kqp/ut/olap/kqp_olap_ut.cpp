@@ -1820,7 +1820,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("BlocksAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
+            UNIT_ASSERT_C(ast.find("BlockAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
 
             result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -1878,6 +1878,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 a Uint64 NOT NULL,
                 b Uint32 NOT NULL,
                 c Timestamp NOT NULL,
+                d Utf8,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1916,6 +1917,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 where (b % 128) == 0
                 group by a, cast(bitcast(Digest::IntHash64(a) as UInt32)/((Math::Pow(2, 32)/240) + 1) as UInt32) as res
                 order by cnt desc;
+            )",
+            R"(
+                SELECT
+                    d,
+                FROM
+                    `/Root/t1` as t1
+                WHERE
+                    t1.d is not distinct from "some_str";
             )",
         };
 

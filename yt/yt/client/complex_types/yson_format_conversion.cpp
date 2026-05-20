@@ -696,7 +696,7 @@ public:
             std::vector<TPositionTableEntry> result;
             result.reserve(fields.size());
             for (auto& field : fields) {
-                PositionTable_.push_back({
+                result.push_back({
                     .FieldName = std::move(field.FieldName),
                     .IsNullable = field.IsNullable,
                 });

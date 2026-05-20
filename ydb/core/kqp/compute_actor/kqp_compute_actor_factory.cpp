@@ -7,62 +7,6 @@
 
 namespace NKikimr::NKqp::NComputeActor {
 
-
-struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
-
-    TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
-        , TIntrusivePtr<NRm::TTxState> tx
-        , ui64 taskId
-        , ui64 limit)
-    : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
-    , ResourceManager(std::move(resourceManager))
-    , Tx(std::move(tx))
-    , TaskId(taskId)
-    {}
-
-    ~TMemoryQuotaManager() override {
-        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{
-            .ExecutionUnits = 1,
-            .Memory = Limit - Guarantee,
-            .ExternalMemory = Guarantee,
-        });
-    }
-
-    bool AllocateExtraQuota(ui64 extraSize) override {
-        auto result = ResourceManager->AllocateResources(*Tx, TaskId,
-            NRm::TKqpResourcesRequest{.Memory = extraSize});
-
-        if (!result) {
-            AFL_WARN(NKikimrServices::KQP_COMPUTE)
-                ("problem", "cannot_allocate_memory")
-                ("tx_id", Tx->TxId)
-                ("task_id", TaskId)
-                ("memory", extraSize);
-
-            return false;
-        }
-
-        return true;
-    }
-
-    void FreeExtraQuota(ui64 extraSize) override {
-        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
-    }
-
-    bool IsReasonableToUseSpilling() const override {
-        return Tx->IsReasonableToStartSpilling();
-    }
-
-    TString MemoryConsumptionDetails() const override {
-        return Tx->ToString();
-    }
-
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
-    TIntrusivePtr<NRm::TTxState> Tx;
-    ui64 TaskId;
-    ui64 ReasonableSpillingTreshold = 0;
-};
-
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -80,7 +24,6 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui32> CriticalTotalRetriesCount = 20;
     std::atomic<ui32> ReaskShardRetriesCount = 5;
 
-    std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
     std::atomic<ui64> MinMemAllocSize = 1_MB;
@@ -131,7 +74,7 @@ public:
             IsParallelScanningAvailable.load(), ShardSplitFactor.load(), CriticalTotalRetriesCount.load(), ReaskShardRetriesCount.load());
     }
 
-    TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) override {
+    TActorId CreateKqpComputeActor(TCreateArgs&& args) override {
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();
@@ -144,21 +87,11 @@ public:
         }
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
-        NRm::TKqpResourcesRequest resourcesRequest;
-        resourcesRequest.ExecutionUnits = 1;
-        resourcesRequest.ExternalMemory = memoryLimits.MkqlLightProgramMemoryLimit;
 
         NScheduler::TSchedulableActorOptions schedulableOptions {
             .Query = args.Query,
             .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
         };
-
-        auto rmResult = ResourceManager_->AllocateResources(
-            *args.TxInfo, args.Task->GetId(), resourcesRequest);
-
-        if (!rmResult) {
-            return NRm::TKqpRMAllocateResult{rmResult};
-        }
 
         {
             ui32 inputChannelsCount = 0;
@@ -177,11 +110,8 @@ public:
                 ("input_channels_count", inputChannelsCount);
         }
 
-        memoryLimits.MemoryQuotaManager = std::make_shared<TMemoryQuotaManager>(
-            ResourceManager_,
-            std::move(args.TxInfo),
-            args.Task->GetId(),
-            memoryLimits.MkqlLightProgramMemoryLimit);
+        memoryLimits.MemoryQuotaManager = std::move(args.TaskQuotaManager);
+        memoryLimits.ChannelQuotaManager = std::move(args.ChannelQuotaManager);
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettings;
 

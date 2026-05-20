@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/logging/logger.h>
 
+#include <yt/yt_proto/yt/client/chunk_client/proto/chunk_spec.pb.h>
+
 #include "private.h"
 
 namespace NYT::NChunkClient {
@@ -71,9 +73,19 @@ Y_FORCE_INLINE TChunkReplica TChunkReplicaWithMedium::ToChunkReplica() const
     return TChunkReplica(GetNodeId(), GetReplicaIndex());
 }
 
+Y_FORCE_INLINE void ToProto(NProto::TChunkReplicaSpec* protoReplica, TChunkReplicaWithMedium replica)
+{
+    protoReplica->set_encoded_chunk_replica_with_medium(replica.Value_);
+}
+
 Y_FORCE_INLINE void ToProto(ui64* protoReplica, TChunkReplicaWithMedium replica)
 {
     *protoReplica = replica.Value_;
+}
+
+Y_FORCE_INLINE void FromProto(TChunkReplicaWithMedium* replica, NProto::TChunkReplicaSpec protoReplica)
+{
+    replica->Value_ = protoReplica.encoded_chunk_replica_with_medium();
 }
 
 Y_FORCE_INLINE void ToProto(ui32* protoReplica, TChunkReplicaWithMedium replica)
@@ -215,6 +227,23 @@ Y_FORCE_INLINE bool operator<(const TChunkIdWithIndexes& lhs, const TChunkIdWith
     }
     return lhs_ < rhs_;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState()
+    : TChunkIdWithIndex()
+    , State(EChunkReplicaState::Generic)
+{ }
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState(const TChunkIdWithIndex& chunkIdWithIndex, EChunkReplicaState state)
+    : TChunkIdWithIndex(chunkIdWithIndex)
+    , State(state)
+{ }
+
+Y_FORCE_INLINE TChunkIdWithIndexAndState::TChunkIdWithIndexAndState(TChunkId id, int replicaIndex, EChunkReplicaState state)
+    : TChunkIdWithIndex(id, replicaIndex)
+    , State(state)
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -374,4 +403,10 @@ inline size_t THash<NYT::NChunkClient::TChunkIdWithIndexes>::operator()(const NY
 {
     return THash<NYT::NChunkClient::TChunkId>()(value.Id) * 497 +
         value.ReplicaIndex + value.MediumIndex * 8;
+}
+
+inline size_t THash<NYT::NChunkClient::TChunkIdWithIndexAndState>::operator()(const NYT::NChunkClient::TChunkIdWithIndexAndState& value) const
+{
+    return THash<NYT::NChunkClient::TChunkId>()(value.Id) * 497 +
+        value.ReplicaIndex + static_cast<size_t>(value.State) * 16;
 }

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NColumnShard::NLoading {
 class TSpecialValuesInitializer;
@@ -9,7 +10,7 @@ class TSpecialValuesInitializer;
 
 namespace NKikimr::NColumnShard {
 
-class TSpaceWatcher : public TActorBootstrapped<TSpaceWatcher> {
+class TSpaceWatcher: public TActorBootstrapped<TSpaceWatcher> {
     TColumnShard* Self;
     NActors::TActorId FindSubDomainPathIdActor;
     std::optional<NKikimr::TLocalPathId> SubDomainPathId;
@@ -26,10 +27,11 @@ public:
 
 public:
     TSpaceWatcher(TColumnShard* self)
-        : Self(self) {
+        : Self(self)
+    {
     }
 
-    void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext &txc);
+    void PersistSubDomainPathId(ui64 localPathId, NTabletFlatExecutor::TTransactionContext& txc);
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
     void StartFindSubDomainPathId(bool delayFirstRequest = true);
@@ -47,11 +49,10 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(NActors::TEvents::TEvPoison, Handle);
             default:
-                    LOG_S_WARN("TSpaceWatcher.StateWork at " << " unhandled event type: " << ev->GetTypeName()
-                                                             << " event: " << ev->ToString());
+                LOG_S_WARN("TSpaceWatcher.StateWork at " << " unhandled event type: " << ev->GetTypeName() << " event: " << ev->ToString());
                 break;
         }
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

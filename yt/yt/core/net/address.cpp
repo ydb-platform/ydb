@@ -271,7 +271,7 @@ TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
 
     auto closingBracketIndex = address.find(']');
     if (closingBracketIndex != TString::npos) {
-        if (closingBracketIndex == TString::npos || address.empty() || address[0] != '[') {
+        if (address.empty() || address[0] != '[') {
             return TError("Address %Qv is malformed, expected [<addr>]:<port> or [<addr>] format",
                 address);
         }
@@ -289,7 +289,7 @@ TErrorOr<TNetworkAddress> TNetworkAddress::TryParse(TStringBuf address)
         ipAddress = address.substr(1, closingBracketIndex - 1);
     } else {
         if (address.find('.') != TString::npos) {
-            auto colonIndex = address.find(':', closingBracketIndex + 1);
+            auto colonIndex = address.find(':');
             if (colonIndex != TString::npos) {
                 try {
                     port = FromString<int>(address.substr(colonIndex + 1));

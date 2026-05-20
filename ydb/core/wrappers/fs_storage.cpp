@@ -44,6 +44,7 @@ private:
             : Key(key)
             , File(key, OpenAlways | WrOnly | ForAppend)
         {
+            FsyncParentDir(key);
             File.Flock(LOCK_EX | LOCK_NB);
             File.Resize(0);
         }
@@ -161,7 +162,7 @@ private:
     }
 
 public:
-    TFsOperationActor(const TString& basePath)
+    explicit TFsOperationActor(const TString& basePath)
         : BasePath(basePath)
     {
     }
@@ -247,7 +248,6 @@ public:
             TMultipartUploadSession session(key);
             session.File.Write(body.data(), body.size());
             session.File.Flush();
-            FsyncParentDir(fsPath);
             session.File.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
@@ -391,17 +391,31 @@ public:
     static constexpr int DefaultMaxListKeys = 1000;
 
     bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
-                            Aws::S3::Model::ListObjectsResult& result) {
+        Aws::S3::Model::ListObjectsResult& result)
+    {
         TVector<TString> children;
         dir.ListNames(children);
-        Sort(children);
+
+        THashSet<TString> directories;
         for (const auto& name : children) {
             TFsPath child = dir / name;
             if (child.IsDirectory()) {
-                if (ListFilesRecursive(child, marker, maxKeys, result)) {
-                    return true;
-                }
-            } else if (child.IsFile()) {
+                directories.insert(name);
+            }
+        }
+
+        Sort(children.begin(), children.end(), [&directories](const TString& a, const TString& b) {
+            TString keyA = directories.contains(a) ? (a + "/") : a;
+            TString keyB = directories.contains(b) ? (b + "/") : b;
+            return keyA < keyB;
+        });
+
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsSymlink()) {
+                continue;
+            }
+            if (child.IsFile()) {
                 const TString& path = child.GetPath();
                 if (!marker.empty() && path <= marker) {
                     continue;
@@ -412,6 +426,10 @@ public:
                 Aws::S3::Model::Object obj;
                 obj.SetKey(Aws::String(path.data(), path.size()));
                 result.AddContents(std::move(obj));
+            } else if (directories.contains(name)) {
+                if (ListFilesRecursive(child, marker, maxKeys, result)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -433,17 +451,31 @@ public:
 
         try {
             TFsPath dirPath(prefix);
-
-            if (!dirPath.IsNonStrictSubpathOf(BasePath)) {
-                ReplyError<TEvListObjectsResponse>(ev->Sender, "Prefix is outside of base path");
-                return;
-            }
+            TFsPath basePath(BasePath);
 
             Aws::S3::Model::ListObjectsResult awsResult;
             bool truncated = false;
 
-            if (dirPath.Exists() && dirPath.IsDirectory()) {
-                truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+            if (dirPath.Exists()) {
+                TFsPath realDirPath = dirPath.RealPath();
+                TFsPath realBasePath = basePath.RealPath();
+                if (!realDirPath.IsNonStrictSubpathOf(realBasePath)) {
+                    auto errorMsg = TStringBuilder() << "Prefix outside of base path"
+                        << ": prefix# " << dirPath.GetPath()
+                        << ", basePath# " << basePath.GetPath();
+                    if (realDirPath.GetPath() != dirPath.GetPath()) {
+                        errorMsg << ", resolvedPrefix# " << realDirPath.GetPath();
+                    }
+                    if (basePath.GetPath() != realBasePath.GetPath()) {
+                        errorMsg << ", resolvedBasePath# " << realBasePath.GetPath();
+                    }
+                    ReplyError<TEvListObjectsResponse>(ev->Sender, errorMsg);
+                    return;
+                }
+
+                if (dirPath.IsDirectory()) {
+                    truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                }
             }
 
             awsResult.SetIsTruncated(truncated);

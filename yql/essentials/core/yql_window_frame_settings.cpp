@@ -336,10 +336,10 @@ std::expected<std::strong_ordering, TString> ParseCallable(const TExprNode::TPtr
         if (std::isinf(value)) {
             return std::unexpected(TString("Inf is not allowed for RANGE frame bounds"));
         }
-        if (value < 0.0f) {
+        if (value < 0.0F) {
             return std::strong_ordering::less;
         }
-        if (value > 0.0f) {
+        if (value > 0.0F) {
             return std::strong_ordering::greater;
         }
         return std::strong_ordering::equal;
@@ -783,6 +783,16 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
             return {};
         }
         return TryParseWindowFrameSettingsFromList(node, ctx);
+    } else if (frameSpec->IsCallable("Void")) {
+        // Void means default frame: ROWS UNBOUNDED PRECEDING to CURRENT ROW (used in deprecated SQL)
+        if (node.IsCallable("WinOnRows")) {
+            auto rowFrame = TWindowFrameSettings::TRowFrame{TMaybe<i32>(), TMaybe<i32>(0)};
+            return TWindowFrameSettings(rowFrame, /*neverEmpty=*/CheckRowFrameNeverEmpty(rowFrame), /*compact=*/false, /*isAlwaysEmpty=*/false);
+        }
+        const TTypeAnnotationNode* type = frameSpec->GetTypeAnn();
+        ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
+                            TStringBuilder() << "Invalid window frame - expecting Tuple, but got: " << (type ? FormatType(type) : "lambda")));
+        return {};
     } else {
         const TTypeAnnotationNode* type = frameSpec->GetTypeAnn();
         ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),

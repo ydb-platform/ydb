@@ -57,8 +57,8 @@ struct TEvTablet {
         EvFollowerDetached, // from leader to user tablet when a follower is removed
         EvCompleteRecoveryBoot, // from user tablet to sys tablet
         EvSnapshotConfirmed, // from sys tablet to user tablet
-        EvCompactTables,
-        EvCompactTablesResponse,
+        EvMoveData,
+        EvMoveDataResponse,
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -982,12 +982,12 @@ struct TEvTablet {
         EMode Mode;
     };
 
-    struct TEvCompactTables : TEventPB<TEvCompactTables, NKikimrTabletBase::TEvCompactTables, EvCompactTables> {};
+    struct TEvMoveData : TEventPB<TEvMoveData, NKikimrTabletBase::TEvMoveData, EvMoveData> {};
 
-    struct TEvCompactTablesResponse : TEventPB<TEvCompactTablesResponse, NKikimrTabletBase::TEvCompactTablesResponse, EvCompactTablesResponse> {
-        TEvCompactTablesResponse() = default;
+    struct TEvMoveDataResponse : TEventPB<TEvMoveDataResponse, NKikimrTabletBase::TEvMoveDataResponse, EvMoveDataResponse> {
+        TEvMoveDataResponse() = default;
 
-        TEvCompactTablesResponse(ui64 tabletId) {
+        TEvMoveDataResponse(ui64 tabletId) {
             Record.SetTabletId(tabletId);
         }
     };

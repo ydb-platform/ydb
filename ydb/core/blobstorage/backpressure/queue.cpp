@@ -38,6 +38,7 @@ TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamic
     , QueueSerializedBytes(counters->GetCounter("QueueSerializedBytes", true, visibility))
     , QueueDeserializedItems(counters->GetCounter("QueueDeserializedItems", true, visibility))
     , QueueDeserializedBytes(counters->GetCounter("QueueDeserializedBytes", true, visibility))
+    , QueueConnected(counters->GetCounter("QueueConnected", true, visibility))
     , QueueSize(counters->GetCounter("QueueSize", false, visibility))
 {}
 
@@ -190,9 +191,23 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             break;
         }
 
-        if (!item.Event.Relevant()) {
+        bool isRelevant = true;
+        switch (item.Event.GetRelevanceStatus()) {
+        case TMessageRelevance::EStatus::CancelledExternally:
+            // signal to make DSProxy finalize event processing
+            ReplyWithError(item, NKikimrProto::ERROR, "external cancellation", ctx);
+            [[fallthrough]];
+        case TMessageRelevance::EStatus::CancelledInternally:
+            isRelevant = false;
             ++*QueueItemsPruned;
             it = EraseItem(Queues.Waiting, it);
+            break;
+        default:
+            // event is relevant
+            break;
+        }
+
+        if (!isRelevant) {
             continue;
         }
 
@@ -252,13 +267,15 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
     Y_ABORT_UNLESS(InFlightCost >= it->Cost);
     InFlightCost -= it->Cost;
 
-    const bool relevant = it->Event.Relevant();
+    const bool dsproxyAwaitingResponse =
+            it->Event.GetRelevanceStatus() == TMessageRelevance::EStatus::Relevant ||
+            it->Event.GetRelevanceStatus() == TMessageRelevance::EStatus::CancelledExternally;
 
     *outSender = it->Event.GetSender();
     *outCookie = it->Event.GetCookie();
     *processingTime = TDuration::Seconds(it->ProcessingTimer.Passed());
     LWTRACK(DSQueueVPutResultRecieved, it->Event.GetOrbit(), processingTime->SecondsFloat() * 1e3,
-            it->Event.GetByteSize(), !relevant);
+            it->Event.GetByteSize(), !dsproxyAwaitingResponse);
 
     InFlightLookup.erase(lookupIt);
     auto span = std::exchange(it->Span, {});
@@ -271,7 +288,7 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
     }
 
     ++*QueueItemsProcessed;
-    return relevant;
+    return dsproxyAwaitingResponse;
 }
 
 void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId) {
@@ -286,7 +303,7 @@ void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 exp
         const ui32 erased = InFlightLookup.erase(std::make_pair(x->SequenceId, x->MsgId));
         Y_ABORT_UNLESS(erased);
         cost += x->Cost; // count item's cost
-        if (!x->Event.Relevant()) {
+        if (x->Event.GetRelevanceStatus() == TMessageRelevance::EStatus::CancelledInternally) {
             if (x == it) {
                 ++it; // advance starting iterator as the item pointed to is being erased
             }
@@ -319,7 +336,7 @@ void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TStr
 
     auto flushQueue = [&](TItemList& queue) {
         for (auto it = queue.begin(); it != queue.end(); it = EraseItem(queue, it)) {
-            if (it->Event.Relevant()) {
+            if (it->Event.GetRelevanceStatus() != TMessageRelevance::EStatus::CancelledInternally) {
                 ReplyWithError(*it, status, errorReason, ctx);
             }
         }
@@ -335,6 +352,7 @@ void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TStr
 void TBlobStorageQueue::OnConnect() {
     SetMaxWindowSize(1000000000); // default value is one second
     CostSettingsUpdate = TInstant::Zero(); // request cost model update in first message
+    ++*QueueConnected;
 }
 
 TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& queue, TItemList::iterator it) {

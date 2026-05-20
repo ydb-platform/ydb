@@ -1546,6 +1546,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
               std::back_inserter(response->BodyKeys));
     if (!ev->GetSkipSrcIdInfo()) {
         response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
+        response->SrcIdInfo.erase("");
     }
 
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
@@ -1555,7 +1556,12 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
     response->MessagesSizes = std::move(MessageSize.GetValues());
     response->InputLags = std::move(SupportivePartitionTimeLag);
-    response->WrittenBytes = AutopartitioningManager->GetWrittenBytes();
+
+    auto amSnapshot = AutopartitioningManager->GetSnapshot();
+    response->WriteStats = TWriteStats{
+        .PerSourceMetrics = std::move(amSnapshot.PerSourceMetrics),
+        .PartitioningKeysManagers = std::move(amSnapshot.KeysManagers),
+    };
 
     LOG_D("Send TEvPQ::TEvGetWriteInfoResponse");
     ctx.Send(originalPartition, response);
@@ -2723,8 +2729,28 @@ void TPartition::RunPersist() {
 
             WriteNewSizeFromSupportivePartitions += writeInfo->BytesWrittenTotal;
 
-            for (auto& [sourceId, writtenBytes] : writeInfo->WrittenBytes) {
-                AutopartitioningManager->OnWrite(sourceId, writtenBytes);
+            std::unordered_map<TString, std::pair<ui64, ui64>> perSourceMetrics;
+            const auto& psm = writeInfo->WriteStats.PerSourceMetrics;
+            const size_t bytesIdx = static_cast<size_t>(ETag::BYTES);
+            const size_t messagesIdx = static_cast<size_t>(ETag::MESSAGES);
+            if (bytesIdx < psm.size()) {
+                for (const auto& [sourceId, writtenBytes] : psm[bytesIdx]) {
+                    perSourceMetrics[sourceId].first = writtenBytes;
+                }
+            }
+            if (messagesIdx < psm.size()) {
+                for (const auto& [sourceId, messagesWritten] : psm[messagesIdx]) {
+                    perSourceMetrics[sourceId].second = messagesWritten;
+                }
+            }
+            for (const auto& [sourceId, metrics] : perSourceMetrics) {
+                AutopartitioningManager->OnWrite(sourceId, metrics.first, metrics.second);
+            }
+            const auto& pkm = writeInfo->WriteStats.PartitioningKeysManagers;
+            for (size_t i = 0; i < pkm.size(); ++i) {
+                if (pkm[i]) {
+                    AutopartitioningManager->AddKeysStats(static_cast<ETag>(i), *pkm[i]);
+                }
             }
         }
         WriteInfosApplied.clear();

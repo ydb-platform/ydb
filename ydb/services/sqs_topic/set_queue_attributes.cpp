@@ -18,6 +18,7 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/protos/sqs.pb.h>
+#include <ydb/core/util/proto_duration.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -73,7 +74,6 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TSetQueueAttributesActor() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
-            CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
 
             const Ydb::Ymq::V1::SetQueueAttributesRequest& request = Request();
@@ -84,43 +84,49 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            SendDescribeProposeRequest(ctx);
+            DescribeTopic(NACLib::UpdateRow);
             Become(&TSetQueueAttributesActor::StateWork);
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
-                HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
+                hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+                hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    if (ProcessCdc(response)) {
-                        return;
-                    }
-                }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
-                                                    std::format("The specified queue doesn't exist")));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
+            // TODO remove it
+        }
+
+        void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+            const auto* result = ev->Get();
+            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            const auto& topicInfo = result->Topics.begin()->second;
+
+            switch(topicInfo.Status) {
+                case NDescriber::EStatus::SUCCESS:
+                    break;
+                case NDescriber::EStatus::NOT_TOPIC:
+                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
+                        TStringBuilder() << "Queue name used by another scheme object"));
+                case NDescriber::EStatus::NOT_FOUND:
+                case NDescriber::EStatus::UNAUTHORIZED:
+                    return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
+                        "The specified queue doesn't exist"));
+                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
+                        "Access denied"));
+                case NDescriber::EStatus::UNKNOWN_ERROR:
+                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                        NDescriber::Description(topicInfo.RealPath, topicInfo.Status)));
             }
-            Y_ABORT_UNLESS(response.PQGroupInfo);
-            PQGroup = response.PQGroupInfo->Description;
-            SelfInfo = response.Self->Info;
+
+            PQGroup = topicInfo.Info->Description;
+            SelfInfo = topicInfo.Self->Info;
 
             const auto& pqConfig = PQGroup.GetPQTabletConfig();
             const NKikimrPQ::TPQTabletConfig::TConsumer* foundConsumer = FindIfPtr(
@@ -157,134 +163,79 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", check.error())));
             }
 
-            return SendAlterTopicRequest(ActorContext());
+            return SendAlterTopicRequest();
         }
 
         std::expected<void, std::string> ValidateFifoImmutability() const {
             bool existingFifo = ExistingConsumer.GetKeepMessageOrder();
-            if (NewQueueAttributes.Consumer.HasKeepMessageOrder()) {
-                bool newFifo = NewQueueAttributes.Consumer.GetKeepMessageOrder();
-                if (existingFifo != newFifo) {
-                    return std::unexpected(std::format(
-                        "FifoQueue attribute cannot be changed. Current value: {}",
-                        existingFifo ? "true" : "false"
-                    ));
-                }
+            if (existingFifo != NewQueueAttributes.FifoQueue) {
+                return std::unexpected(std::format(
+                    "FifoQueue attribute cannot be changed. Current value: {}",
+                    existingFifo ? "true" : "false"
+                ));
             }
             return {};
         }
 
-        void SendAlterTopicRequest(const TActorContext& ctx) {
-            std::pair<TString, TString> pathPair;
-            try {
-                pathPair = NKikimr::NGRpcService::SplitPath(TBase::GetTopicPath());
-            } catch (const std::exception& ex) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, ex.what()));
-            }
-
-            const auto& workingDir = pathPair.first;
-
-            auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
-            SetDatabase(proposal.get(), *this->Request_);
-            SetPeerName(proposal.get(), *this->Request_);
-
-            if (!this->Request_->GetSerializedToken().empty()) {
-                proposal->Record.SetUserToken(this->Request_->GetSerializedToken());
-            }
-
-            NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
-            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
-            modifyScheme.SetWorkingDir(workingDir);
-
-            if (TBase::GetCdcStreamName().Defined()) {
-                modifyScheme.SetAllowAccessToPrivatePaths(true);
-            }
-
-            auto* alterConfig = modifyScheme.MutableAlterPersQueueGroup();
-            alterConfig->CopyFrom(PQGroup);
-            alterConfig->ClearTotalGroupCount();
-            alterConfig->MutablePQTabletConfig()->ClearPartitionKeySchema();
+        void SendAlterTopicRequest() {
+            Ydb::Topic::AlterTopicRequest topicRequest;
+            topicRequest.set_path(TopicPath);
 
             if (NewQueueAttributes.ContentBasedDeduplication.Defined()) {
-                alterConfig->MutablePQTabletConfig()->SetContentBasedDeduplication(NewQueueAttributes.ContentBasedDeduplication.Get());
+                topicRequest.set_set_content_based_deduplication(*NewQueueAttributes.ContentBasedDeduplication);
             }
 
-            auto applyIf = modifyScheme.AddApplyIf();
-            applyIf->SetPathId(SelfInfo.GetPathId());
-            applyIf->SetPathVersion(SelfInfo.GetPathVersion());
+            auto* consumer = topicRequest.add_alter_consumers();
+            consumer->set_name(QueueUrl_->Consumer);
 
-            auto* pqTabletConfig = alterConfig->MutablePQTabletConfig();
-            NKikimrPQ::TPQTabletConfig::TConsumer* consumerToModify = nullptr;
-            for (size_t i = 0; i < pqTabletConfig->ConsumersSize(); ++i) {
-                if (pqTabletConfig->GetConsumers(i).GetName() == QueueUrl_->Consumer) {
-                    consumerToModify = pqTabletConfig->MutableConsumers(i);
-                    break;
-                }
+            auto* consumerType = consumer->mutable_alter_shared_consumer_type();
+            if (NewQueueAttributes.DefaultProcessingTimeout.Defined()) {
+                SetDuration(*NewQueueAttributes.DefaultProcessingTimeout,
+                    *consumerType->mutable_set_default_processing_timeout());
             }
-
-            if (!consumerToModify) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Consumer not found in config"));
+            if (NewQueueAttributes.ReceiveMessageDelay.Defined()) {
+                SetDuration(*NewQueueAttributes.ReceiveMessageDelay,
+                    *consumerType->mutable_set_receive_message_delay());
             }
-
-            ApplyNewAttributes(consumerToModify);
+            if (NewQueueAttributes.ReceiveMessageWaitTime.Defined()) {
+                SetDuration(*NewQueueAttributes.ReceiveMessageWaitTime,
+                    *consumerType->mutable_set_receive_message_wait_time());
+            }
+            if (NewQueueAttributes.MaxReceiveCount.Defined()) {
+                consumerType->mutable_alter_dead_letter_policy()->set_set_enabled(true);
+                consumerType->mutable_alter_dead_letter_policy()->mutable_alter_condition()
+                    ->set_set_max_processing_attempts(*NewQueueAttributes.MaxReceiveCount);
+            }
+            if (NewQueueAttributes.DeadLetterQueue.Defined()) {
+                consumerType->mutable_alter_dead_letter_policy()->set_set_enabled(true);
+                consumerType->mutable_alter_dead_letter_policy()->mutable_set_move_action()
+                    ->set_dead_letter_queue(*NewQueueAttributes.DeadLetterQueue);
+            }
 
             // should we increase global limit?
             if (NewQueueAttributes.MessageRetentionPeriod.Defined()) {
                 ui64 requestedRetentionSeconds = NewQueueAttributes.MessageRetentionPeriod->Seconds();
                 ui64 currentRetentionSeconds = PQGroup.GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds();
                 if (requestedRetentionSeconds > currentRetentionSeconds) {
-                    pqTabletConfig->MutablePartitionConfig()->SetLifetimeSeconds(requestedRetentionSeconds);
+                    SetDuration(*NewQueueAttributes.MessageRetentionPeriod, *topicRequest.mutable_set_retention_period());
                 }
-                consumerToModify->SetAvailabilityPeriodMs(requestedRetentionSeconds * 1000);
+                SetDuration(*NewQueueAttributes.MessageRetentionPeriod, *consumer->mutable_set_availability_period());
             }
 
-            ctx.Send(MakeTxProxyID(), proposal.release());
+            RegisterWithSameMailbox(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
+                .Database = this->Database,
+                .PeerName = Request_->GetPeerName(),
+                .Request = std::move(topicRequest),
+                .UserToken = this->GetUserToken(),
+            }));
         }
 
-        void ApplyNewAttributes(NKikimrPQ::TPQTabletConfig::TConsumer* consumer) {
-            const auto& newConsumer = NewQueueAttributes.Consumer;
-
-            if (newConsumer.HasAvailabilityPeriodMs()) {
-                consumer->SetAvailabilityPeriodMs(newConsumer.GetAvailabilityPeriodMs());
+        void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+            const auto* result = ev->Get();
+            if (result->Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
             }
-            if (newConsumer.HasDefaultProcessingTimeoutSeconds()) {
-                consumer->SetDefaultProcessingTimeoutSeconds(newConsumer.GetDefaultProcessingTimeoutSeconds());
-            }
-            if (newConsumer.HasDefaultDelayMessageTimeMs()) {
-                consumer->SetDefaultDelayMessageTimeMs(newConsumer.GetDefaultDelayMessageTimeMs());
-            }
-            if (newConsumer.HasDefaultReceiveMessageWaitTimeMs()) {
-                consumer->SetDefaultReceiveMessageWaitTimeMs(newConsumer.GetDefaultReceiveMessageWaitTimeMs());
-            }
-            if (newConsumer.HasMaxProcessingAttempts()) {
-                consumer->SetMaxProcessingAttempts(newConsumer.GetMaxProcessingAttempts());
-            }
-            if (newConsumer.HasDeadLetterPolicyEnabled()) {
-                consumer->SetDeadLetterPolicyEnabled(newConsumer.GetDeadLetterPolicyEnabled());
-            }
-            if (newConsumer.HasDeadLetterPolicy()) {
-                consumer->SetDeadLetterPolicy(newConsumer.GetDeadLetterPolicy());
-            }
-            if (newConsumer.HasDeadLetterQueue()) {
-                consumer->SetDeadLetterQueue(newConsumer.GetDeadLetterQueue());
-            }
-        }
-
-        void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-            auto msg = ev->Get();
-            const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
-
-            if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-                if (msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess) {
-                    return ReplyAndDie(ctx);
-                }
-            }
-            return TBase::TBase::TBase::Handle(ev, ctx);
-        }
-
-        void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override {
-            Y_UNUSED(ev);
-            ReplyAndDie(ctx);
+            return ReplyAndDie(ActorContext());
         }
 
         void ReplyAndDie(const TActorContext& ctx) {

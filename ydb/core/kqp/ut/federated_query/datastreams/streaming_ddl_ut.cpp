@@ -1,12 +1,10 @@
 #include "common.h"
 
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 #include <fmt/format.h>
 
@@ -146,6 +144,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(MaxPartitionReadSkewWithRestartAndCheckpoint, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableStreamingPartitionBalancing(true);
+
         constexpr ui32 partitionCount = 10;
         constexpr char inputTopicName[] = "maxPartitionReadSkewRestartInputTopic";
         constexpr char outputTopicName[] = "maxPartitionReadSkewRestartOutputTopic";
@@ -157,17 +157,22 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
 
         constexpr char queryName[] = "streamingQuery";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                PRAGMA pq.MaxPartitionReadSkew = "10s";
-                INSERT INTO `{pq_source}`.`{output_topic}`
-                SELECT time FROM `{pq_source}`.`{input_topic}` WITH (
-                    FORMAT = "json_each_row",
-                    SCHEMA (time String NOT NULL)
-                )
-                WHERE time LIKE "%lunch%";
-            END DO;)",
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    PRAGMA pq.MaxPartitionReadSkew = "10s";
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT time
+                    FROM `{pq_source}`.`{input_topic}`
+                    WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (time String NOT NULL)
+                    )
+                    WHERE time LIKE "%lunch%";
+                END DO;
+            )sql",
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
@@ -186,8 +191,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         Sleep(CheckpointPeriod * 3);
 
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+        ExecQuery(fmt::format(
+            R"sql(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);
+            )sql",
             "query_name"_a = queryName
         ));
 
@@ -200,8 +207,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             WriteTopicMessage(inputTopicName, fmt::format(R"({{"time": "next lunch time {}"}})", p), p);
         }
 
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
+        ExecQuery(fmt::format(
+            R"sql(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);
+            )sql",
             "query_name"_a = queryName
         ));
 
@@ -217,6 +226,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(IdleTimeoutPartitionSessionBalancer, TStreamingTestFixture) {
+        {
+            auto& appConfig = SetupAppConfig();
+            appConfig.MutableTableServiceConfig()->SetEnableWatermarks(true);
+            appConfig.MutableTableServiceConfig()->SetEnableStreamingPartitionBalancing(true);
+        }
+
         constexpr ui32 partitionCount = 2;
         constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
         constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
@@ -228,20 +243,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
 
         constexpr char queryName[] = "streamingQuery";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                PRAGMA pq.MaxPartitionReadSkew = "10s";
-                INSERT INTO `{pq_source}`.`{output_topic}`
-                SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
-                    FORMAT = "json_each_row",
-                    SCHEMA (
-                        key String NOT NULL,
-                        value String NOT NULL
-                    ),
-                    WATERMARK_IDLE_TIMEOUT = "PT5S"
-                );
-            END DO;)",
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    PRAGMA pq.MaxPartitionReadSkew = "10s";
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT key || value
+                    FROM `{pq_source}`.`{input_topic}`
+                    WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (
+                            key String NOT NULL,
+                            value String NOT NULL
+                        ),
+                        WATERMARK_IDLE_TIMEOUT = "PT5S"
+                    );
+                END DO;
+            )sql",
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
@@ -258,6 +278,35 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             WriteTopicMessage(inputTopicName, fmt::format(R"({{"key": "k", "value": "{}"}})", value), 0);
             ReadTopicMessages(outputTopicName, expectedOutputs);
         }
+    }
+
+    Y_UNIT_TEST_F(StreamingPartitionBalancingDisabled, TStreamingTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->SetEnableStreamingPartitionBalancing(false);
+
+        constexpr char inputTopicName[] = "streamingPartitionBalancingDisabledInputTopic";
+        constexpr char outputTopicName[] = "streamingPartitionBalancingDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(
+            R"sql(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    PRAGMA pq.MaxPartitionReadSkew = "10s";
+
+                    INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT * FROM `{pq_source}`.`{input_topic}`;
+                END DO;
+            )sql",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), NYdb::Dev::EStatus::GENERIC_ERROR, "Streaming partition balancing is disabled. Please contact your system administrator to enable it");
     }
 
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
@@ -1192,7 +1241,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.HashJoinMode = "map";
-                PRAGMA ydb.DqChannelVersion = "1";
+                PRAGMA ydb.DqChannelVersion = "2";
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT
@@ -1412,22 +1461,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             auto& runtime = GetRuntime();
             runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
 
-            const auto edgeActor = runtime.AllocateEdgeActor();
             appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
 
-            auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evProxy->Record.MutableConfig() = appConfig;
-
-            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
-            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
-
-            auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *evStorage->Record.MutableConfig() = appConfig;
-
-            runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
-            response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT(response);
+            UpdateConfig(appConfig);
 
             Sleep(TDuration::Seconds(1));
 
@@ -2427,9 +2463,36 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
+    Y_UNIT_TEST_F(StreamingQueryDispositionDisabled, TStreamingWithSchemaSecretsTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryDisposition(false);
+
+        constexpr char inputTopicName[] = "createStreamingQueryDispositionDisabledInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryDispositionDisabledOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `my_query` WITH (
+                STREAMING_DISPOSITION = OLDEST
+            ) AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
+    }
+
     Y_UNIT_TEST_F(StreamingQueryDisposition, TStreamingWithSchemaSecretsTestFixture) {
-        constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
-        constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryDisposition(true);
+
+        constexpr char inputTopicName[] = "createStreamingQueryDispositionInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryDispositionOutputTopic";
         CreateTopic(inputTopicName);
         CreateTopic(outputTopicName);
 

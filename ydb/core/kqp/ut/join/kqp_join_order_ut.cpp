@@ -4,10 +4,12 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
+#include <util/string/join.h>
 
 #include <algorithm>
 #include <fstream>
 #include <regex>
+#include <set>
 
 namespace NKikimr {
 namespace NKqp {
@@ -172,6 +174,46 @@ void PrintPlan(const TString& plan) {
     }
 
     Cout << "JoinOrder" << joinOrder << Endl;
+}
+
+void CollectHashShuffleDescriptions(const NJson::TJsonValue& planNode, TVector<TString>& hashShuffles) {
+    if (!planNode.IsMap()) {
+        return;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto nodeType = planMap.find("Node Type");
+            nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+        if (auto keyColumns = planMap.find("KeyColumns"); keyColumns != planMap.end()) {
+            TVector<TString> keys;
+            for (const auto& key : keyColumns->second.GetArraySafe()) {
+                keys.push_back(key.GetStringSafe());
+            }
+
+            const auto hashFunc = planMap.contains("HashFunc")
+                ? planMap.at("HashFunc").GetStringSafe()
+                : TString("HashShuffle");
+            hashShuffles.push_back(TStringBuilder()
+                << hashFunc << "(" << JoinSeq(", ", keys) << ")");
+        } else {
+            hashShuffles.push_back(nodeType->second.GetStringSafe());
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            CollectHashShuffleDescriptions(child, hashShuffles);
+        }
+    }
+}
+
+TVector<TString> CollectHashShuffleDescriptions(const TString& plan) {
+    NJson::TJsonValue planRoot;
+    NJson::ReadJsonTree(plan, &planRoot, true);
+
+    TVector<TString> hashShuffles;
+    CollectHashShuffleDescriptions(planRoot.GetMapSafe().at("SimplifiedPlan"), hashShuffles);
+    return hashShuffles;
 }
 
 class TFindJoinWithLabels {
@@ -944,6 +986,52 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateSampleTable(session, true);
+
+        const TString query = GetStatic("queries/shuffle_elimination_tpch_q5_composite_join_keys.sql");
+        auto explainResult = session.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        explainResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+        const auto plan = TString{*explainResult.GetStats()->GetPlan()};
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+        PrintPlan(plan);
+
+        const bool hasCustomerCompositeShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("c_custkey") && desc.Contains("c_nationkey");
+            }
+        );
+
+        const bool hasOrdersOnlyShuffle = std::any_of(
+            hashShuffles.begin(),
+            hashShuffles.end(),
+            [](const TString& desc) {
+                return desc.Contains("o_custkey") && !desc.Contains("c_nationkey") && !desc.Contains("s_nationkey");
+            }
+        );
+
+        UNIT_ASSERT_C(
+            !hasCustomerCompositeShuffle && hasOrdersOnlyShuffle,
+            TStringBuilder() << "Expected old RBO/DPHyp shuffle requirements to preserve the customer-side "
+                             << "elimination and shuffle the other side by the enumerated orders key. Got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan);
+    }
+
     Y_UNIT_TEST_TWIN(ShuffleEliminationTpcdsMapJoinBug, EnableSeparationComputeActorsFromRead) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
             "queries/shuffle_elimination_tpcds_map_join_bug.sql", "stats/tpcds1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
@@ -963,6 +1051,30 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (BlockHash)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ShuffleEliminationMapJoinProbeReuse, EnableSeparationComputeActorsFromRead) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/shuffle_elimination_map_join_probe_reuse.sql", "stats/tpch1000s.json",
+            false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
+        );
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+
+        // Inner join: nation (25 rows) is broadcast -> MapJoin.
+        {
+            auto join = joinFinder.Find({"nation", "customer"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
+        }
+
+        // Outer join: the (nation join customer) output inherits customer's c_custkey partitioning.
+        // SE should eliminate the left shuffle; only orders needs to be shuffled.
+        {
+            auto join = joinFinder.Find({"nation", "customer", "orders"});
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
+            UNIT_ASSERT_C(!join.LhsShuffled, "Expected SE to eliminate left (nation inner customer) shuffle");
+            UNIT_ASSERT_C(join.RhsShuffled,  "Expected orders to be shuffled");
         }
     }
 
@@ -1062,6 +1174,75 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(currentJoinOrder == ref);
     }
 
+    std::string LoadBenchmarkConsts(const std::string& constsPath) {
+        if (constsPath.empty()) {
+            return {};
+        }
+
+        TIFStream s(constsPath);
+        return s.ReadAll();
+    }
+
+    TString LoadBenchmarkQuery(
+        const std::string& consts,
+        const std::string& queryType,
+        const std::size_t queryId,
+        const std::string& queryPathTemplate,
+        const std::string& tablePrefix
+    ) {
+        TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << queryPathTemplate << queryType << "/" << "q" << queryId << ".sql";
+
+        TIFStream s(qPath);
+        std::string q = s.ReadAll();
+        Replace(q, "{path}", tablePrefix);
+        Replace(q, "{% include 'header.sql.jinja' %}", "");
+        std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
+        q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
+        if (queryType == "yql" && !consts.empty()) {
+            q = consts + "\n" + q;
+        }
+
+        return q;
+    }
+
+    void AssertCBOOptimizedEveryTree(const std::string& benchmarkName, const std::string& queryType, const std::size_t queryId, const TString& plan) {
+        const TString context = TStringBuilder()
+            << benchmarkName << " query " << queryId
+            << ", type " << queryType
+            << "\nPlan:\n" << plan;
+
+        NJson::TJsonValue planRoot;
+        NJson::ReadJsonTree(plan, &planRoot, true);
+        const auto& planRootMap = planRoot.GetMapSafe();
+        auto simplifiedPlanIt = planRootMap.find("SimplifiedPlan");
+        UNIT_ASSERT_C(simplifiedPlanIt != planRootMap.end(), "Missing SimplifiedPlan. " << context);
+
+        const auto& simplifiedPlan = simplifiedPlanIt->second;
+        const auto& simplifiedPlanMap = simplifiedPlan.GetMapSafe();
+        auto optimizerStatsIt = simplifiedPlanMap.find("OptimizerStats");
+        UNIT_ASSERT_C(optimizerStatsIt != simplifiedPlanMap.end(), "Missing OptimizerStats. " << context);
+
+        const auto& optimizerStats = optimizerStatsIt->second;
+        const auto& optimizerStatsMap = optimizerStats.GetMapSafe();
+        const auto getStat = [&](const TString& name) {
+            auto it = optimizerStatsMap.find(name);
+            UNIT_ASSERT_C(it != optimizerStatsMap.end(), "Missing optimizer stat " << name << ". " << context);
+            return it->second.GetUIntegerSafe();
+        };
+
+        const ui64 equiJoins = getStat("EquiJoinsCount");
+        const ui64 total = getStat("CBOTreesTotal");
+        const ui64 optimized = getStat("CBOTreesOptimized");
+        const TString statsContext = TStringBuilder()
+            << "Stats: " << optimizerStats.GetStringRobust()
+            << "\n" << context;
+
+        if (equiJoins > 0) {
+            UNIT_ASSERT_C(total > 0, TStringBuilder() << "Expected CBO to see at least one tree. " << statsContext);
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(optimized, total, statsContext);
+    }
+
     void RunBenchmarkQueries(
         NYdb::NQuery::TSession& session,
         const std::string& benchmarkName,
@@ -1072,25 +1253,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         const std::string& tablePrefix
     ) {
 
-        std::string consts;
-        if (!constsPath.empty()) {
-            TIFStream s(constsPath);
-            consts = s.ReadAll();
-        }
+        const std::string consts = LoadBenchmarkConsts(constsPath);
 
         for (const std::string& queryType : queryTypes) {
             for (std::size_t i = 1; i <= queryCount; ++i) {
-                TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << queryPathTemplate << queryType << "/" << "q" << i << ".sql";
-
-                TIFStream s(qPath);
-                std::string q = s.ReadAll();
-                Replace(q, "{path}", tablePrefix);
-                Replace(q, "{% include 'header.sql.jinja' %}", "");
-                std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
-                q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
-                if (queryType == "yql" && !consts.empty()) {
-                    q = consts + "\n" + q;
-                }
+                const TString q = LoadBenchmarkQuery(consts, queryType, i, queryPathTemplate, tablePrefix);
 
                 Cout << "Running " << benchmarkName << " query: " << i << ", type: " << queryType << Endl;
                 auto settings = NYdb::NQuery::TExecuteQuerySettings();
@@ -1098,6 +1265,36 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 result.GetIssues().PrintTo(Cerr);
                 UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder{} << "query " << benchmarkName << "#" << i
                     << ", type: " << queryType << " failed, query:\n" << q);
+            }
+        }
+    }
+
+    void ExplainBenchmarkQueriesAndAssertCBO(
+        NYdb::NQuery::TSession& session,
+        const std::string& benchmarkName,
+        const std::string& constsPath,
+        const std::vector<std::string>& queryTypes,
+        size_t queryCount,
+        const std::string& queryPathTemplate,
+        const std::string& tablePrefix,
+        const std::set<std::size_t>& queriesWithoutCboCheck = {}
+    ) {
+        const std::string consts = LoadBenchmarkConsts(constsPath);
+
+        for (const std::string& queryType : queryTypes) {
+            for (std::size_t i = 1; i <= queryCount; ++i) {
+                const TString q = LoadBenchmarkQuery(consts, queryType, i, queryPathTemplate, tablePrefix);
+
+                Cout << "Explaining " << benchmarkName << " query: " << i << ", type: " << queryType << Endl;
+                auto settings = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain);
+                auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+                result.GetIssues().PrintTo(Cerr);
+                UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder{} << "query " << benchmarkName << "#" << i
+                    << ", type: " << queryType << " failed, query:\n" << q);
+                UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan");
+                if (!queriesWithoutCboCheck.contains(i)) {
+                    AssertCBOOptimizedEveryTree(benchmarkName, queryType, i, TString{*result.GetStats()->GetPlan()});
+                }
             }
         }
     }
@@ -1112,6 +1309,26 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CreateTables(session, "schema/tpch.sql", ColumnStore);
 
         RunBenchmarkQueries(
+            session,
+            "TPCH",
+            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            {"yql", "nice", "ydb"},
+            22,
+            "/ydb/library/benchmarks/queries/tpch/",
+            "/Root/"
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(TPCHCboOptimizesEveryQuery, ColumnStore) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
+        auto db = kikimr.GetQueryClient();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateTables(session, "schema/tpch.sql", ColumnStore);
+
+        ExplainBenchmarkQueriesAndAssertCBO(
             session,
             "TPCH",
             ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
@@ -1139,6 +1356,28 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             99,
             "/ydb/library/benchmarks/queries/tpcds/",
             "/Root/test/ds/"
+        );
+    }
+
+    Y_UNIT_TEST(TPCDSCboOptimizesEveryQuery) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpcds1000s.json"), true);
+        auto db = kikimr.GetQueryClient();
+        auto result = db.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session = result.GetSession();
+
+        CreateTables(session, "schema/tpcds.sql", true);
+
+        ExplainBenchmarkQueriesAndAssertCBO(
+            session,
+            "TPCDS",
+            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            {"yql"},
+            99,
+            "/ydb/library/benchmarks/queries/tpcds/",
+            "/Root/test/ds/",
+            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
+            {15, 31, 58, 64, 72, 78, 85}
         );
     }
 

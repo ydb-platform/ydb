@@ -1,7 +1,8 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
 using TColumnSaver = NArrow::NAccessor::TColumnSaver;
@@ -10,6 +11,7 @@ class TChunkAddress {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY(ui16, Chunk, 0);
+
 public:
     ui32 GetEntityId() const {
         return ColumnId;
@@ -21,8 +23,8 @@ public:
 
     TChunkAddress(const ui32 columnId, const ui16 chunk)
         : ColumnId(columnId)
-        , Chunk(chunk) {
-
+        , Chunk(chunk)
+    {
     }
 
     bool operator<(const TChunkAddress& address) const {
@@ -56,7 +58,8 @@ public:
         : PathId(pathId)
         , PortionId(portionId)
         , ColumnId(columnId)
-        , Chunk(chunk) {
+        , Chunk(chunk)
+    {
     }
 
     bool operator<(const TFullChunkAddress& address) const {

@@ -31,11 +31,13 @@ SRCS(
     callstack.cpp
     callstack.h
     config.h
+    coro_stack_pool.cpp
     cpu_manager.cpp
     cpu_manager.h
     defs.h
     event.cpp
     event.h
+    event_flat.h
     event_load.cpp
     event_local.h
     event_pb.cpp
@@ -121,6 +123,7 @@ PEERDIR(
     library/cpp/svnversion
     library/cpp/time_provider
     library/cpp/threading/future
+    library/cpp/threading/queue
 )
 
 IF (SANITIZER_TYPE == "thread")
@@ -139,4 +142,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut_fat
+    ut_mprotect
 )

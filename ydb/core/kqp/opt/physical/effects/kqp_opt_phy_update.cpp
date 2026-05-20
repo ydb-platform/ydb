@@ -96,14 +96,7 @@ TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const TKikimrTableDescription
     YQL_ENSURE(originalAnnotation, "stream lookup received input which isn't properly annontated");
 
     TExprNode::TPtr input = originalInput.Ptr();
-    const TTypeAnnotationNode* itemType = nullptr;
-
-    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
-        itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    } else {
-        YQL_ENSURE(EnsureListType(*input, ctx), "stream or list is allowed as input of the stream lookup");
-        itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-    }
+    const TTypeAnnotationNode* itemType = GetSeqItemType(input->GetTypeAnn());
 
     YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct);
     auto* columns = itemType->Cast<TStructExprType>();

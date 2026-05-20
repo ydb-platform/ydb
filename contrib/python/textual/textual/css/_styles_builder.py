@@ -16,6 +16,7 @@ from textual.css._help_text import (
     border_property_help_text,
     color_property_help_text,
     dock_property_help_text,
+    expand_help_text,
     fractional_property_help_text,
     integer_help_text,
     keyline_help_text,
@@ -44,6 +45,7 @@ from textual.css.constants import (
     VALID_CONSTRAIN,
     VALID_DISPLAY,
     VALID_EDGE,
+    VALID_EXPAND,
     VALID_HATCH,
     VALID_KEYLINE,
     VALID_OVERFLOW,
@@ -1069,6 +1071,7 @@ class StylesBuilder:
     process_row_span = _process_integer
     process_grid_size_columns = _process_integer
     process_grid_size_rows = _process_integer
+    process_line_pad = _process_integer
 
     def process_grid_gutter(self, name: str, tokens: list[Token]) -> None:
         if not tokens:
@@ -1254,6 +1257,17 @@ class StylesBuilder:
                 )
 
         self.styles._rules[name] = (character or " ", color.multiply_alpha(opacity))
+
+    def process_expand(self, name: str, tokens: list[Token]):
+        if not tokens:
+            return
+        if len(tokens) != 1:
+            self.error(name, tokens[0], offset_single_axis_help_text(name))
+        else:
+            token = tokens[0]
+            if token.value not in VALID_EXPAND:
+                self.error(name, tokens[0], expand_help_text(name))
+            self.styles._rules["expand"] = token.value
 
     def _get_suggested_property_name_for_rule(self, rule_name: str) -> str | None:
         """

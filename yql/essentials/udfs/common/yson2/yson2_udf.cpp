@@ -952,6 +952,12 @@ public:
         return Name;
     }
 
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([[[];{type=[CallableType;[];[[ResourceType;Yson2.Node]];[[[UniversalType]]]]}]])");
+        return Config;
+    }
+
     TFrom(TSourcePosition pos, const ITypeInfoHelper::TPtr typeHelper, const TType* shape)
         : TBase(pos, typeHelper, shape)
     {
@@ -1028,6 +1034,12 @@ public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("ConvertTo");
         return Name;
+    }
+
+    static const TStringRef& BuildPolyArgs() {
+        static auto Config = TStringRef::Of(
+            R"([[[];{type=[CallableType;[1u];[[UniversalType]];[[[ResourceType;Yson2.Node];1u];[[OptionalType;[ResourceType;Yson2.Options]]]]]}]])");
+        return Config;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {

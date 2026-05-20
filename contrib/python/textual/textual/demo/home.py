@@ -66,7 +66,7 @@ A modern Python API from the developer of [Rich](https://github.com/Textualize/r
 
 ```python
 # Start building!
-from textual import App, ComposeResult
+from textual.app import App, ComposeResult
 from textual.widgets import Label
 
 class MyApp(App):
@@ -85,7 +85,7 @@ MyApp().run()
 
 ## Built on Rich
 
-With over 1.6 *billion* downloads, Rich is the most popular terminal library out there.
+With over 3.1 *billion* downloads, Rich is the most popular terminal library out there.
 Textual builds on Rich to add interactivity, and is fully-compatible with Rich renderables.
 
 ## Re-usable widgets

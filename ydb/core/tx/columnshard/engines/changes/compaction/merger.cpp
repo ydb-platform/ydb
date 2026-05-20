@@ -29,7 +29,8 @@ public:
         const ui32 columnId, const std::optional<NArrow::NSplitter::TSimpleSerializationStat>& stats, const NSplitter::TSplitSettings& settings)
         : ColumnId(columnId)
         , Stats(stats)
-        , Settings(settings) {
+        , Settings(settings)
+    {
     }
 
     void SetChunks(std::vector<i64>&& recordsCount) {
@@ -81,7 +82,8 @@ public:
 
     explicit TPortionSplitInfo(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& remapper)
         : RecordsCount(recordsCount)
-        , MergingContext(remapper) {
+        , MergingContext(remapper)
+    {
     }
 
     TGeneralSerializedSlice BuildSlice(const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
@@ -112,7 +114,7 @@ public:
 
 class TSplittedBatch {
 private:
-    enum class ESplittingType : ui32 {
+    enum class ESplittingType: ui32 {
         Stats = 0,
         RecordsCount
     };
@@ -160,7 +162,8 @@ public:
         : Remapper(std::move(remapper))
         , Stats(stats)
         , ResultFiltered(resultFiltered)
-        , Settings(settings) {
+        , Settings(settings)
+    {
         AFL_VERIFY(Remapper);
         const std::vector<i64> recordsCount = [&]() {
             auto batchStatsOpt = stats->GetStatsForColumns(resultFiltered->GetColumnIds(), false);
@@ -215,7 +218,8 @@ public:
     TSplitTopology(
         const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered)
         : Stats(stats)
-        , ResultFiltered(resultFiltered) {
+        , ResultFiltered(resultFiltered)
+    {
     }
 
     void FillRemapping(std::vector<std::shared_ptr<arrow::RecordBatch>>&& remapping, const NSplitter::TSplitSettings& settings) {

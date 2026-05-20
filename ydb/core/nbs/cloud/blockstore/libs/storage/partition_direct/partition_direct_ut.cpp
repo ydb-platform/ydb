@@ -22,6 +22,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr ui64 BlocksPerRegion = RegionSize / DefaultBlockSize;
+constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
@@ -46,7 +47,8 @@ struct TScopedNbsService: TDisableCopyMove
 
 [[nodiscard]] TScopedNbsService SetupStorage(
     TEnvironmentSetup& env,
-    EWriteMode writeMode)
+    EWriteMode writeMode,
+    TDuration writeHedgingDelay = TDuration::Seconds(1))
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -79,6 +81,7 @@ struct TScopedNbsService: TDisableCopyMove
         PersistentBufferDDiskPoolName);
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
     storageConfig->SetVChunkSize(DefaultVChunkSize);
+    storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
 
     return TScopedNbsService(nbsConfig);
 }
@@ -654,7 +657,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             GetLoadActorAdapterActorId(env, partition, edge);
 
         bool alreadyOnce{};
-        ui8 singleWriteRequestsCounter{};
+        size_t singleWriteRequestsCounter{};
         runtime->FilterFunction =
             [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
         {
@@ -779,12 +782,6 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 NDDisk::TEvWritePersistentBuffer::EventType)
             {
                 if (writeRequestsCount++ < 2) {
-                    runtime->Schedule(
-                        TDuration::Seconds(10),
-                        ev.release(),
-                        nullptr,
-                        nodeId);
-
                     return false;
                 }
             }

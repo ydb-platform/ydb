@@ -64,7 +64,8 @@ std::vector<ui32> TPortionMetaBase::DoCalcSliceBorderOffsets(
     return { borderOffsets.begin(), borderOffsets.end() };
 }
 
-NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const {
+NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(
+    const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const {
     AFL_VERIFY(blobIds.size());
     FullValidation();
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
@@ -145,7 +146,7 @@ void TPortionMetaBase::FullValidation() const {
 std::optional<TBlobRangeLink16::TLinkId> TPortionMetaBase::GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
     AFL_VERIFY(blobId.IsValid());
     TBlobRangeLink16::TLinkId idx = 0;
-    for (auto &&i : BlobIds) {
+    for (auto&& i : BlobIds) {
         if (i == blobId) {
             return idx;
         }
@@ -153,6 +154,7 @@ std::optional<TBlobRangeLink16::TLinkId> TPortionMetaBase::GetBlobIdxOptional(co
     }
     return std::nullopt;
 }
+
 TBlobRangeLink16::TLinkId TPortionMetaBase::GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
     auto result = GetBlobIdxOptional(blobId);
     AFL_VERIFY(result);
@@ -173,11 +175,13 @@ ui32 TPortionMetaBase::GetBlobIdsCount() const {
 }
 
 TPortionMetaBase::TPortionMetaBase(std::vector<TUnifiedBlobId>&& blobIds)
-    : BlobIds(std::move(blobIds)) {
+    : BlobIds(std::move(blobIds))
+{
 }
 
 TPortionMetaBase::TPortionMetaBase(const std::vector<TUnifiedBlobId>& blobIds)
-    : BlobIds(blobIds) {
+    : BlobIds(blobIds)
+{
 }
 
 std::vector<TUnifiedBlobId> TPortionMetaBase::ExtractBlobIds() {
@@ -193,6 +197,7 @@ TBlobRangeLink16::TLinkId TPortionMetaBase::GetBlobIdxVerifiedPrivate(const TUni
 const std::vector<TUnifiedBlobId>& TPortionMetaBase::GetBlobIdsPrivate() const {
     return BlobIds;
 }
+
 const TBlobRange TPortionMetaBase::RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
     return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
 }
@@ -206,12 +211,14 @@ ui64 TPortionMetaBase::GetMetadataDataSize() const {
 }
 
 TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
-    : PKSchema(pk.GetSchema()), FirstPKRow(pk.GetFirst().GetContent()),
-      LastPKRow(pk.GetLast().GetContent()), RecordSnapshotMin(min),
-      RecordSnapshotMax(max) {
+    : PKSchema(pk.GetSchema())
+    , FirstPKRow(pk.GetFirst().GetContent())
+    , LastPKRow(pk.GetLast().GetContent())
+    , RecordSnapshotMin(min)
+    , RecordSnapshotMax(max)
+{
     AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())
-        ("start", IndexKeyStart().DebugString())
-        ("end", IndexKeyEnd().DebugString());
+    ("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
 }
 
 void TPortionMeta::FullValidation() const {
@@ -249,19 +256,17 @@ ui64 TPortionMeta::GetMetadataMemorySize() const {
 }
 
 ui64 TPortionMeta::GetMemorySize() const {
-    return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() +
-            LastPKRow.GetMemorySize();
+    return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize();
 }
 
 ui64 TPortionMeta::GetDataSize() const {
-    return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() +
-            LastPKRow.GetDataSize();
+    return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize();
 }
 
-TPortionAddress::TPortionAddress(const TInternalPathId pathId,
-                                 const ui64 portionId)
+TPortionAddress::TPortionAddress(const TInternalPathId pathId, const ui64 portionId)
     : PathId(pathId)
-    , PortionId(portionId) {
+    , PortionId(portionId)
+{
 }
 
 bool TPortionAddress::operator<(const TPortionAddress& item) const {
@@ -273,11 +278,10 @@ bool TPortionAddress::operator==(const TPortionAddress& item) const {
 }
 
 const TString TPortionAddress::Debug() const {
-    return TStringBuilder{} << "PathId: " << PathId.DebugString()
-                          << ", PortionId: " << PortionId;
+    return TStringBuilder{} << "PathId: " << PathId.DebugString() << ", PortionId: " << PortionId;
 }
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap
 
 ui64 THash<NKikimr::NOlap::TPortionAddress>::operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
     return CombineHashes(x.GetPortionId(), x.GetPathId().GetRawValue());

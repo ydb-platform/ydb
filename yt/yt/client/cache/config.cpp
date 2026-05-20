@@ -20,9 +20,9 @@ void TClientsCacheConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TClientsCacheAuthentificationOptionsPtr TClientsCacheAuthentificationOptions::GetFromEnvStatic()
+TClientsCacheAuthenticationOptionsPtr TClientsCacheAuthenticationOptions::GetFromEnvStatic()
 {
-    auto options = New<TClientsCacheAuthentificationOptions>();
+    auto options = New<TClientsCacheAuthenticationOptions>();
     options->DefaultOptions = GetClientOptionsFromEnvStatic();
     return options;
 }

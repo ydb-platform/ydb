@@ -8,6 +8,7 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/guid.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
 
@@ -37,6 +38,8 @@ public:
         }
 
         ChatCompletionRequest["max_completion_tokens"] = MAX_COMPLETION_TOKENS;
+        ChatCompletionRequest["parallel_tool_calls"] = true;
+        ChatCompletionRequest["prompt_cache_key"] = TStringBuilder() << "cli_" << CreateGuidAsString();
     }
 
     void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) final {
@@ -80,6 +83,23 @@ protected:
         TJsonParser parser(response);
         if (auto child = parser.MaybeKey("response")) {
             parser = std::move(*child);
+        }
+
+        if (auto usage = parser.MaybeKey("usage")) {
+            if (auto details = usage->MaybeKey("prompt_tokens_details")) {
+                if (auto cachedTokens = details->MaybeKey("cached_tokens")) {
+                    result.Usage.CachedInputTokens = cachedTokens->GetValue().GetUIntegerSafe();
+                }
+            }
+            if (auto inputTokens = usage->MaybeKey("prompt_tokens")) {
+                const auto promptTokens = inputTokens->GetValue().GetUIntegerSafe();
+                result.Usage.InputTokens = promptTokens >= result.Usage.CachedInputTokens
+                    ? promptTokens - result.Usage.CachedInputTokens
+                    : 0;
+            }
+            if (auto outputTokens = usage->MaybeKey("completion_tokens")) {
+                result.Usage.OutputTokens = outputTokens->GetValue().GetUIntegerSafe();
+            }
         }
 
         parser = parser.GetKey("choices").GetElement(0).GetKey("message");

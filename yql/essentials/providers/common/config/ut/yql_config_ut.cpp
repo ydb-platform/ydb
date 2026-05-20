@@ -546,7 +546,7 @@ Y_UNIT_TEST(EnumerateSkipsDeprecatedAndUnderscoreNames) {
     UNIT_ASSERT(Find(names, "Normal") != names.end());
     UNIT_ASSERT(Find(names, "DeprecatedOne") == names.end());
     UNIT_ASSERT(Find(names, "_HiddenInternal") == names.end());
-    UNIT_ASSERT_VALUES_EQUAL(1u, names.size());
+    UNIT_ASSERT_VALUES_EQUAL(1U, names.size());
 }
 
 Y_UNIT_TEST(ValidClustersManagement) {
@@ -558,7 +558,7 @@ Y_UNIT_TEST(ValidClustersManagement) {
     UNIT_ASSERT(dispatcher.IsValidCluster("cluster1"));
     UNIT_ASSERT(dispatcher.IsValidCluster("cluster2"));
     UNIT_ASSERT(!dispatcher.IsValidCluster("cluster3"));
-    UNIT_ASSERT_VALUES_EQUAL(2u, dispatcher.GetValidClusters().size());
+    UNIT_ASSERT_VALUES_EQUAL(2U, dispatcher.GetValidClusters().size());
 }
 
 Y_UNIT_TEST(SetValidClusters) {
@@ -675,9 +675,9 @@ Y_UNIT_TEST(ParseGuidInvalidThrows) {
 }
 
 Y_UNIT_TEST(ParseUnsignedIntegers) {
-    UNIT_ASSERT_VALUES_EQUAL(42u, NPrivate::GetDefaultParser<ui8>()("42"));
-    UNIT_ASSERT_VALUES_EQUAL(1000u, NPrivate::GetDefaultParser<ui16>()("1000"));
-    UNIT_ASSERT_VALUES_EQUAL(100000u, NPrivate::GetDefaultParser<ui32>()("100000"));
+    UNIT_ASSERT_VALUES_EQUAL(42U, NPrivate::GetDefaultParser<ui8>()("42"));
+    UNIT_ASSERT_VALUES_EQUAL(1000U, NPrivate::GetDefaultParser<ui16>()("1000"));
+    UNIT_ASSERT_VALUES_EQUAL(100000U, NPrivate::GetDefaultParser<ui32>()("100000"));
     UNIT_ASSERT_VALUES_EQUAL(1000000000000ULL, NPrivate::GetDefaultParser<ui64>()("1000000000000"));
 }
 
@@ -695,7 +695,7 @@ Y_UNIT_TEST(ParseIntegerInvalidThrows) {
 
 Y_UNIT_TEST(ParseFloatingPoint) {
     UNIT_ASSERT_DOUBLES_EQUAL(3.14, NPrivate::GetDefaultParser<double>()("3.14"), 1e-9);
-    UNIT_ASSERT_DOUBLES_EQUAL(1.5f, NPrivate::GetDefaultParser<float>()("1.5"), 1e-5);
+    UNIT_ASSERT_DOUBLES_EQUAL(1.5F, NPrivate::GetDefaultParser<float>()("1.5"), 1e-5);
 }
 
 Y_UNIT_TEST(ParseDuration) {
@@ -728,7 +728,7 @@ Y_UNIT_TEST(ParseSize) {
 Y_UNIT_TEST(ParseVectorStringComma) {
     auto parser = NPrivate::GetDefaultParser<TVector<TString>>();
     auto result = parser("a,b,c");
-    UNIT_ASSERT_VALUES_EQUAL(3u, result.size());
+    UNIT_ASSERT_VALUES_EQUAL(3U, result.size());
     UNIT_ASSERT_VALUES_EQUAL("a", result[0]);
     UNIT_ASSERT_VALUES_EQUAL("b", result[1]);
     UNIT_ASSERT_VALUES_EQUAL("c", result[2]);
@@ -737,13 +737,13 @@ Y_UNIT_TEST(ParseVectorStringComma) {
 Y_UNIT_TEST(ParseVectorStringSemicolon) {
     auto parser = NPrivate::GetDefaultParser<TVector<TString>>();
     auto result = parser("x;y;z");
-    UNIT_ASSERT_VALUES_EQUAL(3u, result.size());
+    UNIT_ASSERT_VALUES_EQUAL(3U, result.size());
 }
 
 Y_UNIT_TEST(ParseVectorStringPipe) {
     auto parser = NPrivate::GetDefaultParser<TVector<TString>>();
     auto result = parser("foo|bar");
-    UNIT_ASSERT_VALUES_EQUAL(2u, result.size());
+    UNIT_ASSERT_VALUES_EQUAL(2U, result.size());
     UNIT_ASSERT_VALUES_EQUAL("foo", result[0]);
     UNIT_ASSERT_VALUES_EQUAL("bar", result[1]);
 }
@@ -751,7 +751,7 @@ Y_UNIT_TEST(ParseVectorStringPipe) {
 Y_UNIT_TEST(ParseVectorStringSpace) {
     auto parser = NPrivate::GetDefaultParser<TVector<TString>>();
     auto result = parser("hello world");
-    UNIT_ASSERT_VALUES_EQUAL(2u, result.size());
+    UNIT_ASSERT_VALUES_EQUAL(2U, result.size());
 }
 
 Y_UNIT_TEST(ParseVectorStringEmptyItemThrows) {
@@ -764,7 +764,7 @@ Y_UNIT_TEST(ParseVectorStringEmptyItemThrows) {
 Y_UNIT_TEST(ParseSetStringDeduplicates) {
     auto parser = NPrivate::GetDefaultParser<TSet<TString>>();
     auto result = parser("b,a,c,a");
-    UNIT_ASSERT_VALUES_EQUAL(3u, result.size());
+    UNIT_ASSERT_VALUES_EQUAL(3U, result.size());
     UNIT_ASSERT(result.contains("a"));
     UNIT_ASSERT(result.contains("b"));
     UNIT_ASSERT(result.contains("c"));
@@ -773,7 +773,7 @@ Y_UNIT_TEST(ParseSetStringDeduplicates) {
 Y_UNIT_TEST(ParseHashSetString) {
     auto parser = NPrivate::GetDefaultParser<THashSet<TString>>();
     auto result = parser("foo|bar|baz");
-    UNIT_ASSERT_VALUES_EQUAL(3u, result.size());
+    UNIT_ASSERT_VALUES_EQUAL(3U, result.size());
     UNIT_ASSERT(result.contains("foo"));
     UNIT_ASSERT(result.contains("bar"));
     UNIT_ASSERT(result.contains("baz"));
@@ -935,7 +935,7 @@ Y_UNIT_TEST(StaticSettingWithValueIsEmitted) {
         collected.emplace_back(name, value);
     });
 
-    UNIT_ASSERT_VALUES_EQUAL(1u, collected.size());
+    UNIT_ASSERT_VALUES_EQUAL(1U, collected.size());
     UNIT_ASSERT_VALUES_EQUAL("MyStatic", collected[0].first);
     UNIT_ASSERT_VALUES_EQUAL("hello", collected[0].second);
 }
@@ -951,7 +951,7 @@ Y_UNIT_TEST(StaticSettingWithoutValueNotEmitted) {
         collected.emplace_back(name, value);
     });
 
-    UNIT_ASSERT_VALUES_EQUAL(0u, collected.size());
+    UNIT_ASSERT_VALUES_EQUAL(0U, collected.size());
 }
 
 Y_UNIT_TEST(MixedSettingsOnlyStaticEmitted) {
@@ -991,7 +991,7 @@ Y_UNIT_TEST(MultipleStaticSettingsAllEmitted) {
         collected[name] = value;
     });
 
-    UNIT_ASSERT_VALUES_EQUAL(3u, collected.size());
+    UNIT_ASSERT_VALUES_EQUAL(3U, collected.size());
     UNIT_ASSERT_VALUES_EQUAL("text", collected["StrSetting"]);
     UNIT_ASSERT_VALUES_EQUAL("42", collected["IntSetting"]);
     UNIT_ASSERT_VALUES_EQUAL("true", collected["BoolSetting"]);
@@ -1010,7 +1010,7 @@ Y_UNIT_TEST(CustomSerializerOverride) {
         collected.emplace_back(name, value);
     });
 
-    UNIT_ASSERT_VALUES_EQUAL(1u, collected.size());
+    UNIT_ASSERT_VALUES_EQUAL(1U, collected.size());
     UNIT_ASSERT_VALUES_EQUAL("custom_value", collected[0].second);
 }
 

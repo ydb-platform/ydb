@@ -13,7 +13,7 @@
 (let $12 (PqTopic '"pq" '"local" '"test_topic_input" '('('"PartitionsCount" '"1")) '() $11))
 (let $13 '('"SharedReading" '"1"))
 (let $14 '('('"Consumer" '"test_client") '('"Endpoint" '"<pq_pq_endpoint>") $13 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") '('"UseSsl" '"1") '('"WatermarksEnable" '"1") '('"WatermarksGranularityUs" '"4000") '('"WatermarksLateArrivalDelayUs" '"6000") '('"WatermarksLateEventsPolicy" '"adjust") '('"WatermarksIdlePartitions" '"1") '('"WatermarksIdleTimeoutUs" '"5000")))
-(let $15 (DqPqTopicSource world $12 '('"ts") $14 (SecureParam '"cluster:default_pq") '"" $11 (lambda '($19) (Unwrap (- (Member $19 '"ts") (Interval '"5000000")))) '"B\x1F\n\x1D\x1A\x1B\b\x03\x12\x04\x12\x02ts\x1A\x11\n\x0F\n\x02\b3\x12\t!@KL\x00\x00\x00\x00\x00"))
+(let $15 (DqPqTopicSource world $12 '('"ts") $14 (SecureParam '"cluster:default_pq") '"" $11 (lambda '($19) (- (Member $19 '"ts") (Interval '"5000000"))) '"\x1A\x1B\b\x03\x12\x04\x12\x02ts\x1A\x11\n\x0F\n\x02\b3\x12\t!@KL\x00\x00\x00\x00\x00"))
 (let $16 (DqStage '((DqSource $10 $15)) (lambda '($20) (block '(
   (let $21 '('('"format" '"json_each_row") '('"formatSettings" '('('"data.datetime.formatname" '"POSIX") '('"data.timestamp.formatname" '"POSIX"))) '('"settings" '($13))))
   (let $22 (DqSourceWideWrap $20 $10 $11 $21))

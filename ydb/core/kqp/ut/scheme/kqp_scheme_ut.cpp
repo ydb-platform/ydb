@@ -31,6 +31,7 @@
 #include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <util/generic/serialized_enum.h>
+#include <util/generic/size_literals.h>
 #include <util/string/printf.h>
 
 #include <fmt/format.h>
@@ -1586,9 +1587,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DataShardBloomFilterIndex) {
-        TKikimrSettings settings;
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1713,6 +1712,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=1);
+        )");
+        // Mixing a LocalBloomFilter index with a regular secondary index in a single ALTER TABLE
+        // The bloom path and the BuildOperation path are dispatched mutually exclusively.
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+                ADD INDEX idx_bloom_mix LOCAL USING bloom_filter ON (Key1),
+                ADD INDEX idx_global_mix GLOBAL ON (Value);
         )");
     }
 
@@ -2959,15 +2966,25 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         if (type == EIndexTypeSql::GlobalVectorKMeansTree) {
-            auto result = session.ExecuteDataQuery(R"(
-                REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
-                    (1u, "Jack", 100500ul, "Just Jack"),
-                    (3u, "Harr", 5600ul,   "Not Potter"),
-                    (3u, "Josh", 8202ul,   "Very popular name in GB"),
-                    (3u, "Anna", 887773ul, "Just Anna"),
-                    (4u, "Hugo", 77,       "Boss");
-                )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            // Delete old rows from CreateSampleTables() that don't have valid vector format
+            {
+                auto result = session.ExecuteDataQuery("DELETE FROM `Test`;", TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            // Insert properly formatted vector data (uint8, dim=3)
+            // \x02 = EFormat::Uint8Vector as last byte of each string
+            // Note: must use regular string literals (not raw R"(...)") so \x02 is interpreted as byte value
+            {
+                TString query = "REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES\n"
+                    "    (1u, \"Jac\x02\", 100500ul, \"Jus\x02\"),\n"
+                    "    (3u, \"Har\x02\", 5600ul,   \"Not\x02\"),\n"
+                    "    (3u, \"Jos\x02\", 8202ul,   \"Ver\x02\"),\n"
+                    "    (3u, \"Ann\x02\", 887773ul, \"Jus\x02\"),\n"
+                    "    (4u, \"Hug\x02\", 77,       \"Bos\x02\");";
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
         } else {
             CreateSampleTablesWithIndex(session);
         }
@@ -4405,7 +4422,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cerr << explain;
 
             if (expectedError) {
-                UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST, explain);
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST || result.GetStatus() == EStatus::PRECONDITION_FAILED, explain);
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, explain);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, explain);
@@ -4447,7 +4464,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=42, vector_dimension=1024, levels=3, clusters=10",
             "Invalid vector_type: 42");
         check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
-            "vector_type should be set");
+            "table is empty and vector_type/vector_dimension were not specified");
+
 
         // vector_dimension
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
@@ -4464,7 +4482,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
             "Invalid vector_dimension: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
-            "vector_dimension should be set");
+            "table is empty and vector_type/vector_dimension were not specified");
 
         // levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
@@ -4480,8 +4498,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid levels: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
             "Invalid levels: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
-            "levels should be set");
+        // levels is now optional (auto-selected from row count)
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2", "");
 
         // clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
@@ -4499,8 +4517,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid clusters: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
             "Invalid clusters: 99999999999999999999");
-        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
-            "clusters should be set");
+        // clusters is now optional (auto-selected from row count)
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1", "");
+        // clusters and levels are now optional (auto-selected from row count)
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024", "");
 
         // clusters^levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",
@@ -6501,6 +6521,204 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ChangefeedRetentionStorage, UseQueryService) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default (not defined)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(!desc.GetTopicDescription().GetRetentionStorageMb().has_value());
+        }
+
+        { // alter (100 MB)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` SET (
+                    RETENTION_STORAGE_MB = 100
+                );
+            )";
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionStorageMb().value(), 100);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ChangefeedWriteSpeed, UseQueryService) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default (1 MB/s)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 1_MB);
+        }
+
+        { // alter (2 MB/s)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` SET (
+                    PARTITION_WRITE_SPEED_BYTES_PER_SECOND = 2097152
+                );
+            )";
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 2_MB);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ChangefeedWriteBurst, UseQueryService) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto pq = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            if constexpr (UseQueryService) {
+                Y_UNUSED(session);
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            } else {
+                Y_UNUSED(queryClient);
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            }
+        };
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // default (1 MB)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteBurstBytes(), 1_MB);
+        }
+
+        { // alter (2 MB)
+            auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` SET (
+                    PARTITION_WRITE_BURST_BYTES = 2097152
+                );
+            )";
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto desc = pq.DescribeTopic("/Root/table/feed").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitionWriteBurstBytes(), 2_MB);
         }
     }
 
@@ -12617,9 +12835,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     std::unique_ptr<TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true) {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
-        config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
-        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+        auto& featureFlags = *config.MutableFeatureFlags();
+        featureFlags.SetEnableStreamingQueries(enableStreamingQueries);
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableResourcePools(true);
+        featureFlags.SetEnableStreamingQueryDisposition(true);
         config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
@@ -14205,7 +14425,7 @@ END DO)",
         }
         {
             auto query = R"sql(
-                ALTER TABLE `/Root/TestTable` COMPACT WITH (MAX_SHARDS_IN_FLIGHT = 2, CASCADE = false);
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
             )sql";
             auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());

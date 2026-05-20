@@ -6,7 +6,8 @@ void IProposeTxOperator::DoSendReply(TColumnShard& owner, const TActorContext& c
     ctx.Send(GetTxInfo().Source, BuildProposeResultEvent(owner).release());
 }
 
-std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(const TColumnShard& owner) const {
+std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTxOperator::BuildProposeResultEvent(
+    const TColumnShard& owner) const {
     const auto& txInfo = GetTxInfo();
     std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> evResult =
         std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), txInfo.TxKind, txInfo.TxId,
@@ -28,4 +29,4 @@ std::unique_ptr<NKikimr::TEvColumnShard::TEvProposeTransactionResult> IProposeTx
     return evResult;
 }
 
-}
+}   // namespace NKikimr::NColumnShard

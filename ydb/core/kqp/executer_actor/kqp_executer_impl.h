@@ -70,7 +70,6 @@ namespace NKqp {
 
 using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
-const ui64 MaxTaskSize = 48_MB;
 constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
@@ -154,9 +153,11 @@ public:
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
+        , NewRboEnabled(executerConfig.TableServiceConfig.GetEnableNewRBO())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
+        , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -176,7 +177,7 @@ public:
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -458,7 +459,7 @@ protected:
                     if (!channel.DstTask) {
                         Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
                         auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
-                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
+                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
                         ReadResultFromInputBuffer(channelId, inputBuffer);
                         ResultInputBuffers.emplace(channelId, inputBuffer);
                     }
@@ -684,7 +685,7 @@ protected:
                         Stats->ExportExecStats(execStats);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                             const auto& tx = Request.Transactions[txId].Body;
-                            auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                            auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
                             execStats.AddTxPlansWithStats(planWithStats);
                         }
                         this->Send(Target, progress.Release());
@@ -794,7 +795,7 @@ protected:
 
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
-                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
                 TPlanVisualizer viz;
 
                 NJson::TJsonReaderConfig jsonConfig;
@@ -950,6 +951,9 @@ protected:
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                break;
+            case NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW:
+                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::PESSIMISTIC_NONE);
                 break;
             default:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
@@ -1288,7 +1292,7 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
-            .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
+            .EnableWatermarks = EnableWatermarks,
         });
 
         auto err = Planner->PlanExecution();
@@ -1301,7 +1305,7 @@ protected:
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
                 auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0,
-                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))));
+                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
                 ReadResultFromInputBuffer(channelId, inputBuffer);
                 ResultInputBuffers.emplace(channelId, inputBuffer);
             }
@@ -1506,24 +1510,6 @@ protected:
     }
 
 protected:
-    template <class TCollection>
-    bool ValidateTaskSize(const TCollection& tasks) {
-        for (const auto& task : tasks) {
-            if (ui32 size = task->ByteSize(); size > MaxTaskSize) {
-                KQP_STLOG_E(KQPEX, "Abort execution. Task size is too big",
-                    (TaskId, task->GetId()),
-                    (Size, size),
-                    (MaxSize, MaxTaskSize),
-                    (trace_id, TraceId()));
-                ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
-                    MakeIssue(NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED, TStringBuilder() <<
-                        "Datashard program size limit exceeded (" << size << " > " << MaxTaskSize << ")"));
-                return false;
-            }
-        }
-        return true;
-    }
-
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
     }
@@ -1562,7 +1548,7 @@ protected:
                     response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
                     for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                         const auto& tx = Request.Transactions[txId].Body;
-                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats(), NewRboEnabled);
                         jsonSize += planWithStats.size();
                         response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
                     }
@@ -1814,11 +1800,13 @@ protected:
     TActorId CheckpointCoordinatorId;
     TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
+    bool NewRboEnabled = false;
+
 protected:
     TKqpTasksGraph TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     THolder<TPartitionPruner> PartitionPruner;
-
+    bool EnableWatermarks = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

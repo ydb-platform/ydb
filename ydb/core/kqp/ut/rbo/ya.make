@@ -8,6 +8,7 @@ REQUIREMENTS(cpu:2)
 SRCS(
     kqp_rbo_pg_ut.cpp
     kqp_rbo_yql_ut.cpp
+    kqp_rbo_olap_ut.cpp
 )
 
 PEERDIR(
@@ -19,6 +20,7 @@ PEERDIR(
     ydb/library/benchmarks/queries/tpch
     ydb/public/lib/ut_helpers
     ydb/library/yql/udfs/statistics_internal
+    ydb/core/kqp/ut/olap/helpers
     ydb/core/statistics/ut_common
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog

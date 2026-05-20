@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; rec {
-  version = "4.6.3";
+  version = "4.6.4";
 
   src = fetchFromGitHub {
     owner = "simdjson";
     repo = "simdjson";
     rev = "v${version}";
-    hash = "sha256-KEFoHWP2n5srA2d6szBnQkRp+3z7ELTxNvqI5DkqrYk=";
+    hash = "sha256-8oQzsR7DSaNTN9su1uI9tRQ9HvOwXShPwSrnQj8+lGM=";
   };
 
   cmakeFlags = [

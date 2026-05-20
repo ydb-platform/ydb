@@ -499,6 +499,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             )"), TTxControl::Tx(*tx1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
 
             // tx1 reads KV2 and sees the row
             result = session1.ExecuteQuery(Q_(R"(
@@ -507,6 +508,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[1u;["val1"]]])", FormatResultSetYson(result.GetResultSet(0)));
             tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
 
             // tx1 commits
             result = tx1->Commit().ExtractValueSync();

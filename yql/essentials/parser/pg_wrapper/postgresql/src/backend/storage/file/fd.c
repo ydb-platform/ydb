@@ -166,6 +166,9 @@ __thread bool		data_sync_retry = false;
 /* How SyncDataDirectory() should do its job. */
 __thread int			recovery_init_sync_method = RECOVERY_INIT_SYNC_METHOD_FSYNC;
 
+/* How data files should be bulk-extended with zeros. */
+__thread int			file_extend_method = DEFAULT_FILE_EXTEND_METHOD;
+
 /* Which kinds of files should be opened with PG_O_DIRECT. */
 __thread int			io_direct_flags;
 
@@ -519,7 +522,7 @@ retry:
 		{
 			int			elevel;
 
-			if (rc == EINTR)
+			if (errno == EINTR)
 				goto retry;
 
 			/*

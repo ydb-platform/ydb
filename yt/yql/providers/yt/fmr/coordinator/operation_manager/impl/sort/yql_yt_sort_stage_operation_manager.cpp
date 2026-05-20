@@ -271,7 +271,7 @@ private:
 
         auto sortedPartitioner = TSortedPartitioner(partIdsForTables, partIdStats, sortingColumns, sortedPartitionerSettings);
 
-        return PartitionInputTablesIntoTasksSorted(inputTables, sortedPartitioner);
+        return sortedPartitioner.PartitionTablesIntoTasks(inputTables);
     }
 
     TPartitionResult DoUnorderedPartition(const TPrepareOperationStageContext& context) {

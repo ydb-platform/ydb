@@ -5,6 +5,7 @@
 #include <ydb/core/ymq/actor/error.h>
 #include <ydb/core/ymq/actor/proxy_actor.h>
 #include <ydb/core/ymq/actor/serviceid.h>
+#include <ydb/public/sdk/cpp/src/client/types/core_facility/simple_core_facility.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/folder_service/events.h>
@@ -253,18 +254,22 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
     if (result.HasError()) {
         if (CanRetry() && result.Error.Retryable) {
             ScheduleAuthorizationRetry();
+            return;
         } else {
-            RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
-            SetError(
-                result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
-                "IAM authorization error."
-            );
-            SendReplyAndDie();
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
+                SetError(
+                    result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
+                    "IAM authorization error."
+                );
+                SendReplyAndDie();
+                return;
+            }
         }
-        return;
+    } else {
+        UserSID_ = result.Token->GetUserSID();
     }
 
-    UserSID_ = result.Token->GetUserSID();
     MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
 
     // Of course, in practice the accounts that come in aren’t always of the "service_account" type.
@@ -549,7 +554,8 @@ void TMultiAuthFactory::Initialize(
     }
 
     IsYandexCloudMode_ = true;
-    CredentialsProvider_ = CreateCredentialsProviderFactory(config)->CreateProvider();
+    CoreFacility_ = NYdb::CreateSimpleCoreFacility();
+    CredentialsProvider_ = CreateCredentialsProviderFactory(config)->CreateProvider(CoreFacility_);
 
     const auto& rootCAPath = appData.AuthConfig.GetPathToRootCA();
 

@@ -341,7 +341,7 @@ Checks: >
   modernize-use-bool-literals,
   -modernize-use-default-member-init,
   modernize-use-designated-initializers,
-  -modernize-use-emplace,
+  modernize-use-emplace,
   -modernize-use-equals-default,
   modernize-use-equals-delete,
   -modernize-use-nodiscard,
@@ -356,7 +356,7 @@ Checks: >
   -performance-faster-string-find,
   -performance-for-range-copy,
   -performance-implicit-conversion-in-loop,
-  -performance-inefficient-algorithm,
+  performance-inefficient-algorithm,
   -performance-inefficient-string-concatenation,
   -performance-inefficient-vector-operation,
   -performance-move-const-arg,
@@ -364,7 +364,7 @@ Checks: >
   -performance-no-automatic-move,
   -performance-no-int-to-ptr,
   -performance-noexcept-move-constructor,
-  -performance-trivially-destructible,
+  performance-trivially-destructible,
   -performance-type-promotion-in-math-fn,
   -performance-unnecessary-copy-initialization,
   -performance-unnecessary-value-param,
@@ -377,7 +377,7 @@ Checks: >
   readability-container-data-pointer,
   readability-container-size-empty,
   -readability-convert-member-functions-to-static,
-  -readability-delete-null-pointer,
+  readability-delete-null-pointer,
   -readability-deleted-default,
   readability-duplicate-include,
   -readability-else-after-return,
@@ -386,7 +386,7 @@ Checks: >
   -readability-identifier-length,
   -readability-identifier-naming,
   -readability-implicit-bool-conversion,
-  -readability-inconsistent-declaration-parameter-name,
+  readability-inconsistent-declaration-parameter-name,
   readability-isolate-declaration,
   -readability-magic-numbers,
   -readability-make-member-function-const,
@@ -397,23 +397,24 @@ Checks: >
   -readability-qualified-auto,
   -readability-redundant-access-specifiers,
   -readability-redundant-control-flow,
-  -readability-redundant-declaration,
-  -readability-redundant-function-ptr-dereference,
+  readability-redundant-declaration,
+  readability-redundant-function-ptr-dereference,
   -readability-redundant-member-init,
-  -readability-redundant-preprocessor,
-  -readability-redundant-smartptr-get,
-  -readability-redundant-string-cstr,
+  readability-redundant-preprocessor,
+  readability-redundant-smartptr-get,
+  readability-redundant-string-cstr,
   -readability-redundant-string-init,
-  -readability-simplify-boolean-expr,
-  -readability-simplify-subscript-expr,
+  readability-simplify-boolean-expr,
+  readability-simplify-subscript-expr,
   -readability-static-accessed-through-instance,
-  -readability-static-definition-in-anonymous-namespace,
+  readability-static-definition-in-anonymous-namespace,
   -readability-string-compare,
   -readability-suspicious-call-argument,
   -readability-uniqueptr-delete-release,
-  -readability-uppercase-literal-suffix,
+  readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
-  readability-avoid-const-params-in-decls
+  readability-avoid-const-params-in-decls,
+  -sdc-no-lowercase-l-suffix
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true
@@ -425,3 +426,7 @@ CheckOptions:
     value: N
   - key: readability-identifier-naming.StaticVariableCase
     value: CamelCase
+  - key: readability-simplify-boolean-expr.IgnoreMacros
+    value: true
+  - key: readability-simplify-boolean-expr.SimplifyDeMorgan
+    value: false

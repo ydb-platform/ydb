@@ -1,10 +1,10 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "read_request.h"
-#include "vchunk_config.h"
+#include "read_request_executor.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/location.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -37,7 +37,7 @@ public:
         IPartitionDirectServicePtr partitionDirectService,
         IDirectBlockGroupPtr directBlockGroup,
         TBlocksDirtyMap* dirtyMap,
-        ELocation destination);
+        THostIndex destination);
 
     // Starts processing from the FreshWatermark position, which is stored in
     // dirtyMap.
@@ -53,7 +53,7 @@ private:
     void StartCopyRange();
     void OnRangeRead(
         TCopyRangeRequestStatePtr copyRangeState,
-        const TReadRequestExecutor::TResponse& response);
+        const IReadRequestExecutor::TResponse& response);
     void OnRangeWritten(
         TCopyRangeRequestStatePtr copyRangeState,
         const TDBGWriteBlocksResponse& response);
@@ -63,7 +63,7 @@ private:
     const TVolumeConfigPtr VolumeConfig;
     const IPartitionDirectServicePtr PartitionDirectService;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const ELocation Destination;
+    const THostIndex Destination;
     TBlocksDirtyMap* const DirtyMap;
 
     EState State = EState::Stopped;

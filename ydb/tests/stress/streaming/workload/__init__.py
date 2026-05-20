@@ -64,7 +64,9 @@ class Workload():
                     SELECT * FROM
                         `{self.prefix}/source_name`.`{self.input_topic}` WITH (
                             FORMAT = 'json_each_row',
-                            SCHEMA (time Uint64 NOT NULL, level String NOT NULL)
+                            SCHEMA (time Uint64 NOT NULL, level String NOT NULL),
+                            WATERMARK = SystemMetadata('write_time') - Interval('PT0S'),
+                            WATERMARK_GRANULARITY = "PT1S"
                         )
                 );
                 $filtered = (SELECT * FROM $input WHERE level = 'error');

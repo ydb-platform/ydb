@@ -2,9 +2,9 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/array_power2.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/case_helper.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -143,7 +143,8 @@ private:
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-        , StringNormalizer(caseSensitive) {
+        , StringNormalizer(caseSensitive)
+    {
     }
 
     template <class TAction>
@@ -186,12 +187,11 @@ public:
     }
 };
 
-
 namespace {
 
 template <class TBuilder, class TFiller>
-void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor,
-    const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
+void VisitAllChunksWithBuilder(
+    TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor, const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
     for (reader.Start(); reader.IsCorrect();) {
         AFL_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& r : reader) {
@@ -219,25 +219,31 @@ void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TReadDataExtra
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
-    TNGrammBuilder builder(HashesCount, CaseSensitive);
+    const ui32 hashesCount = Request.ResolvedHashesCount();
+    const bool caseSensitive = Request.ResolvedCaseSensitive();
+    const bool useOldSizing = Request.IsOldSizingMode();
+    const ui32 ngramSize = Request.ResolvedNGrammSize();
+    const double falsePositiveProbability = Request.ResolvedFalsePositiveProbability();
+    const ui32 filterSizeBytes = Request.ResolvedFilterSizeBytes();
+    const ui32 resolvedRecordsCount = Request.ResolvedRecordsCount();
+    TNGrammBuilder builder(hashesCount, caseSensitive);
 
-    if (!UseOldSizing) {
+    if (!useOldSizing) {
         static constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
         static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
 
         TArrayPower2BitsStorage maxStorage(MaxBitsSize);
-        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxStorage);
+        VisitAllChunksWithBuilder(reader, GetDataExtractor(), ngramSize, builder, maxStorage);
 
         const ui64 setBitsCount = maxStorage.CountSetBits();
 
         const double m = static_cast<double>(MaxBitsSize);
-        const double k = static_cast<double>(HashesCount);
+        const double k = static_cast<double>(hashesCount);
         const double ratio = static_cast<double>(setBitsCount) / m;
-        const double estimatedUniqueCount = (ratio >= 1.0)
-            ? m / k
-            : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
+        const double estimatedUniqueCount = (ratio >= 1.0) ? m / k : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
 
-        const double requestedBitsSizeDouble = std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(FalsePositiveProbability, 1.0 / k)));
+        const double requestedBitsSizeDouble =
+            std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(falsePositiveProbability, 1.0 / k)));
         const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
         const ui32 targetSize = std::min<ui64>(MaxBitsSize, std::bit_ceil(requestedBitsSize));
 
@@ -247,15 +253,15 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
     }
 
-    ui32 size = FilterSizeBytes * 8;
+    ui32 size = filterSizeBytes * 8;
     if ((size & (size - 1)) == 0) {
-        ui32 recordsCountBase = RecordsCount;
+        ui32 recordsCountBase = resolvedRecordsCount;
         while (recordsCountBase < recordsCount && size * 2 <= TConstants::MaxFilterSizeBytes) {
             size <<= 1;
             recordsCountBase *= 2;
         }
     } else {
-        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1) / RecordsCount));
+        size = std::bit_ceil(size * ((recordsCount + resolvedRecordsCount - 1) / resolvedRecordsCount));
     }
 
     size = std::max<ui32>(16, size);
@@ -266,7 +272,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             GetDataExtractor()->VisitAll(
                 r.GetCurrentChunk(),
                 [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
-                    builder.FillNGrammHashes(NGrammSize, arr, storage);
+                    builder.FillNGrammHashes(ngramSize, arr, storage);
                 },
                 [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
                     auto view = data.GetScalarOptional();
@@ -274,7 +280,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                         return;
                     }
 
-                    builder.BuildNGramms(view->data(), view->size(), {}, NGrammSize, storage);
+                    builder.BuildNGramms(view->data(), view->size(), {}, ngramSize, storage);
                 });
         }
 
@@ -285,8 +291,11 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
+    const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+    const ui32 hashesCount = Request.ResolvedHashesCount();
+    const bool caseSensitive = Request.ResolvedCaseSensitive();
+    const ui32 ngramSize = Request.ResolvedNGrammSize();
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
@@ -296,8 +305,9 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
             result = false;
         }
     };
-    TNGrammBuilder builder(HashesCount, CaseSensitive);
-    AFL_VERIFY(!CaseSensitive || op.GetCaseSensitive());
+
+    TNGrammBuilder builder(hashesCount, caseSensitive);
+    AFL_VERIFY(!caseSensitive || op.GetCaseSensitive());
 
     NRequest::TLikePart::EOperation opLike;
     switch (op.GetOperation()) {
@@ -318,7 +328,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
     }
     auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
     const TString valString((const char*)strVal->value->data(), strVal->value->size());
-    builder.FillNGrammHashes(NGrammSize, opLike, valString, predSet);
+    builder.FillNGrammHashes(ngramSize, opLike, valString, predSet);
     return result;
 }
 

@@ -352,7 +352,7 @@ private:
 
 } // anonymous namespace
 
-TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString label, ISource* src) {
+TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString label, ISource* source) {
     const auto node = MakeIntrusive<TMatchRecognize>(
         Pos_,
         std::move(label),
@@ -366,7 +366,7 @@ TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString label, ISource* sr
         std::move(PatternVars_),
         std::move(Subset_),
         std::move(Definitions_));
-    if (!node->Init(ctx, src)) {
+    if (!node->Init(ctx, source)) {
         return {};
     }
     return node;
@@ -381,8 +381,8 @@ TNodePtr BuildMatchRecognizeDefineAggregate(TPosition pos, TString name, TVector
     return BuildMatchRecognizeVarAccess(pos, std::move(result));
 }
 
-TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, TNodePtr aggr) {
-    return MakeIntrusive<TMatchRecognizeVarAccessNode>(pos, std::move(aggr));
+TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, TNodePtr extractor) {
+    return MakeIntrusive<TMatchRecognizeVarAccessNode>(pos, std::move(extractor));
 }
 
 } // namespace NSQLTranslationV1

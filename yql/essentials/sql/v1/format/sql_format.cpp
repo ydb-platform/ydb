@@ -2071,6 +2071,42 @@ private:
         }
     }
 
+    void VisitCombineCore(const TRule_combine_core& msg) {
+        Visit(msg.GetToken1());
+        Visit(msg.GetRule_named_single_source2());
+        if (msg.HasBlock3()) {
+            PushCurrentIndent();
+            NewLine();
+            Visit(msg.GetBlock3());
+            PopCurrentIndent();
+        }
+
+        NewLine();
+
+        Visit(msg.GetToken4());
+        Visit(msg.GetRule_named_single_source5());
+        if (msg.HasBlock6()) {
+            PushCurrentIndent();
+            NewLine();
+            Visit(msg.GetBlock6());
+            PopCurrentIndent();
+        }
+
+        NewLine();
+
+        // Process similar way as join constraint alternative (see VisitJoinConstraint).
+        Visit(msg.GetToken7());
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_expr8());
+        PopCurrentIndent();
+
+        NewLine();
+
+        Visit(msg.GetToken9());
+        Visit(msg.GetRule_using_call_expr10());
+    }
+
     void VisitSortSpecificationList(const TRule_sort_specification_list& msg) {
         NewLine();
         PushCurrentIndent();
@@ -3183,6 +3219,7 @@ TStaticData::TStaticData()
           {TRule_select_kind::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKind)},
           {TRule_process_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitProcessCore)},
           {TRule_reduce_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitReduceCore)},
+          {TRule_combine_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCombineCore)},
           {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
           {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
           {TRule_row_pattern_recognition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRowPatternRecognitionClause)},
@@ -3352,11 +3389,14 @@ public:
     bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues, EFormatMode mode) override {
         formattedQuery = (mode == EFormatMode::Obfuscate) ? "" : query;
         auto parsedSettings = Settings_;
+        parsedSettings.InferSyntaxVersion = true;
+        parsedSettings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
+        parsedSettings.V0ForceDisable = false;
         if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
             return false;
         }
 
-        if (parsedSettings.PgParser) {
+        if ((parsedSettings.SyntaxVersion == 0) || parsedSettings.PgParser) {
             return mode != EFormatMode::Obfuscate;
         }
 
@@ -3468,12 +3508,15 @@ ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
 TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
                     const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     auto parsedSettings = settings;
+    parsedSettings.InferSyntaxVersion = true;
+    parsedSettings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
+    parsedSettings.V0ForceDisable = false;
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
         throw yexception() << issues.ToString();
     }
 
-    if (parsedSettings.PgParser) {
+    if ((parsedSettings.SyntaxVersion == 0) || parsedSettings.PgParser) {
         return query;
     }
 

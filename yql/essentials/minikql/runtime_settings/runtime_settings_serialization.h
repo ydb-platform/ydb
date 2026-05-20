@@ -15,8 +15,11 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromProto(
     const TString& userName,
     TCredentials::TPtr credentials);
 
+TRuntimeSettings::TPtr DeserializeRuntimeSettingsFromProto(
+    const NProto::TRuntimeSettings& proto);
+
 NProto::TRuntimeSettings SerializeRuntimeSettingsToProto(
-    const TRuntimeSettings::TConstPtr& config);
+    const TRuntimeSettings& config);
 
 TString SerializeRuntimeSettingsToString(const TRuntimeSettings& config);
 

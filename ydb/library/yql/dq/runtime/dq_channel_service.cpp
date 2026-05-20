@@ -126,6 +126,7 @@ void IChannelBuffer::SendFinish() {
 }
 
 EDqFillLevel TLocalBuffer::GetFillLevel() const {
+    std::lock_guard lock(Mutex);
     return FillLevel;
 }
 
@@ -742,17 +743,17 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     PushStats.Bytes += data.Bytes;
     PushStats.Rows += data.Rows;
 
-    (*InputBufferChunks)++;
-    InflightBytes += data.Bytes;
-    *InputBufferBytes += data.Bytes;
-    *InputBufferInflightBytes += data.Bytes;
+    std::lock_guard lock(QueueMutex);
 
     if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
         AbortChannelByMemoryLimit(data.Bytes);
         return false;
     }
 
-    std::lock_guard lock(QueueMutex);
+    (*InputBufferChunks)++;
+    InflightBytes += data.Bytes;
+    *InputBufferBytes += data.Bytes;
+    *InputBufferInflightBytes += data.Bytes;
 
     if (FinishPushed.load()) {
         return false;
@@ -821,7 +822,11 @@ bool TInputDescriptor::EarlyFinish() {
             std::queue<TInputItem> tmpQueue;
             Queue.swap(tmpQueue);
             QueueSize.store(0);
-            PopStats.Bytes += QueueBytes.exchange(0);
+            auto queueBytes = QueueBytes.exchange(0);
+            PopStats.Bytes += queueBytes;
+            if (QuotaManager) {
+                QuotaManager->FreeQuota(queueBytes);
+            }
             if (FinishPushed.load()) {
                 Finished.store(true);
                 ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
@@ -849,7 +854,7 @@ void TInputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
 
 ui32 TInputDescriptor::GetQueueSize() {
     std::lock_guard lock(QueueMutex);
-    return  Queue.size();
+    return Queue.size();
 }
 
 TInputBuffer::~TInputBuffer() {
@@ -906,7 +911,7 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
     if (it != LocalBuffers.end()) {
         auto result = it->second.lock();
         if (result) {
-            std::lock_guard bufferLock(result->Mutex);
+            std::lock_guard lock(result->Mutex);
             if (info.SrcStageId) {
                 result->Info.SrcStageId = info.SrcStageId;
             }
@@ -1646,6 +1651,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
     if (it != OutputDescriptors.end()) {
         auto result = it->second;
         if (bound) {
+            std::lock_guard lock(result->FlowControlMutex);
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
@@ -1676,16 +1682,18 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
     if (it != InputDescriptors.end()) {
         auto result = it->second;
         if (bound) {
+            std::lock_guard lock(result->QueueMutex);
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
             if (result->QuotaManager) {
                 result->QuotaManager->FreeQuota(result->QueueBytes);
             }
-            result->QuotaManager = quotaManager;
             if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes)) {
                 result->AbortChannelByMemoryLimit(result->QueueBytes);
+                quotaManager = nullptr;
             }
+            result->QuotaManager = quotaManager;
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;

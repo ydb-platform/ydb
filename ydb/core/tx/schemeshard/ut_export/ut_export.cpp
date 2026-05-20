@@ -3761,6 +3761,119 @@ state: STATE_ENABLED
         )");
     }
 
+    void CheckVectorIndexImplTables(TTestBasicRuntime& runtime, const TString& tablePath, const TVector<TString>& indexColumns) {
+        const TString indexPath = tablePath + "/vector_idx";
+
+        TestDescribeResult(DescribePath(runtime, tablePath, true, true), {
+            NLs::PathExist,
+            NLs::IndexesCount(1),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, indexPath, true, true), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+        for (const auto& implTable : NTableIndex::GetImplTables(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, indexColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime, TString::Join(indexPath, "/", implTable), true, true),
+                {NLs::PathExist, NLs::IsTable});
+        }
+    }
+
+    void DoVectorIndexImportExport(TTestEnv& env, TTestBasicRuntime& runtime, ui16 s3Port, bool prefixed, bool materialized) {
+        const TString indexKeyColumns = prefixed
+            ? R"(KeyColumnNames: ["prefix", "embedding"])"
+            : R"(KeyColumnNames: ["embedding"])";
+        const TVector<TString> indexColumnsVec = prefixed
+            ? TVector<TString>{"prefix", "embedding"}
+            : TVector<TString>{"embedding"};
+
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "vectors"
+              Columns { Name: "id" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+              Name: "vector_idx"
+              %s
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )", indexKeyColumns.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        CheckVectorIndexImplTables(runtime, "/MyRoot/vectors", indexColumnsVec);
+
+        const ui64 exportTxId = ++txId;
+        TestExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/vectors"
+                    destination_prefix: "test"
+                }
+                %s
+            }
+        )", s3Port, materialized ? "include_index_data: true" : ""));
+        env.TestWaitNotification(runtime, exportTxId);
+        TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const ui64 importId = ++txId;
+        const TString popMode = materialized
+            ? "index_population_mode: " + Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT)
+            : "";
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "test"
+                    destination_path: "/MyRoot/vectors_imported"
+                }
+                %s
+            }
+        )", s3Port, popMode.c_str()));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        CheckVectorIndexImplTables(runtime, "/MyRoot/vectors_imported", indexColumnsVec);
+    }
+
+    Y_UNIT_TEST(VectorIndexImportExport) {
+        EnvOptions().EnableIndexMaterialization(false);
+        DoVectorIndexImportExport(Env(), Runtime(), S3Port(), /*prefixed=*/false, /*materialized=*/false);
+    }
+
+    Y_UNIT_TEST(VectorIndexImportExportMaterialized) {
+        EnvOptions().EnableIndexMaterialization(true);
+        DoVectorIndexImportExport(Env(), Runtime(), S3Port(), /*prefixed=*/false, /*materialized=*/true);
+    }
+
+    Y_UNIT_TEST(VectorIndexImportExportPrefixed) {
+        EnvOptions().EnableIndexMaterialization(false);
+        DoVectorIndexImportExport(Env(), Runtime(), S3Port(), /*prefixed=*/true, /*materialized=*/false);
+    }
+
+    Y_UNIT_TEST(VectorIndexImportExportPrefixedMaterialized) {
+        EnvOptions().EnableIndexMaterialization(true);
+        DoVectorIndexImportExport(Env(), Runtime(), S3Port(), /*prefixed=*/true, /*materialized=*/true);
+    }
+
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextPlain) {
         EnvOptions().EnableIndexMaterialization(true);
         IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(

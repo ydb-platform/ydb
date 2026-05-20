@@ -144,7 +144,8 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     }
 
     while (!rowset.EndOfSet()) {
-        auto schemeShardLocalPathId = rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>();
+        const auto schemeShardLocalPathId =
+            TSchemeShardLocalPathId::FromRawValue(rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>());
         const auto serializedBackupTx = rowset.HaveValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
                                             ? rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
                                             : TString{};

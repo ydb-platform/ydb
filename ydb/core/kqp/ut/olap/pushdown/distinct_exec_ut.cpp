@@ -1,5 +1,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
@@ -61,8 +62,16 @@ public:
     }
 };
 
-std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(const std::vector<i64>& timestamps, const std::vector<TString>& resourceIds, const TString& uidPrefix) {
+std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(
+    const std::vector<i64>& timestamps,
+    const std::vector<TString>& resourceIds,
+    const TString& uidPrefix,
+    const std::vector<std::optional<i32>>* levels = nullptr)
+{
     Y_ABORT_UNLESS(timestamps.size() == resourceIds.size());
+    if (levels) {
+        Y_ABORT_UNLESS(timestamps.size() == levels->size());
+    }
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{
         arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::MICRO), false),
         arrow::field("resource_id", arrow::utf8()),
@@ -79,18 +88,24 @@ std::shared_ptr<arrow::RecordBatch> BuildBatchForRows(const std::vector<i64>& ti
     arrow::StringBuilder msgBuilder;
     arrow::UInt64Builder ncolBuilder;
 
-    ui64 idx = 0;
     for (ui64 i = 0; i < timestamps.size(); ++i) {
         const auto ts = timestamps[i];
         Y_ABORT_UNLESS(tsBuilder.Append(ts).ok());
         const TString& rid = resourceIds[i];
         Y_ABORT_UNLESS(resourceBuilder.Append(rid.data(), rid.size()).ok());
-        const TString uid = TStringBuilder() << uidPrefix << "_" << idx;
+        const TString uid = TStringBuilder() << uidPrefix << "_" << i;
         Y_ABORT_UNLESS(uidBuilder.Append(uid.data(), uid.size()).ok());
-        Y_ABORT_UNLESS(levelBuilder.Append((i32)(idx % 5)).ok());
+        if (levels) {
+            if ((*levels)[i].has_value()) {
+                Y_ABORT_UNLESS(levelBuilder.Append(*(*levels)[i]).ok());
+            } else {
+                Y_ABORT_UNLESS(levelBuilder.AppendNull().ok());
+            }
+        } else {
+            Y_ABORT_UNLESS(levelBuilder.Append((i32)(i % 5)).ok());
+        }
         Y_ABORT_UNLESS(msgBuilder.Append("m").ok());
-        Y_ABORT_UNLESS(ncolBuilder.Append(idx).ok());
-        ++idx;
+        Y_ABORT_UNLESS(ncolBuilder.Append(i).ok());
     }
 
     std::shared_ptr<arrow::TimestampArray> a1;
@@ -141,28 +156,31 @@ std::vector<TString> MakeRepeatedResourceIds(const TString& prefix, const ui32 d
     return rids;
 }
 
-TCollectedStreamResult RunDistinctScanQuery(
-    NYdb::NTable::TTableClient& tableClient,
+TString BuildDistinctScanQueryText(
     const TString& tablePath,
-    bool enablePushdown,
+    bool withForceDistinct,
     const TString& forceDistinctColumn,
     const TString& selectList,
     const TString& whereClause,
     const TString& orderByClause,
-    const std::optional<ui64> limit)
+    const std::optional<ui64> sqlLimit,
+    bool withForceDistinctLimitPragma = true,
+    const std::optional<ui64> forceDistinctLimitValue = std::nullopt)
 {
     TStringBuilder q;
     q << R"(
         --!syntax_v1
         PRAGMA Kikimr.OptEnableOlapPushdown = "true";
     )";
-    if (enablePushdown) {
+    if (withForceDistinct) {
         q << R"(
         PRAGMA Kikimr.OptForceOlapPushdownDistinct = ")" << forceDistinctColumn << R"(";
     )";
-        if (limit.has_value()) {
+        if (withForceDistinctLimitPragma && (forceDistinctLimitValue.has_value() || sqlLimit.has_value())) {
+            // Pragma limit defaults to sqlLimit when forceDistinctLimitValue is omitted (typical E2E case).
+            const ui64 pragmaLimit = forceDistinctLimitValue.has_value() ? *forceDistinctLimitValue : *sqlLimit;
             q << R"(
-        PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = ")" << *limit << R"(";
+        PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = ")" << pragmaLimit << R"(";
     )";
         }
     }
@@ -174,10 +192,27 @@ TCollectedStreamResult RunDistinctScanQuery(
     if (!orderByClause.empty()) {
         q << "\n" << orderByClause;
     }
-    if (limit.has_value()) {
-        q << "\nLIMIT " << *limit;
+    if (sqlLimit.has_value()) {
+        q << "\nLIMIT " << *sqlLimit;
     }
+    return q;
+}
 
+TCollectedStreamResult RunDistinctScanQuery(
+    NYdb::NTable::TTableClient& tableClient,
+    const TString& tablePath,
+    bool withForceDistinct,
+    const TString& forceDistinctColumn,
+    const TString& selectList,
+    const TString& whereClause,
+    const TString& orderByClause,
+    const std::optional<ui64> sqlLimit,
+    bool withForceDistinctLimitPragma = true,
+    const std::optional<ui64> forceDistinctLimitValue = std::nullopt)
+{
+    const TString q = BuildDistinctScanQueryText(
+        tablePath, withForceDistinct, forceDistinctColumn, selectList, whereClause, orderByClause,
+        sqlLimit, withForceDistinctLimitPragma, forceDistinctLimitValue);
     auto it = tableClient.StreamExecuteScanQuery(q).GetValueSync();
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
     return CollectStreamResult(it);
@@ -186,11 +221,38 @@ TCollectedStreamResult RunDistinctScanQuery(
 TCollectedStreamResult RunDistinctQuery(
     NYdb::NTable::TTableClient& tableClient,
     const TString& tablePath,
-    const bool enablePushdown,
+    const bool withForceDistinct,
     ui64 sqlLimit)
 {
     return RunDistinctScanQuery(
-        tableClient, tablePath, enablePushdown, "resource_id", "resource_id", {}, {}, std::optional<ui64>(sqlLimit));
+        tableClient, tablePath, withForceDistinct, "resource_id", "resource_id", {}, {},
+        std::optional<ui64>(sqlLimit), true, std::nullopt);
+}
+
+void AssertQueryPlanContains(
+    NYdb::NTable::TTableClient& tableClient,
+    const TString& query,
+    TStringBuf needle)
+{
+    auto res = StreamExplainQuery(query, tableClient);
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    const auto planRes = CollectStreamResult(res);
+    UNIT_ASSERT(planRes.QueryStats.Defined());
+    const TString ast = TString(planRes.QueryStats->Getquery_ast());
+    UNIT_ASSERT_C(ast.find(needle) != TString::npos, ast);
+}
+
+void AssertQueryPlanNotContains(
+    NYdb::NTable::TTableClient& tableClient,
+    const TString& query,
+    TStringBuf needle)
+{
+    auto res = StreamExplainQuery(query, tableClient);
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    const auto planRes = CollectStreamResult(res);
+    UNIT_ASSERT(planRes.QueryStats.Defined());
+    const TString ast = TString(planRes.QueryStats->Getquery_ast());
+    UNIT_ASSERT_C(ast.find(needle) == TString::npos, ast);
 }
 
 } // namespace
@@ -682,6 +744,195 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 0u);
         UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 0u);
         CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson, "empty result: forced vs plain");
+    }
+
+    // Nullable DISTINCT key: NULL must count as a single distinct value.
+    Y_UNIT_TEST(OneShard_NullableLevel_DistinctOnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        const auto ts = PickTimestampsForShard(0, 1, 30, 1);
+        const auto rids = MakeRepeatedResourceIds("rid", 10, 30);
+        std::vector<std::optional<i32>> levels;
+        levels.reserve(30);
+        for (ui32 i = 0; i < 30; ++i) {
+            if (i % 3 == 0) {
+                levels.emplace_back(std::nullopt);
+            } else if (i % 3 == 1) {
+                levels.emplace_back(1);
+            } else {
+                levels.emplace_back(2);
+            }
+        }
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u", &levels));
+
+        auto tableClient = kikimr.GetTableClient();
+        constexpr ui64 kCap = 10;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", false, "level", "`level`", {}, {}, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", true, "level", "`level`", {}, {}, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 3u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "nullable level DISTINCT: force distinct on/off must match (NULL is one distinct value)");
+    }
+
+    // ORDER BY + LIMIT with force distinct only (no force limit pragma): ordered results must match.
+    Y_UNIT_TEST(OneShard_OrderByLimit_ForceDistinctOnly_OnOff_SameOrderedResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        const auto ts = PickTimestampsForShard(0, 1, 100, 1);
+        const auto rids = MakeRepeatedResourceIds("dup", 10, 100);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        constexpr ui64 kLimit = 7;
+        const TString tablePath = "/Root/olapStore/olapTable";
+        AssertQueryPlanContains(tableClient,
+            BuildDistinctScanQueryText(tablePath, true, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit, false),
+            "KqpOlapDistinct");
+        auto resOff = RunDistinctScanQuery(tableClient, tablePath, false, "resource_id", "resource_id", {},
+            "ORDER BY resource_id", kLimit, false);
+        auto resOn = RunDistinctScanQuery(tableClient, tablePath, true, "resource_id", "resource_id", {},
+            "ORDER BY resource_id", kLimit, false);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
+        CompareYson(resOff.ResultSetYson, resOn.ResultSetYson,
+            "ORDER BY + LIMIT without force limit pragma: row order must match with force distinct on/off");
+    }
+
+    // Non-string DISTINCT key column (Timestamp).
+    Y_UNIT_TEST(OneShard_DistinctTimestamp_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem(
+            "/Root/olapStore/olapTable", BuildBatchForTimestamps(PickTimestampsForShard(0, 1, 50), "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        constexpr ui64 kCap = 50;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", false, "timestamp", "`timestamp`", {}, {}, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctScanQuery(
+            tableClient, "/Root/olapStore/olapTable", true, "timestamp", "`timestamp`", {}, {}, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "DISTINCT timestamp: force distinct on/off must match");
+    }
+
+    // Several ingestion batches (multiple portions); only 10 distinct resource_id values total.
+    Y_UNIT_TEST(MultiInsert_DistinctOnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        const TString tablePath = "/Root/olapStore/olapTable";
+        const auto rids = MakeRepeatedResourceIds("multi", 10, 40);
+        const auto ts1 = PickTimestampsForShard(0, 1, 40, 1);
+        const auto ts2 = PickTimestampsForShard(0, 1, 40, ts1.back() + 1);
+        const auto ts3 = PickTimestampsForShard(0, 1, 40, ts2.back() + 1);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem(tablePath, BuildBatchForRows(ts1, rids, "u1"));
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem(tablePath, BuildBatchForRows(ts2, rids, "u2"));
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem(tablePath, BuildBatchForRows(ts3, rids, "u3"));
+
+        auto tableClient = kikimr.GetTableClient();
+        constexpr ui64 kCap = 100;
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOff = RunDistinctQuery(tableClient, tablePath, false, kCap);
+        const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto resOn = RunDistinctQuery(tableClient, tablePath, true, kCap);
+        const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+        UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+            TStringBuilder() << "DistinctLimit sync point expected with force; before=" << syncBefore << " after_off=" << syncAfterOff
+                             << " after_on=" << syncAfterOn);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, 10u);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, 10u);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "multi-insert DISTINCT (10 uniques): force distinct on/off must match");
+    }
+
+    // Aggregate pushdown wins over force-distinct (no KqpOlapDistinct in plan); both arms share the
+    // same execution path. Checks result compatibility when agg + force pragmas are combined.
+    Y_UNIT_TEST(SimpleDistinct_WithAggPushdownAndForcePragma_OnOff_SameResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        const auto ts = PickTimestampsForShard(0, 1, 100, 1);
+        const auto rids = MakeRepeatedResourceIds("dup", 10, 100);
+        TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
+
+        auto tableClient = kikimr.GetTableClient();
+        // level values are idx % 5 in test batches → at most 5 distinct levels.
+        constexpr ui64 kCap = 5;
+
+        TStringBuilder qBase;
+        qBase << R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+        )";
+
+        TStringBuilder qOff;
+        qOff << qBase << R"(
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT )" << kCap;
+
+        TStringBuilder qOn;
+        qOn << qBase << R"(
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = ")" << kCap << R"(";
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT )" << kCap;
+
+        AssertQueryPlanNotContains(tableClient, qOn, "KqpOlapDistinct");
+
+        const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto itOff = tableClient.StreamExecuteScanQuery(qOff).GetValueSync();
+        UNIT_ASSERT_C(itOff.IsSuccess(), itOff.GetIssues().ToString());
+        auto resOff = CollectStreamResult(itOff);
+
+        auto itOn = tableClient.StreamExecuteScanQuery(qOn).GetValueSync();
+        UNIT_ASSERT_C(itOn.IsSuccess(), itOn.GetIssues().ToString());
+        auto resOn = CollectStreamResult(itOn);
+        const i64 syncAfter = ReadDistinctLimitSyncPointInvocations(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(syncAfter, syncBefore);
+
+        UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kCap);
+        UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kCap);
+        CompareYsonUnordered(resOff.ResultSetYson, resOn.ResultSetYson,
+            "DISTINCT level with agg+force pragmas: force pragma on/off must match");
     }
 }
 

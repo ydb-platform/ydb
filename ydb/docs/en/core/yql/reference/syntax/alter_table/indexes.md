@@ -24,7 +24,7 @@ Parameters specific to vector indexes:
 
 {% note info %}
 
-For vector indexes, the `vector_type` and `vector_dimension` parameters can be omitted if the table is not empty — they will be autodetected from the row contents. The `levels` and `clusters` parameters can also be autodetected, and they do not require a non-empty table.
+For vector indexes, the vector_type and vector_dimension parameters can be omitted if the table is not empty — they are determined automatically based on the row contents. The levels and clusters parameters are also determined automatically, and the table may be empty for them, but this is highly unrecommended because the default values in that case are levels=1, clusters=2. It is far better to create the index on a table that already has data loaded, so that the values can be determined correctly.
 
 {% endnote %}
 

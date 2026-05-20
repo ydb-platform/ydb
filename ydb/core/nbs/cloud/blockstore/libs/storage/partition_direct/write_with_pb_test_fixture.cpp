@@ -1,6 +1,5 @@
 #include "write_with_pb_test_fixture.h"
 
-#include <algorithm>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -143,6 +142,7 @@ TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
 
     return std::make_shared<TWriteWithPbReplicationRequestExecutor>(
         Runtime->GetActorSystem(0),
+        LogTitle.GetChild(GetCycleCount()),
         VChunkConfig,
         DirectBlockGroup,
         Range,

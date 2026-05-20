@@ -110,6 +110,7 @@ namespace {
                 .OP = [&] { \
                     TInterfaceOpCounters c; \
                     c.Requests = COUNTER_VALUE(Interface##OP, Requests, true); \
+                    c.RequestsInFlight = COUNTER_VALUE(Interface##OP, RequestsInFlight, false); \
                     c.ReplyOk = COUNTER_VALUE(Interface##OP, ReplyOk, true); \
                     c.ReplyErr = COUNTER_VALUE(Interface##OP, ReplyErr, true); \
                     c.Bytes = COUNTER_VALUE(Interface##OP, Bytes, true); \
@@ -137,6 +138,7 @@ namespace {
 #define XX(OP) \
                 .OP = { \
                     COUNTER(DirectIO##OP, Requests, true) \
+                    COUNTER(DirectIO##OP, RequestsInFlight, true) \
                     COUNTER(DirectIO##OP, Bytes, true) \
                     COUNTER(DirectIO##OP, BytesInFlight, false) \
                     HISTOGRAM(DirectIO##OP, RequestSizeKiB, RequestSizeBoundsKiB) \
@@ -156,6 +158,11 @@ namespace {
                 COUNTER(DirectIO, QueueSize, false)
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
+            },
+            .PersistentBuffer {
+                COUNTER(PersistentBuffer, AllocatedChunks, true)
+                COUNTER(PersistentBuffer, TotalBytes, true)
+                COUNTER(PersistentBuffer, TotalLsns, true)
             },
         };
 

@@ -414,6 +414,9 @@ void TVChunk::DoWriteBlocksLocal(
 
     auto writeExecutor = CreateWriteRequestExecutor(
         ActorSystem,
+        LogTitle.GetChildWithTags(
+            GetCycleCount(),
+            {{"r", vchunkRange.Print()}}),
         VChunkConfig,
         DirectBlockGroup,
         vchunkRange,

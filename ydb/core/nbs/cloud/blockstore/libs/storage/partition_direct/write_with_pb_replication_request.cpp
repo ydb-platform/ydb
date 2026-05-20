@@ -55,6 +55,7 @@ TVector<THostIndex> TakeNHosts(
 
 TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    TChildLogTitle logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,
@@ -64,6 +65,7 @@ TWriteWithPbReplicationRequestExecutor::TWriteWithPbReplicationRequestExecutor(
     NWilson::TTraceId traceId)
     : TBaseWriteRequestExecutor(
           actorSystem,
+          std::move(logTitle),
           vChunkConfig,
           directBlockGroup,
           vChunkRange,

@@ -106,6 +106,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -183,6 +184,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -265,6 +267,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -359,6 +362,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         auto writeRequest =
             std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 Runtime->GetActorSystem(0),
+                LogTitle.GetChild(GetCycleCount()),
                 VChunkConfig,
                 DirectBlockGroup,
                 range,
@@ -450,9 +454,12 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
 
-        // call hedge mechanism. It will work with default response's handler
-        // from base fixture
+        // call hedge mechanism.
         RunScheduledHedge();
+        // Reply to all write to PBuffer requests.
+        SetWriteResult(
+            TDBGWriteBlocksResponse{.Error = MakeError(S_OK)},
+            false);
 
         UNIT_ASSERT_VALUES_EQUAL(false, ManyPBufferPromise.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());

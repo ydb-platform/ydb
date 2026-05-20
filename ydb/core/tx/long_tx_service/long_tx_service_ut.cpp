@@ -626,7 +626,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         std::vector<NKqp::TSnapshotHandle> handles;
         std::vector<TRowVersion> snapshots;
         
-        for (size_t i = 0; i < 5; ++i) {
+        for (size_t i = 0; i < 10; ++i) {
             runtime.Send(
                 new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
@@ -650,12 +650,13 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             for (size_t index = 0; index < snapshots.size(); ++index) {
                 const auto& snapshot = snapshots[index];
                 UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
-                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == (index < 7));
-
-                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(table).size() == 3);
+                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == (index >= 3));
             }
 
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() = snapshots[6]);
+
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(table).size() == 3);
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(otherTable).size() == 0);
         }
     }
 

@@ -27,7 +27,7 @@ namespace NLongTxService {
 namespace {
     struct TReverseComparatorBySnapshotAndSessionId {
         bool operator()(const TRemoteSnapshotInfo& lhs, const TRemoteSnapshotInfo& rhs) const {
-            return std::tie(lhs.Snapshot, lhs.SessionActorId) < std::tie(rhs.Snapshot, rhs.SessionActorId);
+            return std::tie(lhs.Snapshot, lhs.SessionActorId) > std::tie(rhs.Snapshot, rhs.SessionActorId);
         }
     };
 
@@ -320,7 +320,7 @@ namespace {
         void AddToCollectedSnapshots(const TRemoteSnapshotInfo& snapshot) {
             AFL_ENSURE(CollectedSnapshots.insert(snapshot).second);
 
-            if (CollectedSnapshots.size() >= AppData()->LongTxServiceConfig.GetMaxRemoteSnapshots()) {
+            if (CollectedSnapshots.size() > AppData()->LongTxServiceConfig.GetMaxRemoteSnapshots()) {
                 auto lastSnapshotIter = CollectedSnapshots.begin();
                 SnapshotBorder = std::min(SnapshotBorder, lastSnapshotIter->Snapshot);
                 CollectedSnapshots.erase(lastSnapshotIter);
@@ -667,6 +667,8 @@ private:
                 << " snapshots from " << nodeIdToCollectionTime.size() << "nodes."
                 << " Update border to " << border.Step << ":" << border.TxId);
             RemoteSnapshotsStorage->UpdateBorder(border);
+            std::sort(std::begin(remoteSnapshots), std::end(remoteSnapshots),
+                TRemoteSnapshotInfo::TComparatorBySnapshotAndSessionId{});
             RemoteSnapshotsStorage->UpdateAndCleanExpired(remoteSnapshots, nodeIdToCollectionTime);
 
             LastRemoteSnapshotsUpdate = AppData()->TimeProvider->Now();
@@ -708,7 +710,7 @@ private:
 
         auto addToCollectedSnapshots = [&collectedSnapshots, &snapshotBorder](const TRemoteSnapshotInfo& snapshot) {
             AFL_ENSURE(collectedSnapshots.insert(snapshot).second);
-            if (collectedSnapshots.size() >= AppData()->LongTxServiceConfig.GetMaxRemoteSnapshots()) {
+            if (collectedSnapshots.size() > AppData()->LongTxServiceConfig.GetMaxRemoteSnapshots()) {
                 auto lastSnapshotIter = collectedSnapshots.begin();
                 snapshotBorder = std::min(snapshotBorder, lastSnapshotIter->Snapshot);
                 collectedSnapshots.erase(lastSnapshotIter);
@@ -827,6 +829,8 @@ private:
             << ", border " << border.Step << ":" << border.TxId);
 
         RemoteSnapshotsStorage->UpdateBorder(border);
+        std::sort(std::begin(remoteSnapshots), std::end(remoteSnapshots),
+            TRemoteSnapshotInfo::TComparatorBySnapshotAndSessionId{});
         RemoteSnapshotsStorage->Init(remoteSnapshots);
         LastRemoteSnapshotsUpdate = AppData()->TimeProvider->Now();
 

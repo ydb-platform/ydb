@@ -40,6 +40,7 @@ jobs:
           set -euo pipefail
           cd ./ydb/ci/rightlib
           end_time=$(( SECONDS + 55 * 60 ))
+          poll_interval=300
           iteration=1
 
           while (( SECONDS < end_time )); do
@@ -47,6 +48,6 @@ jobs:
             ./automerge.py || echo "::warning::automerge iteration ${iteration} failed with exit code $?"
             echo "::endgroup::"
             remaining=$(( end_time - SECONDS ))
-            (( remaining > 0 )) && sleep $(( remaining < 300 ? remaining : 300 ))
+            (( remaining > 0 )) && sleep $(( remaining < poll_interval ? remaining : poll_interval ))
             iteration=$(( iteration + 1 ))
           done

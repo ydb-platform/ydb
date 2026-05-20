@@ -54,7 +54,7 @@ def get_ydb_config(request):
             "enable_match_recognize": True,
         },
         table_service_config={
-            "dq_channel_version": 2,
+            "dq_channel_version": 1,
             "enable_watermarks": enable_watermarks,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
         },

@@ -275,10 +275,9 @@ struct TEvPQ {
         };
 
         struct TBatchInfo {
-            ui64 BatchSize = 0;
+            ui64 Size = 0;
             ui64 MinSeqNo;
             ui64 MaxSeqNo;
-            ui64 MinCreateTimestamp;
             TVector<std::pair<TString, ui64>> PartitionKeys;
         };
 

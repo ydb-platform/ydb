@@ -1875,17 +1875,14 @@ std::optional<TEvPQ::TEvWrite::TBatchInfo> TPersQueue::MakeBatchInfo(
     }
     const auto& batchInfo = cmd.GetBatchInfo();
     TEvPQ::TEvWrite::TBatchInfo result;
-    if (batchInfo.HasBatchSize()) {
-        result.BatchSize = static_cast<ui64>(batchInfo.GetBatchSize());
+    if (batchInfo.HasSize()) {
+        result.Size = static_cast<ui64>(batchInfo.GetSize());
     }
     if (batchInfo.HasMinSeqNo()) {
         result.MinSeqNo = static_cast<ui64>(batchInfo.GetMinSeqNo());
     }
     if (batchInfo.HasMaxSeqNo()) {
         result.MaxSeqNo = static_cast<ui64>(batchInfo.GetMaxSeqNo());
-    }
-    if (batchInfo.HasMinCreateTimeMS()) {
-        result.MinCreateTimestamp = static_cast<ui64>(batchInfo.GetMinCreateTimeMS());
     }
     result.PartitionKeys.reserve(batchInfo.PartitionKeysSize());
     for (ui32 i = 0; i < batchInfo.PartitionKeysSize(); ++i) {

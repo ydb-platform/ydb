@@ -89,11 +89,10 @@ message TPersQueuePartitionRequest {
     }
 
     message TBatchInfo {
-    	optional int64 BatchSize = 1;
+    	optional int64 Size = 1;
     	optional int64 MinSeqNo = 2;
      	optional int64 MaxSeqNo = 3;
-    	optional int64 MinCreateTimeMS = 4;
-        repeated TBatchMessagePartitionKey PartitionKeys = 5;
+        repeated TBatchMessagePartitionKey PartitionKeys = 4;
     }
 
     message TCmdWrite {

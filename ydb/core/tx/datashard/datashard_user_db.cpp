@@ -60,7 +60,7 @@ NTable::EReady TDataShardUserDb::SelectRow(
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
 
-    if (LockMode != ELockMode::OptimisticSnapshotIsolation && stats.InvisibleRowSkips > 0) {
+    if (LockMode == ELockMode::Optimistic && stats.InvisibleRowSkips > 0) {
         if (LockTxId) {
             Self.SysLocksTable().BreakSetLocks();
         }
@@ -232,7 +232,7 @@ void TDataShardUserDb::UpdateRow(
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     if (!RowExists(tableId, key)) {
-        if (LockTxId && LockMode != ELockMode::OptimisticSnapshotIsolation) {
+        if (LockTxId && LockMode == ELockMode::Optimistic) {
             // We don't perform an update, but this key may be modified later
             // by a different transaction. Make sure we set the read lock to
             // guard against that.
@@ -1068,7 +1068,7 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
             Self.SysLocksTable().BreakSetLocks();
         }
         MvccReadConflict = true;
-    } else if (rowVersion > SnapshotVersion) {
+    } else if (rowVersion > SnapshotVersion && LockMode == ELockMode::OptimisticSnapshotIsolation) {
         // During commit we read at the current mvcc version, however we may
         // notice there have been changes between the snapshot and current
         // commit version. This is not necessarily an error, but indicates

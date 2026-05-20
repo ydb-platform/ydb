@@ -24,14 +24,14 @@ ui64 GetFromConfig(ui64 value, ui64 defaultValue)
     return value ? value : defaultValue;
 }
 
-THostState::EState StatusToState(EHostStatus status)
+EHostState StatusToState(EHostHealth status)
 {
     switch (status) {
-        case EHostStatus::Online:
-        case EHostStatus::Sufferer:
-            return THostState::EState::Enabled;
-        case EHostStatus::Offline:
-            return THostState::EState::Disabled;
+        case EHostHealth::Online:
+        case EHostHealth::Sufferer:
+            return EHostState::Enabled;
+        case EHostHealth::Offline:
+            return EHostState::Disabled;
     }
 }
 
@@ -89,6 +89,10 @@ TOracle::TOracle(
     , HostStateController(hostStateController)
     , Stats(stats)
     , States(states)
+    , DefaultWriteHedgingDelay(StorageConfig->GetWriteHedgingDelay())
+    , DefaultWriteRequestTimeout(StorageConfig->GetWriteRequestTimeout())
+    , DefaultPBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
+    , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
 {
     Y_ABORT_UNLESS(
         Stats.size() == States.size(),
@@ -96,7 +100,7 @@ TOracle::TOracle(
 
     Statuses.resize(Stats.size());
     for (auto& status: Statuses) {
-        status = EHostStatus::Online;
+        status = EHostHealth::Online;
     }
 }
 
@@ -104,7 +108,7 @@ void TOracle::Think(TInstant now)
 {
     const TOracleConfig config(StorageConfig);
 
-    TVector<EHostStatus> newStatuses(Statuses);
+    TVector<EHostHealth> newStatuses(Statuses);
 
     for (size_t i = 0; i < Stats.size(); ++i) {
         auto errorsInfo = Stats[i].GetErrorsInfo(now);
@@ -121,12 +125,12 @@ void TOracle::Think(TInstant now)
              (HostStateController->GetHostPBufferUsedSize(i) >=
               config.GetErrorsTotalSizeForGoingOffline()));
 
-        newStatuses[i] = EHostStatus::Online;
+        newStatuses[i] = EHostHealth::Online;
 
         if (hasOfflineSymptom) {
-            newStatuses[i] = EHostStatus::Offline;
+            newStatuses[i] = EHostHealth::Offline;
         } else if (hasSufferingSymptom) {
-            newStatuses[i] = EHostStatus::Sufferer;
+            newStatuses[i] = EHostHealth::Sufferer;
         }
     }
 
@@ -141,13 +145,13 @@ void TOracle::Think(TInstant now)
     }
 }
 
-ui8 TOracle::SelectBestPBufferHost(
-    std::span<const ui8> hostIndexes,
+THostIndex TOracle::SelectBestPBufferHost(
+    std::span<const THostIndex> hostIndexes,
     EOperation operation) const
 {
     Y_ABORT_UNLESS(!hostIndexes.empty());
 
-    auto getInflight = [this, operation](ui8 hostIndex)
+    auto getInflight = [this, operation](THostIndex hostIndex)
     {
         return Stats[hostIndex].InflightCount(operation);
     };
@@ -156,11 +160,11 @@ ui8 TOracle::SelectBestPBufferHost(
     // the given operation type. Ties (multiple hosts with the same minimum
     // value) are broken uniformly at random via reservoir sampling, so the
     // load isn't always biased towards the first host in `hostIndexes`.
-    ui8 bestHostIndex = hostIndexes[0];
+    THostIndex bestHostIndex = hostIndexes[0];
     size_t bestInflight = getInflight(bestHostIndex);
     size_t tieCount = 1;
     for (size_t i = 1; i < hostIndexes.size(); ++i) {
-        const ui8 hostIndex = hostIndexes[i];
+        const THostIndex hostIndex = hostIndexes[i];
         const size_t inflight = getInflight(hostIndex);
         if (inflight < bestInflight) {
             bestInflight = inflight;
@@ -177,6 +181,26 @@ ui8 TOracle::SelectBestPBufferHost(
         }
     }
     return bestHostIndex;
+}
+
+TDuration TOracle::GetWriteHedgingDelay() const
+{
+    return DefaultWriteHedgingDelay;
+}
+
+TDuration TOracle::GetWriteRequestTimeout() const
+{
+    return DefaultWriteRequestTimeout;
+}
+
+TDuration TOracle::GetPBufferReplyTimeout() const
+{
+    return DefaultPBufferReplyTimeout;
+}
+
+EWriteMode TOracle::GetWriteMode() const
+{
+    return DefaultWriteMode;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

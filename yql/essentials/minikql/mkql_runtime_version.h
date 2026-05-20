@@ -3,6 +3,7 @@
 #include <util/generic/yexception.h>
 #include <util/system/types.h>
 #include <util/system/yassert.h>
+#include <util/stream/output.h>
 
 #include <compare>
 
@@ -62,3 +63,6 @@ inline constexpr TRuntimeVersion RuntimeVersion{MKQL_RUNTIME_VERSION};
 static_assert(RuntimeVersion >= TRuntimeVersion::MinSupportedRuntimeVersion);
 
 } // namespace NKikimr::NMiniKQL
+
+template <>
+void Out<NKikimr::NMiniKQL::TRuntimeVersion>(IOutputStream& out, const NKikimr::NMiniKQL::TRuntimeVersion& value);

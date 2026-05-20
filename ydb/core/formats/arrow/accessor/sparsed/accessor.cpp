@@ -202,10 +202,12 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
 
 TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
     TMinMax value = TMinMax::Compute(ColValue);
-    if (value.IsNull() && DefaultValue) {
-        value.Min() = DefaultValue;
-        value.Max() = DefaultValue;
+    TMinMax defaultMinMax = TMinMax::MakeNull(value.ElementType());
+    if (DefaultValue) {
+        defaultMinMax.Min() = DefaultValue;
+        defaultMinMax.Max() = DefaultValue;
     }
+    value.UniteWith(defaultMinMax);
     return value;
 }
 

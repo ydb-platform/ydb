@@ -90,6 +90,8 @@ public:
 
     virtual ~TOutputSerializer() {};
     virtual void Push(NUdf::TUnboxedValue&& value) = 0;
+    virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
+    virtual void Push(NDqProto::TWatermark&& watermark) = 0;
     virtual void WidePush(NUdf::TUnboxedValue* values, ui32 width) = 0;
     virtual void Flush(bool finished) = 0;
 
@@ -601,7 +603,7 @@ public:
     ui64 GenMinor = 1;
     ui64 ReconciliationCount = 0;
     ui64 SeqNo = 0;
-    ui64 InflightBytes = 0;
+    std::atomic<ui64> InflightBytes = 0;
     // Receiver
     NActors::TActorId PeerActorId;
     std::atomic<ui64> PeerGenMajor = 0;
@@ -633,7 +635,7 @@ public:
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;
-    TInstant LastActivity;
+    std::atomic<TInstant> LastActivity;
 };
 
 class TDebugNodeState : public TNodeState {
@@ -787,12 +789,16 @@ public:
         }
     }
 
-    void Push(NDqProto::TWatermark&&) override {
-        Y_ENSURE(false);
+    void Push(NDqProto::TWatermark&& watermark) override {
+        if (!Serializer->Buffer->IsFinished()) {
+            Serializer->Push(std::move(watermark));
+        }
     }
 
-    void Push(NDqProto::TCheckpoint&&) override {
-        Y_ENSURE(false);
+    void Push(NDqProto::TCheckpoint&& checkpoint) override {
+        if (!Serializer->Buffer->IsFinished()) {
+            Serializer->Push(std::move(checkpoint));
+        }
     }
 
     void Finish() override {
@@ -903,13 +909,16 @@ public:
     }
 
     bool Empty() const override {
+        if (PausedByCheckpoint) {
+            return true;
+        }
         return Buffer->IsEmpty();
     }
 
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 
     bool IsFinished() const override {
-        return Buffer->IsFinished();
+        return Buffer->IsFinished() && !PausedByCheckpoint;
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
@@ -927,15 +936,17 @@ public:
     }
 
     void PauseByCheckpoint() override {
-        Y_ENSURE(false);
+        Y_ENSURE(!PausedByCheckpoint);
+        PausedByCheckpoint = true;
     }
 
     void ResumeByCheckpoint() override {
-        Y_ENSURE(false);
+        Y_ENSURE(PausedByCheckpoint);
+        PausedByCheckpoint = false;
     }
 
     bool IsPausedByCheckpoint() const override {
-        Y_ENSURE(false);
+        return PausedByCheckpoint;
     }
 
     void AddWatermark(TInstant) override {
@@ -983,11 +994,17 @@ public:
         return IsLocalChannel;
     }
 
+    void SetCallback(IDqInputChannelCallbacks* callback) override {
+        Callback = callback;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    IDqInputChannelCallbacks* Callback = nullptr;
+    bool PausedByCheckpoint = false;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {
@@ -1021,6 +1038,7 @@ public:
     }
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
+        std::lock_guard lock(ChannelService->Mutex);
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
         if (!CleanupScheduled) {
@@ -1031,11 +1049,13 @@ public:
     }
 
     void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+        std::lock_guard lock(ChannelService->Mutex);
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
+        std::lock_guard lock(ChannelService->Mutex);
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
     }
@@ -1073,6 +1093,7 @@ public:
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
             hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
             hFunc(TEvDqCompute::TEvChannelAckV2, Handle);
@@ -1094,6 +1115,8 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         NodeState->HandleWakeup(ev);
     }
+
+    void Handle(NActors::TEvents::TEvPoison::TPtr& ev);
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
         NodeState->HandleDiscovery(ev);
@@ -1160,6 +1183,8 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         NodeState->HandleWakeup(ev);
     }
+
+    void Handle(NActors::TEvents::TEvPoison::TPtr& ev);
 
     void Handle(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
         NodeState->HandleDiscovery(ev);

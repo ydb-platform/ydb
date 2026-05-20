@@ -165,7 +165,6 @@ protected:
                     continue;
                 }
 
-                const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(op.Cast().DataSink().Cluster().StringValue(), *State_->Configuration);
                 if (auto maybeMap = op.Maybe<TYtMap>()) {
                     TYtMap map = maybeMap.Cast();
                     TVector<const TItemExprType*> structItems;
@@ -206,7 +205,7 @@ protected:
                         .Build();
 
                     auto outStructType = ctx.MakeType<TStructExprType>(structItems);
-                    TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
+                    TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
 
                     if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                         if (const auto s = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
@@ -271,7 +270,7 @@ protected:
                         structItems.push_back(prevOutType->GetItems()[*pos]);
                     }
 
-                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), nativeTypeCompatibility);
+                    TYtOutTableInfo mergeOut(ctx.MakeType<TStructExprType>(structItems), prevRowSpec.GetNativeYtTypeFlags());
                     mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                     if (auto nativeType = prevRowSpec.GetNativeYtType()) {
                         mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);

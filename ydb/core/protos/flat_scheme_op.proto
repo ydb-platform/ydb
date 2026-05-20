@@ -1378,6 +1378,7 @@ message TGenericTxInFlyExtraData {
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
 }
 
 message TIndexedTableCreationConfig {
@@ -1856,6 +1857,7 @@ message TIndexBuildControl {
     optional string IndexName = 2;
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 5;
 }
 
 message TLockConfig {

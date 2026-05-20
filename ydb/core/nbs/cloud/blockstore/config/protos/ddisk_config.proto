@@ -25,7 +25,7 @@ message TPBufferConfig
     // default 5000ms
     optional uint32 UpdateFreeSpaceInfoMilliseconds = 4;
 
-    // Storage limit for one tablet in bytes, default 4TiB
+    // Storage limit for one tablet in bytes, default 4GiB
     optional uint64 PerTabletStorageLimit = 5;
 
     // Maximum number of sectors used for barrier erases
@@ -34,4 +34,7 @@ message TPBufferConfig
 
     // Maximum number of chunks persistent buffer can allocate
     optional uint32 MaxChunks = 7;
+
+    // default 1024
+    optional uint32 MaxPendingEventsQueueSize = 8;
 }

@@ -1120,7 +1120,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     }
 
     auto log = [&stageInfo, txId](ui64 channel, ui64 from, ui64 to, TStringBuf type, bool spilling) {
-        LOG_D( "TxId: " << txId << ". "
+        LOG_T( "TxId: " << txId << ". "
             << "Stage " << stageInfo.Id << " create channelId: " << channel
             << " from task: " << from << " to task: " << to << " of type " << type
             << (spilling ? " with spilling" : " without spilling"));

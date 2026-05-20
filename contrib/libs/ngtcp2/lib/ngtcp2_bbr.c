@@ -1097,13 +1097,8 @@ static void bbr_check_probe_rtt_done(ngtcp2_cc_bbr *bbr,
 
 static void bbr_mark_connection_app_limited(ngtcp2_cc_bbr *bbr,
                                             ngtcp2_conn_stat *cstat) {
-  uint64_t app_limited = bbr->rst->delivered + cstat->bytes_in_flight;
-
-  if (app_limited) {
-    bbr->rst->app_limited = app_limited;
-  } else {
-    bbr->rst->app_limited = cstat->max_tx_udp_payload_size;
-  }
+  bbr->rst->app_limited =
+    ngtcp2_max_uint64(bbr->rst->delivered + cstat->bytes_in_flight, 1);
 }
 
 static void bbr_exit_probe_rtt(ngtcp2_cc_bbr *bbr, ngtcp2_tstamp ts) {

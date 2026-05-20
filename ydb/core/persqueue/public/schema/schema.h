@@ -1,14 +1,17 @@
 #pragma once
 
-#include <library/cpp/threading/future/core/future.h>
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 namespace NACLib {
+
 class TUserToken;
-}
+
+} // namespace NACLib
 
 namespace NKikimr::NPQ::NSchema {
 

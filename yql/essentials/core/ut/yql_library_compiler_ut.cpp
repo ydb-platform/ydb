@@ -6,7 +6,7 @@ namespace NYql {
 
 Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
 
-const char* alias = "/lib/ut.yql";
+const char* alias = "/lib/ut.yqls";
 
 bool CompileAndLink(const THashMap<TString, TString>& libs, TExprContext& ctx) {
     NSQLTranslation::TTranslators translators(
@@ -47,7 +47,7 @@ Y_UNIT_TEST(OnlyExportsTest) {
 Y_UNIT_TEST(ExportAndImportsTest) {
     const auto s = "(\n"
                    "(import math_module '"
-                   "/lib/yql/math.yql"
+                   "/lib/yql/math.yqls"
                    ")\n"
                    "(let mySqr2 (bind math_module 'sqr2))\n"
                    "(let mySqr3 (bind math_module 'sqr3))\n"
@@ -70,7 +70,7 @@ Y_UNIT_TEST(ExportAndImportsTest) {
 Y_UNIT_TEST(TestImportSelf) {
     const auto xxx = "(\n"
                      "(import math_module '"
-                     "/lib/yql/xxx.yql"
+                     "/lib/yql/xxx.yqls"
                      ")\n"
                      "(let myXxx (bind math_module 'xxx))\n"
                      "(let sqr (lambda '(x) (Apply myXxx x)))\n"
@@ -78,17 +78,17 @@ Y_UNIT_TEST(TestImportSelf) {
                      ")\n";
 
     const THashMap<TString, TString> libs = {
-        {"/lib/yql/xxx.yql", xxx}};
+        {"/lib/yql/xxx.yqls", xxx}};
 
     TExprContext ctx;
     UNIT_ASSERT(!CompileAndLink(libs, ctx));
-    UNIT_ASSERT_VALUES_EQUAL("/lib/ut.yql:3:13: Error: Library '/lib/yql/xxx.yql' tries to import itself.\n", ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL("/lib/ut.yqls:3:13: Error: Library '/lib/yql/xxx.yqls' tries to import itself.\n", ctx.IssueManager.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(TestMissedModule) {
     const auto aaa = "(\n"
                      "(import math_module '"
-                     "/lib/yql/xxx.yql"
+                     "/lib/yql/xxx.yqls"
                      ")\n"
                      "(let myXxx (bind math_module 'xxx))\n"
                      "(let sqr (lambda '(x) (Apply x myXxx)))\n"
@@ -96,17 +96,17 @@ Y_UNIT_TEST(TestMissedModule) {
                      ")\n";
 
     const THashMap<TString, TString> libs = {
-        {"/lib/yql/aaa.yql", aaa}};
+        {"/lib/yql/aaa.yqls", aaa}};
 
     TExprContext ctx;
     UNIT_ASSERT(!CompileAndLink(libs, ctx));
-    UNIT_ASSERT_VALUES_EQUAL("/lib/ut.yql:3:13: Error: Library '/lib/yql/aaa.yql' has unresolved dependency from '/lib/yql/xxx.yql'.\n", ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL("/lib/ut.yqls:3:13: Error: Library '/lib/yql/aaa.yqls' has unresolved dependency from '/lib/yql/xxx.yqls'.\n", ctx.IssueManager.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(TestUnresolvedSymbol) {
     const auto one = "(\n"
                      "(import math_module '"
-                     "/lib/yql/two.yql"
+                     "/lib/yql/two.yqls"
                      ")\n"
                      "(let myTwo (bind math_module 'zzz))\n"
                      "(let one (lambda '(x) (Apply myTwo x)))\n"
@@ -119,18 +119,18 @@ Y_UNIT_TEST(TestUnresolvedSymbol) {
                      ")\n";
 
     const THashMap<TString, TString> libs = {
-        {"/lib/yql/one.yql", one},
-        {"/lib/yql/two.yql", two}};
+        {"/lib/yql/one.yqls", one},
+        {"/lib/yql/two.yqls", two}};
 
     TExprContext ctx;
     UNIT_ASSERT(!CompileAndLink(libs, ctx));
-    UNIT_ASSERT_VALUES_EQUAL("/lib/ut.yql:3:13: Error: Library '/lib/yql/one.yql' has unresolved symbol 'zzz' from '/lib/yql/two.yql'.\n", ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL("/lib/ut.yqls:3:13: Error: Library '/lib/yql/one.yqls' has unresolved symbol 'zzz' from '/lib/yql/two.yqls'.\n", ctx.IssueManager.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(TestCrossReference) {
     const auto one = "(\n"
                      "(import math_module '"
-                     "/lib/yql/two.yql"
+                     "/lib/yql/two.yqls"
                      ")\n"
                      "(let myTwo (bind math_module 'two))\n"
                      "(let one (lambda '(x) (Apply myTwo x)))\n"
@@ -139,7 +139,7 @@ Y_UNIT_TEST(TestCrossReference) {
 
     const auto two = "(\n"
                      "(import math_module '"
-                     "/lib/yql/one.yql"
+                     "/lib/yql/one.yqls"
                      ")\n"
                      "(let myOne (bind math_module 'one))\n"
                      "(let two (lambda '(x) (Apply myOne x)))\n"
@@ -147,8 +147,8 @@ Y_UNIT_TEST(TestCrossReference) {
                      ")\n";
 
     const THashMap<TString, TString> libs = {
-        {"/lib/yql/one.yql", one},
-        {"/lib/yql/two.yql", two}};
+        {"/lib/yql/one.yqls", one},
+        {"/lib/yql/two.yqls", two}};
 
     TExprContext ctx;
     UNIT_ASSERT(!CompileAndLink(libs, ctx));
@@ -158,7 +158,7 @@ Y_UNIT_TEST(TestCrossReference) {
 Y_UNIT_TEST(TestCrorssDependencyWithoutCrossReference) {
     const auto one = "(\n"
                      "(import math_module '"
-                     "/lib/yql/two.yql"
+                     "/lib/yql/two.yqls"
                      ")\n"
                      "(let myTwo (bind math_module 'two))\n"
                      "(let one (lambda '(x) (Apply myTwo x)))\n"
@@ -167,7 +167,7 @@ Y_UNIT_TEST(TestCrorssDependencyWithoutCrossReference) {
 
     const auto two = "(\n"
                      "(import math_module '"
-                     "/lib/yql/one.yql"
+                     "/lib/yql/one.yqls"
                      ")\n"
                      "(let myOne (bind math_module 'one))\n"
                      "(let two (lambda '(x) (+ x x)))\n"
@@ -177,8 +177,8 @@ Y_UNIT_TEST(TestCrorssDependencyWithoutCrossReference) {
                      ")\n";
 
     const THashMap<TString, TString> libs = {
-        {"/lib/yql/one.yql", one},
-        {"/lib/yql/two.yql", two}};
+        {"/lib/yql/one.yqls", one},
+        {"/lib/yql/two.yqls", two}};
 
     TExprContext ctx;
     UNIT_ASSERT(CompileAndLink(libs, ctx));
@@ -187,7 +187,7 @@ Y_UNIT_TEST(TestCrorssDependencyWithoutCrossReference) {
 Y_UNIT_TEST(TestCircleReference) {
     const auto one = "(\n"
                      "(import math_module '"
-                     "/lib/yql/two.yql"
+                     "/lib/yql/two.yqls"
                      ")\n"
                      "(let myTwo (bind math_module 'two))\n"
                      "(let one (lambda '(x) (Apply myTwo x)))\n"
@@ -196,7 +196,7 @@ Y_UNIT_TEST(TestCircleReference) {
 
     const auto two = "(\n"
                      "(import math_module '"
-                     "/lib/yql/xxx.yql"
+                     "/lib/yql/xxx.yqls"
                      ")\n"
                      "(let myXxx (bind math_module 'xxx))\n"
                      "(let two (lambda '(x) (Apply myXxx x)))\n"
@@ -205,7 +205,7 @@ Y_UNIT_TEST(TestCircleReference) {
 
     const auto xxx = "(\n"
                      "(import math_module '"
-                     "/lib/yql/one.yql"
+                     "/lib/yql/one.yqls"
                      ")\n"
                      "(let myOne (bind math_module 'one))\n"
                      "(let xxx (lambda '(x) (Apply myOne x)))\n"
@@ -213,9 +213,9 @@ Y_UNIT_TEST(TestCircleReference) {
                      ")\n";
 
     const THashMap<TString, TString> libs = {
-        {"/lib/yql/one.yql", one},
-        {"/lib/yql/two.yql", two},
-        {"/lib/yql/xxx.yql", xxx}};
+        {"/lib/yql/one.yqls", one},
+        {"/lib/yql/two.yqls", two},
+        {"/lib/yql/xxx.yqls", xxx}};
 
     TExprContext ctx;
     UNIT_ASSERT(!CompileAndLink(libs, ctx));
@@ -230,7 +230,7 @@ Y_UNIT_TEST(TestForwarding) {
 
     const auto two = "(\n"
                      "(import math_module '"
-                     "/lib/yql/one.yql"
+                     "/lib/yql/one.yqls"
                      ")\n"
                      "(let myOne (bind math_module 'one))\n"
                      "(export myOne)\n"
@@ -238,16 +238,16 @@ Y_UNIT_TEST(TestForwarding) {
 
     const auto xxx = "(\n"
                      "(import math_module '"
-                     "/lib/yql/two.yql"
+                     "/lib/yql/two.yqls"
                      ")\n"
                      "(let xxx (bind math_module 'myOne))\n"
                      "(export xxx)\n"
                      ")\n";
 
     const THashMap<TString, TString> libs = {
-        {"/lib/yql/one.yql", one},
-        {"/lib/yql/two.yql", two},
-        {"/lib/yql/xxx.yql", xxx}};
+        {"/lib/yql/one.yqls", one},
+        {"/lib/yql/two.yqls", two},
+        {"/lib/yql/xxx.yqls", xxx}};
 
     TExprContext ctx;
     UNIT_ASSERT(CompileAndLink(libs, ctx));

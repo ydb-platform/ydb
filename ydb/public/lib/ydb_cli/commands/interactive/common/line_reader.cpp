@@ -104,7 +104,8 @@ public:
 
         std::optional<TYQLCompleterConfig> yqlCompleterConfig;
         if (settings.EnableYqlCompletion) {
-            yqlCompleterConfig = TYQLCompleterConfig{.Color = CurrentColorSchema, .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = GetGlobalLogger().IsVerbose()};
+            Y_VALIDATE(settings.LazyDriver, "TLineReaderSettings::LazyDriver must be set when EnableYqlCompletion is true");
+            yqlCompleterConfig = TYQLCompleterConfig{.Color = CurrentColorSchema, .LazyDriver = settings.LazyDriver, .Database = settings.Database, .IsVerbose = GetGlobalLogger().IsVerbose()};
         }
         YQLCompleter = MakeYQLCompositeCompleter(completionCommands, yqlCompleterConfig);
 

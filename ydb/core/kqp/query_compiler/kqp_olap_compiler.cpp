@@ -4,6 +4,7 @@
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -64,6 +65,10 @@ public:
         return columnIt->second;
     }
 
+    bool HasPhysicalReadColumn(const std::string& name) const {
+        return ReadColumns.contains(name);
+    }
+
     ui32 NewColumnId() {
         return ++MaxColumnId;
     }
@@ -86,6 +91,10 @@ public:
 
     TProgram::TGroupBy* CreateGroupBy() {
         return Program.AddCommand()->MutableGroupBy();
+    }
+
+    TProgram::TDistinct* CreateDistinct() {
+        return Program.AddCommand()->MutableDistinct();
     }
 
     TProgram::TProjection* CreateProjection() {
@@ -966,12 +975,53 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
     }
 }
 
+void CompileDistinct(const TKqpOlapDistinct& distinctNode, TKqpOlapCompileContext& ctx) {
+    // Emit only a marker into SSA program (used by ColumnShard reader to enable distinct-limit early stop).
+    // Execution itself is done at the reader level (distinct-limit sync point); SSA graph stays free of stateful processors.
+    auto* distinct = ctx.CreateDistinct();
+    ui32 colId = 0;
+    const TString keyName(distinctNode.Key().StringValue());
+    if (ctx.GetProjectionKernelIdForColumn(keyName, colId)) {
+        distinct->MutableKeyColumn()->SetId(colId);
+        return;
+    }
+    if (ctx.HasPhysicalReadColumn(keyName)) {
+        colId = GetOrCreateColumnId(distinctNode.Key(), ctx);
+        distinct->MutableKeyColumn()->SetId(colId);
+        return;
+    }
+    const TExprNode::TListType projectionNodes = FindNodes(distinctNode.Input().Ptr(), [](const TExprNode::TPtr& n) {
+        return TKqpOlapProjection::Match(n.Get());
+    });
+    if (projectionNodes.size() == 1) {
+        const auto proj = TExprBase(projectionNodes[0]).Cast<TKqpOlapProjection>();
+        if (ctx.GetProjectionKernelIdForColumn(std::string(proj.ColumnName()), colId)) {
+            distinct->MutableKeyColumn()->SetId(colId);
+            return;
+        }
+    }
+    colId = GetOrCreateColumnId(distinctNode.Key(), ctx);
+    distinct->MutableKeyColumn()->SetId(colId);
+}
+
 void CompileProjections(const TKqpOlapProjections& projectionsNode, TKqpOlapCompileContext& ctx) {
     auto projections = projectionsNode.Projections();
+    const ui32 projectionCount = projections.Size();
     for (const auto& child : projections) {
         auto projection = child.Cast<TKqpOlapProjection>();
         auto generatedColumnIdAndType = GetOrCreateColumnIdAndType(projection.OlapOperation(), ctx);
-        ctx.AddColumnNameForProjectionKernelId(std::string(projection.ColumnName()), generatedColumnIdAndType.Id);
+        const ui32 id = generatedColumnIdAndType.Id;
+        ctx.AddColumnNameForProjectionKernelId(std::string(projection.ColumnName()), id);
+        // SELECT-list alias (e.g. JSON_VALUE(...) AS jsonDoc) may differ from internal projection field name
+        // (__kqp_olap_projection_payload0). Map the sole scan result column to the same kernel id.
+        // Multiple projections: alias→kernel mapping for DISTINCT key is not handled here; falls back to generic ids.
+        const auto resultCols = ctx.GetResultColNames();
+        if (projectionCount == 1 && resultCols.size() == 1) {
+            const std::string& rc = resultCols.front();
+            if (rc != projection.ColumnName().StringValue()) {
+                ctx.AddColumnNameForProjectionKernelId(rc, id);
+            }
+        }
     }
 }
 
@@ -992,10 +1042,92 @@ void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
     }
 }
 
+/// SSA executes OlapProjections via RemainOnly before later steps. If a filter sits above projections in the IR
+/// (`OlapFilter(OlapProjections(x))`), post-order compilation emits projection before filter and physical columns
+/// used in the predicate disappear. Normalize to `OlapProjections(OlapFilter(x))` (and under OlapDistinct the same).
+TExprBase RebuildOlapProjectionsWithInput(const TKqpOlapProjections& proj, TExprBase newInput, TExprContext& ectx,
+    TPositionHandle pos)
+{
+    TVector<TExprBase> projections;
+    projections.reserve(proj.Projections().Size());
+    for (const auto& child : proj.Projections()) {
+        projections.push_back(TExprBase(child));
+    }
+    return Build<TKqpOlapProjections>(ectx, pos)
+        .Input(newInput)
+        .Projections()
+            .Add(projections)
+        .Build()
+        .Done();
+}
+
+TExprBase NormalizeOlapFilterBeforeProjections(TExprBase op, TExprContext& ectx)
+{
+    if (auto maybeDistinct = op.Maybe<TKqpOlapDistinct>()) {
+        const auto distinct = maybeDistinct.Cast();
+        const auto newInput = NormalizeOlapFilterBeforeProjections(distinct.Input(), ectx);
+        if (newInput.Raw() != distinct.Input().Raw()) {
+            return Build<TKqpOlapDistinct>(ectx, op.Pos())
+                .Input(newInput)
+                .Key(distinct.Key())
+                .Done();
+        }
+        return op;
+    }
+
+    if (auto maybeFilter = op.Maybe<TKqpOlapFilter>()) {
+        const auto filter = maybeFilter.Cast();
+        // Pushed-down WHERE must run on stored columns before DISTINCT / narrowing projections.
+        // If the filter wraps OlapDistinct (marker), post-order compilation would run the inner chain first and
+        // RemainOnly could drop predicate columns before the outer filter executes.
+        if (auto maybeDistinct = filter.Input().Maybe<TKqpOlapDistinct>()) {
+            const auto distinct = maybeDistinct.Cast();
+            const auto innerFilter = Build<TKqpOlapFilter>(ectx, op.Pos())
+                .Input(distinct.Input())
+                .Condition(filter.Condition())
+                .Done();
+            const auto swapped = Build<TKqpOlapDistinct>(ectx, op.Pos())
+                .Input(innerFilter)
+                .Key(distinct.Key())
+                .Done();
+            return NormalizeOlapFilterBeforeProjections(swapped, ectx);
+        }
+        const auto newInput = NormalizeOlapFilterBeforeProjections(filter.Input(), ectx);
+        if (const auto maybeProj = newInput.Maybe<TKqpOlapProjections>()) {
+            const auto proj = maybeProj.Cast();
+            const auto innerFilter = Build<TKqpOlapFilter>(ectx, op.Pos())
+                .Input(proj.Input())
+                .Condition(filter.Condition())
+                .Done();
+            return RebuildOlapProjectionsWithInput(proj, innerFilter, ectx, op.Pos());
+        }
+        if (newInput.Raw() != filter.Input().Raw()) {
+            return Build<TKqpOlapFilter>(ectx, op.Pos())
+                .Input(newInput)
+                .Condition(filter.Condition())
+                .Done();
+        }
+        return op;
+    }
+
+    if (auto maybeProj = op.Maybe<TKqpOlapProjections>()) {
+        const auto proj = maybeProj.Cast();
+        const auto newInner = NormalizeOlapFilterBeforeProjections(proj.Input(), ectx);
+        if (newInner.Raw() != proj.Input().Raw()) {
+            return RebuildOlapProjectionsWithInput(proj, newInner, ectx, op.Pos());
+        }
+        return op;
+    }
+
+    return op;
+}
+
 void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
     if (operation.Raw() == ctx.GetRowExpr()) {
         return;
     }
+
+    operation = NormalizeOlapFilterBeforeProjections(operation, ctx.ExprCtx());
 
     if (auto maybeOlapOperation = operation.Maybe<TKqpOlapOperationBase>()) {
         CompileOlapProgramImpl(maybeOlapOperation.Cast().Input(), ctx);
@@ -1011,6 +1143,8 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
+        } else if (auto maybeDistinct = operation.Maybe<TKqpOlapDistinct>()) {
+            CompileDistinct(maybeDistinct.Cast(), ctx);
         } else if (auto maybeProjections = operation.Maybe<TKqpOlapProjections>()) {
             CompileProjections(maybeProjections.Cast(), ctx);
         }

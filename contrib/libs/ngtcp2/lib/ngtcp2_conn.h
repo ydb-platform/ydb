@@ -768,15 +768,9 @@ int ngtcp2_conn_close_stream_if_shut_rdwr(ngtcp2_conn *conn, ngtcp2_strm *strm);
  * ack_delay included in ACK frame.  |ack_delay| is actually tainted
  * (sent by peer), so don't assume that |ack_delay| is always smaller
  * than, or equals to |rtt|.
- *
- * This function returns 0 if it succeeds, or one of the following
- * negative error codes:
- *
- * NGTCP2_ERR_INVALID_ARGUMENT
- *     RTT sample is ignored.
  */
-int ngtcp2_conn_update_rtt(ngtcp2_conn *conn, ngtcp2_duration rtt,
-                           ngtcp2_duration ack_delay, ngtcp2_tstamp ts);
+void ngtcp2_conn_update_rtt(ngtcp2_conn *conn, ngtcp2_duration rtt,
+                            ngtcp2_duration ack_delay, ngtcp2_tstamp ts);
 
 void ngtcp2_conn_set_loss_detection_timer(ngtcp2_conn *conn, ngtcp2_tstamp ts);
 

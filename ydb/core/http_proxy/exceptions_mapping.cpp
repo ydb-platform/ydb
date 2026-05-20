@@ -4,7 +4,6 @@
 
 #include <unordered_map>
 
-
 namespace NKikimr::NHttpProxy {
 
 enum class EMethodId : ui8 {
@@ -174,4 +173,4 @@ TException UnsupportedExceptions(const TString& method, NYds::EErrorCodes issueC
     }
 }
 
-}
+} // namespace NKikimr::NHttpProxy

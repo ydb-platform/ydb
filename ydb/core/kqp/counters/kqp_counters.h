@@ -436,6 +436,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupIteratorTotalQuotaBytesExceeded;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
+    // Lock counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentLocks;
+
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsCount;

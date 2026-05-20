@@ -3640,9 +3640,9 @@ public:
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
 
-                if (ctx.WindowNewPipeline) {
+                if (!ctx.WindowNewPipeline) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
+                                            BuildQuotedAtom(Pos_, "DisableWindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {

@@ -406,3 +406,23 @@ class TestImpex(BaseCliTestWithDatabase):
         assert "id" in result
         assert "value" in result
         self._verify_table_exists(self.table_path)
+
+    def test_tools_infer_csv_execute_already_exists(self, tmp_path, request, table_type):
+        self.init_test(tmp_path, table_type, request.node.name)
+        csv_path = self._prepare_infer_input(tmp_path, request)
+        result = self.execute_ydb_cli_command([
+            "tools", "infer", "csv",
+            "-p", self.table_path,
+            "--execute",
+            "--header",
+            str(csv_path),
+        ], check_exit_code=False)
+        assert "CREATE TABLE" in result.stderr
+        assert "PRIMARY KEY" in result.stderr
+        assert "key" in result.stderr
+        assert "id" in result.stderr
+        assert "value" in result.stderr
+        assert "Status: GENERIC_ERROR" in result.stderr
+        assert "error: path exist" in result.stderr or "is used to reference multiple tables" in result.stderr
+        assert "terminate" not in result.stderr
+        assert result.exit_code == 1

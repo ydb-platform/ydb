@@ -56,7 +56,7 @@ void TRangeLock::Arm()
     if (Lsn) {
         LockableRanges->LockPBuffer(Lsn);
     } else {
-        Y_ABORT_UNLESS(Mask.OnlyDDiskAndNotEmpty());
+        Y_ABORT_UNLESS(!Mask.Empty());
         LockRange = LockableRanges->LockDDiskRange(Range, Mask);
     }
 }
@@ -69,7 +69,7 @@ TRangeLock::TRangeLock(ILockableRanges* lockableRanges, ui64 lsn)
 TRangeLock::TRangeLock(
     ILockableRanges* lockableRanges,
     TBlockRange64 range,
-    TLocationMask mask)
+    THostMask mask)
     : LockableRanges(lockableRanges)
     , Range(range)
     , Mask(mask)

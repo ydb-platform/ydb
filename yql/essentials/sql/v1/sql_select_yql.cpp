@@ -341,6 +341,8 @@ private:
                 return Unsupported("reduce_core");
             case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt3:
                 return Build(block.GetAlt3().GetRule_select_core1(), std::move(select));
+            case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt4:
+                return Unsupported("combine_core");
             case NSQLv1Generated::TRule_select_kind_TBlock2::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");
         }

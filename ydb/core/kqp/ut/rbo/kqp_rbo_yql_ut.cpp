@@ -3143,7 +3143,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> results = {
             R"([[0];[1];[2]])",
             R"([[0];[1];[2];[3];[4]])",
-            R"([[1];[2];[3];[4]])"
+            R"([[1];[2];[3];[4];[5]])"
         };
 
         auto queryClient = kikimr.GetQueryClient();
@@ -3389,6 +3389,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "ItemsLimit"), 1);
             UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "TopSort"), 1);
             UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "Sorted"), 1);
+
+            result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                         .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        queries = {
+            R"(
+                PRAGMA YqlSelect = "force";
+                select t1.a, t1.b from `/Root/t1` as t1 order by t1.a asc;
+            )",
+            R"(
+                PRAGMA YqlSelect = "force";
+                select t1.a, t1.b from `/Root/t1` as t1 where t1.b = 10 order by t1.a desc;
+            )",
+        };
+
+        queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "WideSortBlocks"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "DqCnMerge"), 1);
 
             result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
                          .ExtractValueSync();

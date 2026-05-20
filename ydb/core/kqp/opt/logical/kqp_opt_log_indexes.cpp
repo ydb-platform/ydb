@@ -2014,7 +2014,7 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
 
     const TString& columnName = expectedSettings->ColumnName;
 
-    TString selectedIndex;
+    std::optional<TString> selectedIndex;
     for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
         if (indexInfo.Type != TIndexDescription::EType::GlobalJson) {
             continue;
@@ -2033,7 +2033,7 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         }
     }
 
-    if (selectedIndex.empty()) {
+    if (!selectedIndex.has_value()) {
         return node;
     }
 
@@ -2044,7 +2044,7 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
 
     auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
         .Table(read.Table())
-        .Index(Build<TCoAtom>(ctx, read.Pos()).Value(selectedIndex).Done())
+        .Index(Build<TCoAtom>(ctx, node.Pos()).Value(selectedIndex.value()).Done())
         .Columns(read.Columns())
         .Query<TExprList>().Build()
         .QueryColumns(searchColumns.Ptr())
@@ -2104,7 +2104,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         .Settings(jsonIndexSettings.Settings.BuildNode(ctx, node.Pos()))
         .Done();
 
-    return Build<TCoFlatMap>(ctx, read.Pos())
+    return Build<TCoFlatMap>(ctx, node.Pos())
         .Input(newInput)
         .Lambda(flatMap.Lambda())
         .Done();

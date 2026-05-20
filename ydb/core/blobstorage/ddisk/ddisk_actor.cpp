@@ -138,7 +138,7 @@ namespace {
 #define XX(OP) \
                 .OP = { \
                     COUNTER(DirectIO##OP, Requests, true) \
-                    COUNTER(DirectIO##OP, RequestsInFlight, true) \
+                    COUNTER(DirectIO##OP, RequestsInFlight, false) \
                     COUNTER(DirectIO##OP, Bytes, true) \
                     COUNTER(DirectIO##OP, BytesInFlight, false) \
                     HISTOGRAM(DirectIO##OP, RequestSizeKiB, RequestSizeBoundsKiB) \

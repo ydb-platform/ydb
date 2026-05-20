@@ -162,7 +162,6 @@ namespace {
             .PersistentBuffer {
                 COUNTER(PersistentBuffer, AllocatedChunks, true)
                 COUNTER(PersistentBuffer, TotalBytes, true)
-                COUNTER(PersistentBuffer, TotalLsns, true)
             },
         };
 

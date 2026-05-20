@@ -2089,7 +2089,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }
     if (GatewaysConfig_) {
-        typeAnnotationContext->RuntimeSettings = CreateRuntimeSettingsFromProto(GatewaysConfig_->GetRuntimeSettings(), username, Credentials_);
+        typeAnnotationContext->RuntimeSettings = CreateRuntimeSettingsFromProto(GatewaysConfig_->GetRuntimeSettings(), username, Credentials_, QContext_);
     }
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning

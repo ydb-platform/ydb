@@ -74,6 +74,8 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
             LogTitle.GetWithTime().c_str());
     }
 
+    Request->Sglist.Close();
+
     Promise.TrySetValue(TResponse{
         .Error = std::move(error),
         .Lsn = Lsn,
@@ -216,7 +218,7 @@ TVector<THostIndex> TBaseWriteRequestExecutor::GetAvailableHandOffHosts() const
 
 TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
-    TChildLogTitle logTitle,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,
@@ -230,7 +232,9 @@ TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
         case EWriteMode::PBufferReplication:
             return std::make_shared<TWriteWithPbReplicationRequestExecutor>(
                 actorSystem,
-                std::move(logTitle),
+                logTitle.GetChildWithTags(
+                    GetCycleCount(),
+                    {{"t", "p-write"}, {"r", vChunkRange.Print()}}),
                 vChunkConfig,
                 std::move(directBlockGroup),
                 vChunkRange,
@@ -242,7 +246,9 @@ TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
         case EWriteMode::DirectPBuffersFilling:
             return std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
                 actorSystem,
-                std::move(logTitle),
+                logTitle.GetChildWithTags(
+                    GetCycleCount(),
+                    {{"t", "d-write"}, {"r", vChunkRange.Print()}}),
                 vChunkConfig,
                 std::move(directBlockGroup),
                 vChunkRange,

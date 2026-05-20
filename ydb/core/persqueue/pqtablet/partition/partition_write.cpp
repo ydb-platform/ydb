@@ -1186,7 +1186,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    if (p.Msg.BatchInfo) {
+    if (p.Msg.BatchInfo && p.Msg.PartNo == 0) {
         for (const auto& [partitionKey, size] : p.Msg.BatchInfo->PartitionKeys) {
             AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
         }

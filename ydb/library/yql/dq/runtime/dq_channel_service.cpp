@@ -744,6 +744,13 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     PushStats.Bytes += data.Bytes;
     PushStats.Rows += data.Rows;
 
+    (*InputBufferChunks)++;
+    *InputBufferBytes += data.Bytes;
+
+    if (FinishPushed.load()) {
+        return false;
+    }
+
     std::lock_guard lock(QueueMutex);
 
     if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes)) {
@@ -751,14 +758,8 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
         return false;
     }
 
-    (*InputBufferChunks)++;
     InflightBytes += data.Bytes;
-    *InputBufferBytes += data.Bytes;
     *InputBufferInflightBytes += data.Bytes;
-
-    if (FinishPushed.load()) {
-        return false;
-    }
 
     if (data.Finished) {
         FinishPushed.store(true);
@@ -767,10 +768,14 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
             Queue.swap(tmpQueue);
             QueueSize.store(0);
             auto queueBytes = QueueBytes.exchange(0) + data.Bytes;
+
             PopStats.Bytes += queueBytes;
             if (QuotaManager) {
                 QuotaManager->FreeQuota(queueBytes);
             }
+            InflightBytes -= queueBytes;
+            *InputBufferInflightBytes -= queueBytes;
+
             Finished.store(true);
             ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
             return true;

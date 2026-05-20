@@ -189,6 +189,7 @@ private:
     bool CanEnqueue() const;
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
+    void SendInfoToAutopartitioningManager(const TWriteMsg& p);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});

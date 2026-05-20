@@ -1173,6 +1173,18 @@ void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
     }
 }
 
+void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
+    if (p.Msg.BatchInfo && p.Msg.PartNo == 0) {
+        for (const auto& [partitionKey, size] : p.Msg.BatchInfo->PartitionKeys) {
+            AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
+        }
+    }
+    
+    if (!p.Msg.BatchInfo) {
+        AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
+    }
+}
+
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {
     Y_DEBUG_ABORT_UNLESS(WriteInflightSize >= p.Msg.Data.size(),
                          "PQ %" PRIu64 ", Partition {%" PRIu32 ", %" PRIu32 "}, WriteInflightSize=%" PRIu64 ", p.Msg.Data.size=%" PRISZT,
@@ -1186,15 +1198,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    if (p.Msg.BatchInfo && p.Msg.PartNo == 0) {
-        for (const auto& [partitionKey, size] : p.Msg.BatchInfo->PartitionKeys) {
-            AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
-        }
-    }
-    
-    if (!p.Msg.BatchInfo) {
-        AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
-    }
+    SendInfoToAutopartitioningManager(p);
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written

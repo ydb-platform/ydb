@@ -39,50 +39,29 @@ class YDBWrapper:
         if use_local_config is None:
             use_local_config = not os.environ.get("YDB_QA_CONFIG")
 
-        self._config_source = None
-
         if use_local_config:
-            if config_path is None:
-                dir_path = os.path.dirname(__file__)
-                config_path = os.path.normpath(
-                    os.path.join(dir_path, "..", "..", "config", "ydb_qa_config.json")
-                )
-            try:
-                with open(config_path, 'r') as f:
-                    config_dict = json.load(f)
-                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-                if _explicit_local is True:
-                    self._config_source = f"file:{config_path} (forced, vars.YDB_QA_CONFIG ignored)"
-                else:
-                    self._config_source = f"file:{config_path} (vars.YDB_QA_CONFIG not set)"
-            except FileNotFoundError:
-                raise RuntimeError(f"Config file not found: {config_path}")
-            except json.JSONDecodeError as e:
-                raise RuntimeError(f"Invalid JSON config file: {e}")
+            resolved_path = self._default_config_path(config_path)
+            enable_statistics = self._load_config_from_file(resolved_path, enable_statistics)
+            if _explicit_local is True:
+                self._config_source = f"file:{resolved_path} (forced, vars.YDB_QA_CONFIG ignored)"
+            else:
+                self._config_source = f"file:{resolved_path} (vars.YDB_QA_CONFIG not set)"
         else:
             ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
             if ydb_qa_config_env:
                 try:
                     config_dict = json.loads(ydb_qa_config_env)
                     enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-                    self._config_source = "env:YDB_QA_CONFIG (from vars.YDB_QA_CONFIG)"
+                    self._config_source = "env:YDB_QA_CONFIG"
                 except (json.JSONDecodeError, KeyError) as e:
                     raise RuntimeError(f"Invalid YDB_QA_CONFIG format: {e}")
             else:
-                if config_path is None:
-                    dir_path = os.path.dirname(__file__)
-                    config_path = os.path.normpath(
-                        os.path.join(dir_path, "..", "..", "config", "ydb_qa_config.json")
-                    )
-                try:
-                    with open(config_path, 'r') as f:
-                        config_dict = json.load(f)
-                    enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-                    self._config_source = f"file:{config_path} (vars.YDB_QA_CONFIG not set)"
-                except FileNotFoundError:
-                    raise RuntimeError(f"Config file not found: {config_path}")
-                except json.JSONDecodeError as e:
-                    raise RuntimeError(f"Invalid JSON config file: {e}")
+                resolved_path = self._default_config_path(config_path)
+                enable_statistics = self._load_config_from_file(resolved_path, enable_statistics)
+                if _explicit_local is False:
+                    self._config_source = f"file:{resolved_path} (fallback: vars.YDB_QA_CONFIG not set)"
+                else:
+                    self._config_source = f"file:{resolved_path} (vars.YDB_QA_CONFIG not set)"
 
         self._log("info", f"YDB config source: {self._config_source}")
         
@@ -128,9 +107,28 @@ class YDBWrapper:
             self._log("info", "Statistics logging disabled")
 
     @property
-    def config_source(self) -> Optional[str]:
+    def config_source(self) -> str:
         """Human-readable description of where YDB QA config was loaded from."""
         return self._config_source
+
+    @staticmethod
+    def _default_config_path(config_path: Optional[str]) -> str:
+        """Resolve default config path relative to this file if not provided."""
+        if config_path is not None:
+            return config_path
+        dir_path = os.path.dirname(__file__)
+        return os.path.normpath(os.path.join(dir_path, "..", "..", "config", "ydb_qa_config.json"))
+
+    def _load_config_from_file(self, config_path: str, enable_statistics: Optional[bool]) -> Optional[bool]:
+        """Load config dict from JSON file and apply it."""
+        try:
+            with open(config_path, 'r') as f:
+                config_dict = json.load(f)
+            return self._load_config_from_dict(config_dict, enable_statistics)
+        except FileNotFoundError:
+            raise RuntimeError(f"Config file not found: {config_path}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Invalid JSON config file: {e}")
 
     def _load_config_from_dict(self, config_dict: dict, enable_statistics: bool = None):
         """Load configuration from dictionary"""

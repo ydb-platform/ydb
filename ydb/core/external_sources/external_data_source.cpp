@@ -69,7 +69,9 @@ struct TExternalDataSource : public IExternalSource {
         // opaque error far from the CREATE statement.
         if (proto.GetSourceType() == ToString(NYql::EDatabaseType::Ydb)) {
             const auto& props = proto.GetProperties().GetProperties();
-            if (!props.contains("database_name") && !props.contains("database_id")) {
+            const bool hasDatabaseName = props.contains("database_name") && !props.at("database_name").empty();
+            const bool hasDatabaseId = props.contains("database_id") && !props.at("database_id").empty();
+            if (!hasDatabaseName && !hasDatabaseId) {
                 throw TExternalSourceException()
                     << proto.GetSourceType() << " source must provide database_name or database_id";
             }

@@ -55,7 +55,7 @@ namespace NKikimr::NDDisk {
         IssuePersistentBufferChunkAllocationInflight = false;
         PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
         PersistentBufferAllocatedChunks.insert(chunkIdx);
-        Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+        *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
 
         if (!PersistentBufferReady) {
             StartRestorePersistentBuffer();
@@ -94,8 +94,8 @@ namespace NKikimr::NDDisk {
             STLOG_D("TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
             UpdateFreeSpaceInfo();
-            Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
-            Counters.PersistentBuffer.TotalBytes =
+            *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+            *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
             return;
         }
@@ -420,7 +420,7 @@ namespace NKikimr::NDDisk {
                 }
                 PersistentBufferWriteInflightsByRecord.erase(it);
             }
-            Counters.PersistentBuffer.TotalBytes =
+            *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
         }
     }

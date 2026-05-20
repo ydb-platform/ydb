@@ -99,6 +99,8 @@ namespace {
         auto cDirectIOWrite = cDirectIO->GetSubgroup("operation", "Write");
         auto cDirectIORead = cDirectIO->GetSubgroup("operation", "Read");
 
+        auto cPersistentBuffer = counters->GetSubgroup("subsystem", "persistent_buffer");
+
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
 #define HISTOGRAM(GROUP, NAME, BUCKETS) .NAME = c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS)),
 #define COUNTER_VALUE(GROUP, NAME, DERIV) c##GROUP->GetCounter(#NAME, DERIV)

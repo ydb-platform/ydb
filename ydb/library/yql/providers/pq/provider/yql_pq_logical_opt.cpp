@@ -550,23 +550,21 @@ private:
         // in many comparisons (e.g. 1k comparisons sharing a 1k-node expr).
         TNodeMap<bool> containsMemberCache;
         std::function<bool(const TExprNode::TPtr&)> containsMemberCached = [&](const TExprNode::TPtr& root) -> bool {
-            auto it = containsMemberCache.find(root.Get());
-            if (it != containsMemberCache.end()) {
+            auto [it, inserted] = containsMemberCache.emplace(root.Get(), false);
+            if (!inserted) {
                 return it->second;
             }
-            bool result = false;
             if (TCoMember::Match(root.Get())) {
-                result = true;
+                it->second = true;
             } else {
                 for (const auto& child : root->Children()) {
                     if (containsMemberCached(child)) {
-                        result = true;
+                        it->second = true;
                         break;
                     }
                 }
             }
-            containsMemberCache[root.Get()] = result;
-            return result;
+            return it->second;
         };
 
         auto isConstant = [](const TExprNode::TPtr& node) -> bool {

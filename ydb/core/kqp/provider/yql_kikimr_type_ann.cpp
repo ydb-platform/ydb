@@ -1223,6 +1223,10 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
                     return TStatus::Error;
                 }
+                if (meta->StoreType == EStoreType::Column) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index is not supported on column tables"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalJson;
             } else if (type == "localBloomFilter") {
                 if (meta->StoreType == EStoreType::Column &&

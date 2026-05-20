@@ -631,6 +631,55 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
+    Y_UNIT_TEST(CreateOlap) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Text Json,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX `json_idx` GLOBAL USING json ON (Text)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterOlap) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64 NOT NULL,
+                    Text Json,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST_QUAD(UpsertJsonIndex, IsJsonDocument, WithReturning) {
         auto kikimr = Kikimr();
         auto db = kikimr.GetQueryClient();

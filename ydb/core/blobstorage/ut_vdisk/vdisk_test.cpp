@@ -905,7 +905,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
 
     //     YDB_LOG_CTX_NOTICE(*Conf.ActorSystem1, "first read pass w/repl took",
-               {"data", timedelta.ToString().data()});
+    //           {"data", timedelta.ToString().data()});
     //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
     //     TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
     //     begin = Now();

@@ -903,6 +903,7 @@ public:
             hFunc(TEvStateStorage::TEvListStateStorage, Handle);
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             hFunc(TEvStateStorage::TEvListBoard, Handle);
+            fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
             TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));
             break;

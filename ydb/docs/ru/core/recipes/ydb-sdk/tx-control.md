@@ -119,32 +119,30 @@
 
   - JDBC
 
-    В JDBC-драйвере этот режим нельзя выбрать явно через настройки `Connection`. Он используется драйвером для отдельных операций, которые не выполняются как интерактивная пользовательская транзакция.
+    JDBC-драйвер не позволяет явно указать режим `ImplicitTx` для выполнения транзакций. Он самостоятельно использует этот режим для выполнения тех запросов, для которых он необходим:
+    * DDL-инструкции, такие как [CREATE TABLE](../../yql/reference/syntax/create_table/index.md), [DROP TABLE](../../yql/reference/syntax/drop_table.md) и т.д.
+    * Операции [BATCH UPDATE](../../yql/reference/syntax/batch-update.md) и [BATCH DELETE](../../yql/reference/syntax/batch-delete.md)
 
     {% note info %}
 
-    Некоторые операции YDB не являются транзакционными и не выполняются как интерактивная пользовательская транзакция:
-
-    * DDL
-    * BATCH UPDATE/DELETE
-    * BulkUpsert
-    * ScanQuery
-
-    Такие операции нельзя откатить через JDBC `rollback()`. Если приложение уже открыло интерактивную транзакцию, а потом пытается выполнить такую операцию, поведение по умолчанию — ошибка. Это отличается от `MySQL`/`Oracle`, где нетранзакционные DDL часто ведут себя как implicit commit.
-
-    Поведение для таких операций настраивается опциями драйвера:
-
-    * `schemeQueryTxMode` — для scheme query;
-    * `scanQueryTxMode` — для scan query;
-    * `bulkUpsertTxMode` — для bulk upsert.
-
-    Возможные значения этих опций:
-
-    * `ERROR` — вернуть ошибку при попытке выполнить операцию внутри интерактивной транзакции;
-    * `FAKE_TX` — выполнить операцию без участия в пользовательской транзакции;
-    * `SHADOW_COMMIT` — применить поведение, близкое к implicit commit.
+    Так как данные операции не транзакционные и не могут быть отменены через `rollback()` драйвер не позволяет выполнять их в рамках открытой транзакции. Их следует выполнять либо в режиме автокоммита либо до выполнения каких либо других запросов к базе.
 
     {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            try (Statement statement = connection.createStatement()) {
+                // Запрос автоматические будет выполнен в режиме ImplicitTx
+                statement.execute("CREATE TABLE test (id Int32, value Text, PRIMARY KEY (id))");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -393,10 +391,32 @@
 
   - JDBC
 
+    JDBC-драйвер использует режим `Serializable` по умолчанию для выполнения всех не read-only запросов.
+
     ```java
-    connection.setAutoCommit(false);
-    connection.setReadOnly(false);
-    connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(false);
+            connection.setReadOnly(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setString(2, "value-1");
+                ps.executeUpdate();
+
+                ps.setInt(1, 2);
+                ps.setString(2, "value-2");
+                ps.executeUpdate();
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
     ```
 
   {% endlist %}
@@ -726,13 +746,34 @@
 
   - JDBC
 
+    JDBC стандарт не поддерживает уровни транзакций кроме [стандартных](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). Однако JDBC драйвер позволяет задать этот режим с помощью задания [нестандартной константы 16](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L130).
+
+    {% note warning %}
+
+    Данный режим не поддерживает интерактивные транзакции.
+
+    {% endnote %}
+
     ```java
-    connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
-    connection.setReadOnly(true);
-    connection.setTransactionIsolation(16); // 16 - нестандартное значение драйвера YDB для ONLINE_RO
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(16); // 16 - нестандартное значение драйвера YDB для ONLINE_RO
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
     ```
 
-    Важно: данный режим не поддерживает интерактивные транзакции.
 
   {% endlist %}
 
@@ -1000,13 +1041,33 @@
 
   - JDBC
 
-    ```java
-    connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
-    connection.setReadOnly(true);
-    connection.setTransactionIsolation(32); // 32 - нестандартное значение драйвера YDB для STALE_RO
-    ```
+    JDBC стандарт не поддерживает уровни транзакций кроме [стандартных](https://docs.oracle.com/javase/8/docs/api/constant-values.html#java.sql.Connection.TRANSACTION_NONE). Однако JDBC драйвер позволяет задать этот режим с помощью задания [нестандартной константы 32](https://github.com/ydb-platform/ydb-jdbc-driver/blob/v2.3.25/jdbc/src/main/java/tech/ydb/jdbc/YdbConst.java#L142).
 
-    Важно: данный режим не поддерживает интерактивные транзакции.
+    {% note warning %}
+
+    Данный режим не поддерживает интерактивные транзакции.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
+            connection.setReadOnly(true);
+            connection.setTransactionIsolation(32); // 32 - нестандартное значение драйвера YDB для STALE_RO
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 
@@ -1255,9 +1316,28 @@
 
   - JDBC
 
+    JDBC-драйвер использует режим `Snapshot Read-Only` для выполнения всех read-only запросов, при условии что используются стандартные режимы транзакций (TRANSACTION_SERIALIZABLE или REPEATABLE_READ).
+
     ```java
-    connection.setReadOnly(true);
-    connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+            connection.setAutoCommit(false); 
+            connection.setReadOnly(true); // Будет использован  Snapshot Read-Only
+            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+            try (Statement statement = connection.createStatement()) {
+                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
+                   // Обработка результата запроса
+                }
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
     ```
 
   {% endlist %}
@@ -1509,12 +1589,41 @@
 
   - JDBC
 
-    ```java
-    connection.setReadOnly(false);
-    connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
-    ```
+    Для установки режима `Snapshot Read-Write` следует использовать стандартный режим REPEATABLE_READ.
 
-    Данный режим поддерживается начиная с версии JDBC-драйвера 2.3.23 и может потребовать включения опции `repeatableReadEnabled=true`.
+    {% note info %}
+
+    Данный режим поддерживается начиная с версии JDBC-драйвера 2.3.24 и требует явного включения через опцию `repeatableReadEnabled`.
+
+    {% endnote %}
+
+    ```java
+    public static void main(String[] args) {
+        String connectionUrl = args[0];
+        Properties props = new Properties();
+        props.setProperty("repeatableReadEnabled", "true"); // Режим REPEATABLE_READ не доступен по умолчанию
+
+        try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
+            connection.setAutoCommit(false); 
+            connection.setReadOnly(false);
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
+            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setString(2, "value-1");
+                ps.executeUpdate();
+
+                ps.setInt(1, 2);
+                ps.setString(2, "value-2");
+                ps.executeUpdate();
+            }
+
+            connection.commit();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+    ```
 
   {% endlist %}
 

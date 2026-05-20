@@ -282,6 +282,44 @@ SDK автоматически прокидывает заголовок W3C `tr
 
 - JavaScript
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Установите `@ydbjs/telemetry` вместе с OpenTelemetry Node SDK и OTLP-экспортёром:
+
+  ```bash
+  npm install @ydbjs/telemetry @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-http
+  ```
+
+  Инициализируйте `NodeSDK` до создания драйвера и вызовите `register()` из `@ydbjs/telemetry`:
+
+  ```js
+  import { NodeSDK } from '@opentelemetry/sdk-node'
+  import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+  import { Driver } from '@ydbjs/core'
+  import { query } from '@ydbjs/query'
+  import { register } from '@ydbjs/telemetry'
+
+  const sdk = new NodeSDK({
+      serviceName: 'my-service',
+      traceExporter: new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' }),
+  })
+  sdk.start()
+
+  // Должно быть вызвано ДО создания Driver — middleware пропагации W3C
+  // trace context устанавливается один раз при construction'е драйвера.
+  const instrumentation = register()
+
+  using driver = new Driver(process.env.YDB_CONNECTION_STRING)
+  await driver.ready()
+  await using sql = query(driver)
+  // ...
+
+  instrumentation.disable()
+  await sdk.shutdown()
+  ```
+
+  Альтернативно, через `--import` для автозагрузки до старта приложения:
+
+  ```bash
+  node --import @opentelemetry/sdk-node/register --import @ydbjs/telemetry/register your-app.js
+  ```
 
 {% endlist %}

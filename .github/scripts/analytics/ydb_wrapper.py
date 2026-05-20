@@ -35,6 +35,7 @@ class YDBWrapper:
         # If silent=True, logs go to stderr (for scripts called from other scripts)
         self._log_stream = sys.stderr if silent else sys.stdout
 
+        _explicit_local = use_local_config  # remember if caller forced the choice
         if use_local_config is None:
             use_local_config = not os.environ.get("YDB_QA_CONFIG")
 
@@ -50,7 +51,10 @@ class YDBWrapper:
                 with open(config_path, 'r') as f:
                     config_dict = json.load(f)
                 enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-                self._config_source = f"file:{config_path} (use_local_config=True, vars.YDB_QA_CONFIG ignored)"
+                if _explicit_local is True:
+                    self._config_source = f"file:{config_path} (forced, vars.YDB_QA_CONFIG ignored)"
+                else:
+                    self._config_source = f"file:{config_path} (vars.YDB_QA_CONFIG not set)"
             except FileNotFoundError:
                 raise RuntimeError(f"Config file not found: {config_path}")
             except json.JSONDecodeError as e:

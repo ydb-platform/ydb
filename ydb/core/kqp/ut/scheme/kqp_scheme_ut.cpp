@@ -14390,7 +14390,7 @@ END DO)",
         TestTruncateTable(tableName, useQueryClient, createSecondaryIndex);
     }
 
-    Y_UNIT_TEST(TruncateTableWithEraseRowPermission) {
+    Y_UNIT_TEST(TruncateTableEraseRowPermission) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
@@ -14414,51 +14414,7 @@ END DO)",
         }
 
         kikimr.GetTestClient().GrantConnect("user@builtin");
-        {
-            auto schemeClient = kikimr.GetSchemeClient();
-            auto result = schemeClient.ModifyPermissions("/Root/TestTable",
-                NYdb::NScheme::TModifyPermissionsSettings()
-                    .AddGrantPermissions(NYdb::NScheme::TPermissions(
-                        "user@builtin", {"ydb.granular.erase_row", "ydb.granular.describe_schema"}))
-            ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
 
-        auto userSession = kikimr.GetTableClient(
-            NYdb::NTable::TClientSettings().AuthToken("user@builtin"))
-            .CreateSession().GetValueSync().GetSession();
-        {
-            auto result = userSession.ExecuteSchemeQuery(R"(
-                TRUNCATE TABLE `/Root/TestTable`;
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(TruncateTableWithoutEraseRowPermissionFails) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
-        TKikimrRunner kikimr(featureFlags);
-
-        auto rootSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        {
-            auto result = rootSession.ExecuteSchemeQuery(R"(
-                CREATE TABLE `/Root/TestTable` (
-                    k Uint32,
-                    v String,
-                    PRIMARY KEY(k)
-                );
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto result = rootSession.ExecuteDataQuery(R"(
-                UPSERT INTO `/Root/TestTable` (k, v) VALUES (1, "a"), (2, "b");
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        kikimr.GetTestClient().GrantConnect("user@builtin");
         {
             auto schemeClient = kikimr.GetSchemeClient();
             auto result = schemeClient.ModifyPermissions("/Root/TestTable",
@@ -14479,6 +14435,22 @@ END DO)",
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
                 result.GetIssues().ToString());
+        }
+
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TestTable",
+                NYdb::NScheme::TModifyPermissionsSettings()
+                    .AddGrantPermissions(NYdb::NScheme::TPermissions(
+                        "user@builtin", {"ydb.granular.erase_row"}))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = userSession.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/TestTable`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 

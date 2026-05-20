@@ -9,13 +9,16 @@ from ydb.tools.mnc.lib.logging_setup import setup_loggers
 from ydb.tools.mnc.lib.progress import MyTraceback
 
 from ydb.tools.mnc.cli import parser_factory
+from ydb.tools.mnc.cli import command_options
 from ydb.tools.mnc.cli.tui import TuiApp, TuiLauncher, should_route_to_launcher
 import ydb.tools.mnc.scheme as scheme
 
 
 async def async_main():
     parser, actions, expected_config, prefer_launcher = parser_factory.build_parser()
-    args = parser.parse_args()
+    raw_argv = sys.argv[1:]
+    initial_argv = command_options.apply_cached_options(parser, raw_argv) if "--tui" in raw_argv else raw_argv
+    args = parser.parse_args(initial_argv)
 
     # Initialize output management
     if args.verbose:
@@ -30,7 +33,7 @@ async def async_main():
 
     launcher_used = should_route_to_launcher(args, expected_config, prefer_launcher)
     if launcher_used:
-        result = await TuiLauncher(parser, expected_config).run_async(args)
+        result = await TuiLauncher(parser, expected_config).run_async(args, initial_argv=raw_argv)
         if result.cancelled:
             return
         args = result.args
@@ -50,6 +53,7 @@ async def async_main():
                 cfg['deploy_flags'] = scheme.common.merge_deploy_flags(cfg.get('deploy_flags', []), args.deploy_flags)
             deploy_ctx.apply_cfg(cfg, command_scheme)
             setattr(args, "config", cfg)
+        command_options.save_command_options(parser, args)
         result = await actions[args.verb](args)
         if not result:
             raise CliError(f"Command '{args.verb}' failed", result=result)

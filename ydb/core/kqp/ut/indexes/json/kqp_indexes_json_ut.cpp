@@ -4945,6 +4945,40 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
 
         ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
     }
+
+    Y_UNIT_TEST(Negation) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // JE
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.key' TRUE ON ERROR)");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.key') IS NULL");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.key') IS NOT NULL");
+            ValidateNoAutoSelect(db, "COALESCE(JSON_EXISTS(Text, '$.key'), true)");
+
+            ValidateNoAutoSelect(db, "NOT JSON_EXISTS(Text, '$.key')");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.key') == false");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.key') != true");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.key') == Just(false)");
+            ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.key') != Just(true)");
+
+            // JV
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool DEFAULT TRUE ON EMPTY)");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool DEFAULT TRUE ON ERROR)");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool DEFAULT TRUE ON EMPTY DEFAULT TRUE ON ERROR)");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool) IS NULL");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool) IS NOT NULL");
+            ValidateNoAutoSelect(db, "COALESCE(JSON_VALUE(Text, '$.key' RETURNING Bool), true)");
+
+            ValidateNoAutoSelect(db, "NOT JSON_VALUE(Text, '$.key' RETURNING Bool)");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool) == false");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool) != true");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool) == Just(false)");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Bool) != Just(true)");
+
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Int32) IS NULL");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Int32) IS NOT NULL");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Int32) NOT IN (1, 2, 3)");
+        });
+    }
 }
 
 }  // namespace NKikimr::NKqp

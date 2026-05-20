@@ -57,7 +57,7 @@ WITH (
   distance=cosine)
 ```
 
-This command creates an index of the `vector_kmeans_tree` type. For more information about indexes of this type, see [{#T}](../../dev/vector-indexes.md#kmeans-tree-type). In this model example, the parameter `distance=cosine` is specified to use cosine distance when searching by the index. This is a very important parameter, the distance should be the same as the model was trained to. Also we have parameters clusters, levels, overlap_clusters, they are autodetected but if you have a large database and wish to tune it you can find more detailed description of parameters here [{#T}](../../yql/reference/syntax/create_table/vector_index.md).
+This command creates an index of the `vector_kmeans_tree` type. For more information about indexes of this type, see [{#T}](../../dev/vector-indexes.md#kmeans-tree-type). In this model example, only the `distance=cosine` parameter is specified — it sets the distance function used by the index. This is an important parameter: the distance function must match the one the embedding model was trained for. The parameters `clusters`, `levels`, and `overlap_clusters` are autodetected and not shown here; if you have a large dataset and want to tune the index, see the detailed parameter reference in [{#T}](../../yql/reference/syntax/create_table/vector_index.md).
 
 For general information about vector indexes, their creation parameters, and current limitations, see the section [{#T}](../../dev/vector-indexes.md).
 

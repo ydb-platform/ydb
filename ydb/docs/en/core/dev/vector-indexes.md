@@ -44,7 +44,7 @@ Note that:
 - Vector index search is always approximate — its results differ from a full-scan search.
 - Increasing the [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) parameter improves search quality (recall) at the cost of speed. The parameter sets the number of index clusters nearest to the query that are scanned. The default value is 1 (minimum quality, maximum speed).
 - The `overlap_clusters=3` parameter significantly improves future search quality during indexing by specifying the number of clusters each vector is added to, but increases the index size.
-- We can omit vector_type and vector_dimension parameters if table is not empty. They will be autodetected from the row contents.
+- The `vector_type` and `vector_dimension` parameters can be omitted if the table is not empty — they will be autodetected from existing rows.
 
 ### Filtered Vector Index {#filtered}
 

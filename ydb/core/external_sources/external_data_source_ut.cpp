@@ -70,8 +70,22 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             source->ValidateExternalDataSource(proto.SerializeAsString()),
             NExternalSource::TExternalSourceException,
-            "Ydb source must provide database_name or database_id");
+            "Ydb source must provide a non-empty database_name or database_id");
 
+        proto.MutableProperties()->MutableProperties()->insert({"database_name", ""});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->ValidateExternalDataSource(proto.SerializeAsString()),
+            NExternalSource::TExternalSourceException,
+            "Ydb source must provide a non-empty database_name or database_id");
+
+        proto.MutableProperties()->MutableProperties()->clear();
+        proto.MutableProperties()->MutableProperties()->insert({"database_id", ""});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->ValidateExternalDataSource(proto.SerializeAsString()),
+            NExternalSource::TExternalSourceException,
+            "Ydb source must provide a non-empty database_name or database_id");
+
+        proto.MutableProperties()->MutableProperties()->clear();
         proto.MutableProperties()->MutableProperties()->insert({"database_name", "/local"});
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
 

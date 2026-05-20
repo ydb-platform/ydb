@@ -1,5 +1,8 @@
 PY3TEST()
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(16)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 TEST_SRCS(

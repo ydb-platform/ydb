@@ -10,6 +10,7 @@
 
 using namespace NYT;
 using namespace NYT::NBus;
+using namespace NYT::NBus::NTcp;
 using namespace NYT::NRpc;
 using namespace NYT::NRpc::NBus;
 using namespace NYT::NConcurrency;

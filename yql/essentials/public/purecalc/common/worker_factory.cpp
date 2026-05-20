@@ -202,7 +202,6 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
 
     if (BlockEngineMode_ != EBlockEngineMode::Disable) {
         typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
-        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverCollect")));
         typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));
     }
 

@@ -39,8 +39,15 @@ public:
         TString DiskId;
     };
 
+    struct TVChunk
+    {
+        TString DiskId;
+        ui32 VChunkIndex;
+    };
+
 private:
-    using TData = std::variant<TVolume, TPartitionDirect, TDirectBlockGroup>;
+    using TData =
+        std::variant<TVolume, TPartitionDirect, TDirectBlockGroup, TVChunk>;
 
     ui64 StartTime = 0;
     TData Data;

@@ -48,14 +48,14 @@ namespace boost {
       for (size_type i=0; i != NumDims; ++i) {
         ordering_[i] = NumDims - 1 - i;
       }
-      ascending_.assign(true);
+      ascending_.fill(true);
     }
 
     general_storage_order(const fortran_storage_order&) {
       for (size_type i=0; i != NumDims; ++i) {
         ordering_[i] = i;
       }
-      ascending_.assign(true);
+      ascending_.fill(true);
     }
 
     size_type ordering(size_type dim) const { return ordering_[dim]; }

@@ -1,12 +1,73 @@
 #include "mkql_computation_node_ut.h"
 
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
+
+class TFetchAfterFinishWrapper: public TMutableComputationNode<TFetchAfterFinishWrapper> {
+    using TBase = TMutableComputationNode<TFetchAfterFinishWrapper>;
+
+public:
+    class TValue: public TComputationValue<TValue> {
+    public:
+        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue source)
+            : TComputationValue<TValue>(memInfo)
+            , Source_(std::move(source))
+        {
+        }
+
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            const auto status = Source_.Fetch(result);
+            if (status == NUdf::EFetchStatus::Finish) {
+                NUdf::TUnboxedValue extra;
+                MKQL_ENSURE(Source_.Fetch(extra) == NUdf::EFetchStatus::Finish, "Expected Finish on repeated call after Finish");
+            }
+            return status;
+        }
+        NUdf::TUnboxedValue Source_;
+    };
+
+    TFetchAfterFinishWrapper(TComputationMutables& mutables, IComputationNode* source)
+        : TBase(mutables)
+        , Source_(source)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TValue>(Source_->GetValue(ctx));
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Source_);
+    }
+    IComputationNode* Source_;
+};
+
+TComputationNodeFactory GetFetchAfterFinishFactory() {
+    return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        if (callable.GetType()->GetName() == "FetchAfterFinish") {
+            MKQL_ENSURE(callable.GetInputsCount() == 1U, "Expected 1 arg");
+            return new TFetchAfterFinishWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
+        }
+        return nullptr;
+    };
+}
+
+TRuntimeNode WrapWithFetchAfterFinish(TProgramBuilder& pb, TRuntimeNode stream) {
+    TCallableBuilder b(pb.GetTypeEnvironment(), "FetchAfterFinish", stream.GetStaticType());
+    b.Add(stream);
+    return TRuntimeNode(b.Build(), false);
+}
 
 template <bool UseLLVM>
 TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) {
@@ -103,6 +164,28 @@ TRuntimeNode StreamToString(TSetup<UseLLVM>& setup, TRuntimeNode stream) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
+
+Y_UNIT_TEST_LLVM(TestSubStreamFetchAfterFinish) {
+    TSetup<LLVM> setup(GetTestFactory(GetFetchAfterFinishFactory()));
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    auto list = pb.NewList(pb.NewDataType(NUdf::EDataSlot::Uint64), {
+                                                                        pb.NewDataLiteral<ui64>(1),
+                                                                        pb.NewDataLiteral<ui64>(1),
+                                                                        pb.NewDataLiteral<ui64>(2),
+                                                                        pb.NewDataLiteral<ui64>(2),
+                                                                    });
+    auto stream = pb.Iterator(list, {});
+
+    stream = pb.Collect(pb.Chopper(stream,
+                                   [&](TRuntimeNode item) { return item; },
+                                   [&](TRuntimeNode key, TRuntimeNode item) { return pb.NotEquals(item, key); },
+                                   [&](TRuntimeNode, TRuntimeNode group) { return WrapWithFetchAfterFinish(pb, group); }));
+
+    const auto graph = setup.BuildGraph(stream);
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector{1U, 1U, 2U, 2U});
+}
+
 Y_UNIT_TEST_LLVM(TestEmpty) {
     TSetup<LLVM> setup;
 

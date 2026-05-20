@@ -46,7 +46,7 @@ struct TTestSubconfig
     int MyInt;
     unsigned int MyUint;
     bool MyBool;
-    std::vector<TString> MyStringList;
+    std::vector<std::string> MyStringList;
     ETestEnum MyEnum;
     TDuration MyDuration;
     TSize MySize;
@@ -81,10 +81,10 @@ using TTestSubconfigPtr = TIntrusivePtr<TTestSubconfig>;
 struct TTestConfig
     : public TYsonStruct
 {
-    TString MyString;
+    std::string MyString;
     TTestSubconfigPtr Subconfig;
     std::vector<TTestSubconfigPtr> SubconfigList;
-    std::unordered_map<TString, TTestSubconfigPtr> SubconfigMap;
+    std::unordered_map<std::string, TTestSubconfigPtr> SubconfigMap;
     std::optional<i64> NullableInt;
 
     REGISTER_YSON_STRUCT(TTestConfig);
@@ -416,7 +416,7 @@ TEST_P(TYsonStructParseTest, UnrecognizedSorted)
     EXPECT_TRUE(AreNodesEqual(unrecognizedNode, unrecognizedRecursivelyNode));
     EXPECT_EQ(3, unrecognizedNode->GetChildCount());
 
-    TString expectedYson;
+    std::string expectedYson;
     expectedYson += "{\"a_unrecognized\"=\"TestString\";";
     expectedYson += "\"value\"=1337;";
     expectedYson += "\"value_unrecognized\"=42;";
@@ -707,7 +707,7 @@ TEST(TYsonStructTest, SaveSingleParameter)
     auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());
     builder->BeginTree();
     config->SaveParameter("my_string", builder.get());
-    auto actual = ConvertTo<TString>(builder->EndTree());
+    auto actual = ConvertTo<std::string>(builder->EndTree());
     EXPECT_EQ("test", actual);
 }
 
@@ -776,7 +776,7 @@ TEST(TYsonStructTest, Save)
 
     auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-    TString subconfigYson =
+    std::string subconfigYson =
         "{\"my_bool\"=%false;"
         "\"my_enum\"=\"value1\";"
         "\"my_int\"=200;"
@@ -785,7 +785,7 @@ TEST(TYsonStructTest, Save)
         "\"my_duration\"=1000;"
         "\"my_size\"=8000}";
 
-    TString subconfigYsonOrigin =
+    std::string subconfigYsonOrigin =
         "{\"my_bool\"=%false;"
         "\"my_enum\"=\"value1\";"
         "\"my_int\"=100;"
@@ -794,7 +794,7 @@ TEST(TYsonStructTest, Save)
         "\"my_duration\"=1000;"
         "\"my_size\"=8000}";
 
-    TString expectedYson;
+    std::string expectedYson;
     expectedYson += "{\"my_string\"=\"hello!\";";
     expectedYson += "\"sub\"=" + subconfigYson + ";";
     expectedYson += "\"sub_list\"=[" + subconfigYsonOrigin + "];";
@@ -1056,7 +1056,7 @@ struct TTestConfigWithManyFieldsFinal
     : public TTestConfigWithManyFieldsDerived1
     , public TTestConfigWithManyFieldsDerived2
 {
-    TString String;
+    std::string String;
 
     REGISTER_YSON_STRUCT(TTestConfigWithManyFieldsFinal);
 
@@ -1110,7 +1110,7 @@ struct TTestConfigWithManyFieldsFinalLite
     : public TTestConfigWithManyFieldsDerivedLite1
     , public TTestConfigWithManyFieldsDerivedLite2
 {
-    TString String;
+    std::string String;
 
     REGISTER_YSON_STRUCT_LITE(TTestConfigWithManyFieldsFinalLite);
 
@@ -1207,7 +1207,7 @@ class TTestConfigLite
     : public TYsonStructLite
 {
 public:
-    TString MyString;
+    std::string MyString;
     std::optional<i64> NullableInt;
 
     REGISTER_YSON_STRUCT_LITE(TTestConfigLite);
@@ -1228,7 +1228,7 @@ TEST(TYsonStructTest, SaveLite)
 
     auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-    TString expectedYson;
+    std::string expectedYson;
     expectedYson += "{\"my_string\"=\"hello!\";";
     expectedYson += "\"nullable_int\"=42}";
 
@@ -1249,7 +1249,7 @@ class TTestLiteWithDefaults
     : public TYsonStructLite
 {
 public:
-    TString MyString;
+    std::string MyString;
     int MyInt;
     TTestSubconfigPtr Subconfig;
 
@@ -1290,7 +1290,7 @@ class TTestConfigLiteWithFieldTracking
     : public TYsonStructLiteWithFieldTracking
 {
 public:
-    TString MyString;
+    std::string MyString;
     std::optional<i64> NullableInt;
 
     REGISTER_YSON_STRUCT_LITE(TTestConfigLiteWithFieldTracking);
@@ -1679,7 +1679,7 @@ class TTestConfigWithAliases
     : public TYsonStruct
 {
 public:
-    TString Value;
+    std::string Value;
 
     REGISTER_YSON_STRUCT(TTestConfigWithAliases);
 
@@ -1779,14 +1779,14 @@ TEST(TYsonStructTest, Aliases5)
 struct TTestConfigWithContainers
     : public NYTree::TYsonStructLite
 {
-    std::vector<TString> Vector;
-    std::array<TString, 3> Array;
-    std::pair<size_t, TString> Pair;
-    std::set<TString> Set;
-    std::map<TString, int> Map;
+    std::vector<std::string> Vector;
+    std::array<std::string, 3> Array;
+    std::pair<size_t, std::string> Pair;
+    std::set<std::string> Set;
+    std::map<std::string, int> Map;
     std::multiset<int> MultiSet;
-    std::unordered_set<TString> UnorderedSet;
-    std::unordered_map<TString, int> UnorderedMap;
+    std::unordered_set<std::string> UnorderedSet;
+    std::unordered_map<std::string, int> UnorderedMap;
     std::unordered_multiset<size_t> UnorderedMultiSet;
 
     REGISTER_YSON_STRUCT_LITE(TTestConfigWithContainers);
@@ -1846,11 +1846,11 @@ TEST(TYsonStructTest, ParameterTuplesAndContainers)
 
 TEST(TYsonStructTest, EnumAsKeyToYHash)
 {
-    THashMap<ETestEnum, TString> deserialized, original = {
+    THashMap<ETestEnum, std::string> deserialized, original = {
         {ETestEnum::Value0, "abc"}
     };
 
-    TString serialized = "{\"value0\"=\"abc\";}";
+    std::string serialized = "{\"value0\"=\"abc\";}";
     EXPECT_EQ(serialized, ConvertToYsonString(original, EYsonFormat::Text).AsStringBuf());
 
     Deserialize(deserialized, ConvertToNode(TYsonString(serialized, EYsonType::Node)));
@@ -1919,7 +1919,7 @@ TEST(TYsonStructTest, DontSerializeDefault)
         auto config = New<TConfigWithDontSerializeDefault>();
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-        TString expectedYson = "{\"value\"=123;}";
+        std::string expectedYson = "{\"value\"=123;}";
         EXPECT_TRUE(AreNodesEqual(
             ConvertToNode(TYsonString(expectedYson)),
             ConvertToNode(TYsonString(output.AsStringBuf()))));
@@ -1930,7 +1930,7 @@ TEST(TYsonStructTest, DontSerializeDefault)
         config->OtherValue = 789;
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-        TString expectedYson = "{\"value\"=123;\"other_value\"=789;}";
+        std::string expectedYson = "{\"value\"=123;\"other_value\"=789;}";
         EXPECT_TRUE(AreNodesEqual(
             ConvertToNode(TYsonString(expectedYson)),
             ConvertToNode(TYsonString(output.AsStringBuf()))));
@@ -1969,14 +1969,14 @@ TEST(TYsonStructTest, UniversalParameterAccessor)
         config->NestedStruct.Value = 3;
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-        TString expectedYson = "{\"value\"=3;}";
+        std::string expectedYson = "{\"value\"=3;}";
         EXPECT_TRUE(AreNodesEqual(
             ConvertToNode(TYsonString(expectedYson)),
             ConvertToNode(TYsonString(output.AsStringBuf()))));
     }
 
     {
-        TString sourceYson = "{\"value\"=3;}";
+        std::string sourceYson = "{\"value\"=3;}";
         auto config = ConvertTo<TIntrusivePtr<TConfigWithUniversalParameterAccessor>>(TYsonString(TStringBuf(sourceYson)));
 
         EXPECT_EQ(3, config->NestedStruct.Value);
@@ -2006,7 +2006,7 @@ TEST(TYsonStructTest, VirtualInheritance)
         auto config = New<TVirtualInheritanceConfig>();
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-        TString expectedYson = "{\"value\"=123;}";
+        std::string expectedYson = "{\"value\"=123;}";
         EXPECT_TRUE(AreNodesEqual(
             ConvertToNode(TYsonString(expectedYson)),
             ConvertToNode(TYsonString(output.AsStringBuf()))));
@@ -2045,7 +2045,7 @@ TEST(TYsonStructTest, RegisterBaseFieldInDerived)
         auto config = New<TDerived>();
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-        TString expectedYson = "{\"value\"=123;}";
+        std::string expectedYson = "{\"value\"=123;}";
         EXPECT_TRUE(AreNodesEqual(
             ConvertToNode(TYsonString(expectedYson)),
             ConvertToNode(TYsonString(output.AsStringBuf()))));
@@ -2078,7 +2078,7 @@ TEST(TYsonStructTest, ClassLevelPostprocess)
         config->Value = 1;
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-        TString expectedYson = "{\"value\"=1}";
+        std::string expectedYson = "{\"value\"=1}";
         EXPECT_TRUE(AreNodesEqual(
             ConvertToNode(TYsonString(expectedYson)),
             ConvertToNode(TYsonString(output.AsStringBuf()))));
@@ -2118,7 +2118,7 @@ TEST(TYsonStructTest, RecursiveConfig)
         config->Subconfig->Value = 3;
         auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
 
-        TString expectedYson = "{\"value\"=1;\"subconfig\"={\"value\"=3}}";
+        std::string expectedYson = "{\"value\"=1;\"subconfig\"={\"value\"=3}}";
         EXPECT_TRUE(AreNodesEqual(
             ConvertToNode(TYsonString(expectedYson)),
             ConvertToNode(TYsonString(output.AsStringBuf()))));
@@ -2293,7 +2293,7 @@ TEST(TYsonStructTest, TestComplexSerialization)
         TTestConfigPtr Config1;
         TTestConfigPtr Config2;
         TTestConfigLite LiteConfig;
-        TString StructName;
+        std::string StructName;
 
         Y_SAVELOAD_DEFINE(Config1, Config2, LiteConfig, StructName);
     };
@@ -2914,7 +2914,7 @@ class TTestSubConfigLiteWithDefaults
 {
 public:
     int MyInt;
-    TString MyString;
+    std::string MyString;
 
     REGISTER_YSON_STRUCT_LITE(TTestSubConfigLiteWithDefaults);
 
@@ -3079,7 +3079,7 @@ class TTestingNestedMapWithCustomDefault
     : public TYsonStruct
 {
 public:
-    THashMap<TString, TIntrusivePtr<TSimpleYsonStruct>> NestedMap;
+    THashMap<std::string, TIntrusivePtr<TSimpleYsonStruct>> NestedMap;
 
     REGISTER_YSON_STRUCT(TTestingNestedMapWithCustomDefault);
 
@@ -3087,7 +3087,7 @@ public:
     {
         registrar.Parameter("nested_map", &TThis::NestedMap)
             .DefaultCtor([] {
-                return THashMap<TString, TIntrusivePtr<TSimpleYsonStruct>>{
+                return THashMap<std::string, TIntrusivePtr<TSimpleYsonStruct>>{
                     {"foo", CreateSimpleYsonStruct(42)},
                     {"bar", CreateSimpleYsonStruct(7)},
                 };
@@ -3131,7 +3131,7 @@ class TTestingNestedMapWithCustomDefaultResetOnLoad
     : public TYsonStruct
 {
 public:
-    THashMap<TString, TIntrusivePtr<TSimpleYsonStruct>> NestedMap;
+    THashMap<std::string, TIntrusivePtr<TSimpleYsonStruct>> NestedMap;
 
     REGISTER_YSON_STRUCT(TTestingNestedMapWithCustomDefaultResetOnLoad);
 
@@ -3139,7 +3139,7 @@ public:
     {
         registrar.Parameter("nested_map", &TThis::NestedMap)
             .DefaultCtor([] {
-                return THashMap<TString, TIntrusivePtr<TSimpleYsonStruct>>{
+                return THashMap<std::string, TIntrusivePtr<TSimpleYsonStruct>>{
                     {"foo", CreateSimpleYsonStruct(42)},
                     {"bar", CreateSimpleYsonStruct(7)},
                 };
@@ -4358,8 +4358,8 @@ TEST(TYsonStructTest, YsonStructLiteMoveAssign)
 struct TTestYsonStructWithMap
     : public TYsonStruct
 {
-    std::map<TString, TString> Map;
-    std::map<TTestComplexKey, TString> ComplexMap;
+    std::map<std::string, std::string> Map;
+    std::map<TTestComplexKey, std::string> ComplexMap;
     TTestComplexKey ComplexKey;
 
     REGISTER_YSON_STRUCT(TTestYsonStructWithMap);
@@ -4482,11 +4482,11 @@ struct TTestYsonStructVisitor
     : public TYsonStruct
 {
     int X;
-    TString Y;
+    std::string Y;
     TTestYsonStructVisitorSubPtr Sub;
     TTestYsonStructVisitorSubLite SubLite;
-    THashMap<TString, TTestYsonStructVisitorSubPtr> SubMap;
-    std::tuple<int, TString, TTestYsonStructVisitorSubPtr> SubTuple;
+    THashMap<std::string, TTestYsonStructVisitorSubPtr> SubMap;
+    std::tuple<int, std::string, TTestYsonStructVisitorSubPtr> SubTuple;
     TYsonStructVisitorPoly Poly;
 
     REGISTER_YSON_STRUCT(TTestYsonStructVisitor);
@@ -4509,12 +4509,12 @@ struct TTestYsonStructVisitor
 
 TEST(TestYsonStruct, Visitor)
 {
-    std::vector<std::pair<TString, bool>> visited;
+    std::vector<std::pair<std::string, bool>> visited;
     auto visitor = [&](const auto& context) {
         visited.emplace_back(context.Path, !context.Parameter->IsRequired());
     };
     TraverseYsonStruct<TTestYsonStructVisitor>(visitor);
-    auto expected = std::vector<std::pair<TString, bool>>{
+    auto expected = std::vector<std::pair<std::string, bool>>{
         {"/x", false},
         {"/y", true},
         {"/sub", false},

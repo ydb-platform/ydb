@@ -10,6 +10,15 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 namespace {
 
+NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
+    const auto& cboStats = kqpCtx.CBOStats;
+
+    NJson::TJsonValue optimizerStats(NJson::EJsonValueType::JSON_MAP);
+    optimizerStats["CBOTreesTotal"] = cboStats.TreesTotal;
+    optimizerStats["CBOTreesOptimized"] = cboStats.TreesOptimized;
+    return optimizerStats;
+}
+
 TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
     Y_UNUSED(typeCtx);
     auto take = TCoTake(node);
@@ -337,7 +346,8 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
     plans.AppendValue(execPlan.value());
     planJson["Plans"] = plans;
     planJson["SimplifiedPlan"] = explainPlan.value();
-    
+    planJson["SimplifiedPlan"]["OptimizerStats"] = MakeNewRBOOptimizerStats(KqpCtx);
+
     TransformCtx->PlanJson = planJson;
 }
 

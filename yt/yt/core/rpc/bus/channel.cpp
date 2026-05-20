@@ -35,6 +35,7 @@
 namespace NYT::NRpc::NBus {
 
 using namespace NYT::NBus;
+using namespace NYT::NBus::NTcp;
 using namespace NConcurrency;
 using namespace NTracing;
 using namespace NYPath;
@@ -183,7 +184,7 @@ private:
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
         auto& bucket = Buckets_[options.MultiplexingBand];
-        auto parallelism = TTcpDispatcher::Get()->GetMultiplexingParallelism(
+        auto parallelism = NBus::NTcp::TDispatcher::Get()->GetMultiplexingParallelism(
             options.MultiplexingBand,
             options.MultiplexingParallelism);
         auto index = parallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % parallelism;
@@ -302,7 +303,7 @@ private:
         TSession(
             EMultiplexingBand band,
             IMemoryUsageTrackerPtr memoryUsageTracker)
-            : TosLevel_(TTcpDispatcher::Get()->GetTosLevelForBand(band))
+            : TosLevel_(NBus::NTcp::TDispatcher::Get()->GetTosLevelForBand(band))
             , MemoryUsageTracker_(std::move(memoryUsageTracker))
         {
             YT_VERIFY(MemoryUsageTracker_);
@@ -372,18 +373,18 @@ private:
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
                 // since this also provides proper cleanup and cancellation when global shutdown happens.
-                if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
+                if (NRpc::TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
                     YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                         requestControl->GetRequestId(),
                         requestControl->GetService(),
                         requestControl->GetMethod(),
                         Bus_->GetEndpointDescription());
                 }
-                auto effectiveTimeout = options.Timeout.value_or(TDispatcher::Get()->GetDefaultRequestTimeout());
+                auto effectiveTimeout = options.Timeout.value_or(NRpc::TDispatcher::Get()->GetDefaultRequestTimeout());
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND(&TSession::HandleTimeout, MakeWeak(this), requestControl),
                     effectiveTimeout,
-                    TDispatcher::Get()->GetHeavyInvoker());
+                    NRpc::TDispatcher::Get()->GetHeavyInvoker());
                 requestControl->SetTimeoutCookie(std::move(timeoutCookie));
             }
 
@@ -410,7 +411,7 @@ private:
                             requestControl,
                             options);
                     })
-                    .Via(TDispatcher::Get()->GetHeavyInvoker()));
+                    .Via(NRpc::TDispatcher::Get()->GetHeavyInvoker()));
             } else {
                 DoSendRequest(
                     std::move(request),
@@ -462,7 +463,7 @@ private:
                     TError(NYT::EErrorCode::Canceled, "Request canceled"));
                 --Depth;
             } else {
-                TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
+                NRpc::TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
                     &TSession::NotifyError,
                     MakeStrong(this),
                     requestControl,
@@ -728,7 +729,7 @@ private:
 
             if (options.RequestHeavy || (request->IsAttachmentCompressionEnabled() && request->HasAttachments())) {
                 BIND(&IClientRequest::Serialize, request)
-                    .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
+                    .AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
                     .Subscribe(BIND(
                         &TSession::OnRequestSerialized,
@@ -843,7 +844,7 @@ private:
                     auto timeoutCookie = TDelayedExecutor::Submit(
                         BIND(&TSession::HandleAcknowledgementTimeout, MakeWeak(this), requestControl),
                         *options.AcknowledgementTimeout,
-                        TDispatcher::Get()->GetHeavyInvoker());
+                        NRpc::TDispatcher::Get()->GetHeavyInvoker());
                     requestControl->SetAcknowledgementTimeoutCookie(std::move(timeoutCookie));
                 }
             }

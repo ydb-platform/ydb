@@ -767,14 +767,6 @@ public:
     }
 
 public: // For testing
-    void SetRefCountForTesting(const TLogoBlobID& id, ui32 refCount) {
-        if (refCount) {
-            RefCounts[id] = refCount;
-        } else {
-            RefCounts.erase(id);
-        }
-    }
-
     TString Dump() const;
     void VerifyEqualIndex(const TKeyValueState& state) const;
 };

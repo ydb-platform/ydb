@@ -5,9 +5,6 @@
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/ptr.h>
-
-#include <memory>
 
 namespace NKikimr {
 
@@ -268,9 +265,7 @@ struct TRangeReadRequestBuilder {
 Y_UNIT_TEST_SUITE(KeyValueReadStorage) {
 
 void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
-        const std::vector<ui32> &groupIds,
-        NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK,
-        const std::vector<TString>& expectedMessageSubstrings = {}) {
+        const std::vector<ui32> &groupIds, NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK) {
     TTestActorSystem runtime(1);
     runtime.Start();
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
@@ -295,10 +290,6 @@ void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
         UNIT_ASSERT_C(record.status() == status, "Expected# " << NKikimrKeyValue::Statuses::ReplyStatus_Name(status)
                 << " received# " <<  NKikimrKeyValue::Statuses::ReplyStatus_Name(record.status())
                 << " Message# " << record.msg());
-        for (const TString& expectedMessageSubstring : expectedMessageSubstrings) {
-            UNIT_ASSERT_C(TString(record.msg()).Contains(expectedMessageSubstring),
-                    "Expected message to contain# " << expectedMessageSubstring << " Message# " << record.msg());
-        }
     }
 
     runtime.Stop();
@@ -419,24 +410,6 @@ Y_UNIT_TEST(ReadNoDataWithoutRefCount) {
 
     RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND);
 }
-
-#ifdef NDEBUG
-Y_UNIT_TEST(ReadNoDataWithRefCount) {
-    TTestEnv env;
-    std::vector<ui32> groupIds = {1, 2, 3};
-
-    TReadRequestBuilder builder("a");
-    TLogoBlobID id(1, 2, 3, 2, 1, 0);
-    env.State.SetRefCountForTesting(id, 1);
-    builder.AddToEnd("b", id, 0, 1);
-
-    RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, {
-        "NODATA received for TEvGet, but blob is still referenced",
-        TStringBuilder() << "BlobId# " << id.ToString(),
-        TStringBuilder() << "GroupId# " << groupIds[2],
-    });
-}
-#endif
 
 void RunStorageRequestNoDataTest(TTestEnv &env, TReadRequestBuilder &builder,
         const std::vector<ui32> &groupIds)

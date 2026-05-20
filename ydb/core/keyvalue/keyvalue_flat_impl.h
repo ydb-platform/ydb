@@ -26,7 +26,6 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/util/stlog.h>
 #include <util/string/escape.h>
-#include <memory>
 
 // Uncomment the following macro to enable consistency check before every transactions in TTxRequest
 //#define KIKIMR_KEYVALUE_CONSISTENCY_CHECKS
@@ -324,7 +323,7 @@ protected:
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << ' ' << TDerived::Name << " Execute");
             TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
-            ((Self->State).*ExecuteMethod)(db, ctx);
+            (Self->State.*ExecuteMethod)(db, ctx);
             return true;
         }
 
@@ -332,7 +331,7 @@ protected:
             ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
                     << ' ' << TDerived::Name << " Complete");
             Self->State.PushTrashBeingCommitted(TrashBeingCommitted, ctx);
-            ((Self->State).*CompleteMethod)(ctx, Self->Info());
+            (Self->State.*CompleteMethod)(ctx, Self->Info());
         }
     };
 

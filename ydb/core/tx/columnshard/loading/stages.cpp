@@ -151,6 +151,9 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
             if (backupTx.ParseFromString(serializedBackupTx)) {
                 Self->LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
                 Self->LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
+            } else {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_last_completed_backup_transaction")(
+                    "scheme_shard_local_path_id", schemeShardLocalPathId)("serialized_size", serializedBackupTx.size());
             }
         }
         if (!rowset.Next()) {

@@ -14,6 +14,9 @@ NKikimr::TConclusionStatus TImportTask::DoDeserializeFromProto(const NKikimrColu
     } else {
         SchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(identifier.GetPathId());
     }
+    if (!SchemeShardLocalPathId) {
+        return TConclusionStatus::Fail("incorrect schemeShardLocalPathId (cannot be zero)");
+    }
     if (!proto.HasTxId()) {
         return TConclusionStatus::Fail("Can't find tx id");
     }

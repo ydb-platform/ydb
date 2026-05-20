@@ -222,28 +222,32 @@ Y_UNIT_TEST_SUITE(Backup) {
         ui64 writeId = 1;
         TActorId sender = runtime.AllocateEdgeActor();
 
+        TPlanStep table1PlanStep;
+        ui64 table1TxId = 0;
         // Write data to first table
         {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId1, MakeTestBlob({ 0, 100 }, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
+            table1PlanStep = planStep;
+            table1TxId = txId;
         }
 
+        TPlanStep table2PlanStep;
+        ui64 table2TxId = 0;
         // Copy table to create second table (read-only copy)
         {
-            const auto copyPlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(tableId1, tableId2, 1), ++txId);
-            PlanSchemaTx(runtime, sender, NOlap::TSnapshot(copyPlanStep, txId));
+            const ui64 copyTxId = ++txId;
+            const auto copyPlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(tableId1, tableId2, 1), copyTxId);
+            PlanSchemaTx(runtime, sender, NOlap::TSnapshot(copyPlanStep, copyTxId));
+            table2PlanStep = copyPlanStep;
+            table2TxId = copyTxId;
         }
-
-        // Wait for compaction
-        TestWaitCondition(runtime, "insert compacted", [&]() {
-            return true;
-        }, TDuration::Seconds(1000));
 
         // Create backup tasks for both tables
         NKikimrTxColumnShard::TBackupTxBody txBody1;
-        NOlap::TSnapshot backupSnapshot1(planStep.Val(), txId);
+        const NOlap::TSnapshot backupSnapshot1(table1PlanStep.Val(), table1TxId);
         auto& backupTask1 = *txBody1.MutableBackupTask();
         backupTask1.SetTableName("table1");
         backupTask1.SetTableId(tableId1);
@@ -272,7 +276,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         table1.MutableSelf();
 
         NKikimrTxColumnShard::TBackupTxBody txBody2;
-        NOlap::TSnapshot backupSnapshot2(planStep.Val(), txId);
+        const NOlap::TSnapshot backupSnapshot2(table2PlanStep.Val(), table2TxId);
         auto& backupTask2 = *txBody2.MutableBackupTask();
         backupTask2.SetTableName("table2");
         backupTask2.SetTableId(tableId2);

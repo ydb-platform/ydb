@@ -40,6 +40,7 @@ NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFro
 
 NKikimrColumnShardExportProto::TIdentifier TIdentifier::SerializeToProto() const {
     NKikimrColumnShardExportProto::TIdentifier result;
+    result.SetPathId(SchemeShardLocalPathId.GetRawValue());
     result.SetSchemeShardLocalPathId(SchemeShardLocalPathId.GetRawValue());
     return result;
 }

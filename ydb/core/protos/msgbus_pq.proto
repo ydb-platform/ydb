@@ -83,6 +83,19 @@ message TPersQueuePartitionRequest {
         optional string ClientId = 1; // mandatory
     }
 
+    message TBatchMessagePartitionKey {
+        optional string Key = 1;
+        optional int64 Size = 2;
+    }
+
+    message TBatchInfo {
+    	optional int64 BatchSize = 1;
+    	optional int64 MinSeqNo = 2;
+     	optional int64 MaxSeqNo = 3;
+    	optional int64 MinCreateTimeMS = 4;
+        repeated TBatchMessagePartitionKey PartitionKeys = 5;
+    }
+
     message TCmdWrite {
         optional bytes SourceId = 1; //mandatory
         optional int64 SeqNo = 2; //mandatory
@@ -112,6 +125,8 @@ message TPersQueuePartitionRequest {
 
         optional bytes ChoosePartitionKey = 20; // Bytes that are used to choose partition for the message
         optional string MessageDeduplicationId = 21; // Deduplication id for the message
+
+        optional TBatchInfo BatchInfo = 22; // Batch information (if the message contains several messages)
     }
 
     message TCmdUpdateWriteTimestamp {

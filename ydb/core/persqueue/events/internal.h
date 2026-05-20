@@ -274,6 +274,14 @@ struct TEvPQ {
             std::optional<TPartitonAndOffset> OriginalPartitionAndOffset;
         };
 
+        struct TBatchInfo {
+            ui64 BatchSize = 0;
+            ui64 MinSeqNo;
+            ui64 MaxSeqNo;
+            ui64 MinCreateTimestamp;
+            TVector<std::pair<TString, ui64>> PartitionKeys;
+        };
+
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
@@ -300,6 +308,7 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
+            std::optional<TBatchInfo> BatchInfo;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)

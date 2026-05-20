@@ -148,6 +148,9 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         const NKikimrClient::TPersQueuePartitionRequest::TCmdDeregisterMessageGroup& cmd,
         NPersQueue::NErrorCode::EErrorCode& code, TString& error) const;
 
+    std::optional<TEvPQ::TEvWrite::TBatchInfo> MakeBatchInfo(
+        const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd) const;
+
     void TrySendUpdateConfigResponses(const TActorContext& ctx);
     static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                      NPersQueue::TConverterFactoryPtr& converterFactory,

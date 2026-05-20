@@ -1186,7 +1186,13 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
+    if (p.Msg.BatchInfo) {
+        for (const auto& [partitionKey, size] : p.Msg.BatchInfo->PartitionKeys) {
+            AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
+        }
+    } else {
+        AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
+    }
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written

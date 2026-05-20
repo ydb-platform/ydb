@@ -19,13 +19,13 @@ using namespace NTxUT;
 
 Y_UNIT_TEST_SUITE(Backup) {
     void SendProposeTx(
-        TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
+        TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
     }
 
     [[nodiscard]] TPlanStep WaitProposeTxResult(
-        TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const ui64 txId) {
+        TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const ui64 txId) {
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(Backup) {
     }
 
     [[nodiscard]] THashMap<ui64, TPlanStep> WaitProposeTxResults(
-        TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, std::vector<ui64> txIds) {
+        TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, std::vector<ui64> txIds) {
         THashMap<ui64, TPlanStep> result;
         const ui32 expectedResultsCount = txIds.size();
         for (ui32 i = 0; i < expectedResultsCount; ++i) {
@@ -60,17 +60,17 @@ Y_UNIT_TEST_SUITE(Backup) {
     }
 
     [[nodiscard]] TPlanStep ProposeTx(
-        TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
+        TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
         SendProposeTx(runtime, sender, txKind, txBody, txId);
         return WaitProposeTxResult(runtime, sender, txKind, txId);
     }
 
-    void SubscribeTxCompletion(TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId) {
+    void SubscribeTxCompletion(TTestBasicRuntime & runtime, TActorId & sender, const ui64 txId) {
         auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
     }
 
-    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap) {
+    void PlanTx(TTestBasicRuntime & runtime, TActorId & sender, NOlap::TSnapshot snap) {
         auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
         auto tx = plan->Record.AddTransactions();
         tx->SetTxId(snap.GetTxId());
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
     }
 
-    void PlanTxs(TTestBasicRuntime& runtime, TActorId& sender, std::vector<NOlap::TSnapshot> snaps) {
+    void PlanTxs(TTestBasicRuntime & runtime, TActorId & sender, std::vector<NOlap::TSnapshot> snaps) {
         std::sort(snaps.begin(), snaps.end());
         for (auto it = snaps.begin(); it != snaps.end();) {
             const ui64 planStep = it->GetPlanStep();
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         }
     }
 
-    void WaitNotifyTxCompletions(TTestBasicRuntime& runtime, TActorId& sender, std::vector<ui64> txIds) {
+    void WaitNotifyTxCompletions(TTestBasicRuntime & runtime, TActorId & sender, std::vector<ui64> txIds) {
         const ui32 expectedResultsCount = txIds.size();
         for (ui32 i = 0; i < expectedResultsCount; ++i) {
             auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);

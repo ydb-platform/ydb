@@ -239,7 +239,8 @@ struct Schema: NIceDb::Schema {
         struct LastCompletedBackupTransaction: Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId, SchemeShardLocalPathId>;
-        using TColumns = TableColumns<PathId, SchemeShardLocalPathId, DropStep, DropTxId, CopyStep, CopyTxId, IsReadOnly, LastCompletedBackupTransaction>;
+        using TColumns =
+            TableColumns<PathId, SchemeShardLocalPathId, DropStep, DropTxId, CopyStep, CopyTxId, IsReadOnly, LastCompletedBackupTransaction>;
     };
 
     struct TableVersionInfo: Table<(ui32)ECommonTables::TableVersionInfo> {

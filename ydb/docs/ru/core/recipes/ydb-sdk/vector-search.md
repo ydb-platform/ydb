@@ -1124,8 +1124,6 @@
 
           print(f"Table index {index_name} created.")
       ```
-    
-{% endlist %}
 
 - C#
 

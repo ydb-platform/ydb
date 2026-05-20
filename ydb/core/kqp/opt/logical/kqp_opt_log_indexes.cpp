@@ -1993,7 +1993,21 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         return node;
     }
 
-    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx);
+    THashSet<TString> jsonIndexedColumns;
+    for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson) {
+            continue;
+        }
+
+        if (indexInfo.State != TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        YQL_ENSURE(indexInfo.KeyColumns.size() == 1, "Expected single key column in JSON index");
+        jsonIndexedColumns.insert(indexInfo.KeyColumns.at(0));
+    }
+
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
     if (!expectedSettings.has_value()) {
         return node;
     }
@@ -2062,7 +2076,15 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         return {};
     }
 
-    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx);
+    if (indexDesc->State != TIndexDescription::EIndexState::Ready) {
+        return {};
+    }
+
+    THashSet<TString> jsonIndexedColumns;
+    YQL_ENSURE(indexDesc->KeyColumns.size() == 1, "Expected single key column in JSON index");
+    jsonIndexedColumns.insert(indexDesc->KeyColumns.at(0));
+
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
     if (!expectedSettings.has_value()) {
         ctx.AddError(std::move(expectedSettings.error()));
         return {};

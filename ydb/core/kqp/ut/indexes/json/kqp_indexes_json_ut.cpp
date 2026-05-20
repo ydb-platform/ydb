@@ -2373,8 +2373,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1') IN ("a"u, "b"u))", kErr);
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1.k2') == "v"u)", kErr);
             ValidateError(db, R"(JSON_VALUE(Text, '$.k1.type()') == "v"u)", kErr);
-            ValidateError(db, R"(JSON_VALUE(Text, '$.k1') == JSON_VALUE(Text, '$.k2' RETURNING Utf8))", kErr);
-            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == JSON_VALUE(Text, '$.k2'))", kErr);
+
+            // One JSON_VALUE is indexable
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1') == JSON_VALUE(Text, '$.k2' RETURNING Utf8))", {"\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == JSON_VALUE(Text, '$.k2'))", {"\3k1"}, "and");
 
             // With RETURNING
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "v"u)", {"\3k1" + strSuffix("v")});
@@ -4573,6 +4575,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
                     Key Uint64,
                     Text JsonDocument,
                     Text2 JsonDocument,
+                    Text3 JsonDocument,
                     Data Utf8,
                     PRIMARY KEY (Key)
                 );
@@ -4589,37 +4592,52 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        // AND/OR of indexable predicates on different JSON columns - rejected.
-        ValidateError(db,
-            R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text2, '$.k2'))",
-            "Cross-column predicates are not supported");
-        ValidateError(db,
-            R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text2, '$.k2'))",
-            "Cross-column predicates are not supported");
-        ValidateError(db,
-            R"(JSON_EXISTS(Text2, '$.k1') AND JSON_EXISTS(Text, '$.k2'))",
-            "Cross-column predicates are not supported");
-        ValidateError(db,
+        {
+            const auto query = R"(
+                ALTER TABLE TestTable ADD INDEX json_idx2 GLOBAL USING json ON (Text2)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // AND/OR of indexable predicates on different JSON columns
+        ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text2, '$.k2'))", {"\3k1"}, "and");
+        ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text2, '$.k2'))");
+        ValidateTokens(db, R"(JSON_EXISTS(Text2, '$.k1') AND JSON_EXISTS(Text, '$.k2'))", {"\3k2"}, "and");
+        ValidateError(db, R"(JSON_EXISTS(Text2, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
+
+        ValidateTokens(db,
             R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "a" AND JSON_VALUE(Text2, '$.k2' RETURNING Utf8) == "b")",
-            "Cross-column predicates are not supported");
-        ValidateError(db,
-            R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "a" OR JSON_VALUE(Text2, '$.k2' RETURNING Utf8) == "b")",
-            "Cross-column predicates are not supported");
-        ValidateError(db,
-            R"(JSON_EXISTS(Text, '$.k1') AND JSON_VALUE(Text2, '$.k2' RETURNING Utf8) == "b")",
-            "Cross-column predicates are not supported");
+            {"\3k1" + strSuffix("a")}, "and");
+        ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "a" OR JSON_VALUE(Text2, '$.k2' RETURNING Utf8) == "b")");
+        ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_VALUE(Text2, '$.k2' RETURNING Utf8) == "b")", {"\3k1"}, "and");
+        ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_VALUE(Text2, '$.k2' RETURNING Utf8) == "b")");
 
         // Same predicate on different columns combined with non-indexable
-        ValidateError(db,
+        ValidateTokens(db,
             R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text2, '$.k2') AND Data = "x"u)",
-            "Cross-column predicates are not supported");
+            {"\3k1"}, "and");
+
         // Cross-column comparison directly between JSON columns
-        ValidateError(db,
-            R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == JSON_VALUE(Text2, '$.k2' RETURNING Utf8))",
-            "Cross-column predicates are not supported");
-        ValidateError(db,
-            R"(JSON_VALUE(Text2, '$.k1' RETURNING Utf8) == JSON_VALUE(Text, '$.k2' RETURNING Utf8))",
-            "Cross-column predicates are not supported");
+        ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == JSON_VALUE(Text2, '$.k2' RETURNING Utf8))",
+            {"\3k1"}, "and");
+        ValidateTokens(db, R"(JSON_VALUE(Text2, '$.k1' RETURNING Utf8) == JSON_VALUE(Text, '$.k2' RETURNING Utf8))",
+            {"\3k2"}, "and");
+
+        // One of predicates is not indexable
+        ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text3, '$.k2'))", {"\3k1"}, "and");
+        ValidateTokens(db, R"(JSON_EXISTS(Text3, '$.k2') AND JSON_EXISTS(Text, '$.k1'))", {"\3k1"}, "and");
+
+        ValidateError(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text2, '$.k2'))");
+        ValidateError(db, R"(JSON_EXISTS(Text3, '$.k2') OR JSON_EXISTS(Text, '$.k1'))");
+
+        ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "a" AND JSON_VALUE(Text3, '$.k2' RETURNING Utf8) == "b")",
+            {"\3k1" + strSuffix("a")}, "and");
+        ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "a" OR JSON_VALUE(Text2, '$.k2' RETURNING Utf8) == "b")");
+
+        ValidateTokens(db, R"(JSON_VALUE(Text3, '$.k2' RETURNING Utf8) == "b" AND JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "a")",
+            {"\3k1" + strSuffix("a")}, "and");
+        ValidateError(db, R"(JSON_VALUE(Text3, '$.k2' RETURNING Utf8) == "b" OR JSON_VALUE(Text, '$.k1' RETURNING Utf8) == "a")");
     }
 
     // JSON_VALUE IN $param
@@ -4897,6 +4915,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }
 
         ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1')");
+
+        ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Data, '$.k1')");
+        ValidateAutoSelect(db, "JSON_EXISTS(Data, '$.k1') AND JSON_EXISTS(Text, '$.k1')");
+
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Data, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Data, '$.k1') OR JSON_EXISTS(Text, '$.k1')");
+
         ValidateNoAutoSelect(db, "JSON_EXISTS(Data, '$.k1')");
     }
 

@@ -4,6 +4,8 @@ items:
   include:
     mode: link
     path: initial-deployment/toc_p.yaml
+- name: Замена диска
+  href: disk-replacement.md
 - name: Подготовка виртуальных машин с Terraform
   href: preparing-vms-with-terraform.md
 - name: Перезапуск

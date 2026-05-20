@@ -1,16 +1,16 @@
-/* Copyright (c) 2023, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2023 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_ASM_BASE_H
 #define OPENSSL_HEADER_ASM_BASE_H
@@ -40,14 +40,16 @@
 #if defined(__ASSEMBLER__)
 
 #if defined(BORINGSSL_PREFIX)
-#include <contrib/restricted/google/boringssl/include/boringssl_prefix_symbols_asm.h>
-#endif
+#include <contrib/restricted/google/boringssl/include/openssl/prefix_symbols_internal_S.h>
+#endif  // BORINGSSL_PREFIX
 
 #if defined(__ELF__)
 // Every ELF object file, even empty ones, should disable executable stacks. See
 // https://www.airs.com/blog/archives/518.
+// clang-format off
 .pushsection .note.GNU-stack, "", %progbits
 .popsection
+// clang-format on
 #endif
 
 #if defined(__CET__) && defined(OPENSSL_X86_64)
@@ -56,7 +58,7 @@
 // https://lpc.events/event/7/contributions/729/attachments/496/903/CET-LPC-2020.pdf
 //
 // cet.h defines _CET_ENDBR which is used to mark function entry points for IBT.
-// and adds the assembly marker. The value of _CET_ENDBR is made dependant on if
+// and adds the assembly marker. The value of _CET_ENDBR is made dependent on if
 // '-fcf-protection' is passed to the compiler. _CET_ENDBR is only required when
 // the function is the target of an indirect jump, but BoringSSL chooses to mark
 // all assembly entry points because it is easier, and allows BoringSSL's ABI
@@ -152,7 +154,7 @@
 //
 // References:
 // - "ELF for the Arm® 64-bit Architecture"
-//   https://github.com/ARM-software/abi-aa/blob/master/aaelf64/aaelf64.rst
+//   https://github.com/ARM-software/abi-aa/blob/main/aaelf64/aaelf64.rst
 // - "Providing protection for complex software"
 //   https://developer.arm.com/architectures/learn-the-architecture/providing-protection-for-complex-software
 
@@ -186,7 +188,9 @@
 #define AARCH64_VALIDATE_LINK_REGISTER
 #endif
 
-#if GNU_PROPERTY_AARCH64_POINTER_AUTH != 0 || GNU_PROPERTY_AARCH64_BTI != 0
+#if defined(__ELF__) && \
+    (GNU_PROPERTY_AARCH64_POINTER_AUTH != 0 || GNU_PROPERTY_AARCH64_BTI != 0)
+// clang-format off
 .pushsection .note.gnu.property, "a";
 .balign 8;
 .long 4;
@@ -198,6 +202,7 @@
 .long (GNU_PROPERTY_AARCH64_POINTER_AUTH | GNU_PROPERTY_AARCH64_BTI);
 .long 0;
 .popsection;
+// clang-format on
 #endif
 #endif  // ARM || AARCH64
 

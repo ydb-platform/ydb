@@ -1174,15 +1174,14 @@ void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
 }
 
 void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
-    if (p.Msg.BatchInfo && p.Msg.PartNo == 0) {
-        for (const auto& [partitionKey, size] : p.Msg.BatchInfo->PartitionKeys) {
+    if (p.Msg.MessagesInBatch > 0) {
+        for (const auto& [partitionKey, size] : p.Msg.PartitionKeys) {
             AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
         }
+        return;
     }
-    
-    if (!p.Msg.BatchInfo) {
-        AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
-    }
+
+    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
 }
 
 bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request) {

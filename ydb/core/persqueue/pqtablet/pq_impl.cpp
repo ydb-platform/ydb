@@ -1867,31 +1867,27 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NW
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
-std::optional<TEvPQ::TEvWrite::TBatchInfo> TPersQueue::MakeBatchInfo(
-    const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd) const
+void TPersQueue::FillBatchInfo(
+    const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+    TEvPQ::TEvWrite::TMsg& msg) const
 {
-    if (!cmd.HasBatchInfo()) {
-        return std::nullopt;
+    if (cmd.HasMaxSeqNo()) {
+        msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
     }
-    const auto& batchInfo = cmd.GetBatchInfo();
-    TEvPQ::TEvWrite::TBatchInfo result;
-    if (batchInfo.HasSize()) {
-        result.Size = static_cast<ui64>(batchInfo.GetSize());
+    if (cmd.HasTotalBatchMessages()) {
+        msg.MessagesInBatch = static_cast<ui64>(cmd.GetTotalBatchMessages());
     }
-    if (batchInfo.HasMinSeqNo()) {
-        result.MinSeqNo = static_cast<ui64>(batchInfo.GetMinSeqNo());
+    if (cmd.GetPartNo() == 0) {
+        return;
     }
-    if (batchInfo.HasMaxSeqNo()) {
-        result.MaxSeqNo = static_cast<ui64>(batchInfo.GetMaxSeqNo());
-    }
-    result.PartitionKeys.reserve(batchInfo.PartitionKeysSize());
-    for (ui32 i = 0; i < batchInfo.PartitionKeysSize(); ++i) {
-        const auto& partitionKey = batchInfo.GetPartitionKeys(i);
-        result.PartitionKeys.emplace_back(
+
+    msg.PartitionKeys.reserve(cmd.PartitionKeysSize());
+    for (ui32 i = 0; i < cmd.PartitionKeysSize(); ++i) {
+        const auto& partitionKey = cmd.GetPartitionKeys(i);
+        msg.PartitionKeys.emplace_back(
             partitionKey.GetKey(),
             partitionKey.HasSize() ? static_cast<ui64>(partitionKey.GetSize()) : 0);
     }
-    return result;
 }
 
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
@@ -2085,8 +2081,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                     .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
                     .MessageDeduplicationId = deduplicationId,
-                    .BatchInfo = MakeBatchInfo(cmd)
                 });
+                FillBatchInfo(cmd, msgs.back());
 
                 partNo++;
                 uncompressedSize = 0;
@@ -2136,8 +2132,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                 .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
                 .MessageDeduplicationId = std::move(deduplicationId),
-                .BatchInfo = MakeBatchInfo(cmd)
             });
+            FillBatchInfo(cmd, msgs.back());
         }
         PQ_LOG_D("got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
                  " partition: " << req.GetPartition() <<

@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
         };
 
         // Verify the full sorted output in one assertion:
-        // known fields ordered by priority (1..13), then unknown fields alphabetically (paths < tx_id)
+        // known fields ordered by priority (0..12), then unknown fields lexicographically (paths < tx_id)
         UNIT_ASSERT_STRING_CONTAINS(
             test.SendAuditLog(std::move(parts)),
             "component=schemeshard, subject=user@domain, remote_address=192.168.1.1, "

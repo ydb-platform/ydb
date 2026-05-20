@@ -150,26 +150,26 @@ private:
     static inline const std::unordered_map<TString, ui32> FieldsOrder =
     {
         // operation's kind
-        {"component", 1},
+        {"component", 0},
 
         // subject
-        {"subject", 2},
-        {"remote_address", 3},
-        {"sanitized_token", 4},
-        {"masked_token", 5},
+        {"subject", 1},
+        {"remote_address", 2},
+        {"sanitized_token", 3},
+        {"masked_token", 4},
 
         // verb
-        {"operation", 6},
-        {"status", 7},
-        {"detailed_status", 8},
-        {"reason", 9},
+        {"operation", 5},
+        {"status", 6},
+        {"detailed_status", 7},
+        {"reason", 8},
 
         // object
         // (these fields are not required for all audit logs)
-        {"cloud_id", 10},
-        {"folder_id", 11},
-        {"resource_id", 12},
-        {"database", 13}
+        {"cloud_id", 9},
+        {"folder_id", 10},
+        {"resource_id", 11},
+        {"database", 12}
 
         // specific fields
         // ...

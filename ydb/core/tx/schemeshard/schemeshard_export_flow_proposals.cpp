@@ -322,9 +322,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetSecretKey(exportSettings.secret_key());
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
-            backupSettings.MutableLimits()->SetRowGroupSize(exportSettings.row_group_size());
-            
-
+            if (const auto rowGroupSize = exportSettings.row_group_size()) {
+                backupSettings.MutableLimits()->SetRowGroupSize(rowGroupSize);
+            }
 
             backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
 

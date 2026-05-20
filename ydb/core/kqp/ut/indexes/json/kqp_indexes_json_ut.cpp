@@ -4745,7 +4745,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
 }
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
-    Y_UNIT_TEST(BasicTokens) {
+    Y_UNIT_TEST(Basic) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.key'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
@@ -4764,7 +4764,61 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         });
     }
 
-    Y_UNIT_TEST(NonJsonPredicate) {
+    Y_UNIT_TEST(PrimaryColumnPredicate) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, "JsonDocument", /* withIndex */ true);
+
+        // JI predicate
+        ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1')");
+
+        // JI predicate with primary -> primary wins
+        ValidateNoAutoSelect(db, "Key > 5 AND JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Key > 5");
+        ValidateNoAutoSelect(db, "Key = 1 AND JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Key = 1");
+
+        // Without JI predicate
+        ValidateNoAutoSelect(db, "Key > 5");
+        ValidateNoAutoSelect(db, "Key = 1");
+    }
+
+    Y_UNIT_TEST(SecondaryColumnPredicate) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE TestTable (
+                    Key Uint64,
+                    Text JsonDocument,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (Text),
+                    INDEX data_idx GLOBAL ON (Data)
+                );
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // JI predicate
+        ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1')");
+
+        // JI predicate with secondary -> secondary wins
+        ValidateNoAutoSelect(db, "Data = 'b' AND JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Data = 'b'");
+        ValidateNoAutoSelect(db, "Data >= 'a' AND JSON_EXISTS(Text, '$.k1')");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Data >= 'a'");
+
+        // Without JI predicate
+        ValidateNoAutoSelect(db, "Data = 'b'");
+        ValidateNoAutoSelect(db, "Data >= 'a'");
+    }
+
+    Y_UNIT_TEST(DataColumnPredicate) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Data = 'd1'");
             ValidateAutoSelect(db, "Data = 'd1' AND JSON_EXISTS(Text, '$.k1')");
@@ -4791,25 +4845,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         });
     }
 
-    Y_UNIT_TEST(KeyPredicate) {
-        auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        CreateTestTable(db, "JsonDocument", /* withIndex */ true);
-
-        ValidateNoAutoSelect(db, "Key > 5 AND JSON_EXISTS(Text, '$.k1')");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Key > 5");
-
-        ValidateNoAutoSelect(db, "Key > 5 OR JSON_EXISTS(Text, '$.k1')");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Key > 5");
-
-        ValidateNoAutoSelect(db, "Key = 1 AND JSON_EXISTS(Text, '$.k1')");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND Key = 1");
-
-        ValidateNoAutoSelect(db, "Key = 1 OR JSON_EXISTS(Text, '$.k1')");
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR Key = 1");
-    }
-
     Y_UNIT_TEST(TwoJsonIndexes) {
         auto kikimr = Kikimr();
         auto db = kikimr.GetQueryClient();
@@ -4832,37 +4867,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }
 
         ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1')", "json_idx_text");
+        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1')", "json_idx_extra");
+
+        ValidateAutoSelect(db, "JSON_EXISTS(Extra, '$.k1')", "json_idx_extra");
         ValidateNoAutoSelect(db, "JSON_EXISTS(Extra, '$.k1')", "json_idx_text");
 
-        ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1')", "json_idx_extra");
-        ValidateAutoSelect(db, "JSON_EXISTS(Extra, '$.k1')", "json_idx_extra");
-
+        // Cross-column predicates are not supported
         ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Extra, '$.k1')");
         ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Extra, '$.k1')");
-    }
-
-    Y_UNIT_TEST(MixedIndexes) {
-        auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        {
-            const std::string query = R"(
-                CREATE TABLE TestTable (
-                    Key Uint64,
-                    Text JsonDocument,
-                    Data Utf8,
-                    PRIMARY KEY (Key),
-                    INDEX json_idx GLOBAL USING json ON (Text),
-                    INDEX data_idx GLOBAL ON (Data)
-                );
-            )";
-
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1')");
-        ValidateNoAutoSelect(db, "Data = 'd1'");
     }
 
     Y_UNIT_TEST(WrongColumn) {

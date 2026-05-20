@@ -162,8 +162,8 @@ namespace {
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
             },
             .PersistentBuffer {
-                COUNTER(PersistentBuffer, AllocatedChunks, true)
-                COUNTER(PersistentBuffer, TotalBytes, true)
+                COUNTER(PersistentBuffer, AllocatedChunks, false)
+                COUNTER(PersistentBuffer, TotalBytes, false)
             },
         };
 

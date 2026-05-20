@@ -99,6 +99,7 @@ class TTableInfo {
     struct TPathInfo {
         std::optional<NOlap::TSnapshot> DropVersion;
         std::optional<NOlap::TSnapshot> CopyVersion;
+        std::optional<TString> LastCompletedBackupTransaction;
         bool IsReadOnly = false;
     };
 
@@ -216,9 +217,12 @@ public:
         if (!pathInfo.IsReadOnly) {   // v0 can't be read-only. backward compatibility
             Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
         }
-        Schema::RenameTableSchemeShardLocalPathIdV1(
-            db, InternalPathId, oldPathId, newPathId, pathInfo.DropVersion, pathInfo.CopyVersion, pathInfo.IsReadOnly);
-        AFL_VERIFY(SchemeShardLocalPathIds.insert({newPathId, TPathInfo{pathInfo.DropVersion, pathInfo.CopyVersion, pathInfo.IsReadOnly}}).second);
+        Schema::RenameTableSchemeShardLocalPathIdV1(db, InternalPathId, oldPathId, newPathId, pathInfo.DropVersion, pathInfo.CopyVersion,
+            pathInfo.LastCompletedBackupTransaction, pathInfo.IsReadOnly);
+        AFL_VERIFY(SchemeShardLocalPathIds
+                       .insert({newPathId, TPathInfo{pathInfo.DropVersion, pathInfo.CopyVersion,
+                                              pathInfo.LastCompletedBackupTransaction, pathInfo.IsReadOnly}})
+                       .second);
         SchemeShardLocalPathIds.erase(oldPathId);
     }
 
@@ -226,8 +230,9 @@ public:
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId, const NOlap::TSnapshot& copyVersion) {
         auto it = SchemeShardLocalPathIds.find(srcSchemeShardLocalPathId);
         AFL_VERIFY(it != SchemeShardLocalPathIds.end());
-        Schema::CopySchemeShardLocalPathIdV1(db, InternalPathId, dstSchemeShardLocalPathId, it->second.DropVersion, copyVersion, true);
-        AFL_VERIFY(SchemeShardLocalPathIds.insert({dstSchemeShardLocalPathId, TPathInfo{it->second.DropVersion, copyVersion, true}}).second);
+        Schema::CopySchemeShardLocalPathIdV1(
+            db, InternalPathId, dstSchemeShardLocalPathId, it->second.DropVersion, copyVersion, std::nullopt, true);
+        AFL_VERIFY(SchemeShardLocalPathIds.insert({dstSchemeShardLocalPathId, TPathInfo{it->second.DropVersion, copyVersion, std::nullopt, true}}).second);
     }
 
     bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
@@ -283,6 +288,10 @@ public:
         if (rowset.template HaveValue<Schema::TableInfoV1::CopyStep>() && rowset.template HaveValue<Schema::TableInfoV1::CopyTxId>()) {
             result.SetCopyVersion(schemeShardLocalPathId, NOlap::TSnapshot(rowset.template GetValue<Schema::TableInfoV1::CopyStep>(),
                                                               rowset.template GetValue<Schema::TableInfoV1::CopyTxId>()));
+        }
+        if (rowset.template HaveValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()) {
+            result.SchemeShardLocalPathIds[schemeShardLocalPathId].LastCompletedBackupTransaction =
+                rowset.template GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>();
         }
         if (rowset.template HaveValue<Schema::TableInfoV1::IsReadOnly>()) {
             result.SetReadOnly(schemeShardLocalPathId, rowset.template GetValue<Schema::TableInfoV1::IsReadOnly>());

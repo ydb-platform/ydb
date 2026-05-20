@@ -78,7 +78,7 @@ To enable mandatory database node authorization, the following configuration blo
 
     For more information on configuring cluster authentication parameters, see [{#T}](../../../reference/configuration/security_config.md#security-access-levels).
 
-3. In the `auth_config` section of the cluster configuration, add the `node_registration_token` as empty string. Example:
+3. In the `auth_config` section of the cluster configuration, add the `node_registration_token` as an empty string. Example:
 
     ```yaml
     auth_config:

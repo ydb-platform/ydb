@@ -3240,5 +3240,196 @@ TMaybeNode<TExprBase> DqUnorderedOverStageInput(TExprBase node, TExprContext& ct
     return TExprBase(res);
 }
 
+<<<<<<< HEAD
+=======
+namespace {
+
+bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx, bool& rightAny) {
+    bool leftAny = false;
+    rightAny = false;
+    if (const auto maybeFlags = join.Flags()) {
+        for (auto&& flag: maybeFlags.Cast()) {
+            auto&& name = flag.StringValue();
+            if (name == "LeftAny"sv) {
+                leftAny = true;
+                continue;
+            } else if (name == "RightAny"sv) {
+                rightAny = true;
+                continue;
+            }
+        }
+        if (leftAny) {
+            ctx.AddError(TIssue(ctx.GetPosition(maybeFlags.Cast().Pos()), "Streamlookup ANY LEFT join is not implemented"));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+} // anonymous namespace
+
+TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ctx) {
+    const auto join = node.Cast<TDqJoin>();
+    if (join.JoinAlgo().StringValue() != "StreamLookupJoin") {
+        return node;
+    }
+
+    const auto left = join.LeftInput().Maybe<TDqConnection>();
+    if (!left) {
+        return node;
+    }
+
+    bool rightAny = false;
+    if (!ValidateStreamLookupJoinFlags(join, ctx, rightAny)) {
+        return {};
+    }
+
+    TExprNode::TPtr ttl;
+    TExprNode::TPtr maxCachedRows;
+    TExprNode::TPtr maxDelayedRows;
+    TExprNode::TPtr isMultiget;
+    TExprNode::TPtr isMultiMatches;
+    TExprNode::TPtr fullscanLimit;
+    if (const auto maybeOptions = join.JoinAlgoOptions()) {
+        for (auto&& option: maybeOptions.Cast()) {
+            auto&& name = option.Name().Value();
+            if (name == "TTL"sv) {
+                ttl = option.Value().Cast().Ptr();
+            } else if (name == "MaxCachedRows"sv) {
+                maxCachedRows = option.Value().Cast().Ptr();
+            } else if (name == "MaxDelayedRows"sv) {
+                maxDelayedRows = option.Value().Cast().Ptr();
+            } else if (name == "MultiGet"sv) {
+                isMultiget = option.Value().Cast().Ptr();
+            } else if (name == "FullscanLimit"sv) {
+                fullscanLimit = option.Value().Cast().Ptr();
+            }
+        }
+    }
+
+    const auto pos = node.Pos();
+
+    if (!ttl) {
+        ttl = ctx.NewAtom(pos, 300);
+    }
+
+    if (!maxCachedRows) {
+        maxCachedRows = ctx.NewAtom(pos, 1'000'000);
+    }
+
+    if (!maxDelayedRows) {
+        maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
+    }
+
+    if (!rightAny) {
+        if (isMultiget && isMultiget->IsAtom() && FromString<bool>(isMultiget->Content())) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: Multiget supports only LEFT JOIN /*+streamlookup(Multiget=true...)*/ ANY, other kinds of join are unimplemented"));
+            return {};
+        }
+        isMultiMatches = ctx.NewAtom(pos, true);
+    }
+
+    auto rightInput = join.RightInput().Ptr();
+    if (auto maybe = TExprBase(rightInput).Maybe<TCoExtractMembers>()) {
+        rightInput = maybe.Cast().Input().Ptr();
+    }
+
+    auto leftLabel = join.LeftLabel().Maybe<NNodes::TCoAtom>() ? join.LeftLabel().Cast<NNodes::TCoAtom>().Ptr() : ctx.NewAtom(pos, "");
+    Y_ENSURE(join.RightLabel().Maybe<NNodes::TCoAtom>());
+    auto cn = Build<TDqCnStreamLookup>(ctx, pos)
+        .Output(left.Output().Cast())
+        .LeftLabel(leftLabel)
+        .RightInput(rightInput)
+        .RightLabel(join.RightLabel().Cast<NNodes::TCoAtom>())
+        .JoinKeys(join.JoinKeys())
+        .JoinType(join.JoinType())
+        .LeftJoinKeyNames(join.LeftJoinKeyNames())
+        .RightJoinKeyNames(join.RightJoinKeyNames())
+        .TTL(ttl)
+        .MaxCachedRows(maxCachedRows)
+        .MaxDelayedRows(maxDelayedRows);
+
+    if (fullscanLimit && !isMultiMatches) { // gaps are not allowed in optional
+        isMultiMatches = ctx.NewAtom(pos, false);
+    }
+
+    if (isMultiMatches && !isMultiget) { // ditto
+        isMultiget = ctx.NewAtom(pos, false);
+    }
+
+    if (isMultiget) {
+        cn.IsMultiget(isMultiget);
+    }
+
+    if (isMultiMatches) {
+        cn.IsMultiMatches(isMultiMatches);
+    }
+
+    if (fullscanLimit) {
+        cn.FullscanLimit(fullscanLimit);
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, pos)
+        .Args({"stream"})
+        .Body("stream")
+        .Done();
+    const auto stage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(cn.Done())
+            .Build()
+        .Program(lambda)
+        .Settings(TDqStageSettings().BuildNode(ctx, pos))
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(stage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+TExprBase DqPushWatermarkGeneratorToStage(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap
+) {
+    const auto maybeWatermarkGenerator = node.Maybe<TDqPhyWatermarkGenerator>();
+    if (!maybeWatermarkGenerator) {
+        return node;
+    }
+    const auto watermarkGenerator = maybeWatermarkGenerator.Cast();
+
+    const auto maybeConnection = watermarkGenerator.Input().Maybe<TDqCnUnionAll>();
+    if (!maybeConnection) {
+        return node;
+    }
+    const auto connection = maybeConnection.Cast();
+
+    if (!IsSingleConsumerConnection(connection, parentsMap)) {
+        return node;
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, watermarkGenerator.Pos())
+            .Args({"arg"})
+            .Body<TCoToFlow>()
+                .Input<TDqPhyWatermarkGenerator>()
+                    .InitFrom(watermarkGenerator)
+                    .Input<TCoFromFlow>()
+                        .Input("arg")
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(connection, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+    return result.Cast();
+}
+>>>>>>> 09f159dc6ea (dq/streamlookup join/fullscan: tunable limits and feature-flags (#35568))
 
 } // namespace NYql::NDq

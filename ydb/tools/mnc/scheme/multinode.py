@@ -44,6 +44,15 @@ scheme = {
             overridden_configs=c.optional(c.object_with_additional_fields()),
         )),
     )),
+    "nbs": c.optional(c.object_with(
+        enabled=c.with_default(bool, False),
+        database=c.with_default(str, 'NBS'),
+        folder_id=c.with_default(str, 'testFolder'),
+        storage_pool_kind=c.with_default(str, 'ssd'),
+        pipe_client_retry_count=c.with_default(int, 3),
+        pipe_client_min_retry_time=c.with_default(int, 1),
+        pipe_client_max_retry_time=c.with_default(int, 10),
+    )),
     "overridden_configs": c.optional(c.object_with_additional_fields()),
     "build_args": c.with_default(c.list_with(str), ["-r"]),
     "log": c.optional(c.object_with(
@@ -54,7 +63,6 @@ scheme = {
         ))),
     )),
     "use_nw_cache": c.with_default(bool, False),
-    "with_nbs": c.with_default(bool, False),
     "use_home_dir": c.with_default(bool, False),
     "deploy_flags": c.optional(c.list_with(c.deploy_flags)),
     "required_cli_args": c.optional(c.list_with(str)),

@@ -53,6 +53,7 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
     TString ErrorDescription;
 
     TStackVec<TReadItemInfo, 1> ReadItems;
+    const THashMap<TLogoBlobID, ui32> *RefCounts;
 
     NWilson::TSpan Span;
 
@@ -295,10 +296,19 @@ public:
                 IntermediateResult->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), batch.GroupId)] += 1;
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
-                Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
-                    << " TabletId# " << TabletInfo->TabletID
-                    << " Id# " << response.Id
-                    << " Key# " << read.Key);
+                if (response.Status == NKikimrProto::NODATA) {
+                    const auto it = RefCounts->find(readItem.LogoBlobId);
+                    const ui32 refCount = it != RefCounts->end() ? it->second : 0;
+                    if (refCount != 0) {
+                        STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV324,
+                            "NODATA received for TEvGet, but blob is still referenced",
+                            (KeyValue, TabletInfo->TabletID),
+                            (BlobId, readItem.LogoBlobId),
+                            (RefCount, refCount));
+                        ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
+                        return;
+                    }
+                }
                 STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV317,
                         "Unexpected EvGetResult.",
                         (KeyValue, TabletInfo->TabletID),
@@ -520,10 +530,12 @@ public:
    }
 
     TKeyValueStorageReadRequest(THolder<TIntermediate> &&intermediate,
-            const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
+            const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
+            const THashMap<TLogoBlobID, ui32> *refCounts)
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
+        , RefCounts(refCounts)
         , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
     {
         IntermediateResult->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
@@ -532,9 +544,10 @@ public:
 
 
 IActor* CreateKeyValueStorageReadRequest(THolder<TIntermediate>&& intermediate,
-        const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration)
+        const TTabletStorageInfo *tabletInfo, ui32 tabletGeneration,
+        const THashMap<TLogoBlobID, ui32> *refCounts)
 {
-    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo, tabletGeneration);
+    return new TKeyValueStorageReadRequest(std::move(intermediate), tabletInfo, tabletGeneration, refCounts);
 }
 
 } // NKeyValue

@@ -112,6 +112,7 @@ struct TTestEnv {
     TBlobStorageMockState BlobStorageState;
 
     std::unique_ptr<TTabletStorageInfo> TabletInfo;
+    THashMap<TLogoBlobID, ui32> RefCounts;
 
     std::unordered_map<ui64, TActorId> GroupActors; // [groupId, actorId]
 
@@ -271,7 +272,7 @@ void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
     TActorId edgeActor = runtime.AllocateEdgeActor(1);
     auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
 
-    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1), 1);
+    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.RefCounts), 1);
 
     std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
     UNIT_ASSERT_C(ev->Type == static_cast<ui64>(TEvKeyValue::EvReadResponse), "Type# " << ev->GetTypeName());
@@ -408,7 +409,7 @@ void RunTest(TTestEnv &env, TRangeReadRequestBuilder &builder, const std::vector
     TActorId edgeActor = runtime.AllocateEdgeActor(1);
     auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
 
-    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1), 1);
+    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.RefCounts), 1);
 
     std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
     UNIT_ASSERT(ev->Type == TEvKeyValue::EvReadRangeResponse);

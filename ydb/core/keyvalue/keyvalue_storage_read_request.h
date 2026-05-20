@@ -11,7 +11,8 @@ namespace NKeyValue {
 IActor* CreateKeyValueStorageReadRequest(
     THolder<TIntermediate>&& intermediate,
     const TTabletStorageInfo *tabletInfo,
-    ui32 tabletGeneration);
+    ui32 tabletGeneration,
+    const THashMap<TLogoBlobID, ui32> *refCounts);
 
 } // NKeyValue
 } // NKikimr

@@ -529,6 +529,8 @@ public:
         return false;
     }
 
+    void RegisterReadRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
+        const TTabletStorageInfo *info, ui32 tabletGeneration);
     void RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
         const TTabletStorageInfo *info, ui32 tabletGeneration);
 

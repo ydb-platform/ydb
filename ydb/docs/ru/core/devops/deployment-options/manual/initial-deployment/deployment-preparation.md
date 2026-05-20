@@ -96,33 +96,46 @@ ydb hard nofile 10000
 
 ## Установите программное обеспечение {{ ydb-short-name }} на каждом сервере {#install-binaries}
 
-1. Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками:
+### Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками
+
+{% list tabs %}
+
+  - OSS
 
     ```bash
     mkdir ydbd-stable-linux-amd64
     curl -L <binaries_url> | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
     ```
-
-    где `binaries_url` ссылка на архив нужной вам версии со страницы [загрузок](../../../../downloads/index.md)
-
-1. Создайте на сервере директорию:
+  
+  - Enterprise
 
     ```bash
-    sudo mkdir -p  /opt/ydb
+    mkdir ydbd-stable-linux-amd64
+    curl -L <binaries_url> | tar -xJ --strip-component=1 -C ydbd-stable-linux-amd64
     ```
+  
+{% endlist %}
 
-1. Скопируйте исполняемый файл и библиотеки в соответствующие директории:
+  где `binaries_url` — ссылка на архив нужной вам версии со страницы [загрузок](../../../../downloads/index.md).
 
-    ```bash
-    sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
-    sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
-    ```
+### Создайте на сервере директорию
 
-1. Установите владельца файлов и каталогов:
+  ```bash
+  sudo mkdir -p  /opt/ydb
+  ```
 
-    ```bash
-    sudo chown -R root:bin /opt/ydb
-    ```
+### Скопируйте исполняемый файл и библиотеки в соответствующие директории
+
+  ```bash
+  sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
+  sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
+  ```
+
+### Установите владельца файлов и каталогов
+
+  ```bash
+  sudo chown -R root:bin /opt/ydb
+  ```
 
 ## Подготовьте и очистите диски на каждом сервере {#prepare-disks}
 
@@ -143,9 +156,11 @@ vdb    252:16   0   186G  0 disk
 
 Названия блочных устройств зависят от настроек операционной системы, заданных базовым образом или настроенных вручную. Обычно имена устройств состоят из трех частей:
 
-* Фиксированный префикс или префикс, указывающий на тип устройства
-* Последовательный идентификатор устройства (может быть буквой или числом)
-* Последовательный идентификатор раздела на данном устройстве (обычно число)
+* фиксированный префикс, указывающий на тип устройства — например, `vd` в `vdb` (virtio), `sd` в `sda` (SATA/SCSI) или `nvme` в `nvme0n1` (NVMe);
+* идентификатор устройства — буква или число (`b` в `vdb`, `a` в `sda`, `0n1` в `nvme0n1`);
+* номер раздела — обычно число (`1` в `vdb1`).
+
+В выводе `lsblk` выше системный диск — `vda`, диск для данных {{ ydb-short-name }} — `vdb`. В командах ниже используется `/dev/vdb`; на вашем сервере подставьте путь к целому диску без номера раздела (например, `/dev/sda` или `/dev/nvme0n1`).
 
 1. Создайте разделы на выбранных дисках:
 
@@ -156,7 +171,7 @@ vdb    252:16   0   186G  0 disk
     {% endnote %}
 
     ```bash
-    DISK=/dev/nvme0n1
+    DISK=/dev/vdb
     sudo parted ${DISK} mklabel gpt -s
     sudo parted -a optimal ${DISK} mkpart primary 0% 100%
     sudo parted ${DISK} name 1 ydb_disk_ssd_01

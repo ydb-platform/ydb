@@ -1,6 +1,5 @@
 #include "write_with_pb_test_fixture.h"
 
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NThreading;

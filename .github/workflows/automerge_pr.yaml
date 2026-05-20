@@ -39,18 +39,13 @@ jobs:
         run: |
           set -euo pipefail
           cd ./ydb/ci/rightlib
-          loop_interval_seconds=300
-          max_loop_duration_seconds=3300
-          loop_deadline_seconds=$((SECONDS + max_loop_duration_seconds))
+          end_time=$(( SECONDS + 55 * 60 ))
           iteration=1
 
-          while (( SECONDS < loop_deadline_seconds )); do
+          while (( SECONDS < end_time )); do
             echo "::group::automerge iteration ${iteration}"
             ./automerge.py || echo "::warning::automerge iteration ${iteration} failed with exit code $?"
             echo "::endgroup::"
-
-            remaining_seconds=$((loop_deadline_seconds - SECONDS))
-            (( remaining_seconds <= 0 )) && break
-            sleep $(( remaining_seconds < loop_interval_seconds ? remaining_seconds : loop_interval_seconds ))
-            iteration=$((iteration + 1))
+            (( SECONDS < end_time )) && sleep 300
+            iteration=$(( iteration + 1 ))
           done

@@ -33,7 +33,9 @@ Y_UNIT_TEST_SUITE(KqpDisableOnlineRO) {
                     SELECT * FROM `/Root/KV`;
                 )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
                 result.GetIssues().PrintTo(Cerr);
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                    "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes.");
             }
 
             {
@@ -41,8 +43,9 @@ Y_UNIT_TEST_SUITE(KqpDisableOnlineRO) {
                     UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
                 )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
                 result.GetIssues().PrintTo(Cerr);
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Operation 'Upsert' can't be performed in read only transaction");
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                    "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes.");
             }
         }
     };

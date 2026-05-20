@@ -139,6 +139,11 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvUploadResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvDeleteResult, S3Manager->Handle);
                 fFunc(TEvPrivate::EvScanFound, S3Manager->Handle);
+<<<<<<< HEAD
+=======
+                fFunc(TEvPrivate::EvDeleteThrottleWakeup, S3Manager->Handle);
+                fFunc(TEvPrivate::EvPutThrottleWakeup, S3Manager->Handle);
+>>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
 
                 default:
                     if (!HandleDefaultEvents(ev, SelfId())) {

@@ -50,9 +50,13 @@ public:
 <<<<<<< HEAD
 =======
         TDqComputeActorWatermarks* watermarksTracker,
+<<<<<<< HEAD
 >>>>>>> 31edc356e98 (dq: streamlookup join: implement fullscan support (#33754))
         const THashMap<TString, TString>& secureParams,
         size_t fullscanRowLimit = 5000)
+=======
+        const THashMap<TString, TString>& secureParams)
+>>>>>>> 09f159dc6ea (dq/streamlookup join/fullscan: tunable limits and feature-flags (#35568))
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -64,7 +68,7 @@ public:
         , Factory(factory)
         , Settings(std::move(settings))
         , SecureParams(secureParams)
-        , FullscanRowLimit(Min(fullscanRowLimit, (size_t)Settings.GetCacheLimit()))
+        , FullscanRowLimit(Settings.HasFullscanLimit() ? Settings.GetFullscanLimit() : Settings.GetCacheLimit())
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)

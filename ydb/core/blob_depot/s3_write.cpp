@@ -10,6 +10,7 @@ namespace NKikimr::NBlobDepot {
         const ui64 AgentInstanceId;
         std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> Request;
         std::unique_ptr<IEventHandle> Response;
+        ui32 AllocatedLocatorCount = 0;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PREPARE_WRITE_S3; }
@@ -22,6 +23,8 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            AllocatedLocatorCount = 0;
+
             TAgent& agent = Self->GetAgent(NodeId);
             if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) {
                 // agent has been disconnected while transaction was in queue -- do nothing
@@ -58,6 +61,7 @@ namespace NKikimr::NBlobDepot {
 
                     const bool inserted = agent.S3WritesInFlight.insert(locator).second;
                     Y_ABORT_UNLESS(inserted);
+                    ++AllocatedLocatorCount;
                 }
             }
 
@@ -93,7 +97,12 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            TActivationContext::Send(Response.release());
+            if (AllocatedLocatorCount) {
+                Self->S3Manager->OnS3WriteInFlightAdded(AllocatedLocatorCount);
+            }
+            if (Response) {
+                TActivationContext::Send(Response.release());
+            }
         }
     };
 
@@ -106,13 +115,107 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
-        auto& agent = GetAgent(ev->Recipient);
+        S3Manager->HandlePrepareWriteS3(std::move(ev));
+    }
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-            (Msg, ev->Get()->Record));
+    void TS3Manager::HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev) {
+        const TMonotonic now = TActivationContext::Monotonic();
+        const bool timeThrottled = now < PutThrottleUntil;
+        const bool concurrencyThrottled = S3WritesInFlight >= CurrentMaxWritesInFlight;
 
-        Execute(std::make_unique<TS3Manager::TTxPrepareWriteS3>(this, agent,
+        if (timeThrottled || concurrencyThrottled) {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS23, "TEvPrepareWriteS3 queued", (Id, Self->GetLogId()),
+                (TimeThrottled, timeThrottled), (ConcurrencyThrottled, concurrencyThrottled),
+                (S3WritesInFlight, S3WritesInFlight), (CurrentMaxWritesInFlight, CurrentMaxWritesInFlight),
+                (QueueSize, PendingPrepareWrites.size()));
+            PendingPrepareWrites.push_back(std::move(ev));
+            if (timeThrottled && !PutWakeupScheduled) {
+                TActivationContext::Schedule(PutThrottleUntil, new IEventHandle(TEvPrivate::EvPutThrottleWakeup,
+                    0, Self->SelfId(), {}, nullptr, 0));
+                PutWakeupScheduled = true;
+            }
+            return;
+        }
+
+        auto& agent = Self->GetAgent(ev->Recipient);
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, Self->GetLogId()),
+            (AgentId, agent.Connection->NodeId), (Msg, ev->Get()->Record));
+
+        Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
             std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
+    }
+
+    void TS3Manager::NotifyPutSlowDown() {
+        Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_SLOW_DOWN] += 1;
+
+        CurrentMaxWritesInFlight = 1;
+        ConsecutiveSuccessfulWriteBatches = 0;
+        const TDuration delay = PutBackoff.Next();
+        PutThrottleUntil = TActivationContext::Monotonic() + delay;
+
+        STLOG(PRI_WARN, BLOB_DEPOT, BDTS22, "S3 put throttled", (Id, Self->GetLogId()),
+            (Delay, delay), (CurrentMaxWritesInFlight, CurrentMaxWritesInFlight),
+            (S3WritesInFlight, S3WritesInFlight), (QueueSize, PendingPrepareWrites.size()));
+        BDEV(BDEV42, "S3_put_throttled", (BDT, Self->TabletID()), (DelayMs, delay.MilliSeconds()),
+            (QueueSize, PendingPrepareWrites.size()));
+
+        if (!PutWakeupScheduled) {
+            TActivationContext::Schedule(PutThrottleUntil, new IEventHandle(TEvPrivate::EvPutThrottleWakeup,
+                0, Self->SelfId(), {}, nullptr, 0));
+            PutWakeupScheduled = true;
+        }
+    }
+
+    void TS3Manager::HandlePutThrottleWakeup() {
+        PutWakeupScheduled = false;
+        RunPendingPrepareWritesIfPossible();
+    }
+
+    void TS3Manager::RunPendingPrepareWritesIfPossible() {
+        const TMonotonic now = TActivationContext::Monotonic();
+        if (now < PutThrottleUntil) {
+            if (!PutWakeupScheduled && !PendingPrepareWrites.empty()) {
+                TActivationContext::Schedule(PutThrottleUntil, new IEventHandle(TEvPrivate::EvPutThrottleWakeup,
+                    0, Self->SelfId(), {}, nullptr, 0));
+                PutWakeupScheduled = true;
+            }
+            return;
+        }
+
+        while (!PendingPrepareWrites.empty() && S3WritesInFlight < CurrentMaxWritesInFlight) {
+            auto ev = std::move(PendingPrepareWrites.front());
+            PendingPrepareWrites.pop_front();
+
+            auto& agent = Self->GetAgent(ev->Recipient);
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS07, "TEvPrepareWriteS3", (Id, Self->GetLogId()),
+                (AgentId, agent.Connection->NodeId), (Msg, ev->Get()->Record));
+
+            Self->Execute(std::make_unique<TTxPrepareWriteS3>(Self, agent,
+                std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle>(ev.Release())));
+        }
+    }
+
+    void TS3Manager::OnS3WriteInFlightAdded(ui32 count) {
+        S3WritesInFlight += count;
+    }
+
+    void TS3Manager::OnS3WriteInFlightRemoved(bool success) {
+        Y_ABORT_UNLESS(S3WritesInFlight);
+        --S3WritesInFlight;
+
+        if (success && CurrentMaxWritesInFlight < MaxWritesInFlight) {
+            if (++ConsecutiveSuccessfulWriteBatches >= SuccessesPerWriteConcurrencyStepUp) {
+                ConsecutiveSuccessfulWriteBatches = 0;
+                ++CurrentMaxWritesInFlight;
+                if (CurrentMaxWritesInFlight >= MaxWritesInFlight) {
+                    CurrentMaxWritesInFlight = MaxWritesInFlight;
+                    PutBackoff.Reset();
+                }
+            }
+        }
+
+        RunPendingPrepareWritesIfPossible();
     }
 
 } // NKikimr::NBlobDepot

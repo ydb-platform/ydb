@@ -279,7 +279,6 @@ public:
 
 
         bool hasErrorResponses = false;
-        bool hasNoDataResponses = false;
         for (ui32 readQueryIdx = 0; readQueryIdx < batch.ReadItemIndecies.size(); ++readQueryIdx) {
             ui32 readItemIdx = batch.ReadItemIndecies[readQueryIdx];
             TEvBlobStorage::TEvGetResult::TResponse &response = ev->Get()->Responses[readQueryIdx];
@@ -317,7 +316,6 @@ public:
                     ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
                     return;
                 }
-                hasNoDataResponses = true;
             } else {
                 STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV317,
                         "Unexpected EvGetResult.",
@@ -339,10 +337,6 @@ public:
         }
         if (hasErrorResponses) {
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
-            return;
-        }
-        if (hasNoDataResponses) {
-            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND);
             return;
         }
 

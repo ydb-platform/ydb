@@ -2733,16 +2733,33 @@ public:
 
 
     void LogQueryFinalState(NKikimrKqp::TEvQueryResponse* record) {
-        if (!QueryState || !IsExecuteAction(QueryState->GetAction())) {
+        if (!record || !QueryState || !QueryState->UserRequestContext
+                || !IsExecuteAction(QueryState->GetAction())) {
             return;
         }
+        ui64 durationUs = QueryState->QueryStats.DurationUs;
+        if (!durationUs) {
+            durationUs = (TInstant::Now() - QueryState->StartTime).MicroSeconds();
+        }
         auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
-        auto queryDuration = TDuration::MicroSeconds(QueryState->QueryStats.DurationUs);
+        auto queryDuration = TDuration::MicroSeconds(durationUs);
+        static const TString FailedToExtractQueryText = "<failed to extract query text>";
         LogQueryEvent(TlsActivationContext->AsActorContext(), requestInfo, queryDuration,
             record->GetYdbStatus(), QueryState->UserToken,
-            QueryState->GetDatabase(), QueryState->UserRequestContext->DatabaseId,
+            QueryState->Database, QueryState->UserRequestContext->DatabaseId,
             QueryState->GetAction(), QueryState->GetType(), record,
-            [this]() { return this->QueryState->ExtractQueryText(); },
+            [this, failed = FailedToExtractQueryText]() -> TString {
+                if (QueryState->CompileResult) {
+                    if (QueryState->CompileResult->Query) {
+                        return QueryState->CompileResult->Query->Text;
+                    }
+                    return failed;
+                }
+                if (QueryState->RequestEv) {
+                    return QueryState->RequestEv->GetQuery();
+                }
+                return failed;
+            },
             QueryState->ParametersSize);
     }
 

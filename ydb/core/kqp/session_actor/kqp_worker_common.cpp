@@ -1,5 +1,7 @@
 #include "kqp_worker_common.h"
 
+#include <util/charset/utf8.h>
+
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr::NKqp {
@@ -170,7 +172,7 @@ void LogQueryEvent(const TActorContext &ctx, const TKqpRequestInfo& requestInfo,
     TString queryText = extractQueryText ? extractQueryText() : TString();
     const size_t origQueryLen = queryText.size();
     if (queryText.size() > MaxQueryTextLen) {
-        queryText.resize(MaxQueryTextLen);
+        Utf8TruncateInplaceRobust(queryText, MaxQueryTextLen);
     }
 
     TStringBuilder line;
@@ -194,7 +196,7 @@ void LogQueryEvent(const TActorContext &ctx, const TKqpRequestInfo& requestInfo,
             constexpr size_t MaxIssuesLen = 1024;
             TString issuesStr = issues.ToString(true);
             if (issuesStr.size() > MaxIssuesLen) {
-                issuesStr.resize(MaxIssuesLen);
+                Utf8TruncateInplaceRobust(issuesStr, MaxIssuesLen);
             }
             line << ", issues: \"" << EscapeC(issuesStr) << '"';
         }

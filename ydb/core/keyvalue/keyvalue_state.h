@@ -30,7 +30,10 @@ namespace NActors {
 namespace NKikimr {
 namespace NKeyValue {
 
-class TKeyValueState : public std::enable_shared_from_this<TKeyValueState> {
+struct TKeyValueStateLifetimeToken {
+};
+
+class TKeyValueState {
 public:
     using TIndex = TMap<TString, TIndexRecord>;
     using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command;
@@ -298,6 +301,8 @@ protected:
     TMemorizableControlWrapper ReadRequestsInFlightLimit;
     TControlWrapper UsePayload_Base;
     TMemorizableControlWrapper UsePayload;
+
+    std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 
 public:
     TKeyValueState();
@@ -749,6 +754,10 @@ public:
     ui32 GetRefCount(const TLogoBlobID& id) const {
         const auto it = RefCounts.find(id);
         return it != RefCounts.end() ? it->second : 0;
+    }
+
+    std::weak_ptr<TKeyValueStateLifetimeToken> GetLifetimeToken() const {
+        return LifetimeToken;
     }
 
     ui32 GetTrashCount() const {

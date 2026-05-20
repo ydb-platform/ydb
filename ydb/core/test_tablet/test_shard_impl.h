@@ -50,7 +50,7 @@ namespace NKikimr::NTestShard {
                 NTestShard::EPercentileCounters_descriptor>;
 
             TProtobufTabletCountersPair<TKeyValueCounters, TTestShardCounters> pair;
-            State->SetupTabletCounters(pair.GetFirstTabletCounters().Release());
+            State.SetupTabletCounters(pair.GetFirstTabletCounters().Release());
             Counters.reset(pair.GetSecondTabletCounters().Release());
             Counters->Simple()[NTestShard::COUNTER_MODE_INITIAL] = 1;
         }

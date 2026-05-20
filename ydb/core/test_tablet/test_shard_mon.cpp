@@ -26,7 +26,7 @@ namespace NKikimr::NTestShard {
             , Params(ev->Get()->Cgi())
             , ActivityActorId(self->ActivityActorId)
         {
-            Trash = self->State->GetTrashTotalBytes();
+            Trash = self->State.GetTrashTotalBytes();
         }
 
         void Bootstrap() {

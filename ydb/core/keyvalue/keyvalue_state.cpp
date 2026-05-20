@@ -450,6 +450,7 @@ void TKeyValueState::CountOnline() {
 //
 
 void TKeyValueState::Terminate(const TActorContext& ctx) {
+    LifetimeToken.reset();
     ctx.Send(ChannelBalancerActorId, new TEvents::TEvPoisonPill);
 }
 
@@ -3123,7 +3124,7 @@ bool TKeyValueState::PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyV
 void TKeyValueState::RegisterReadRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
         const TTabletStorageInfo *info, ui32 tabletGeneration)
 {
-    ctx.RegisterWithSameMailbox(CreateKeyValueStorageReadRequest(std::move(intermediate), info, tabletGeneration, weak_from_this()));
+    ctx.RegisterWithSameMailbox(CreateKeyValueStorageReadRequest(std::move(intermediate), info, tabletGeneration, this, GetLifetimeToken()));
 }
 
 void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
@@ -3165,7 +3166,7 @@ void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TInt
         }
     }
 
-    ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info, tabletGeneration, weak_from_this()));
+    ctx.RegisterWithSameMailbox(CreateKeyValueStorageRequest(std::move(intermediate), info, tabletGeneration, this, GetLifetimeToken()));
 }
 
 void TKeyValueState::ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,

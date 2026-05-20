@@ -10,12 +10,14 @@ namespace NKikimr {
 namespace NKeyValue {
 
 class TKeyValueState;
+struct TKeyValueStateLifetimeToken;
 
 IActor* CreateKeyValueStorageRequest(
     THolder<TIntermediate>&& intermediate,
     const TTabletStorageInfo *tabletInfo,
     ui32 tabletGeneration,
-    std::weak_ptr<TKeyValueState> state);
+    TKeyValueState *state,
+    std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken);
 
 } // NKeyValue
 } // NKikimr

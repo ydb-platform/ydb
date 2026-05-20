@@ -38,7 +38,8 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     THolder<TIntermediate> IntermediateResults;
 
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
-    std::weak_ptr<TKeyValueState> State;
+    TKeyValueState *State;
+    std::weak_ptr<TKeyValueStateLifetimeToken> StateLifetimeToken;
 
     THPTimer PutTimer;
     TInstant GetStatusSentAt;
@@ -76,12 +77,14 @@ public:
     }
 
     TKeyValueStorageRequest(THolder<TIntermediate>&& intermediate, const TTabletStorageInfo *tabletInfo,
-            ui32 tabletGeneration, std::weak_ptr<TKeyValueState> state)
+            ui32 tabletGeneration, TKeyValueState *state,
+            std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken)
         : InFlightLimitSeq(intermediate->SequentialReadLimit)
         , TabletGeneration(tabletGeneration)
         , IntermediateResults(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
-        , State(std::move(state))
+        , State(state)
+        , StateLifetimeToken(std::move(stateLifetimeToken))
         , Span(TWilsonTablet::TabletBasic, IntermediateResults->Span.GetTraceId(), "KeyValue.StorageRequest")
     {
         IntermediateResults->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
@@ -346,8 +349,7 @@ public:
                 read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
                 if (response.Status == NKikimrProto::NODATA) {
-                    const auto state = State.lock();
-                    const ui32 refCount = state ? state->GetRefCount(readItem.LogoBlobId) : 0;
+                    const ui32 refCount = StateLifetimeToken.lock() ? State->GetRefCount(readItem.LogoBlobId) : 0;
                     if (refCount != 0) {
                         TStringStream str;
                         str << "NODATA received for TEvGet, but blob is still referenced"
@@ -355,9 +357,14 @@ public:
                             << " BlobId# " << readItem.LogoBlobId.ToString()
                             << " GroupId# " << groupId
                             << " RefCount# " << refCount;
+                        Y_DEBUG_ABORT_UNLESS(false, "%s", str.Str().c_str());
                         ReplyErrorAndDie(ctx, str.Str());
                         return;
                     }
+                    read.Status = NKikimrProto::NODATA;
+                    readItem.Status = NKikimrProto::NODATA;
+                    readItem.InFlight = false;
+                    continue;
                 }
 
                 TStringStream err;
@@ -811,8 +818,9 @@ IActor* CreateKeyValueStorageRequest(
         THolder<TIntermediate>&& intermediate,
         const TTabletStorageInfo *tabletInfo,
         ui32 tabletGeneration,
-        std::weak_ptr<TKeyValueState> state) {
-    return new TKeyValueStorageRequest(std::move(intermediate), tabletInfo, tabletGeneration, std::move(state));
+        TKeyValueState *state,
+        std::weak_ptr<TKeyValueStateLifetimeToken> stateLifetimeToken) {
+    return new TKeyValueStorageRequest(std::move(intermediate), tabletInfo, tabletGeneration, state, std::move(stateLifetimeToken));
 }
 
 } // NKeyValue

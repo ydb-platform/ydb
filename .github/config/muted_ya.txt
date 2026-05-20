@@ -69,3 +69,4 @@ ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
 ydb/tools/stress_tool/ut unittest.sole chunk
+ydb/core/tx/columnshard/engines/storage/optimizer/ut TilingCoreUnits.TilingChoosesAccumulatorMiddleAndLastLevelsIndependently

@@ -1190,7 +1190,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         for (const auto& [partitionKey, size] : p.Msg.BatchInfo->PartitionKeys) {
             AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
         }
-    } else {
+    }
+    
+    if (!p.Msg.BatchInfo) {
         AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
     }
 

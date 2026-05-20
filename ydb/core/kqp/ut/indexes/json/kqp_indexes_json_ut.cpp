@@ -2052,6 +2052,58 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             }
         });
     }
+
+    Y_UNIT_TEST(TruncateTable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableTruncateTable(true);
+
+        auto kikimr = TKikimrRunner(TKikimrSettings().SetFeatureFlags(featureFlags));
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, "Json", /* withIndex */ true);
+
+        auto upsertData = [&]() {
+            const TString query = R"(
+                UPSERT INTO `/Root/TestTable` (Key, Text, Data) VALUES
+                    (1, '{"a":1}', "data1"),
+                    (2, '{"b":"hello"}', "data2"),
+                    (3, '"scalar"', "data3");
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        auto ensureMainTableEmpty = [&]() {
+            auto result = db.ExecuteQuery("SELECT * FROM `/Root/TestTable`;", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+        };
+
+        auto ensureIndexEmpty = [&]() {
+            auto index = ReadIndex(db);
+            UNIT_ASSERT_VALUES_EQUAL(index.RowsCount(), 0);
+        };
+
+        auto ensureIndexNonEmpty = [&]() {
+            auto index = ReadIndex(db);
+            UNIT_ASSERT_GT(index.RowsCount(), 0);
+        };
+
+        upsertData();
+        ensureIndexNonEmpty();
+
+        for (size_t i = 0; i < 3; ++i) {
+            auto result = db.ExecuteQuery("TRUNCATE TABLE `/Root/TestTable`;", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            ensureMainTableEmpty();
+            ensureIndexEmpty();
+
+            upsertData();
+            ensureIndexNonEmpty();
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {

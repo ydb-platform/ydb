@@ -142,14 +142,14 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     if (!rowset.IsReady()) {
         return false;
     }
-    
+
     while (!rowset.EndOfSet()) {
-        auto pathId = rowset.GetValue<Schema::TableInfoV1::PathId>();
+        auto schemeShardLocalPathId = rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>();
         auto serializedBackupTx = rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>();
         if (serializedBackupTx) {
             NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
             if (backupTx.ParseFromString(serializedBackupTx)) {
-                Self->LastCompletedBackupTransactions[pathId] = backupTx;
+                Self->LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
             }
         }
         if (!rowset.Next()) {

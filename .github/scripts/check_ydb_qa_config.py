@@ -38,10 +38,9 @@ try:
         else:
             print(f"⚠ Config file not found: {config_file_path}")
         
-        # Note about YDB_QA_CONFIG (wrapper ignores it by default)
         if os.environ.get("YDB_QA_CONFIG"):
-            print("ℹ YDB_QA_CONFIG is set, but wrapper uses local config file by default (use_local_config=True)")
-        
+            print("✓ YDB_QA_CONFIG environment variable is set (used by YDBWrapper)")
+
         # Try to create wrapper - it will load config and show logs
         with YDBWrapper(silent=False) as wrapper:
             if wrapper.check_credentials():

@@ -1249,6 +1249,18 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!p.Msg.DisableDeduplication &&
         ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
+        if (p.Msg.MaxSeqNo.has_value() && sourceId.SeqNo() && p.Msg.SeqNo <= *sourceId.SeqNo()
+            && *p.Msg.MaxSeqNo >= *sourceId.SeqNo() && p.Msg.SeqNo != *p.Msg.MaxSeqNo) {
+            CancelOneWriteOnWrite(ctx,
+                                    TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId)
+                                    << " seqNo: " << p.Msg.SeqNo
+                                    << " maxSeqNo: " << *p.Msg.MaxSeqNo
+                                    << " must be less than already written seqNo: " << *sourceId.SeqNo(),
+                                    p,
+                                    NPersQueue::NErrorCode::BAD_REQUEST);
+            return false;
+        }
+
         if (poffset >= curOffset) {
             LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)

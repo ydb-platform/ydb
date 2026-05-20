@@ -60,6 +60,10 @@ public:
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
+    // Persists newConfig to the partition's local DB. The in-memory config is
+    // unchanged; the new value applies after the next partition restart.
+    void UpdateConfig(const TVChunkConfig& newConfig);
+
 private:
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 

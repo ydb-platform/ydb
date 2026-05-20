@@ -21,6 +21,7 @@ ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage3
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.ChunkDetailsMinMax
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
@@ -28,9 +29,11 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartit
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.RandomWritesDirectPBufferFilling
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldRestorePartitionAfterRestart
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadBlocksInDifferentRegionsDirectPBufferFilling
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadFromHandoffPersistentBuffers
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldScheduleCleanup
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_WithExplicitPartition
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
+ydb/core/tx/columnshard/engines/storage/optimizer/ut TilingCoreUnits.TilingChoosesAccumulatorMiddleAndLastLevelsIndependently
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
 ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
@@ -69,4 +72,3 @@ ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
 ydb/tools/stress_tool/ut unittest.sole chunk
-ydb/core/tx/columnshard/engines/storage/optimizer/ut TilingCoreUnits.TilingChoosesAccumulatorMiddleAndLastLevelsIndependently

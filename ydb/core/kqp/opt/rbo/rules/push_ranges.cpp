@@ -131,7 +131,7 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
     TPredicateExtractorSettings settings;
     settings.MergeAdjacentPointRanges = true;
     settings.HaveNextValueCallable = true;
-    settings.BuildLiteralRange = false;
+    settings.BuildLiteralRange = true;
     settings.IsValidForRange = IsValidForRange;
 
     if (kqpCtx.Config->GetExtractPredicateRangesLimit() != 0) {
@@ -191,7 +191,7 @@ bool IsNothingLike(const TExprNode::TPtr& node) {
         return true;
     }
 
-    if (node->IsCallable({"Just", "SafeCast", "StrictCast"}) && node->ChildrenSize() > 0) {
+    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString", "FromPg", "ToPg"}) && node->ChildrenSize() > 0) {
         return IsNothingLike(node->HeadPtr());
     }
 
@@ -203,7 +203,7 @@ std::optional<TString> FormatLiteralValue(const TExprNode::TPtr& node) {
         return std::nullopt;
     }
 
-    if (node->IsCallable({"Just", "SafeCast", "StrictCast"}) && node->ChildrenSize() > 0) {
+    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString", "FromPg", "ToPg"}) && node->ChildrenSize() > 0) {
         return FormatLiteralValue(node->HeadPtr());
     }
 
@@ -218,281 +218,42 @@ std::optional<TString> FormatLiteralValue(const TExprNode::TPtr& node) {
     return std::nullopt;
 }
 
-struct TExplainRangeBound {
-    std::optional<TString> Value;
-    bool Inclusive = false;
-};
+using TLiteralRange = IPredicateRangeExtractor::TBuildResult::TLiteralRange;
+using TLiteralRangeBound = IPredicateRangeExtractor::TBuildResult::TLiteralRange::TLiteralRangeBound;
 
-struct TExplainColumnRange {
-    TExplainRangeBound From;
-    TExplainRangeBound To;
-};
+bool TryFormatRangeBoundValue(const TLiteralRangeBound& bound, size_t columnIndex, std::optional<TString>& value) {
+    value = std::nullopt;
+    if (columnIndex >= bound.Columns.size() || IsNothingLike(bound.Columns[columnIndex])) {
+        return true;
+    }
 
-using TExplainRange = TVector<TExplainColumnRange>;
-using TExplainRanges = TVector<TExplainRange>;
-
-TExplainColumnRange MakeFullExplainRange() {
-    return {};
+    value = FormatLiteralValue(bound.Columns[columnIndex]);
+    return value.has_value();
 }
 
-std::optional<TExplainRangeBound> IntersectFromBound(const TExplainRangeBound& left, const TExplainRangeBound& right) {
-    if (!left.Value) {
-        return right;
-    }
-    if (!right.Value) {
-        return left;
-    }
-    if (*left.Value != *right.Value) {
-        return std::nullopt;
-    }
-
-    return TExplainRangeBound{.Value = left.Value, .Inclusive = left.Inclusive && right.Inclusive};
-}
-
-std::optional<TExplainRangeBound> IntersectToBound(const TExplainRangeBound& left, const TExplainRangeBound& right) {
-    if (!left.Value) {
-        return right;
-    }
-    if (!right.Value) {
-        return left;
-    }
-    if (*left.Value != *right.Value) {
-        return std::nullopt;
-    }
-
-    return TExplainRangeBound{.Value = left.Value, .Inclusive = left.Inclusive && right.Inclusive};
-}
-
-std::optional<TExplainColumnRange> IntersectColumnRange(const TExplainColumnRange& left, const TExplainColumnRange& right) {
-    auto from = IntersectFromBound(left.From, right.From);
-    auto to = IntersectToBound(left.To, right.To);
-    if (!from || !to) {
-        return std::nullopt;
-    }
-
-    return TExplainColumnRange{.From = std::move(*from), .To = std::move(*to)};
-}
-
-std::optional<TExplainRange> IntersectExplainRange(const TExplainRange& left, const TExplainRange& right) {
-    TExplainRange result;
-    const size_t size = Max(left.size(), right.size());
-    result.reserve(size);
-
-    for (size_t i = 0; i < size; ++i) {
-        const auto& leftColumn = i < left.size() ? left[i] : MakeFullExplainRange();
-        const auto& rightColumn = i < right.size() ? right[i] : MakeFullExplainRange();
-        auto column = IntersectColumnRange(leftColumn, rightColumn);
-        if (!column) {
-            return std::nullopt;
-        }
-        result.push_back(std::move(*column));
-    }
-
-    return result;
-}
-
-std::optional<TExplainRanges> IntersectExplainRanges(const TExplainRanges& left, const TExplainRanges& right) {
-    TExplainRanges result;
-    for (const auto& leftRange : left) {
-        for (const auto& rightRange : right) {
-            auto range = IntersectExplainRange(leftRange, rightRange);
-            if (!range) {
-                return std::nullopt;
-            }
-            result.push_back(std::move(*range));
-        }
-    }
-    return result;
-}
-
-TExplainRanges MultiplyExplainRanges(const TExplainRanges& left, const TExplainRanges& right) {
-    TExplainRanges result;
-    for (const auto& leftRange : left) {
-        for (const auto& rightRange : right) {
-            TExplainRange range = leftRange;
-            range.insert(range.end(), rightRange.begin(), rightRange.end());
-            result.push_back(std::move(range));
-        }
-    }
-    return result;
-}
-
-std::optional<TExplainRanges> ParseAsRangeForExplain(const TExprNode::TPtr& node) {
-    TExplainRanges result;
-    for (const auto& range : node->ChildrenList()) {
-        if (!range->IsList() || range->ChildrenSize() != 2) {
-            return std::nullopt;
-        }
-
-        const auto& from = range->Head();
-        const auto& to = range->Tail();
-        if (!from.IsList() || !to.IsList() || from.ChildrenSize() == 0 || from.ChildrenSize() != to.ChildrenSize()) {
-            return std::nullopt;
-        }
-
-        const size_t columnCount = from.ChildrenSize() - 1;
-        auto fromInclusive = FormatLiteralValue(from.ChildPtr(columnCount));
-        auto toInclusive = FormatLiteralValue(to.ChildPtr(columnCount));
-        if (!fromInclusive || !toInclusive) {
-            return std::nullopt;
-        }
-
-        TExplainRange explainRange;
-        explainRange.reserve(columnCount);
-        for (size_t i = 0; i < columnCount; ++i) {
-            TExplainColumnRange columnRange;
-            if (!IsNothingLike(from.ChildPtr(i))) {
-                columnRange.From.Value = FormatLiteralValue(from.ChildPtr(i));
-                if (!columnRange.From.Value) {
-                    return std::nullopt;
-                }
-            }
-            if (!IsNothingLike(to.ChildPtr(i))) {
-                columnRange.To.Value = FormatLiteralValue(to.ChildPtr(i));
-                if (!columnRange.To.Value) {
-                    return std::nullopt;
-                }
-            }
-            columnRange.From.Inclusive = *fromInclusive == "1";
-            columnRange.To.Inclusive = *toInclusive == "1";
-            explainRange.push_back(std::move(columnRange));
-        }
-
-        result.push_back(std::move(explainRange));
-    }
-    return result;
-}
-
-std::optional<TExplainRanges> ParseRangeForExplain(const TExprNode::TPtr& node) {
-    const TString op = TString(node->Head().Content());
-    if (op == "Exists" || op == "NotExists" || op == "StartsWith" || op == "NotStartsWith") {
-        return std::nullopt;
-    }
-
-    auto value = FormatLiteralValue(node->ChildPtr(1));
-    if (!value) {
-        return std::nullopt;
-    }
-
-    auto makeSingleColumnRange = [](TExplainRangeBound from, TExplainRangeBound to) {
-        TExplainRange range;
-        range.push_back(TExplainColumnRange{.From = std::move(from), .To = std::move(to)});
-        return range;
-    };
-
-    if (op == "==" || op == "===") {
-        TExplainRangeBound bound{.Value = value, .Inclusive = true};
-        return TExplainRanges{makeSingleColumnRange(bound, bound)};
-    }
-    if (op == "!=") {
-        TExplainRangeBound bound{.Value = value, .Inclusive = false};
-        return TExplainRanges{
-            makeSingleColumnRange({}, bound),
-            makeSingleColumnRange(bound, {}),
-        };
-    }
-    if (op == "<" || op == "<=") {
-        return TExplainRanges{makeSingleColumnRange({}, {.Value = value, .Inclusive = op == "<="})};
-    }
-    if (op == ">" || op == ">=") {
-        return TExplainRanges{makeSingleColumnRange({.Value = value, .Inclusive = op == ">="}, {})};
-    }
-
-    return std::nullopt;
-}
-
-std::optional<TExplainRanges> ParseRangesForExplain(const TExprNode::TPtr& node) {
-    if (!node) {
-        return std::nullopt;
-    }
-
-    if (node->IsCallable("RangeFinalize") || node->IsCallable("RangeToPg")) {
-        return ParseRangesForExplain(node->HeadPtr());
-    }
-
-    if (node->IsCallable("RangeEmpty")) {
-        return TExplainRanges{};
-    }
-
-    if (node->IsCallable("AsRange")) {
-        return ParseAsRangeForExplain(node);
-    }
-
-    if (node->IsCallable("RangeFor")) {
-        return ParseRangeForExplain(node);
-    }
-
-    if (node->IsCallable("RangeUnion")) {
-        TExplainRanges result;
-        for (const auto& child : node->ChildrenList()) {
-            auto childRanges = ParseRangesForExplain(child);
-            if (!childRanges) {
-                return std::nullopt;
-            }
-            result.insert(result.end(), childRanges->begin(), childRanges->end());
-        }
-        return result;
-    }
-
-    if (node->IsCallable("RangeIntersect")) {
-        std::optional<TExplainRanges> result;
-        for (const auto& child : node->ChildrenList()) {
-            auto childRanges = ParseRangesForExplain(child);
-            if (!childRanges) {
-                return std::nullopt;
-            }
-            if (!result) {
-                result = std::move(childRanges);
-            } else {
-                result = IntersectExplainRanges(*result, *childRanges);
-                if (!result) {
-                    return std::nullopt;
-                }
-            }
-        }
-        if (result) {
-            return result;
-        }
-        return TExplainRanges{};
-    }
-
-    if (node->IsCallable("RangeMultiply")) {
-        TExplainRanges result{{}};
-        for (size_t i = 1; i < node->ChildrenSize(); ++i) {
-            auto childRanges = ParseRangesForExplain(node->ChildPtr(i));
-            if (!childRanges) {
-                return std::nullopt;
-            }
-            result = MultiplyExplainRanges(result, *childRanges);
-        }
-        return result;
-    }
-
-    return std::nullopt;
-}
-
-TVector<TString> BuildReadRangeDescriptions(const TExprNode::TPtr& ranges, const TVector<TString>& keyColumns, size_t usedPrefixLen) {
-    auto parsedRanges = ParseRangesForExplain(ranges);
-    if (!parsedRanges) {
-        return {};
-    }
-
+TVector<TString> BuildReadRangeDescriptions(const TVector<TLiteralRange>& ranges, const TVector<TString>& keyColumns, size_t usedPrefixLen) {
     TVector<TString> result;
-    for (const auto& range : *parsedRanges) {
-        size_t columnCount = Min(range.size(), keyColumns.size());
-        columnCount = Min(columnCount, usedPrefixLen);
+    for (const auto& range : ranges) {
+        const size_t columnCount = Min(keyColumns.size(), usedPrefixLen);
         for (size_t i = 0; i < columnCount; ++i) {
-            const auto& columnRange = range[i];
-            if (!columnRange.From.Value && !columnRange.To.Value) {
+            std::optional<TString> fromValue;
+            std::optional<TString> toValue;
+            if (!TryFormatRangeBoundValue(range.Left, i, fromValue) ||
+                !TryFormatRangeBoundValue(range.Right, i, toValue))
+            {
+                return {};
+            }
+
+            if (!fromValue && !toValue) {
                 continue;
             }
 
             TStringBuilder desc;
             desc << StripAliasPrefix(keyColumns[i]) << " "
-                 << (columnRange.From.Inclusive ? "[" : "(")
-                 << (columnRange.From.Value ? *columnRange.From.Value : "-∞") << ", "
-                 << (columnRange.To.Value ? *columnRange.To.Value : "+∞")
-                 << (columnRange.To.Inclusive ? "]" : ")");
+                 << (fromValue && range.Left.Inclusive ? "[" : "(")
+                 << (fromValue ? *fromValue : "-∞") << ", "
+                 << (toValue ? *toValue : "+∞")
+                 << (toValue && range.Right.Inclusive ? "]" : ")");
             result.push_back(desc);
         }
     }
@@ -577,7 +338,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     TOpRead::TRangeInfo rangeInfo{
         .KeyColumns = keyColumns,
-        .ReadRangeDescriptions = BuildReadRangeDescriptions(ranges, keyColumns, buildResult.UsedPrefixLen),
+        .ReadRangeDescriptions = BuildReadRangeDescriptions(buildResult.LiteralRanges, keyColumns, buildResult.UsedPrefixLen),
         .UsedPrefixLen = buildResult.UsedPrefixLen,
         .ExpectedMaxRanges = buildResult.ExpectedMaxRanges
             ? TMaybe<size_t>(*buildResult.ExpectedMaxRanges)

@@ -133,6 +133,11 @@ static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
     return std::nullopt;
 }
 
+TString StripAliasPrefix(const TString& column) {
+    const auto dot = column.rfind('.');
+    return (dot != TString::npos) ? column.substr(dot + 1) : column;
+}
+
 NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
 
@@ -162,20 +167,23 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     THashSet<TString> addedColumns;
     if (RangeInfo) {
         const size_t usedLen = Min(RangeInfo->UsedPrefixLen, RangeInfo->KeyColumns.size());
+        if (RangeInfo->ReadRangeDescriptions) {
+            for (const auto& rangeDesc : RangeInfo->ReadRangeDescriptions) {
+                readColumns.AppendValue(rangeDesc);
+            }
+        } else {
+            for (size_t i = 0; i < usedLen; ++i) {
+                readColumns.AppendValue(StripAliasPrefix(RangeInfo->KeyColumns[i]));
+            }
+        }
+
         for (size_t i = 0; i < usedLen; ++i) {
-            // Strip alias prefix (alias.col -> col) for display
-            const auto& col = RangeInfo->KeyColumns[i];
-            const auto dot = col.rfind('.');
-            const TString colName = (dot != TString::npos) ? col.substr(dot + 1) : col;
-            readColumns.AppendValue(colName);
-            addedColumns.insert(colName);
+            addedColumns.insert(StripAliasPrefix(RangeInfo->KeyColumns[i]));
         }
 
         NJson::TJsonValue rangeKeys(NJson::EJsonValueType::JSON_ARRAY);
         for (size_t i = 0; i < usedLen; ++i) {
-            const auto& col = RangeInfo->KeyColumns[i];
-            const auto dot = col.rfind('.');
-            rangeKeys.AppendValue((dot != TString::npos) ? col.substr(dot + 1) : col);
+            rangeKeys.AppendValue(StripAliasPrefix(RangeInfo->KeyColumns[i]));
         }
         res["ReadRangesKeys"] = std::move(rangeKeys);
 

@@ -704,9 +704,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(readOp, plan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Table"), "t1", plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), plan);
+
+        auto disjointPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t1.a, t1.b FROM `/Root/t1` AS t1 WHERE t1.a < 5 OR t1.a >= 10;
+        )");
+        const auto simplifiedDisjointPlan = GetSimplifiedPlan(disjointPlan);
+        const auto* disjointReadOp = FindOperatorByStringField(simplifiedDisjointPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(disjointReadOp, disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a (-∞, 5)"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "a [10, +∞)"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "b"), disjointPlan);
     }
 
     Y_UNIT_TEST(ExplainAnalyzeRangePushdown) {
@@ -721,6 +732,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto* readOp = FindOperatorByStringField(simplifiedPlan, "Name", "TableRangeScan");
         UNIT_ASSERT_C(readOp, plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Rows"), plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Size"), plan);

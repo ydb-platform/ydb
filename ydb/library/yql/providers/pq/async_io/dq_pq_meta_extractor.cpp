@@ -1,13 +1,15 @@
 #include "dq_pq_meta_extractor.h"
 
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
 namespace NYql::NDq {
 
 namespace {
 
-const std::unordered_map<TString, TPqMetaExtractor::TPqMetaExtractorLambda> ExtractorsMap = {
+const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
     {
         "create_time", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
             using TDataType = NUdf::TDataType<NUdf::TTimestamp>;
@@ -48,7 +50,7 @@ const std::unordered_map<TString, TPqMetaExtractor::TPqMetaExtractorLambda> Extr
             const auto& data = message.GetMessageGroupId();
             return std::make_pair(
                 NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size())),
-                data.size()
+                static_cast<i64>(data.size())
             );
         }
     },
@@ -65,20 +67,37 @@ const std::unordered_map<TString, TPqMetaExtractor::TPqMetaExtractorLambda> Extr
 
 } // anonymous namespace
 
-TPqMetaExtractor::TPqMetaExtractor() {
-    for (const auto& sysColumn : AllowedPqMetaSysColumns(true)) {
-        const auto key = SkipPqSystemPrefix(sysColumn);
-        Y_ENSURE(key, sysColumn);
-        Y_ENSURE(ExtractorsMap.contains(*key), "Pq metadata field " << *key << " hasn't valid runtime extractor. You should add it.");
-    }
-}
+TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
+    const TString& columnName,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    const auto key = SkipPqSystemPrefix(columnName);
+    Y_ENSURE(key, columnName);
 
-TPqMetaExtractor::TPqMetaExtractorLambda TPqMetaExtractor::FindExtractorLambda(const TString& sysColumn) const {
-    const auto key = SkipPqSystemPrefix(sysColumn);
-    Y_ENSURE(key, sysColumn);
+    if (*key == "user_attributes") {
+        NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
+        NKikimr::NMiniKQL::TType* stringDataType = typeBuilder.NewDataType(NUdf::EDataSlot::String);
+        NKikimr::NMiniKQL::TType* messageMetaDictType = typeBuilder.NewDictType(stringDataType, stringDataType, false);
+        const auto* holderFactoryPtr = &holderFactory;
+        return [holderFactoryPtr, messageMetaDictType](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+            auto dictBuilder = holderFactoryPtr->NewDict(messageMetaDictType, 0);
+            i64 usedSpace = 0;
+            if (const auto& metaPtr = message.GetMessageMeta()) {
+                for (const auto& [k, v] : metaPtr->Fields) {
+                    auto ks = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(k.data(), k.size()));
+                    auto vs = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(v.data(), v.size()));
+                    usedSpace += static_cast<i64>(k.size() + v.size());
+                    dictBuilder->Add(std::move(ks), std::move(vs));
+                }
+            }
+            NUdf::TUnboxedValue dictValue = dictBuilder->Build();
+            return std::make_pair(dictValue.Release(), usedSpace);
+        };
+    }
 
     const auto iter = ExtractorsMap.find(*key);
-    Y_ENSURE(iter != ExtractorsMap.end(), sysColumn);
+    Y_ENSURE(iter != ExtractorsMap.end(), columnName);
 
     return iter->second;
 }

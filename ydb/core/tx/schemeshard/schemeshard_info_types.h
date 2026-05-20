@@ -2172,6 +2172,24 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         PQPartitionsInsideCount -= delta;
     }
 
+    ui64 GetPQGroupsInside() const {
+        return PQGroupsInsideCount;
+    }
+
+    void SetPQGroupsInside(ui64 val) {
+        PQGroupsInsideCount = val;
+    }
+
+    void IncPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(Max<ui64>() - PQGroupsInsideCount >= delta);
+        PQGroupsInsideCount += delta;
+    }
+
+    void DecPQGroupsInside(ui64 delta = 1) {
+        Y_ENSURE(PQGroupsInsideCount >= delta, "PQGroupsInsideCount: " << PQGroupsInsideCount << " delta: " << delta);
+        PQGroupsInsideCount -= delta;
+    }
+
     ui64 GetPQReservedStorage() const {
         return PQReservedStorage;
     }
@@ -2647,6 +2665,7 @@ private:
     THashSet<TShardIdx> SequenceShards;
 
     ui64 PQPartitionsInsideCount = 0;
+    ui64 PQGroupsInsideCount = 0;
     ui64 PQReservedStorage = 0;
 
     TPathId ResourcesDomainId;
@@ -2891,6 +2910,18 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         return space;
     }
 
+    static bool ValidateFileStoreConfigSpaceOverflow(ui64 blockSize, ui64 blockCount, TString& errStr) {
+        if (blockSize && blockCount > Max<ui64>() / blockSize) {
+            errStr = TStringBuilder()
+                << "FileStore size overflows ui64: blocks count " << blockCount
+                << " * block size " << blockSize
+                << " > " << Max<ui64>();
+            return false;
+        }
+
+        return true;
+    }
+
 private:
     TFileStoreSpace GetFileStoreSpace(const NKikimrFileStore::TConfig& config) const {
         const ui64 blockSize = config.GetBlockSize();
@@ -2951,6 +2982,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -3020,7 +3052,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     static bool IsLocalIndex(EType type) {
         return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
-            || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter;
+            || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax;
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
@@ -3045,6 +3078,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
@@ -3095,6 +3129,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 break;
             case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                 alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 break;
             default:
                 errMsg += TStringBuilder() << "TIndexAlteringConfig only supports local index types, got: " << static_cast<int>(config.GetType());

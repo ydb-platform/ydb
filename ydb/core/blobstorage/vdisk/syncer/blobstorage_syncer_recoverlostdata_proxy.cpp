@@ -55,31 +55,17 @@ namespace NKikimr {
         }
 
         void CreateAndRunTask(const TActorContext &ctx) {
-            TActorId sstWriterId;
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-            auto* sstWriterActor = new TIndexSstWriterActor(
-                SyncerCtx->VCtx,
-                SyncerCtx->PDiskCtx,
-                SyncerCtx->LevelIndexLogoBlob,
-                SyncerCtx->LevelIndexBlock,
-                SyncerCtx->LevelIndexBarrier);
-            sstWriterId = ctx.Register(sstWriterActor);
-            ActiveActors.Insert(sstWriterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-#endif
             // create task
             auto task = std::make_unique<TSyncerJobTask>(
                 TSyncerJobTask::EFullRecover,
                 TargetVDiskId,
                 TargetActorId,
-                sstWriterId,
+                TActorId(),
                 PeerSyncState,
                 JobCtx);
             // run task
             const TActorId jobActorId = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID));
             ActiveActors.Insert(jobActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-            sstWriterActor->SetSyncerJobActorId(jobActorId);
-#endif
             // state func
             Become(&TThis::WaitForSyncStateFunc);
         }
@@ -91,11 +77,6 @@ namespace NKikimr {
                             TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
             ActiveActors.Erase(ev->Sender);
             auto* msg = ev->Get();
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-            if (msg->Task->SstWriterId) {
-                ActiveActors.Erase(msg->Task->SstWriterId);
-            }
-#endif
             std::unique_ptr<TSyncerJobTask> task = std::move(msg->Task);
             auto syncStatus = task->GetCurrent().LastSyncStatus;
             if (!TPeerSyncState::Good(syncStatus)) {

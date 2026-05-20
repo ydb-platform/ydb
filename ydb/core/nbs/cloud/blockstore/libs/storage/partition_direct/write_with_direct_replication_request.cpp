@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <utility>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,29 +22,25 @@ TWriteWithDirectReplicationRequestExecutor::
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId,
-        TDuration hedgingDelay,
-        TDuration timeout)
+        NWilson::TTraceId traceId)
     : TBaseWriteRequestExecutor(
           actorSystem,
           vChunkConfig,
           std::move(directBlockGroup),
-          std::move(vChunkRange),
+          vChunkRange,
           std::move(callContext),
           std::move(request),
           lsn,
-          std::move(traceId),
-          hedgingDelay,
-          timeout)
+          std::move(traceId))
 {}
 
 void TWriteWithDirectReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
-    SendWriteRequest(ELocation::PBuffer0);
-    SendWriteRequest(ELocation::PBuffer1);
-    SendWriteRequest(ELocation::PBuffer2);
+    for (auto host: VChunkConfig.PBufferHosts.GetPrimary()) {
+        SendWriteRequest(host);
+    }
 }
 
 void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
@@ -71,23 +69,23 @@ void TWriteWithDirectReplicationRequestExecutor::
         return;
     }
 
-    const auto availableHandOffLocations = GetAvailableHandOffLocations();
+    const auto availableHandOffHosts = GetAvailableHandOffHosts();
     const size_t neededHedgingRequestsCount = std::min(
         QuorumDirectBlockGroupHostCount - CompletedWrites.Count(),
-        availableHandOffLocations.size());
+        availableHandOffHosts.size());
 
     for (size_t i = 0; i < neededHedgingRequestsCount; ++i) {
-        const auto& location = availableHandOffLocations[i];
+        const auto host = availableHandOffHosts[i];
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "TWriteWithDirectReplicationRequestExecutor. Send write request to "
-            "handoff buffer %lu since we "
+            "handoff host %u since we "
             "have %lu completed writes",
-            GetLocationIndex(location),
+            static_cast<ui32>(host),
             CompletedWrites.Count());
 
-        SendWriteRequest(location);
+        SendWriteRequest(host);
     }
 }
 

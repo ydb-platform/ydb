@@ -1,13 +1,15 @@
 #include "json_index.h"
 
+#include <library/cpp/json/json_writer.h>
+#include <util/string/join.h>
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/binary_json/format.h>
 
-namespace NKikimr {
+#include <ranges>
 
-namespace NJsonIndex {
+namespace NKikimr::NJsonIndex {
 
 using NYql::TIssue;
 using NYql::TIssues;
@@ -52,12 +54,13 @@ void AppendKey(TString& prefix, TStringBuf key) {
     prefix += key;
 }
 
-bool IsLiteralType(EJsonPathItemType type) {
+bool IsSuffixType(EJsonPathItemType type) {
     switch (type) {
         case EJsonPathItemType::StringLiteral:
         case EJsonPathItemType::NumberLiteral:
         case EJsonPathItemType::BooleanLiteral:
         case EJsonPathItemType::NullLiteral:
+        case EJsonPathItemType::Variable:
             return true;
         default:
             return false;
@@ -99,30 +102,33 @@ bool IsPredicateType(EJsonPathItemType type) {
 // Therefore \x00 can only appear at the start of a literal suffix, never inside the path portion
 // A token B whose content after position A.size() starts with \x00 has the SAME path as A but
 // carries a value constraint - still a valid ancestor/descendant relationship for pruning.
-void PruneRedundantTokens(TCollectResult::TTokens& tokens, TCollectResult::ETokensMode mode) {
+void PruneRedundantTokens(TTokens& tokens, TCollectResult::ETokensMode mode) {
     if (tokens.size() <= 1 || mode == TCollectResult::ETokensMode::NotSet) {
         return;
     }
 
-    TCollectResult::TTokens result;
-    std::optional<TString> lastKept;
+    TTokens result;
+    std::optional<TToken> lastKept;
 
     if (mode == TCollectResult::ETokensMode::Or) {
         // OR: keep minimal tokens (roots). Token is redundant if a shorter prefix is already kept
         for (const auto& token : tokens) {
-            if (lastKept.has_value() && token.StartsWith(*lastKept)) {
+            if (lastKept.has_value() && token.PathToken.StartsWith(lastKept->PathToken)) {
                 continue;
             }
+
             result.insert(token);
-            lastKept = token;
+            if (token.ParamName.empty()) {
+                lastKept = token;
+            }
         }
     } else {
         // AND: keep maximal tokens (leaves). Token is redundant if a longer token that starts with it is already kept
-        for (auto it = tokens.rbegin(); it != tokens.rend(); ++it) {
-            const auto& token = *it;
-            if (lastKept.has_value() && lastKept->StartsWith(token)) {
+        for (const auto& token : std::ranges::reverse_view(tokens)) {
+             if (token.ParamName.empty() && lastKept.has_value() && lastKept->PathToken.StartsWith(token.PathToken)) {
                 continue;
             }
+
             result.insert(token);
             lastKept = token;
         }
@@ -202,14 +208,20 @@ class TQueryCollector {
         Predicate = 2,
 
         // Comparison RHS: scalar literals (string, number, bool, null)
-        // Also supports unary arithmetic operations (+, -) for numbers
+        // Also supports unary arithmetic operations (+, -) for numbers and variables
         Literal = 3
     };
 
 public:
-    TQueryCollector(const TJsonPathPtr path, ECallableType callableType)
+    TQueryCollector(
+        const TJsonPathPtr path, ECallableType callableType,
+        const std::unordered_map<TString, TString>& variables,
+        const std::unordered_map<TString, TString>& paramVariables
+    )
         : Reader(path)
         , CallableType(callableType)
+        , Variables(variables)
+        , ParamVariables(paramVariables.begin(), paramVariables.end())
     {
     }
 
@@ -253,12 +265,14 @@ private:
 private:
     TJsonPathReader Reader;
     ECallableType CallableType;
+    std::unordered_map<TString, TString> Variables;
+    std::unordered_map<TString, TString> ParamVariables;
     TVector<TString> FilterObjectPrefixes;
 };
 
 TCollectResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
     const bool isUnaryOp = item.Type == EJsonPathItemType::UnaryMinus || item.Type == EJsonPathItemType::UnaryPlus;
-    if (mode == EMode::Literal && !IsLiteralType(item.Type) && !isUnaryOp) {
+    if (mode == EMode::Literal && !(IsSuffixType(item.Type) || isUnaryOp)) {
         return TCollectResult(TIssue("Expected a literal expression"));
     }
 
@@ -365,7 +379,7 @@ TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mo
 
     auto& tokens = result.GetTokens();
     auto node = tokens.extract(tokens.begin());
-    AppendKey(node.value(), item.GetString());
+    AppendKey(node.value().PathToken, item.GetString());
     tokens.insert(std::move(node));
     return result;
 }
@@ -373,18 +387,11 @@ TCollectResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mo
 TCollectResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, EMode mode) {
     auto result = Collect(Reader.ReadInput(item), mode);
     result.StopCollecting();
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
-    }
     return result;
 }
 
 TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
-    auto result = Collect(Reader.ReadInput(item), mode);
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
-    }
-    return result;
+    return Collect(Reader.ReadInput(item), mode);
 }
 
 TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
@@ -410,32 +417,8 @@ TCollectResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EM
     const auto& rightItem = Reader.ReadRightOperand(item);
 
     auto leftCollectResult = CollectArithmeticOperand(leftItem, mode);
-    if (leftCollectResult.IsError()) {
-        return leftCollectResult;
-    }
-
     auto rightCollectResult = CollectArithmeticOperand(rightItem, mode);
-    if (rightCollectResult.IsError()) {
-        return rightCollectResult;
-    }
-
-    auto& leftTokens = leftCollectResult.GetTokens();
-    auto& rightTokens = rightCollectResult.GetTokens();
-
-    bool hasMix = false;
-    if (!leftTokens.empty() && !rightTokens.empty()) {
-        if (leftCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
-            rightCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-            hasMix = true;
-        }
-    }
-
-    leftTokens.insert(rightTokens.begin(), rightTokens.end());
-    if (leftTokens.size() > 1) {
-        leftCollectResult.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
-    }
-    leftCollectResult.StopCollecting();
-    return leftCollectResult;
+    return MergeComparisonPathResults(std::move(leftCollectResult), std::move(rightCollectResult));
 }
 
 TCollectResult TQueryCollector::BinaryAnd(const TJsonPathItem& item, EMode mode) {
@@ -464,8 +447,8 @@ TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mod
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
 
-    const bool leftIsLiteral = IsLiteralType(leftItem.Type) || EvaluteNumericLiteral(leftItem).has_value();
-    const bool rightIsLiteral = IsLiteralType(rightItem.Type) || EvaluteNumericLiteral(rightItem).has_value();
+    const bool leftIsLiteral = IsSuffixType(leftItem.Type) || EvaluteNumericLiteral(leftItem).has_value();
+    const bool rightIsLiteral = IsSuffixType(rightItem.Type) || EvaluteNumericLiteral(rightItem).has_value();
 
     if (!leftIsLiteral && rightIsLiteral) {
         return CollectEqualOperands(leftItem, rightItem);
@@ -481,7 +464,7 @@ TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mod
         return MergeComparisonPathResults(std::move(leftCollectResult), std::move(rightCollectResult));
     }
 
-    return TCollectResult(TIssue("Comparison is not allowed between literals on both sides"));
+    return TCollectResult(TIssue("Comparison is not allowed between literals/variables on both sides"));
 }
 
 TCollectResult TQueryCollector::BinaryComparisonOp(const TJsonPathItem& item, EMode mode) {
@@ -521,7 +504,7 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
         return inputCollectResult;
     }
 
-    FilterObjectPrefixes.push_back(*tokens.begin());
+    FilterObjectPrefixes.push_back(tokens.begin()->PathToken);
     const auto& predicateItem = Reader.ReadFilterPredicate(item);
     auto predicateResult = Collect(predicateItem, EMode::Filter);
     FilterObjectPrefixes.pop_back();
@@ -535,11 +518,15 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
 }
 
 TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
-    auto result = Collect(Reader.ReadInput(item), mode);
-    result.StopCollecting();
-    if (!result.IsError() && result.GetTokens().size() > 1) {
-        return TCollectResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
+    const auto& input = Reader.ReadInput(item);
+    if (IsSuffixType(input.Type) || EvaluteNumericLiteral(input).has_value()) {
+        TCollectResult result(TTokens{});
+        result.StopCollecting();
+        return result;
     }
+
+    auto result = Collect(input, mode);
+    result.StopCollecting();
     return result;
 }
 
@@ -568,7 +555,16 @@ TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftIt
     auto& literalTokens = literalResult.GetTokens();
     if (pathResult.CanCollect() && literalTokens.size() == 1) {
         auto node = pathTokens.extract(pathTokens.begin());
-        node.value() += *literalTokens.begin();
+        const auto& literalToken = *literalTokens.begin();
+
+        if (!literalToken.ParamName.empty()) {
+            // Parametric variable: record the variable name so the caller can append a runtime value
+            node.value().ParamName = literalToken.ParamName;
+        } else {
+            // Regular literal: append the encoded value suffix to the path token
+            node.value().PathToken += literalToken.PathToken;
+        }
+
         pathTokens.insert(std::move(node));
     }
 
@@ -577,16 +573,27 @@ TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftIt
 }
 
 TCollectResult TQueryCollector::CollectArithmeticOperand(const TJsonPathItem& item, EMode mode) {
-    if (IsLiteralType(item.Type) || EvaluteNumericLiteral(item).has_value()) {
-        return TCollectResult(TCollectResult::TTokens{});
-    }
-    return Collect(item, mode);
+    return IsSuffixType(item.Type) || EvaluteNumericLiteral(item).has_value() ? TCollectResult(TTokens{}) : Collect(item, mode);
 }
 
 TCollectResult TQueryCollector::Variable(const TJsonPathItem& item, EMode mode) {
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TCollectResult(TIssue("Variables are not supported at the moment"));
+    if (mode != EMode::Literal) {
+        return TCollectResult(TIssue("Variables are not allowed in this context"));
+    }
+
+    auto name = TString(item.GetString());
+
+    if (auto it = ParamVariables.find(name); it != ParamVariables.end()) {
+        TTokens tokens;
+        tokens.emplace("", it->second);
+        return TCollectResult(std::move(tokens));
+    }
+
+    if (auto it = Variables.find(name); it != Variables.end()) {
+        return TCollectResult(TString(it->second));
+    }
+
+    return TCollectResult(TTokens{});
 }
 
 std::optional<double> TQueryCollector::EvaluteNumericLiteral(const TJsonPathItem& item) {
@@ -709,7 +716,7 @@ TCollectResult::TCollectResult(TTokens&& tokens)
 
 TCollectResult::TCollectResult(TString&& token) {
     TTokens tokens;
-    tokens.insert(std::move(token));
+    tokens.emplace(std::move(token), "");
     Result = std::move(tokens);
 }
 
@@ -718,12 +725,12 @@ TCollectResult::TCollectResult(TCollectResult::TError&& issue)
 {
 }
 
-const TCollectResult::TTokens& TCollectResult::GetTokens() const {
+const TTokens& TCollectResult::GetTokens() const {
     Y_ENSURE(!IsError(), "Result is not a query");
     return std::get<TTokens>(Result);
 }
 
-TCollectResult::TTokens& TCollectResult::GetTokens() {
+TTokens& TCollectResult::GetTokens() {
     Y_ENSURE(!IsError(), "Result is not a query");
     return std::get<TTokens>(Result);
 }
@@ -753,19 +760,19 @@ void TCollectResult::SetTokensMode(ETokensMode mode) {
     TokensMode = mode;
 }
 
-TVector<TString> TokenizeBinaryJson(const TStringBuf binaryJson) {
+TVector<TString> TokenizeBinaryJson(TStringBuf text) {
     TVector<TString> tokens;
-    if (!binaryJson.size()) {
+    if (text.empty()) {
         return tokens;
     }
     tokens.emplace_back();
-    auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(binaryJson);
+    auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(text);
     TokenizeBinaryJson(reader->GetRootCursor(), "", tokens);
     return tokens;
 }
 
-TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
-    auto json = NKikimr::NBinaryJson::SerializeToBinaryJson(jsonStr);
+TVector<TString> TokenizeJson(TStringBuf text, TString& error) {
+    auto json = NKikimr::NBinaryJson::SerializeToBinaryJson(text);
     if (std::holds_alternative<TString>(json)) {
         error = std::get<TString>(json);
         return TVector<TString>();
@@ -775,8 +782,10 @@ TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
     return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
 }
 
-TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType) {
-    auto result = TQueryCollector(path, callableType).Collect();
+TCollectResult CollectJsonPath(const TJsonPathPtr& path, ECallableType callableType,
+    const std::unordered_map<TString, TString>& variables, const std::unordered_map<TString, TString>& paramVariables)
+{
+    auto result = TQueryCollector(path, callableType, variables, paramVariables).Collect();
     if (!result.IsError()) {
         if (result.GetTokens().empty()) {
             result = TCollectResult(TIssue("Cannot collect tokens for the given JSON path"));
@@ -800,6 +809,86 @@ TCollectResult MergeOr(TCollectResult left, TCollectResult right) {
         TCollectResult::ETokensMode::And, TCollectResult::ETokensMode::Or);
 }
 
-}  // namespace NJsonIndex
+TString FormatJsonIndexToken(const TString& pathToken, const TString& paramName) {
+    TStringStream ss;
+    NJson::TJsonWriter writer(&ss, /* formatOutput */ false);
+    writer.OpenMap();
 
-}  // namespace NKikimr
+    size_t nullPos = pathToken.find('\0');
+    size_t pathEnd = (nullPos == TString::npos) ? pathToken.size() : nullPos;
+
+    // Decode LEB128-prefixed key segments from the path portion
+    if (pathEnd > 0) {
+        std::vector<TString> path;
+        size_t pos = 0;
+
+        while (pos < pathEnd) {
+            size_t encodedLength = 0;
+            int shift = 0;
+            while (pos < pathEnd) {
+                ui8 byte = static_cast<ui8>(pathToken[pos++]);
+                encodedLength |= static_cast<size_t>(byte & 0x7F) << shift;
+                shift += 7;
+                if (!(byte & 0x80)) {
+                    break;
+                }
+            }
+
+            if (encodedLength == 0) {
+                break;
+            }
+
+            size_t keyLength = encodedLength - 1;
+            if (pos + keyLength > pathEnd) {
+                break;
+            }
+
+            path.push_back(pathToken.substr(pos, keyLength));
+            pos += keyLength;
+        }
+
+        if (!path.empty()) {
+            writer.Write("path", JoinSeq(".", path));
+        }
+    }
+
+    // Decode literal suffix
+    if (nullPos != TString::npos && nullPos + 1 < pathToken.size()) {
+        auto typeCode = static_cast<NBinaryJson::EEntryType>(static_cast<ui8>(pathToken[nullPos + 1]));
+
+        switch (typeCode) {
+            case NBinaryJson::EEntryType::BoolFalse:
+                writer.Write("literal", false);
+                break;
+            case NBinaryJson::EEntryType::BoolTrue:
+                writer.Write("literal", true);
+                break;
+            case NBinaryJson::EEntryType::Null:
+                writer.Write("literal", NJson::TJsonValue(NJson::JSON_NULL));
+                break;
+            case NBinaryJson::EEntryType::String:
+                writer.Write("literal", pathToken.substr(nullPos + 2));
+                break;
+            case NBinaryJson::EEntryType::Number:
+                if (nullPos + 2 + sizeof(double) <= pathToken.size()) {
+                    double d;
+                    memcpy(&d, pathToken.data() + nullPos + 2, sizeof(double));
+                    writer.Write("literal", d);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    // Param name
+    if (!paramName.empty()) {
+        writer.Write("param", paramName);
+    }
+
+    writer.CloseMap();
+    writer.Flush();
+    return ss.Str();
+}
+
+} // namespace NKikimr::NJsonIndex

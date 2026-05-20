@@ -208,6 +208,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomFilterIndex;
                 case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;
                 case NKikimrSchemeOp::EIndexTypeInvalid:
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -945,6 +947,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     entry->SetShardsLimit(subDomainInfo->GetSchemeLimits().MaxShards);
     entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside());
     entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions);
+    entry->SetPQGroupsInside(subDomainInfo->GetPQGroupsInside());
     *entry->MutableSchemeLimits() = subDomainInfo->GetSchemeLimits().AsProto();
 
     NKikimrSubDomains::TDomainKey *resourcesKey = entry->MutableResourcesDomainKey();
@@ -1535,6 +1538,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             break;

@@ -680,105 +680,362 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
     return CreateClusters(settings, maxRounds, error);
 }
 
-bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
-    error = "";
-
-    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
-        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
-        return false;
-    }
-
-    if (!settings.has_settings()) {
-        error = TStringBuilder() << "vector index settings should be set";
-        return false;
-    }
-
-    if (!ValidateSettings(settings.settings(), error)) {
-        return false;
-    }
-
-    if (!ValidateSettingInRange("levels",
-        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt,
-        MinLevels, MaxLevels,
-        error))
-    {
-        return false;
-    }
-
-    if (!ValidateSettingInRange("clusters",
-        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
-        MinClusters, MaxClusters,
-        error))
-    {
-        return false;
-    }
-
-    if (settings.has_overlap_clusters() &&
-        settings.overlap_clusters() > settings.clusters()) {
-        error = TStringBuilder() << "overlap_clusters should be less than or equal to clusters";
-        return false;
-    }
-
-    if (settings.has_overlap_ratio() &&
-        settings.overlap_ratio() < 0) {
-        error = TStringBuilder() << "overlap_ratio should be >= 0";
-        return false;
-    }
-
-    ui64 clustersPowLevels = 1;
-    for (ui64 i = 0; i < settings.levels(); ++i) {
-        clustersPowLevels *= settings.clusters();
-        if (clustersPowLevels > MaxClustersPowLevels) {
-            error = TStringBuilder() << "Invalid clusters^levels: " << settings.clusters() << "^" << settings.levels() << " should be less than " << MaxClustersPowLevels;
+namespace {
+    bool ValidateSettingsImpl(const Ydb::Table::VectorIndexSettings& settings, bool partial, TString& error) {
+        if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+            error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
             return false;
         }
+
+        if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
+            error = TStringBuilder() << "either distance or similarity should be set";
+            return false;
+        }
+        if (!Ydb::Table::VectorIndexSettings::Metric_IsValid(settings.metric())) {
+            error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
+            return false;
+        }
+
+        if (partial) {
+            if (settings.has_vector_type()) {
+                if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
+                    error = TStringBuilder() << "vector_type should be set";
+                    return false;
+                }
+                if (!Ydb::Table::VectorIndexSettings::VectorType_IsValid(settings.vector_type())) {
+                    error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
+                    return false;
+                }
+            }
+
+            if (settings.has_vector_dimension() && settings.vector_dimension() != 0) {
+                if (!ValidateSettingInRange("vector_dimension",
+                    std::optional<ui64>(settings.vector_dimension()),
+                    MinVectorDimension, MaxVectorDimension,
+                    error))
+                {
+                    return false;
+                }
+            }
+        } else {
+            if (!settings.has_vector_type() || settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
+                error = TStringBuilder() << "vector_type should be set";
+                return false;
+            }
+            if (!Ydb::Table::VectorIndexSettings::VectorType_IsValid(settings.vector_type())) {
+                error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
+                return false;
+            }
+
+            if (!ValidateSettingInRange("vector_dimension",
+                settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt,
+                MinVectorDimension, MaxVectorDimension,
+                error))
+            {
+                Y_ASSERT(error);
+                return false;
+            }
+        }
+
+        error = "";
+        return true;
     }
 
-    if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
-        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters()
-            << " should be less than " << MaxVectorDimensionMultiplyClusters;
+    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error) {
+        error = "";
+
+        if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+            error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+            return false;
+        }
+
+        if (!settings.has_settings()) {
+            error = TStringBuilder() << "vector index settings should be set";
+            return false;
+        }
+
+        if (!ValidateSettingsImpl(settings.settings(), partial, error)) {
+            return false;
+        }
+
+        if (partial) {
+            if (settings.has_levels()) {
+                if (!ValidateSettingInRange("levels",
+                    std::optional<ui64>(settings.levels()),
+                    MinLevels, MaxLevels,
+                    error))
+                {
+                    return false;
+                }
+            }
+
+            if (settings.has_clusters()) {
+                if (!ValidateSettingInRange("clusters",
+                    std::optional<ui64>(settings.clusters()),
+                    MinClusters, MaxClusters,
+                    error))
+                {
+                    return false;
+                }
+            }
+        } else {
+            if (!ValidateSettingInRange("levels",
+                settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt,
+                MinLevels, MaxLevels,
+                error))
+            {
+                return false;
+            }
+
+            if (!ValidateSettingInRange("clusters",
+                settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
+                MinClusters, MaxClusters,
+                error))
+            {
+                return false;
+            }
+        }
+
+        if (settings.has_overlap_clusters() &&
+            (!partial || settings.has_clusters()) &&
+            settings.overlap_clusters() > settings.clusters()) {
+            error = TStringBuilder() << "overlap_clusters should be less than or equal to clusters";
+            return false;
+        }
+
+        if (settings.has_overlap_ratio() &&
+            settings.overlap_ratio() < 0) {
+            error = TStringBuilder() << "overlap_ratio should be >= 0";
+            return false;
+        }
+
+        // Cross-field validations only when both operands are present
+        if (settings.has_levels() && settings.has_clusters()) {
+            ui64 clustersPowLevels = 1;
+            for (ui64 i = 0; i < settings.levels(); ++i) {
+                clustersPowLevels *= settings.clusters();
+                if (clustersPowLevels > MaxClustersPowLevels) {
+                    error = TStringBuilder() << "Invalid clusters^levels: " << settings.clusters() << "^" << settings.levels() << " should be less than " << MaxClustersPowLevels;
+                    return false;
+                }
+            }
+        }
+
+        if (settings.settings().has_vector_dimension() && settings.settings().vector_dimension() != 0
+            && settings.has_clusters())
+        {
+            if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
+                error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters()
+                    << " should be less than " << MaxVectorDimensionMultiplyClusters;
+                return false;
+            }
+        }
+
+        error = "";
+        return true;
+    }
+} // namespace
+
+bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, false, error);
+}
+
+bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, true, error);
+}
+
+bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, true, error);
+}
+
+ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {
+    // C = ((L * T * P * N) / (1 + T * (L - 1))) ^ (1 / (L + 1))
+    double num = levels * searchWidth * avgClustersPerVector * rowCount;
+    double den = 1.0 + searchWidth * (levels - 1);
+    double clusters = std::pow(num / den, 1.0 / (levels + 1));
+    ui64 result = static_cast<ui64>(std::round(clusters));
+    if (result < MinClusters) {
+        result = MinClusters;
+    }
+    if (result > MaxClusters) {
+        result = MaxClusters;
+    }
+    return result;
+}
+
+double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {
+    // S = C + C * T * (L - 1) + T * N * P / (C ^ L)
+    double denominator = std::pow(static_cast<double>(clusters), static_cast<double>(levels));
+    return clusters + clusters * searchWidth * (levels - 1) + (searchWidth * rowCount * avgClustersPerVector) / denominator;
+}
+
+bool NeedsVectorSettingsAutoSelect(const Ydb::Table::VectorIndexSettings& vectorSettings) {
+    return (!vectorSettings.has_vector_type() || vectorSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED)
+        || (!vectorSettings.has_vector_dimension() || vectorSettings.vector_dimension() == 0);
+}
+
+bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, const TStringBuf& embedding) {
+    if (embedding.empty()) {
         return false;
     }
 
-    error = "";
+    const bool hasVectorType = vectorSettings.has_vector_type()
+        && vectorSettings.vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
+    const bool hasVectorDimension = vectorSettings.has_vector_dimension()
+        && vectorSettings.vector_dimension() != 0;
+
+    if (hasVectorType && hasVectorDimension) {
+        return true;
+    }
+
+    const ui8 formatByte = static_cast<ui8>(embedding.back());
+    switch (formatByte) {
+    case EFormat::FloatVector:
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        }
+        if (!hasVectorDimension) {
+            if (embedding.size() < HeaderLen + sizeof(float)) {
+                return false;
+            }
+            vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(float));
+        }
+        break;
+    case EFormat::Uint8Vector:
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+        }
+        if (!hasVectorDimension) {
+            if (embedding.size() < HeaderLen + sizeof(ui8)) {
+                return false;
+            }
+            vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(ui8));
+        }
+        break;
+    case EFormat::Int8Vector:
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8);
+        }
+        if (!hasVectorDimension) {
+            if (embedding.size() < HeaderLen + sizeof(i8)) {
+                return false;
+            }
+            vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(i8));
+        }
+        break;
+    case EFormat::BitVector: {
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT);
+        }
+        if (!hasVectorDimension) {
+            if (embedding.size() < HeaderLen + 2) {
+                return false;
+            }
+            const ui8 paddingBits = static_cast<ui8>(embedding[embedding.size() - 2]);
+            const size_t payloadBits = (embedding.size() - HeaderLen - 1) * 8;
+            if (payloadBits < paddingBits) {
+                return false;
+            }
+            vectorSettings.set_vector_dimension(payloadBits - paddingBits);
+        }
+        break;
+    }
+    default:
+        return false;
+    }
+
     return true;
 }
 
+void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 rowCount, bool isPrefixed) {
+    const bool hasLevels = settings.has_levels() && settings.levels() > 0;
+    const bool hasClusters = settings.has_clusters() && settings.clusters() > 0;
+
+    if (hasLevels && hasClusters) {
+        return;
+    }
+
+    if (isPrefixed) {
+        rowCount = static_cast<ui64>(std::sqrt(static_cast<double>(rowCount)));
+    }
+
+    if (rowCount < 100) {
+        if (!hasLevels) {
+            settings.set_levels(1);
+        }
+        if (!hasClusters) {
+            settings.set_clusters(MinClusters);
+        }
+        return;
+    }
+
+    double searchWidth = 10;
+    double avgClustersPerVector = 1;
+    if (settings.has_overlap_clusters() && settings.overlap_clusters() > 0) {
+        searchWidth = 4;
+        avgClustersPerVector = settings.overlap_clusters() - 0.5;
+    }
+    constexpr double scoreThreshold = 1500;
+
+    auto clampClusters = [&](ui64 clusters, ui64 levels) -> ui64 {
+        ui64 maxClusters = MaxClusters;
+        if (levels > 0) {
+            double maxByPowLevels = std::pow(static_cast<double>(MaxClustersPowLevels), 1.0 / levels);
+            maxClusters = std::min(maxClusters, static_cast<ui64>(std::floor(maxByPowLevels)));
+        }
+        if (settings.settings().has_vector_dimension() && settings.settings().vector_dimension() != 0) {
+            ui64 maxByDim = MaxVectorDimensionMultiplyClusters / settings.settings().vector_dimension();
+            maxClusters = std::min(maxClusters, maxByDim);
+        }
+        clusters = std::min(clusters, maxClusters);
+        return clusters < MinClusters ? MinClusters : clusters;
+    };
+
+    if (!hasLevels && !hasClusters) {
+        ui64 bestLevels = 1;
+        ui64 bestClusters = MinClusters;
+        double bestScore = std::numeric_limits<double>::max();
+
+        for (ui64 levels = 1; levels <= MaxLevels; ++levels) {
+            ui64 clusters = ComputeOptimalClusters(levels, searchWidth, rowCount, avgClustersPerVector);
+            clusters = clampClusters(clusters, levels);
+            double score = ComputeEfficiencyScore(levels, clusters, searchWidth, rowCount, avgClustersPerVector);
+            if (score < bestScore) {
+                bestScore = score;
+                bestLevels = levels;
+                bestClusters = clusters;
+            }
+            if (score < scoreThreshold) {
+                break;
+            }
+        }
+        settings.set_levels(bestLevels);
+        settings.set_clusters(bestClusters);
+    } else if (hasLevels && !hasClusters) {
+        ui64 clusters = ComputeOptimalClusters(settings.levels(), searchWidth, rowCount, avgClustersPerVector);
+        clusters = clampClusters(clusters, settings.levels());
+        settings.set_clusters(clusters);
+    } else if (!hasLevels && hasClusters) {
+        ui64 clusters = settings.clusters();
+        ui64 bestLevels = 1;
+        double bestScore = std::numeric_limits<double>::max();
+
+        for (ui64 levels = 1; levels <= MaxLevels; ++levels) {
+            double score = ComputeEfficiencyScore(levels, clusters, searchWidth, rowCount, avgClustersPerVector);
+            if (score < bestScore) {
+                bestScore = score;
+                bestLevels = levels;
+            }
+            if (score < scoreThreshold) {
+                break;
+            }
+        }
+        settings.set_levels(bestLevels);
+    }
+}
+
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
-    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
-        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
-        return false;
-    }
-
-    if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
-        error = TStringBuilder() << "either distance or similarity should be set";
-        return false;
-    }
-    if (!Ydb::Table::VectorIndexSettings::Metric_IsValid(settings.metric())) {
-        error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
-        return false;
-    }
-
-    if (!settings.has_vector_type() || settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
-        error = TStringBuilder() << "vector_type should be set";
-        return false;
-    }
-    if (!Ydb::Table::VectorIndexSettings::VectorType_IsValid(settings.vector_type())) {
-        error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
-        return false;
-    }
-
-    if (!ValidateSettingInRange("vector_dimension",
-        settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt,
-        MinVectorDimension, MaxVectorDimension,
-        error))
-    {
-        Y_ASSERT(error);
-        return false;
-    }
-
-    error = "";
-    return true;
+    return ValidateSettingsImpl(settings, false, error);
 }
 
 bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower, const TString& value, TString& error) {

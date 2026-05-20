@@ -49,6 +49,17 @@ inline bool ConvertOlapIndexToCreationConfig(
         config.AddKeyColumnNames(it->second);
         *config.MutableBloomNGrammFilterDescription() = indexProto.GetBloomNGrammFilter();
         return true;
+    } else if (indexProto.HasMinMaxIndex()) {
+        config.SetType(NKikimrSchemeOp::EIndexTypeLocalMinMax);
+        auto it = columnIdToName.find(indexProto.GetMinMaxIndex().GetColumnId());
+        
+        if (it == columnIdToName.end()) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "ConvertOlapIndexToCreationConfig: MinMax column ID " << indexProto.GetMinMaxIndex().GetColumnId()
+                << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+            return false;
+        }
+        config.AddKeyColumnNames(it->second);
     }
 
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,

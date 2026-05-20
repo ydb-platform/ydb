@@ -9,13 +9,10 @@
 
 #include <yt/yt/core/ytree/unittests/proto/test.pb.h>
 
-#include <yt/yt/client/table_client/logical_type.h>
-
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
-using NTableClient::TTypeV3LogicalTypeWrapper;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -327,8 +324,6 @@ void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected, const TY
     EXPECT_TRUE(AreNodesEqual(expectedNode, actualNode))
         << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n"
         << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n";
-
-    EXPECT_NO_THROW(ConvertTo<TTypeV3LogicalTypeWrapper>(actualNode));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

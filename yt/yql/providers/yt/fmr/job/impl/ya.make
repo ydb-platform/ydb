@@ -6,6 +6,7 @@ SRCS(
     yql_yt_job_impl.cpp
     yql_yt_raw_table_queue_reader.cpp
     yql_yt_raw_table_queue_writer.cpp
+    yql_yt_reduce_reader.cpp
     yql_yt_sorted_merge_reader.cpp
     yql_yt_table_data_service_reader.cpp
     yql_yt_table_data_service_base_writer.cpp

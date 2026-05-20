@@ -1,12 +1,12 @@
 Metadata-Version: 2.4
 Name: rich
-Version: 14.3.4
+Version: 15.0.0
 Summary: Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal
 License: MIT
 License-File: LICENSE
 Author: Will McGugan
 Author-email: willmcgugan@gmail.com
-Requires-Python: >=3.8.0
+Requires-Python: >=3.9.0
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Environment :: Console
 Classifier: Framework :: IPython
@@ -16,7 +16,6 @@ Classifier: Operating System :: MacOS
 Classifier: Operating System :: Microsoft :: Windows
 Classifier: Operating System :: POSIX :: Linux
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11

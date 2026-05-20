@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_settings.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/ai_session_runner.h>
@@ -79,11 +80,18 @@ TVersionInfo ResolveVersionInfo(const TDriver& driver) {
     return result;
 }
 
-std::vector<ISessionRunner::TPtr> SetupSessions(const TClientCommand::TConfig& config, const TDriver& driver, TInteractiveConfigurationManager::TPtr configManager) {
+std::vector<ISessionRunner::TPtr> SetupSessions(
+    const TClientCommand::TConfig& config,
+    TInteractiveConfigurationManager::TPtr configManager,
+    TLazyDriver::TPtr completerLazyDriver,
+    TLazyDriver::TPtr sqlLazyDriver,
+    TLazyDriver::TPtr aiLazyDriver)
+{
     std::vector<ISessionRunner::TPtr> sessions;
 
     sessions.push_back(CreateSqlSessionRunner({
-        .Driver = driver,
+        .SqlLazyDriver = std::move(sqlLazyDriver),
+        .CompleterLazyDriver = std::move(completerLazyDriver),
         .Database = config.Database,
         .EnableAiInteractive = config.EnableAiInteractive,
     }));
@@ -106,7 +114,7 @@ std::vector<ISessionRunner::TPtr> SetupSessions(const TClientCommand::TConfig& c
         sessions.push_back(CreateAiSessionRunner({
             .ConfigurationManager = configManager,
             .Database = config.Database,
-            .Driver = driver,
+            .AiLazyDriver = std::move(aiLazyDriver),
             .ConnectionString = connectionStringBuilder,
             .UsageInfoGetter = config.UsageInfoGetter,
         }));
@@ -122,8 +130,6 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName)
 {}
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
-    config.BuildInfoCommandTag = "interactive";
-
     // Ctrl+C handling stays where it should: inside replxx. While a line is being read the
     // terminal is in raw mode with ISIG disabled, so the tty driver does not turn Ctrl+C
     // into SIGINT — it arrives as a \x03 byte that replxx interprets as a cancel event
@@ -146,14 +152,32 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     };
 #endif
 
-    const TDriver driver(config.CreateDriverConfig());
     const auto configManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, !config.EnableAiInteractive);
-    if (auto code = PrintWelcomeMessage(config, driver, configManager)) {
-        return code;
+
+    // Probe driver: only used for the connectivity check and welcome message.
+    {
+        TDriver probeDriver(config.CreateDriverConfigWithBuildInfo("interactive"));
+        Y_DEFER { probeDriver.Stop(true); };
+        if (auto code = PrintWelcomeMessage(config, probeDriver, configManager)) {
+            return code;
+        }
     }
 
+    auto completerLazyDriver = std::make_shared<TLazyDriver>(
+        [&config] { return TDriver(config.CreateDriverConfig()); });
+    auto sqlLazyDriver = std::make_shared<TLazyDriver>(
+        [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql")); });
+    auto aiLazyDriver = std::make_shared<TLazyDriver>(
+        [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-ai")); });
+
+    Y_DEFER {
+        aiLazyDriver->Stop(true);
+        sqlLazyDriver->Stop(true);
+        completerLazyDriver->Stop(true);
+    };
+
     ui64 activeSession = static_cast<ui64>(configManager->GetInteractiveMode());
-    const auto& sessions = SetupSessions(config, driver, configManager);
+    const auto& sessions = SetupSessions(config, configManager, completerLazyDriver, sqlLazyDriver, aiLazyDriver);
     Y_VALIDATE(activeSession < sessions.size(), "Invalid active session: " << activeSession);
 
     ILineReader::TPtr lineReader;

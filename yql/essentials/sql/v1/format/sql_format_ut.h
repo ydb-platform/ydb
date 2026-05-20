@@ -955,6 +955,36 @@ Y_UNIT_TEST(Reduce) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Combine) {
+    TCases cases = {
+        {"combine leftInput with rightInput "
+         "on leftInput.key=rightInput.key using $f((value),(value))",
+         "COMBINE leftInput\nWITH rightInput\n"
+         "ON\n\tleftInput.key == rightInput.key\nUSING $f((value), (value));\n"},
+        {"combine leftInput presort key with rightInput presort key "
+         "on leftInput.key=rightInput.key using $f((value),(value))",
+         "COMBINE leftInput\n\tPRESORT\n\t\tkey\nWITH rightInput\n\tPRESORT\n\t\tkey\n"
+         "ON\n\tleftInput.key == rightInput.key\nUSING $f((value), (value));\n"},
+        {"combine leftInput presort key,subkey with rightInput presort key,subkey "
+         "on leftInput.key=rightInput.key AND leftInput.subkey=rightInput.subkey "
+         "using $f((value,extra),(value,extra))",
+         "COMBINE leftInput\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "WITH rightInput\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "ON\n\tleftInput.key == rightInput.key AND leftInput.subkey == rightInput.subkey\n"
+         "USING $f((value, extra), (value, extra));\n"},
+        {"combine leftInput as L presort key,subkey with rightInput as R presort key,subkey "
+         "on L.key=R.key AND L.subkey=R.subkey "
+         "using $f((value,extra),(value,extra))",
+         "COMBINE leftInput AS L\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "WITH rightInput AS R\n\tPRESORT\n\t\tkey,\n\t\tsubkey\n"
+         "ON\n\tL.key == R.key AND L.subkey == R.subkey\n"
+         "USING $f((value, extra), (value, extra));\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Select) {
     TCases cases = {
         {"select 1",

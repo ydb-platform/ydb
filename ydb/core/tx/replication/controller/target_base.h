@@ -5,7 +5,7 @@
 
 namespace NKikimr::NReplication::NController {
 
-class TTargetBaseStats: public TReplication::ITargetStats {
+class ITargetBaseStats: public TReplication::ITargetStats {
 protected:
     virtual bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) = 0;
     virtual void RemoveWorker(ui64 workerId) = 0;
@@ -31,7 +31,7 @@ protected:
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
 public:
-    struct TConfigBase : public IConfig {
+    struct TConfigBase: public IConfig {
         using TPtr = std::shared_ptr<TConfigBase>;
 
         TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath);
@@ -87,8 +87,8 @@ public:
 
 private:
     TReplication* const Replication;
-    const ui64 Id;
     const ETargetKind Kind;
+    const ui64 Id;
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;

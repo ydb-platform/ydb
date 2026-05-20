@@ -1586,23 +1586,27 @@ struct TEvBlobStorage {
         TInstant Deadline;
         NKikimrBlobStorage::EGetHandleClass GetHandleClass;
         bool SingleLine;    // Print DataInfo in single line
+        bool OmitDataInfoUnlessError;
 
         TEvCheckIntegrity(TCloneEventPolicy, const TEvCheckIntegrity& origin)
             : Id(origin.Id)
             , Deadline(origin.Deadline)
             , GetHandleClass(origin.GetHandleClass)
             , SingleLine(origin.SingleLine)
+            , OmitDataInfoUnlessError(origin.OmitDataInfoUnlessError)
         {}
 
         TEvCheckIntegrity(
                 const TLogoBlobID& id,
                 TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass getHandleClass,
-                bool singleLine = false)
+                bool singleLine = false,
+                bool omitDataInfoUnlessError = false)
             : Id(id)
             , Deadline(deadline)
             , GetHandleClass(getHandleClass)
             , SingleLine(singleLine)
+            , OmitDataInfoUnlessError(omitDataInfoUnlessError)
         {}
 
         TString Print(bool /*isFull*/) const {

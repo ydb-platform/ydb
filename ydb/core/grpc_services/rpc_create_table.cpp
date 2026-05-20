@@ -11,6 +11,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/local_indexes/bloom/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -108,7 +109,7 @@ private:
 
     bool MakeCreateColumnTable(const Ydb::Table::CreateTableRequest& req, const TString& tableName,
                             NKikimrSchemeOp::TModifyScheme& schemaProto,
-                            StatusIds::StatusCode& code, NYql::TIssues& issues) {
+                            StatusIds::StatusCode& code, NYql::TIssues& issues, const TActorContext& ctx) {
         schemaProto.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
         auto tableDesc = schemaProto.MutableCreateColumnTable();
         tableDesc->SetName(tableName);
@@ -277,6 +278,40 @@ private:
                     }
                     break;
                 }
+                case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                    if (!AppData()->FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                        LOG_ERROR_S(ctx, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    } 
+
+                    if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                        LOG_ERROR_S(ctx, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage);
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+
+                    olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                    auto* min_max = olapIndex->MutableMinMaxIndex();
+                    if (index.index_columns().size() != 1) {
+                        LOG_ERROR_S(ctx, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns())));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    
+                    if (auto it = colNameToId.find(index.index_columns(0)); it == colNameToId.end()) {
+                        LOG_ERROR_S(ctx, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0)));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0))));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    } else {
+                        min_max->SetColumnId(it->second);
+                    }
+                    break;
+                }
                 case Ydb::Table::TableIndex::TYPE_NOT_SET:
                 case Ydb::Table::TableIndex::kGlobalIndex:
                 case Ydb::Table::TableIndex::kGlobalAsyncIndex:
@@ -326,7 +361,7 @@ private:
         if (req->store_type() == Ydb::Table::StoreType::STORE_TYPE_COLUMN) {
             StatusIds::StatusCode code = StatusIds::SUCCESS;
             NYql::TIssues issues;
-            if (MakeCreateColumnTable(*req, name, *modifyScheme, code, issues)) {
+            if (MakeCreateColumnTable(*req, name, *modifyScheme, code, issues, ctx)) {
                 ctx.Send(MakeTxProxyID(), proposeRequest.release());
             } else {
                 Reply(code, issues, ctx);

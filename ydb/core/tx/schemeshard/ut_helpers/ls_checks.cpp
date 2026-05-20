@@ -740,6 +740,21 @@ TCheckFunc PQPartitionsInsideDomain(ui64 count) {
     };
 }
 
+TCheckFunc PQGroupsInsideDomain(ui64 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& pathDescr = record.GetPathDescription();
+        const auto& domain = pathDescr.GetDomainDescription();
+        const auto& curCount = domain.GetPQGroupsInside();
+
+        UNIT_ASSERT_EQUAL_C(curCount, count,
+                            "pq groups inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
+                                " has count " << curCount <<
+                                " but expected " << count);
+    };
+}
+
 DESCRIBE_ASSERT_EQUAL(TopicReservedStorage, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetReserveSize(), "Topic ReserveSize")
 DESCRIBE_ASSERT_EQUAL(TopicAccountSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
 DESCRIBE_ASSERT_GE(TopicAccountSizeGE, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")

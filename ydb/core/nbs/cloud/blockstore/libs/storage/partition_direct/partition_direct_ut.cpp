@@ -22,6 +22,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr ui64 BlocksPerRegion = RegionSize / DefaultBlockSize;
+constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
@@ -656,7 +657,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             GetLoadActorAdapterActorId(env, partition, edge);
 
         bool alreadyOnce{};
-        ui8 singleWriteRequestsCounter{};
+        size_t singleWriteRequestsCounter{};
         runtime->FilterFunction =
             [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
         {

@@ -51,8 +51,15 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     if (*txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
         *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO &&
-        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW)
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW)
         return false;
+
+    if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+        // In Read Committed mode, each query should see the latest committed data,
+        // so we need a fresh snapshot for each query, not a cached one.
+        return true;
+    }
 
     if (txCtx.GetSnapshot().IsValid())
         return false;
@@ -310,36 +317,55 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                 }
             }
 
+            auto processSinkSettings = [&](NKikimrKqp::TKqpTableSinkSettings& settings) {
+                const bool tableModifiedBefore = modifiedTables.contains(getTable(settings.GetTable()));
+                modifiedTables.insert(getTable(settings.GetTable()));
+                for (const auto& index : settings.GetIndexes()) {
+                    modifiedTables.insert(getTable(index.GetTable()));
+                }
+
+                // For plans compatibility with old indexes. Don't need it for new.
+                if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
+                    AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+                    return true;
+                }
+
+                // For plans compatibility with old indexes. Don't need it for new.
+                for (const auto& index : settings.GetIndexes()) {
+                    if (index.GetIsUniq() && tableModifiedBefore) {
+                        return true;
+                    }
+                }
+
+                if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
+                    // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
+                    return true;
+                }
+
+                return false;
+            };
+
             for (const auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
-                    const bool tableModifiedBefore = modifiedTables.contains(getTable(settings.GetTable()));
-                    modifiedTables.insert(getTable(settings.GetTable()));
-                    for (const auto& index : settings.GetIndexes()) {
-                        modifiedTables.insert(getTable(index.GetTable()));
-                    }
-
-                    // For plans compatibility with old indexes. Don't need it for new.
-                    if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
-                        AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-                        return true;
-                    }
-
-                    // For plans compatibility with old indexes. Don't need it for new.
-                    for (const auto& index : settings.GetIndexes()) {
-                        if (index.GetIsUniq() && tableModifiedBefore) {
-                            return true;
-                        }
-                    }
-
-                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
-                        // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
+                    if (processSinkSettings(settings)) {
                         return true;
                     }
                 } else {
+                    return true;
+                }
+            }
+
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                AFL_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+
+                if (processSinkSettings(settings)) {
                     return true;
                 }
             }

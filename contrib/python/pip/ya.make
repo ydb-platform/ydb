@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(26.0.1)
+VERSION(26.1)
 
 LICENSE(MIT)
 
@@ -184,12 +184,6 @@ PY_SRCS(
     pip/_vendor/certifi/__init__.py
     pip/_vendor/certifi/__main__.py
     pip/_vendor/certifi/core.py
-    pip/_vendor/dependency_groups/__init__.py
-    pip/_vendor/dependency_groups/__main__.py
-    pip/_vendor/dependency_groups/_implementation.py
-    pip/_vendor/dependency_groups/_lint_dependency_groups.py
-    pip/_vendor/dependency_groups/_pip_wrapper.py
-    pip/_vendor/dependency_groups/_toml_compat.py
     pip/_vendor/distlib/__init__.py
     pip/_vendor/distlib/compat.py
     pip/_vendor/distlib/resources.py
@@ -217,6 +211,9 @@ PY_SRCS(
     pip/_vendor/packaging/_parser.py
     pip/_vendor/packaging/_structures.py
     pip/_vendor/packaging/_tokenizer.py
+    pip/_vendor/packaging/dependency_groups.py
+    pip/_vendor/packaging/direct_url.py
+    pip/_vendor/packaging/errors.py
     pip/_vendor/packaging/licenses/__init__.py
     pip/_vendor/packaging/licenses/_spdx.py
     pip/_vendor/packaging/markers.py
@@ -380,35 +377,31 @@ PY_SRCS(
     pip/_vendor/truststore/_ssl_constants.py
     pip/_vendor/truststore/_windows.py
     pip/_vendor/urllib3/__init__.py
+    pip/_vendor/urllib3/_base_connection.py
     pip/_vendor/urllib3/_collections.py
+    pip/_vendor/urllib3/_request_methods.py
     pip/_vendor/urllib3/_version.py
     pip/_vendor/urllib3/connection.py
     pip/_vendor/urllib3/connectionpool.py
     pip/_vendor/urllib3/contrib/__init__.py
-    pip/_vendor/urllib3/contrib/_appengine_environ.py
-    pip/_vendor/urllib3/contrib/_securetransport/__init__.py
-    pip/_vendor/urllib3/contrib/_securetransport/bindings.py
-    pip/_vendor/urllib3/contrib/_securetransport/low_level.py
-    pip/_vendor/urllib3/contrib/appengine.py
-    pip/_vendor/urllib3/contrib/ntlmpool.py
+    pip/_vendor/urllib3/contrib/emscripten/__init__.py
+    pip/_vendor/urllib3/contrib/emscripten/connection.py
+    pip/_vendor/urllib3/contrib/emscripten/fetch.py
+    pip/_vendor/urllib3/contrib/emscripten/request.py
+    pip/_vendor/urllib3/contrib/emscripten/response.py
     pip/_vendor/urllib3/contrib/pyopenssl.py
-    pip/_vendor/urllib3/contrib/securetransport.py
     pip/_vendor/urllib3/contrib/socks.py
     pip/_vendor/urllib3/exceptions.py
     pip/_vendor/urllib3/fields.py
     pip/_vendor/urllib3/filepost.py
-    pip/_vendor/urllib3/packages/__init__.py
-    pip/_vendor/urllib3/packages/backports/__init__.py
-    pip/_vendor/urllib3/packages/backports/makefile.py
-    pip/_vendor/urllib3/packages/backports/weakref_finalize.py
-    pip/_vendor/urllib3/packages/six.py
+    pip/_vendor/urllib3/http2/__init__.py
+    pip/_vendor/urllib3/http2/connection.py
+    pip/_vendor/urllib3/http2/probe.py
     pip/_vendor/urllib3/poolmanager.py
-    pip/_vendor/urllib3/request.py
     pip/_vendor/urllib3/response.py
     pip/_vendor/urllib3/util/__init__.py
     pip/_vendor/urllib3/util/connection.py
     pip/_vendor/urllib3/util/proxy.py
-    pip/_vendor/urllib3/util/queue.py
     pip/_vendor/urllib3/util/request.py
     pip/_vendor/urllib3/util/response.py
     pip/_vendor/urllib3/util/retry.py
@@ -417,6 +410,7 @@ PY_SRCS(
     pip/_vendor/urllib3/util/ssltransport.py
     pip/_vendor/urllib3/util/timeout.py
     pip/_vendor/urllib3/util/url.py
+    pip/_vendor/urllib3/util/util.py
     pip/_vendor/urllib3/util/wait.py
 )
 
@@ -431,8 +425,6 @@ RESOURCE_FILES(
     pip/_vendor/certifi/LICENSE
     pip/_vendor/certifi/cacert.pem
     pip/_vendor/certifi/py.typed
-    pip/_vendor/dependency_groups/LICENSE.txt
-    pip/_vendor/dependency_groups/py.typed
     pip/_vendor/distlib/LICENSE.txt
     pip/_vendor/distro/LICENSE
     pip/_vendor/distro/py.typed
@@ -461,6 +453,8 @@ RESOURCE_FILES(
     pip/_vendor/truststore/LICENSE
     pip/_vendor/truststore/py.typed
     pip/_vendor/urllib3/LICENSE.txt
+    pip/_vendor/urllib3/contrib/emscripten/emscripten_fetch_worker.js
+    pip/_vendor/urllib3/py.typed
     pip/_vendor/vendor.txt
     pip/py.typed
 )

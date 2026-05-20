@@ -57,9 +57,9 @@ struct TComputationOptsFull: public TComputationOpts {
                          NUdf::ICountersProvider* countersProvider,
                          const NUdf::ILogProvider* logProvider,
                          NYql::TLangVersion langver,
-                         const NYql::TRuntimeSettings& runtimeSettings);
+                         NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
-    ~TComputationOptsFull();
+    ~TComputationOptsFull() = default;
 
     TAllocState& AllocState;
     const TTypeEnvironment& TypeEnv;
@@ -70,7 +70,7 @@ struct TComputationOptsFull: public TComputationOpts {
     NUdf::ICountersProvider* const CountersProvider;
     const NUdf::ILogProvider* const LogProvider;
     const NYql::TLangVersion LangVer;
-    const NYql::TRuntimeSettings& RuntimeSettings;
+    const NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
 };
 
 struct TWideFieldsInitInfo {
@@ -108,7 +108,7 @@ struct TComputationContextLLVM {
     IStatsRegistry* const Stats;
     const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues; // NOLINT(modernize-avoid-c-arrays)
     const NUdf::IValueBuilder* const Builder;
-    float UsageAdjustor = 1.f;
+    float UsageAdjustor = 1.F;
     ui32 RssCounter = 0U;
     const NUdf::TSourcePosition* CalleePosition = nullptr;
 };
@@ -136,7 +136,7 @@ struct TComputationContext: public TComputationContextLLVM {
                         const TComputationMutables& mutables,
                         arrow::MemoryPool& arrowMemoryPool,
                         TMaybe<NUdf::TSourcePosition>& notConsumedLinear,
-                        const NYql::TRuntimeSettings& RuntimeSettings);
+                        NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
     ~TComputationContext();
 
@@ -147,11 +147,13 @@ struct TComputationContext: public TComputationContextLLVM {
 
     void UpdateUsageAdjustor(ui64 memLimit);
     NUdf::TLoggerPtr MakeLogger() const;
+    NYql::TRuntimeSettings::TConstPtr GetRuntimeSettingsSharedPtr() const;
 
 private:
     NUdf::ITypeInfoHelper::TPtr MakeTypeHelper(TMaybe<NUdf::TSourcePosition>& target);
 
 private:
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettingsPtr_;
     ui64 InitRss_ = 0ULL;
     ui64 LastRss_ = 0ULL;
     NUdf::TLoggerPtr RssLogger_;
@@ -362,6 +364,7 @@ struct TComputationNodeFactoryContext {
     TComputationMutables& Mutables;
     TComputationNodeOnNodeMap& ElementsCache;
     const TNodePushBack NodePushBack;
+    const NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
 
     TComputationNodeFactoryContext(
         TNodeLocator nodeLocator,
@@ -380,7 +383,8 @@ struct TComputationNodeFactoryContext {
         EGraphPerProcess graphPerProcess,
         TComputationMutables& mutables,
         TComputationNodeOnNodeMap& elementsCache,
-        TNodePushBack&& nodePushBack);
+        TNodePushBack&& nodePushBack,
+        NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
     ~TComputationNodeFactoryContext();
 };

@@ -29,6 +29,7 @@ RECURSE_FOR_TESTS(
     ut_extsubdomain
     ut_extsubdomain_reboots
     ut_failure_injection
+    ut_filestore
     ut_filestore_reboots
     ut_incremental_restore
     ut_incremental_restore_reboots
@@ -347,9 +348,10 @@ PEERDIR(
     ydb/core/metering
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/cloud_events
     ydb/core/persqueue/public/partition_index_generator
     ydb/core/persqueue/public/partition_key_range
-    ydb/core/persqueue/public/cloud_events
+    ydb/core/persqueue/public/schema
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/resource_pools

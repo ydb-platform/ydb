@@ -23,7 +23,7 @@ from helpers import (
 CLUSTER_CONFIG = dict(
     additional_log_configs={
         'GRPC_PROXY': LogLevels.DEBUG,
-        'FLAT_TX_SCHEMESHARD': LogLevels.TRACE,
+        'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
         'PERSQUEUE_CLUSTER_TRACKER': LogLevels.CRIT,
     },
     enable_audit_log=True,

@@ -7,6 +7,8 @@
 
 #include <util/datetime/base.h>
 
+#include <optional>
+
 namespace NKikimr::NPQ {
 
 class TRlContext {
@@ -86,4 +88,4 @@ private:
     TMaybe<NKikimrPQ::TPQTabletConfig::EMeteringMode> MeteringMode;
 };
 
-}
+} // namespace NKikimr::NPQ

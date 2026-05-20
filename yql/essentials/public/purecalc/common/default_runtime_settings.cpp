@@ -7,7 +7,7 @@ namespace NYql::NPureCalc::NPrivate {
 NYql::TRuntimeSettings::TConstPtr GetDefaultRuntimeSettings() {
     struct TDefaultSettings {
         NYql::TRuntimeSettings::TConstPtr Ptr = []() {
-            return NYql::MakeRuntimeSettingsMutable();
+            return MakeRuntimeSettingsMutable();
         }();
     };
     return Singleton<TDefaultSettings>()->Ptr;

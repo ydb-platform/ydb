@@ -6,6 +6,36 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+THostIndex TOracleMock::SelectBestPBufferHost(
+    std::span<const THostIndex> hostIndexes,
+    EOperation operation) const
+{
+    Y_UNUSED(operation);
+    return hostIndexes[0];
+}
+
+TDuration TOracleMock::GetWriteHedgingDelay() const
+{
+    return WriteHedgingDelay;
+}
+
+TDuration TOracleMock::GetWriteRequestTimeout() const
+{
+    return WriteRequestTimeout;
+}
+
+TDuration TOracleMock::GetPBufferReplyTimeout() const
+{
+    return PBufferReplyTimeout;
+}
+
+EWriteMode TOracleMock::GetWriteMode() const
+{
+    return WriteMode;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 {
     VChunks.push_back(std::move(vChunk));
@@ -14,6 +44,11 @@ void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
 {
     return Executor;
+}
+
+IOraclePtr TDirectBlockGroupMock::GetOracle()
+{
+    return &Oracle;
 }
 
 void TDirectBlockGroupMock::Schedule(TDuration delay, TCallback callback)
@@ -30,13 +65,15 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
     return nullptr;
 }
 
-void TDirectBlockGroupMock::EstablishConnections()
-{}
+void TDirectBlockGroupMock::Run(IPartitionDirectService* service)
+{
+    Y_UNUSED(service);
+}
 
 NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroupMock::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
@@ -52,7 +89,7 @@ TDirectBlockGroupMock::ReadBlocksFromDDisk(
 NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroupMock::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
@@ -70,7 +107,7 @@ TDirectBlockGroupMock::ReadBlocksFromPBuffer(
 NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroupMock::WriteBlocksToDDisk(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
@@ -86,7 +123,7 @@ TDirectBlockGroupMock::WriteBlocksToDDisk(
 NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroupMock::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     ui64 lsn,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
@@ -104,7 +141,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
 NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
 TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
-    std::vector<ui8> hostIndexes,
+    TVector<THostIndex> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
     TDuration replyTimeout,
@@ -113,7 +150,7 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
 {
     return WriteBlocksToManyPBuffersHandler(
         vChunkIndex,
-        hostIndexes,
+        std::move(hostIndexes),
         lsn,
         range,
         replyTimeout,
@@ -123,8 +160,8 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
     ui32 vChunkIndex,
-    ui8 pbufferHostIndex,   // source host
-    ui8 ddiskHostIndex,     // destination host
+    THostIndex pbufferHostIndex,   // source host
+    THostIndex ddiskHostIndex,     // destination host
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
@@ -138,7 +175,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
 
 NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroupMock::EraseFromPBuffer(
     ui32 vChunkIndex,
-    ui8 hostIndex,
+    THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
@@ -152,9 +189,14 @@ TDirectBlockGroupMock::RestoreDBGPBuffers(ui32 vChunkIndex)
 }
 
 NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
-    ui8 hostIndex)
+    THostIndex hostIndex)
 {
     return ListPBuffersHandler(hostIndex);
+}
+
+NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
+{
+    return DumpHandler();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

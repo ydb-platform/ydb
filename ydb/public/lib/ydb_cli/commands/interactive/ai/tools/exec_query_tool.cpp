@@ -193,9 +193,10 @@ public:
         , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
         , Prompt(settings.Prompt)
         , Database(settings.Database)
-        , Driver(settings.Driver)
-        , ExecuteRunner(settings.Driver)
-    {}
+        , LazyDriver(settings.LazyDriver)
+    {
+        Y_VALIDATE(LazyDriver, "TExecQueryTool requires a non-null LazyDriver");
+    }
 
 protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
@@ -236,8 +237,9 @@ protected:
     TResponse DoExecute() final {
         Y_DEFER { ResetInterrupted(); };
 
+        TQueryRunner executeRunner(LazyDriver->Get());
         try {
-            if (ExecuteRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
+            if (executeRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
                 YDB_CLI_LOG(Notice, "Query execution was interrupted by user");
                 return TResponse::Error("Query execution was interrupted by user", UserMessage);
             }
@@ -246,13 +248,13 @@ protected:
             return TResponse::Error(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
-        return TResponse::Success(ExecuteRunner.ExtractResults(), UserMessage);
+        return TResponse::Success(executeRunner.ExtractResults(), UserMessage);
     }
 
 private:
     bool RequestQueryText() {
         const auto lineReader = CreateLineReader({
-            .Driver = Driver,
+            .LazyDriver = LazyDriver,
             .Database = Database,
             .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "YQL" << Colors.OldColor() << "> ",
             .EnableSwitchMode = false,
@@ -290,8 +292,7 @@ private:
     const IYQLHighlighter::TPtr YQLHighlighter;
     const TString Prompt;
     const TString Database;
-    const TDriver Driver;
-    TQueryRunner ExecuteRunner;
+    const TLazyDriver::TPtr LazyDriver;
 
     TString Query;
     TString UserMessage;

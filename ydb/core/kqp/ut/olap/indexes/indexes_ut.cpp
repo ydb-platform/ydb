@@ -49,24 +49,27 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
-    Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService) {
+    Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
 
-        ExecQuery(kikimr, UseQueryService, R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
+        ExecQuery(kikimr, UseQueryService, R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MIN_MAX,
             FEATURES=`{"column_name" : "level"}`);
         )");
     }
 
-    Y_UNIT_TEST(MinMaxIndexAppliedToDataAfterCompaction, EUseQueryService) {
+    Y_UNIT_TEST(MinMaxIndexAppliedToDataAfterCompaction, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -97,11 +100,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->WaitCompactions(TDuration::Seconds(5));
 
         ExecQuery(kikimr, UseQueryService,
-            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MINMAX,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MIN_MAX,
                     FEATURES=`{"column_name" : "level"}`);
                 )");
         ExecQuery(kikimr, UseQueryService,
-            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=MINMAX,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=MIN_MAX,
                     FEATURES=`{"column_name" : "resource_id"}`);
                 )");
         ExecQuery(kikimr, UseQueryService,
@@ -146,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "field"}`);
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
@@ -159,19 +162,21 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[["{\"min\":\"x\",\"max\":\"x\"}"]]]
     )";
-    Y_UNIT_TEST(ChunkDetailsMinMax) {
+    Y_UNIT_TEST(ChunkDetailsMinMax, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(settings);
     }
 
 
-    Y_UNIT_TEST(MinMaxIndexUsedInQueries, EUseQueryService) {
+    Y_UNIT_TEST(MinMaxIndexUsedInQueries, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -220,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
 
         assertDDLQueryOk(R"(
-            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "value"}`);
+            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "value"}`);
 
         )");
 
@@ -269,12 +274,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
     }
 
-    Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {
+    Y_UNIT_TEST(MinMaxNulls, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -323,7 +329,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
 
         assertDDLQueryOk(R"(
-            ALTER OBJECT `/Root/minmax_nulls` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=null_value_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "null_value"}`);
+            ALTER OBJECT `/Root/minmax_nulls` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=null_value_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "null_value"}`);
         )");
 
         runDMLQuery(R"(
@@ -355,11 +361,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     }
 
-    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -401,11 +409,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
     }
 
-    Y_UNIT_TEST(AddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+    Y_UNIT_TEST(AddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
@@ -430,11 +440,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTable` DROP INDEX idx_ngram;");
     }
 
-    Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableWithLocalBloomFilterIndexAndDropIsCorrect, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -455,11 +467,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateBloom` DROP INDEX idx_bloom;");
     }
 
-    Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService) {
+    Y_UNIT_TEST(CreateTableWithLocalBloomNgramFilterIndexAndDropIsCorrect, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(
@@ -479,6 +493,66 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
     }
+
+    Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableViewMinMaxIndex`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_minmax LOCAL USING min_max ON (resource_id)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            "SELECT * FROM `/Root/olapTableViewMinMaxIndex` VIEW idx_minmax;",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+    Y_UNIT_TEST(LocalBloomFilterIndexDoesntAllowWrongParametersOnAlter, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableViewMinMaxIndex`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            "ALTER TABLE `/Root/olapTableViewMinMaxIndex` ALTER INDEX idx_bloom SET (foo = bar);",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+        result = session.ExecuteQuery(
+            "ALTER TABLE `/Root/olapTableViewMinMaxIndex` ALTER INDEX idx_bloom SET (ngram_size = 42);",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
 
     Y_UNIT_TEST(BloomNgramAddIndexThenUpsertIndexChangesFilterParams, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
@@ -1130,12 +1204,13 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         }
     }
 
-    Y_UNIT_TEST(CountMinSketchIndex, EUseQueryService) {
+    Y_UNIT_TEST(CountMinSketchIndex, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

@@ -9,6 +9,8 @@
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+#include <util/generic/scope.h>
+
 namespace NYdb::NConsoleClient {
 
 namespace NAi {
@@ -23,11 +25,12 @@ public:
         : TBase(CreateSessionSettings(settings))
         , ConfigurationManager(settings.ConfigurationManager)
         , Database(settings.Database)
-        , Driver(settings.Driver)
+        , AiLazyDriver(settings.AiLazyDriver)
         , ConnectionString(settings.ConnectionString)
         , UsageInfoGetter(settings.UsageInfoGetter)
     {
         Y_VALIDATE(ConfigurationManager, "ConfigurationManager is not initialized");
+        Y_VALIDATE(AiLazyDriver, "TAiSessionRunner requires a non-null AiLazyDriver");
     }
 
     ILineReader::TPtr Setup() final {
@@ -62,6 +65,11 @@ public:
         Y_VALIDATE(AiModel, "Can not handle input while AiModel is not initialized");
         Y_VALIDATE(ConfigurationManager->GetActiveAiProfileId() == AiModel->GetId(), "Unexpected active AI profile");
 
+        // Create the AI driver up front so it is ready for tool calls within
+        // this turn, and release it before control goes back to the user.
+        AiLazyDriver->Init();
+        Y_DEFER { AiLazyDriver->Stop(true); };
+
         if (!ModelHandler) {
             try {
                 ModelHandler = TModelHandler({
@@ -69,7 +77,7 @@ public:
                     .Profile = AiModel,
                     .Prompt = Settings.Prompt,
                     .Database = Database,
-                    .Driver = Driver,
+                    .LazyDriver = AiLazyDriver,
                     .ConnectionString = ConnectionString,
                     .UsageInfoGetter = UsageInfoGetter,
                 });
@@ -144,7 +152,7 @@ private:
 
     static TLineReaderSettings CreateSessionSettings(const TAiSessionSettings& settings) {
         return {
-            .Driver = settings.Driver,
+            .LazyDriver = nullptr,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << "> ",
             .HistoryFilePath = NLocalPaths::GetAiHistoryFile(),
@@ -239,7 +247,7 @@ private:
 private:
     const TInteractiveConfigurationManager::TPtr ConfigurationManager;
     const TString Database;
-    const TDriver Driver;
+    const TLazyDriver::TPtr AiLazyDriver;
     const TString ConnectionString;
     const TClientCommand::TConfig::TUsageInfoGetter UsageInfoGetter;
 

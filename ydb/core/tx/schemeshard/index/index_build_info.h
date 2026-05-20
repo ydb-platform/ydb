@@ -186,6 +186,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 Level = 1;
         ui32 Round = 0;
         bool IsEmpty = false;
+        bool NeedVectorAutodetect = false;
 
         EState State = Sample;
 
@@ -381,7 +382,7 @@ public:
             result << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
                 << ", Sample = " << Sample.State
-                << ", Clusters = " << Clusters->GetClusters().size() << " }, ";
+                << ", Clusters = " << (Clusters ? Clusters->GetClusters().size() : 0) << " }, ";
         }
 
         result
@@ -598,7 +599,7 @@ public:
                 case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription: {
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     TString createError;
-                    Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
+                    Y_ENSURE(NKikimr::NKMeans::ValidateSettingsPartial(desc.settings(), createError), createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
@@ -610,7 +611,6 @@ public:
                         ? desc.settings().overlap_ratio()
                         : NTableIndex::NKMeans::DefaultOverlapRatio;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
-                    Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                     break;
                 }

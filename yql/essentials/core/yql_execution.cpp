@@ -283,7 +283,7 @@ public:
                     YQL_ENSURE(body->HasResult());
                 } else if (status.Level == TStatus::Repeat || status.Level == TStatus::Async) {
                     output->SetState(TExprNode::EState::ExecutionPending);
-                    FreshPendingNodes_.push_back(output.Get());
+                    FreshPendingNodes_.emplace_back(output.Get());
                 }
                 return status;
             } else {
@@ -310,7 +310,7 @@ public:
                     output->SetState(TExprNode::EState::ExecutionPending);
                     status = ExecuteChildren(output, output, ctx, depth + 1);
                     if (TExprNode::EState::ExecutionPending == output->GetState()) {
-                        FreshPendingNodes_.push_back(output.Get());
+                        FreshPendingNodes_.emplace_back(output.Get());
                     }
                     if (status.Level != TStatus::Repeat) {
                         return status;

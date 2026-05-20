@@ -43,8 +43,8 @@ private:
     };
 
     bool IsAllowedMonitoringTagValueChar(unsigned char c) const;
-    TSanitizeParameters ScanForSanitize(const std::string& value) const;
-    std::string SanitizeMonitoringTagValue(const std::string& value, int resultingLength) const;
+    TSanitizeParameters ScanForSanitize(TStringBuf value) const;
+    std::string SanitizeMonitoringTagValue(TStringBuf value, int resultingLength) const;
     TTag SanitizeMonitoringTag(const TTag& tag, int resultingLength) const;
 
     template <class TTagPerfect>

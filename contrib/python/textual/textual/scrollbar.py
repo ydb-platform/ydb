@@ -357,12 +357,14 @@ class ScrollBar(Widget):
 
     def _on_mouse_capture(self, event: events.MouseCapture) -> None:
         if isinstance(self._parent, Widget):
-            self._parent._user_scroll_interrupt = True
+            self._parent.release_anchor()
         self.grabbed = event.mouse_position
         self.grabbed_position = self.position
 
     def _on_mouse_release(self, event: events.MouseRelease) -> None:
         self.grabbed = None
+        if self.vertical and isinstance(self.parent, Widget):
+            self.parent._check_anchor()
         event.stop()
 
     async def _on_mouse_move(self, event: events.MouseMove) -> None:
@@ -393,9 +395,6 @@ class ScrollBar(Widget):
 class ScrollBarCorner(Widget):
     """Widget which fills the gap between horizontal and vertical scrollbars,
     should they both be present."""
-
-    def __init__(self, name: str | None = None):
-        super().__init__(name=name)
 
     def render(self) -> RenderableType:
         assert self.parent is not None

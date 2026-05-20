@@ -3,6 +3,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NSchemeShardUT_Private;
+using NKikimrSchemeOp::EIndexType;
 
 Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
     void SetupLogging(TTestActorRuntimeBase& runtime) {
@@ -219,6 +220,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Columns { Name: "key" Type: "Uint32" }
                 Columns { Name: "value1" Type: "Utf8" }
                 Columns { Name: "value2" Type: "Utf8" }
+                Columns { Name: "value3" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
             IndexDescription {
@@ -229,7 +231,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             IndexDescription {
                 Name: "ValueIndex2"
                 KeyColumnNames: ["value2"]
-                Type: EIndexTypeGlobal
+                Type: EIndexTypeGlobalAsync
+            }
+            IndexDescription {
+                Name: "ValueIndex3"
+                KeyColumnNames: ["value3"]
+                Type: EIndexTypeGlobalUnique
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -247,23 +254,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableCopy"),
                           {NLs::PathExist});
 
-        // Check first index
-        auto index1Desc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex1", true, true);
-        UNIT_ASSERT(index1Desc.GetPathDescription().HasTableIndex());
-        UNIT_ASSERT_VALUES_EQUAL(index1Desc.GetPathDescription().ChildrenSize(), 1);
-        TString implTable1Name = index1Desc.GetPathDescription().GetChildren(0).GetName();
-        TestDescribeResult(DescribePrivatePath(runtime,
-            "/MyRoot/TableCopy/ValueIndex1/" + implTable1Name),
-            {NLs::PathExist});
-
-        // Check second index
-        auto index2Desc = DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex2", true, true);
-        UNIT_ASSERT(index2Desc.GetPathDescription().HasTableIndex());
-        UNIT_ASSERT_VALUES_EQUAL(index2Desc.GetPathDescription().ChildrenSize(), 1);
-        TString implTable2Name = index2Desc.GetPathDescription().GetChildren(0).GetName();
-        TestDescribeResult(DescribePrivatePath(runtime,
-            "/MyRoot/TableCopy/ValueIndex2/" + implTable2Name),
-            {NLs::PathExist});
+        // Check indexes
+        NKikimrSchemeOp::EIndexType expectedType[3] = {EIndexType::EIndexTypeGlobal,
+            EIndexType::EIndexTypeGlobalAsync, EIndexType::EIndexTypeGlobalUnique};
+        size_t i = 0;
+        for (auto idx: {"ValueIndex1", "ValueIndex2", "ValueIndex3"}) {
+            auto indexDesc = DescribePrivatePath(runtime, TString::Join("/MyRoot/TableCopy/", idx), true, true);
+            UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+            auto tableIndex = indexDesc.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetState(), NKikimrSchemeOp::EIndexStateReady);
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetType(), expectedType[i]);
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.KeyColumnNamesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tableIndex.GetKeyColumnNames(0), Sprintf("value%d", i+1));
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+            TestDescribeResult(DescribePrivatePath(runtime,
+                TString::Join("/MyRoot/TableCopy/", idx, "/", NTableIndex::ImplTable)),
+                {NLs::PathExist});
+            i++;
+        }
     }
 
     // Priority 1 Test 3: Consistent copy of column table with local bloom indexes

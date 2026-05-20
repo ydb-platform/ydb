@@ -23,6 +23,7 @@ TEST_SRCS(
     test_vector_index.py
     test_unique_index.py
     test_batch_operations.py
+    test_compact.py
     test_topic.py
     test_kafka_topic.py
     test_transfer.py

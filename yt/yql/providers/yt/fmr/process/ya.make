@@ -15,6 +15,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/yt_job_service/file
     yt/yql/providers/yt/fmr/yt_job_service/impl
     yt/yql/providers/yt/fmr/utils
+    yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl
     yt/yql/providers/yt/job
 )
 

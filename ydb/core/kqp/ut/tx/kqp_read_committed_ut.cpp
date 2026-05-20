@@ -1,0 +1,851 @@
+#include "kqp_sink_common.h"
+
+#include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/common_helper.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/base/tablet_pipecache.h>
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYdb;
+using namespace NYdb::NQuery;
+
+Y_UNIT_TEST_SUITE(KqpReadCommitted) {
+    class TReadSeesLastCommitted : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            size_t evWriteCounter = 0;
+            size_t evReadCounter = 0;
+            size_t evCreateSnapshotCounter = 0;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                    auto* evRead = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    auto& snapshot = evRead->Record.GetSnapshot();
+                    UNIT_ASSERT(snapshot.GetStep() != 0);
+                    UNIT_ASSERT(snapshot.GetTxId() != 0);
+                } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest::EventType) {
+                    ++evCreateSnapshotCounter;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER {
+                runtime.SetObserverFunc(saveObserver);
+            };
+
+            // Session1 starts a Read Committed transaction and reads initial data
+            {
+                //TEST: TEvCreateSnapshotRequest, EvRead
+                auto future1 = Kikimr->RunInThreadPool([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return evCreateSnapshotCounter >= 1 && evReadCounter >= 1;
+                    });
+                    runtime.DispatchEvents(opts);
+                    UNIT_ASSERT(evCreateSnapshotCounter >= 1);
+                    UNIT_ASSERT(evReadCounter >= 1);
+                }
+
+                auto result = runtime.WaitFuture(future1);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+                auto tx1 = result.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                // Session2 commits changes to the same data
+                {
+                    //TEST: EvWrite
+                    auto future2 = Kikimr->RunInThreadPool([&] {
+                        return session2.ExecuteQuery(Q_(R"(
+                            UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
+                            VALUES (1U, "Paul", "Changed Other", 100u);
+                        )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                    });
+
+                    {
+                        TDispatchOptions opts2;
+                        opts2.FinalEvents.emplace_back([&](IEventHandle&) {
+                            return evWriteCounter >= 1;
+                        });
+                        runtime.DispatchEvents(opts2);
+                        UNIT_ASSERT(evWriteCounter >= 1);
+                    }
+
+                    auto result2 = runtime.WaitFuture(future2);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                }
+
+                // Session1 reads again within the same transaction and should see the committed changes
+                // This demonstrates that Read Committed sees the latest committed data
+                {
+                    Cerr << "TEST >> READ 2 --- " << Endl;
+                    //TEST: TEvCreateSnapshotRequest, EvRead, TEvCreateSnapshotRequest, EvRead
+                    size_t evCreateSnapshotBefore = evCreateSnapshotCounter;
+                    size_t evReadBefore = evReadCounter;
+
+                    auto future3 = Kikimr->RunInThreadPool([&] {
+                        return session1.ExecuteQuery(Q_(R"(
+                            SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+
+                            SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                        )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    });
+
+                    {
+                        TDispatchOptions opts3;
+                        opts3.FinalEvents.emplace_back([&](IEventHandle&) {
+                            return (evCreateSnapshotCounter - evCreateSnapshotBefore) >= 1 && (evReadCounter - evReadBefore) >= 1; // TODO: 2???
+                        });
+                        runtime.DispatchEvents(opts3);
+                        UNIT_ASSERT((evCreateSnapshotCounter - evCreateSnapshotBefore) >= 1);
+                        UNIT_ASSERT((evReadCounter - evReadBefore) >= 1);
+                    }
+
+                    auto result2 = runtime.WaitFuture(future3);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                    CompareYson(R"([[[100u];["Changed Other"];1u;"Paul"]])", FormatResultSetYson(result2.GetResultSet(0)));
+                    CompareYson(R"([[[100u];["Changed Other"];1u;"Paul"]])", FormatResultSetYson(result2.GetResultSet(1)));
+                }
+
+                // Commit the transaction
+                {
+                    auto future4 = Kikimr->RunInThreadPool([&] {
+                        return tx1->Commit().ExtractValueSync();
+                    });
+                    auto result2 = runtime.WaitFuture(future4);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                }
+            }
+
+            // Verify the final state
+            {
+                auto future5 = Kikimr->RunInThreadPool([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                });
+                auto result = runtime.WaitFuture(future5);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[100u];["Changed Other"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadSeesLastCommittedOltp) {
+        TReadSeesLastCommitted tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TReadSeesOwnChanges : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // Session1 starts a Read Committed transaction
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
+                    SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+                auto tx1 = result.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                // Session2 commits first change
+                {
+                    auto result2 = session2.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
+                        VALUES (1U, "Paul", "First Change", 100u);
+                    )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                }
+
+                // Session1 reads and sees first committed change
+                {
+                    auto result2 = session1.ExecuteQuery(Q_(R"(
+                        PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
+                        SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                    )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                    CompareYson(R"([[[100u];["First Change"];1u;"Paul"]])", FormatResultSetYson(result2.GetResultSet(0)));
+                }
+
+                // Session1 writes second change
+                {
+                    auto result2 = session1.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
+                        VALUES (1U, "Paul", "Second Change", 200u);
+                    )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                }
+
+                // Session1 reads and sees second committed change
+                {
+                    auto result2 = session1.ExecuteQuery(Q_(R"(
+                        PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
+                        SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                    )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                    CompareYson(R"([[[200u];["Second Change"];1u;"Paul"]])", FormatResultSetYson(result2.GetResultSet(0)));
+                }
+
+                // Commit the transaction
+                {
+                    auto result2 = tx1->Commit().ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                }
+            }
+
+            // Verify the final state
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[200u];["Second Change"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadSeesOwnChangesOltp) {
+        TReadSeesOwnChanges tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    class TReadDoesNotSeeUncommitted : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // Session1 starts a Read Committed transaction
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
+                    SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+                auto tx1 = result.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                // Session2 starts a transaction but does not commit
+                auto result2 = session2.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
+                    VALUES (1U, "Paul", "Uncommitted Change", 100u);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                auto tx2 = result2.GetTransaction();
+                UNIT_ASSERT(tx2);
+
+                // Session1 reads and should NOT see the uncommitted change
+                {
+                    auto result3 = session1.ExecuteQuery(Q_(R"(
+                        PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
+                        SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                    )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+                    CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result3.GetResultSet(0)));
+                }
+
+                // Session2 commits
+                {
+                    auto result3 = tx2->Commit().ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+                }
+
+                // Session1 reads again and now sees the committed change
+                {
+                    auto result3 = session1.ExecuteQuery(Q_(R"(
+                        PRAGMA ydb.DefaultTxMode="ReadCommittedRW";
+                        SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                    )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+                    CompareYson(R"([[[100u];["Uncommitted Change"];1u;"Paul"]])", FormatResultSetYson(result3.GetResultSet(0)));
+                }
+
+                // Commit the transaction
+                {
+                    auto result3 = tx1->Commit().ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+                }
+            }
+
+            // Verify the final state
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[100u];["Uncommitted Change"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadDoesNotSeeUncommittedOltp) {
+        TReadDoesNotSeeUncommitted tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    class TReadCommittedTakesLocks : public TTableDataModificationTester {
+    public:
+        TReadCommittedTakesLocks(TString effectQuery, size_t evReadsExpected, size_t evWritesExpected, size_t evLocksExpected)
+            : EffectQuery(effectQuery)
+            , EvReadsExpected(evReadsExpected)
+            , EvWritesExpected(evWritesExpected)
+            , EvLocksExpected(evLocksExpected) {
+        }
+    protected:
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            size_t evLockCounter = 0;
+            size_t evLockResultCounter = 0;
+            size_t evReadCounter = 0;
+            size_t evWriteCounter = 0;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    auto* lockEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvLockRows>();
+                    auto lockMode = lockEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRowsResult::EventType) {
+                    ++evLockResultCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                    auto* readEv = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    auto lockMode = readEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCounter;
+                    auto* writeEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    auto lockMode = writeEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(EffectQuery, TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+            });
+
+            {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return evReadCounter >= 1 && evWriteCounter >= 1;
+                });
+                runtime.DispatchEvents(opts, TDuration::Seconds(30));
+            }
+
+            auto result = runtime.WaitFuture(future);
+
+            Cerr << "Result status: " << result.GetStatus() << Endl;
+            Cerr << "evReadCounter: " << evReadCounter << ", evLockCounter: " << evLockCounter 
+                 << ", evLockResultCounter: " << evLockResultCounter << ", evWriteCounter: " << evWriteCounter << Endl;
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                Cerr << "Issues: " << result.GetIssues().ToString() << Endl;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(evReadCounter == EvReadsExpected);
+            UNIT_ASSERT(evLockCounter == EvLocksExpected);
+            UNIT_ASSERT(evLockResultCounter == EvLocksExpected);
+            UNIT_ASSERT(evWriteCounter == EvWritesExpected);
+        }
+    
+        const TString EffectQuery;
+        const size_t EvReadsExpected;
+        const size_t EvWritesExpected;
+        const size_t EvLocksExpected;
+    };
+
+    Y_UNIT_TEST(TUpdateWhereTakesLocks) {
+        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test` SET Comment = "Updated" WHERE Name == "Paul")", 1, 2, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TDeleteWhereTakesLocks) {
+        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test` WHERE Name == "Paul")", 1, 2, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TUpdateOnTakesLocks) {
+        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test` ON (Group, Name, Comment) VALUES (1u, "Paul", "Updated"))", 0, 2, 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TDeleteOnTakesLocks) {
+        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test` ON (Group, Name) VALUES (1u, "Paul"))", 0, 2, 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TUpsertTakesLocks) {
+        TReadCommittedTakesLocks tester(R"(UPSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Upserted"))", 0, 2, 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TReplaceTakesLocks) {
+        TReadCommittedTakesLocks tester(R"(REPLACE INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Replaced"))", 0, 2, 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TInsertTakesLocks) {
+        TReadCommittedTakesLocks tester(R"(INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted"))", 0, 2, 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TUpdateWhereTakesLocksWithUniqueIndex) {
+        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test2` SET Comment = "Updated" WHERE Name == "Paul")", 3, 4, 3);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TDeleteWhereTakesLocksWithUniqueIndex) {
+        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test2` WHERE Name == "Paul")", 2, 4, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TUpdateOnTakesLocksWithUniqueIndex) {
+        TReadCommittedTakesLocks tester(R"(UPDATE `/Root/Test2` ON (Group, Name, Comment) VALUES (1u, "Paul", "Updated"))", 2, 4, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TDeleteOnTakesLocksWithUniqueIndex) {
+        TReadCommittedTakesLocks tester(R"(DELETE FROM `/Root/Test2` ON (Group, Name) VALUES (1u, "Paul"))", 1, 4, 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TUpsertTakesLocksWithUniqueIndex) {
+        TReadCommittedTakesLocks tester(R"(UPSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Paul", "Upserted"))", 2, 4, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TReplaceTakesLocksWithUniqueIndex) {
+        TReadCommittedTakesLocks tester(R"(REPLACE INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Paul", "Replaced"))", 2, 4, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TInsertTakesLocksWithUniqueIndex) {
+        TReadCommittedTakesLocks tester(R"(INSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted"))", 1, 4, 2);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TpccPaymentReturningConflict : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            auto client = Kikimr->GetQueryClient();
+            auto tableClient = Kikimr->GetTableClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            {
+                const TString createQuery = Sprintf(R"(
+                    CREATE TABLE `/Root/warehouse` (
+                        W_ID       Int32          NOT NULL,
+                        W_YTD      Double,
+                        W_TAX      Double,
+                        W_NAME     Utf8,
+                        W_STREET_1 Utf8,
+                        W_STREET_2 Utf8,
+                        W_CITY     Utf8,
+                        W_STATE    Utf8,
+                        W_ZIP      Utf8,
+
+                        PRIMARY KEY (W_ID)
+                    );
+                )");
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+                Kikimr->RunCall([&] {
+                    auto it = session.ExecuteQuery(
+                        R"(
+                            INSERT INTO `/Root/warehouse` (W_ID, W_YTD, W_TAX, W_NAME, W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP) VALUES
+                                (1, 1.1, 1.2, "name", "street1", "street2", "city", "state", "zip");
+                        )",
+                        NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync();
+                    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                });
+            }
+
+            size_t evLockCounter = 0;
+            size_t evLockResultCounter = 0;
+            size_t evReadCounter = 0;
+            size_t evWriteCounter = 0;
+
+            std::vector<std::unique_ptr<IEventHandle>> blockedLocks;
+
+            auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRows::EventType) {
+                    ++evLockCounter;
+                    auto* lockEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvLockRows>();
+                    auto lockMode = lockEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+
+                    if (evLockCounter == 1) {
+                        blockedLocks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvLockRowsResult::EventType) {
+                    ++evLockResultCounter;
+                } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    ++evReadCounter;
+                    auto* readEv = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    auto lockMode = readEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
+                } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    ++evWriteCounter;
+                    auto* writeEv = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    auto lockMode = writeEv->Record.GetLockMode();
+                    UNIT_ASSERT_VALUES_EQUAL(lockMode, NKikimrDataEvents::PESSIMISTIC_NONE);
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            auto saveObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+            {
+                auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+                auto params = TParamsBuilder()
+                    .AddParam("$w_id").Int32(1).Build()
+                    .AddParam("$payment").Double(100.1).Build()
+                    .Build();
+
+                auto future1 = Kikimr->RunInThreadPool([&] {
+                    return session1.ExecuteQuery(
+                        R"(
+                            DECLARE $w_id AS Int32;
+                            DECLARE $payment AS Double;
+
+                            UPDATE `/Root/warehouse`
+                            SET W_YTD = W_YTD + $payment
+                            WHERE W_ID = $w_id
+                            RETURNING W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME;
+                        )",
+                        NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()), std::move(params)).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return evLockCounter == 1;
+                    });
+                    runtime.DispatchEvents(opts, TDuration::Seconds(30));
+
+                    UNIT_ASSERT(evReadCounter == 1);
+                    UNIT_ASSERT(evLockCounter == 1);
+                }
+
+                {
+                    Kikimr->RunCall([&] {
+                        auto session2 = client.GetSession().GetValueSync().GetSession();
+                        auto it1 = session2.ExecuteQuery(
+                            R"(
+                                UPSERT INTO `/Root/warehouse` (W_ID, W_YTD, W_TAX, W_NAME, W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP) VALUES
+                                    (1, 1.0, 1.0, "changed", "changed", "changed", "changed", "changed", "changed");
+                            )",
+                            NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                        UNIT_ASSERT_C(it1.IsSuccess(), it1.GetIssues().ToString());
+
+                        auto tx1 = it1.GetTransaction();
+                        UNIT_ASSERT(tx1);
+                        UNIT_ASSERT(tx1->IsActive());
+
+                        auto commitResult = tx1->Commit().ExtractValueSync();
+                        UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
+                    });
+                    
+                    UNIT_ASSERT(evReadCounter == 1);
+                    UNIT_ASSERT(evLockCounter == 2);
+                    UNIT_ASSERT(evLockResultCounter == 1);
+                    UNIT_ASSERT(evWriteCounter == 2);
+                }
+
+                for(auto& ev : blockedLocks) {
+                    runtime.Send(ev.release());
+                }
+
+
+                auto it1 = runtime.WaitFuture(future1);
+                UNIT_ASSERT_C(it1.IsSuccess(), it1.GetIssues().ToString());
+                TString output1 = FormatResultSetYson(it1.GetResultSet(0));
+                CompareYson(output1, R"([[["changed"];["changed"];["changed"];["changed"];["changed"];["changed"]]])");
+
+                UNIT_ASSERT(evReadCounter == 3);
+                UNIT_ASSERT(evLockCounter == 3);
+                UNIT_ASSERT(evLockResultCounter == 3);
+                UNIT_ASSERT(evWriteCounter == 3);
+
+                auto tx1 = it1.GetTransaction();
+                UNIT_ASSERT(tx1);
+                UNIT_ASSERT(tx1->IsActive());
+
+                auto futureResult1 = Kikimr->RunInThreadPool([&] {
+                    return tx1->Commit().ExtractValueSync();
+                });
+                auto commitResult1 = runtime.WaitFuture(futureResult1);
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult1.GetStatus(), EStatus::SUCCESS, commitResult1.GetIssues().ToString());
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TpccPaymentReturningConflict) {
+        TpccPaymentReturningConflict tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TDeadlockDetection : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.SetNodeCount(2);
+        }
+        
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+            auto tableClient = Kikimr->GetTableClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            ui32 nodeForTable = runtime.GetNodeId(0);
+            auto nodePinningObserver = runtime.AddObserver<TEvHive::TEvCreateTablet>([nodeForTable](TEvHive::TEvCreateTablet::TPtr& ev) {
+                auto* msg = ev->Get();
+                msg->Record.ClearAllowedNodeIDs();
+                msg->Record.AddAllowedNodeIDs(nodeForTable);
+            });
+
+            {
+                const TString createQuery1 = R"(
+                    CREATE TABLE `/Root/KeyValue1` (
+                        Key Uint64 NOT NULL,
+                        Value Uint64 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery1).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            nodeForTable = runtime.GetNodeId(1);
+
+            {
+                const TString createQuery2 = R"(
+                    CREATE TABLE `/Root/KeyValue2` (
+                        Key Uint64 NOT NULL,
+                        Value Uint64 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                auto result = Kikimr->RunCall([&] {
+                    return tableClient.GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(createQuery2).GetValueSync();
+                });
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            nodePinningObserver.Remove();
+
+            {
+                auto result = Kikimr->RunCall([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 0);
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                auto result = Kikimr->RunCall([&] {
+                    return session1.ExecuteQuery(Q_(R"(
+                        UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 0);
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            auto tx1 = Kikimr->RunCall([&] {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 1);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetTransaction();
+            });
+            UNIT_ASSERT(tx1);
+
+            auto tx2 = Kikimr->RunCall([&] {
+                auto result = session2.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 2);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetTransaction();
+            });
+            UNIT_ASSERT(tx2);
+
+            auto future1 = Kikimr->RunInThreadPool([&] {
+                return session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue2` (Key, Value) VALUES (2, 1);
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            });
+
+            auto future2 = Kikimr->RunInThreadPool([&] {
+                return session2.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KeyValue1` (Key, Value) VALUES (1, 2);
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            });
+
+            auto result1 = runtime.WaitFuture(future1);
+            auto result2 = runtime.WaitFuture(future2);
+
+            bool tx1Aborted = result1.GetStatus() == EStatus::ABORTED;
+            bool tx2Aborted = result2.GetStatus() == EStatus::ABORTED;
+
+            UNIT_ASSERT_C(tx1Aborted || tx2Aborted, "At least one transaction should be aborted due to deadlock");
+            UNIT_ASSERT_C(!(tx1Aborted && tx2Aborted), "Only one transaction should be aborted, not both");
+
+            if (tx1Aborted) {
+                Cerr << "Transaction 1 aborted with status: " << result1.GetStatus() << Endl;
+                Cerr << "Transaction 1 issues: " << result1.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_C(result1.GetIssues().ToString().contains("Deadlock"),
+                              "Error message should contain 'Deadlock': " + result1.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+                
+                auto commitResult = Kikimr->RunCall([&] { return tx2->Commit().ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            } else {
+                Cerr << "Transaction 2 aborted with status: " << result2.GetStatus() << Endl;
+                Cerr << "Transaction 2 issues: " << result2.GetIssues().ToString() << Endl;
+                UNIT_ASSERT_C(result2.GetIssues().ToString().contains("Deadlock"),
+                              "Error message should contain 'Deadlock': " + result2.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+                
+                auto commitResult = Kikimr->RunCall([&] { return tx1->Commit().ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+            }
+
+            auto verifyResult1 = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
+                SELECT Key, Value FROM `/Root/KeyValue1`;
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult1.GetStatus(), EStatus::SUCCESS, verifyResult1.GetIssues().ToString());
+            
+            auto verifyResult2 = Kikimr->RunCall([&] { return session1.ExecuteQuery(Q_(R"(
+                SELECT Key, Value FROM `/Root/KeyValue2`;
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyResult2.GetStatus(), EStatus::SUCCESS, verifyResult2.GetIssues().ToString());
+            
+            auto resultSet1 = verifyResult1.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet1.RowsCount(), 1);
+            
+            TResultSetParser parser1(resultSet1);
+            parser1.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser1.ColumnParser("Key").GetUint64(), 1u);
+            ui64 key1Value = parser1.ColumnParser("Value").GetUint64();
+            
+            auto resultSet2 = verifyResult2.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet2.RowsCount(), 1);
+            
+            TResultSetParser parser2(resultSet2);
+            parser2.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(parser2.ColumnParser("Key").GetUint64(), 2u);
+            ui64 key2Value = parser2.ColumnParser("Value").GetUint64();
+            
+            if (tx1Aborted) {
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 2u, "KeyValue1 should have Value = 2 when Tx2 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 2u, "KeyValue2 should have Value = 2 when Tx2 succeeded");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(key1Value, 1u, "KeyValue1 should have Value = 1 when Tx1 succeeded");
+                UNIT_ASSERT_VALUES_EQUAL_C(key2Value, 1u, "KeyValue2 should have Value = 1 when Tx1 succeeded");
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TDeadlockDetectionOltp) {
+        TDeadlockDetection tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+}
+
+} // namespace NKqp
+} // namespace NKikimr

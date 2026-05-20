@@ -473,6 +473,8 @@ enum EServiceKikimr {
     NBS_VOLUME = 4000;
 
     NBS_SS_PROXY = 4100;
+
+    BS_PERSISTENT_BUFFER = 4200;
 };
 
 message TActivity {

@@ -126,7 +126,7 @@ class IntegerProperty(GenericProperty[int, int]):
         if isinstance(value, (int, float)):
             return int(value)
         else:
-            raise StyleValueError(f"Expected a number here, got f{value}")
+            raise StyleValueError(f"Expected a number here, got {value!r}")
 
 
 class BooleanProperty(GenericProperty[bool, bool]):
@@ -991,7 +991,7 @@ class ColorProperty:
                             self.name, context="inline", error=error, value=token
                         ),
                     )
-            parsed_color = parsed_color.with_alpha(alpha)
+            parsed_color = parsed_color.multiply_alpha(alpha)
 
             if obj.set_rule(self.name, parsed_color):
                 obj.refresh(children=True)

@@ -38,9 +38,12 @@ struct TTestInfo {
     double Median = 0;
     double Std = 0;
     TDuration UnixBench;
+    TDuration ProcessCPUTime;
+    TDuration CompilationCPUTime;
     std::vector<TTiming> Timings;
+    std::vector<TTiming> CPUTime;
 
-    explicit TTestInfo(std::vector<TTiming>&& timings);
+    explicit TTestInfo(std::vector<TTiming>&& timings, std::vector<TTiming>&& cpuTime);
     void operator +=(const TTestInfo& other);
     void operator /=(const ui32 count);
 };
@@ -59,6 +62,7 @@ private:
     YDB_READONLY_DEF(TString, ErrorInfo);
     YDB_READONLY_DEF(TRawResults, RawResults);
     YDB_ACCESSOR_DEF(TTiming, Timing);
+    YDB_ACCESSOR_DEF(TTiming, CPUTime);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     YDB_READONLY_DEF(TString, ExecStats);
@@ -67,12 +71,13 @@ private:
     TQueryBenchmarkResult() = default;
 public:
     static TQueryBenchmarkResult Result(TRawResults&& rawResults,
-        const TTiming& timing, const TString& queryPlan, const TString& planAst,
+        const TTiming& timing, const TTiming& cpuTime, const TString& queryPlan, const TString& planAst,
         const TString& execStats, TStringBuf expected)
     {
         TQueryBenchmarkResult result;
         result.RawResults = std::move(rawResults);
         result.Timing = timing;
+        result.CPUTime = cpuTime;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
         result.ExecStats = execStats;

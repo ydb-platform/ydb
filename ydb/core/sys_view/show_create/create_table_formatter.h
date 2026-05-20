@@ -65,9 +65,13 @@ private:
         const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
     void FormatLocalBloomNgramFilterIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
         const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalMinMaxIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
     void FormatLocalBloomFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
         const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
     void FormatLocalBloomNgramFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalMinMaxIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
         const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
 
     void Format(const Ydb::TypedValue& value, bool isPartition = false);

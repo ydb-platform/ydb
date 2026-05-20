@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -562,6 +563,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
             Stream << " LOCAL USING bloom_ngram_filter ON ";
             isLocalBloomNgramFilter = true;
+            break;
+        }
+        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+            Stream << " LOCAL USING min_max ON ";
             break;
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -1361,7 +1366,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         try {
             for (const auto& index : schema.GetIndexes()) {
                 // Check if this is a bloom filter or bloom ngram filter that should be formatted inline
-                if (index.HasBloomFilter() || index.HasBloomNGrammFilter()) {
+                if (index.HasBloomFilter() || index.HasBloomNGrammFilter() || index.HasMinMaxIndex()) {
                     if (isFamilyPrinted || hasInlineIndex) {
                         Stream << ",\n";
                         isFamilyPrinted = false;
@@ -1370,8 +1375,10 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
                     inlineFormattedIndexes.insert(index.GetName());
                     if (index.HasBloomFilter()) {
                         FormatLocalBloomFilterIndexInline(index, columns);
-                    } else {
+                    } else if (index.HasBloomNGrammFilter()) {
                         FormatLocalBloomNgramFilterIndexInline(index, columns);
+                    } else {
+                        FormatLocalMinMaxIndexInline(index, columns);
                     }
                 }
             }
@@ -1799,6 +1806,10 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
             FormatLocalBloomNgramFilterIndex(tablePath, indexDesc, columns);
             return;
         }
+        if (indexDesc.HasMinMaxIndex()) {
+            FormatLocalMinMaxIndex(tablePath, indexDesc, columns);
+            return;
+        }
     }
 
     Stream << "ALTER OBJECT ";
@@ -1808,6 +1819,10 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
     switch (indexDesc.GetImplementationCase()) {
         case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
             const auto& bloomFilter = indexDesc.GetBloomFilter();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=BLOOM_FILTER, ";
             Stream << "FEATURES=";
 
@@ -1845,10 +1860,15 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex: {
             const auto& maxIndex = indexDesc.GetMaxIndex();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=MAX, ";
             Stream << "FEATURES=";
             NJson::TJsonValue json;
@@ -1862,10 +1882,15 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch: {
             const auto& countMinSketch = indexDesc.GetCountMinSketch();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=COUNT_MIN_SKETCH, ";
             Stream << "FEATURES=";
             NJson::TJsonValue json;
@@ -1876,10 +1901,15 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
             json["column_names"] = std::move(jsonColumnNames);
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
             const auto& bloomNGrammFilter = indexDesc.GetBloomNGrammFilter();
+            Stream << "ALTER OBJECT ";
+            EscapeName(fullPath, Stream);
+            Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
+            Stream << indexDesc.GetName();
             Stream << ", TYPE=BLOOM_NGRAMM_FILTER, ";
             Stream << "FEATURES=";
 
@@ -1926,11 +1956,33 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
+            Stream << ");";
             break;
         }
-        default: break;
+        case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+            const auto& minMaxIndex = indexDesc.GetMinMaxIndex();
+            auto columnIdFieldName= minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name();
+            if (!minMaxIndex.HasColumnId()) {
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << columnIdFieldName <<" must be filled in " << minMaxIndex.GetTypeName() << " proto");
+            }
+            auto columnNameIt = columns.find(minMaxIndex.GetColumnId()); 
+            if (columnNameIt == columns.end()) {
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "column id(" << minMaxIndex.GetDescriptor()->FindFieldByNumber(TMinMaxIndex::kColumnIdFieldNumber)->full_name() << ") is not present in table description ");
+            }
+            Stream << "ALTER TABLE ";
+            EscapeName(fullPath, Stream);
+            Stream << "\nADD INDEX ";
+            EscapeName(indexDesc.GetName(), Stream);
+            Stream << " LOCAL USING min_max ON (";
+            EscapeName(columnNameIt->second->GetName(), Stream);
+            Stream << ");";
+            break;
+        }
+        default: {
+            ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            TStringBuilder() << "Unsupported OLAP index implementation for index " << indexDesc.GetName());
+        }
     }
-    Stream << ");";
 }
 
 void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options) {
@@ -2213,6 +2265,48 @@ void TCreateTableFormatter::FormatLocalBloomNgramFilterIndexInline(const NKikimr
     if (hasParams) {
         Stream << " WITH (" << params.Str() << ")";
     }
+}
+
+void TCreateTableFormatter::FormatLocalMinMaxIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    const auto& min_max = indexDesc.GetMinMaxIndex();
+
+    Stream << "\n\nALTER TABLE ";
+    EscapeName(tablePath, Stream);
+    Stream << " ADD INDEX ";
+    EscapeName(indexDesc.GetName(), Stream);
+    Stream << " LOCAL USING min_max ON (";
+
+    if (!min_max.HasColumnId()) {
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS, NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+    }
+
+    const auto& columnName = columns.at(min_max.GetColumnId())->GetName();
+    EscapeName(columnName, Stream);
+    Stream << ")";
+
+}
+
+void TCreateTableFormatter::FormatLocalMinMaxIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const TOlapColumnDescription*>& columns) {
+    const auto& min_max = indexDesc.GetMinMaxIndex();
+
+    Stream << "\tINDEX ";
+    EscapeName(indexDesc.GetName(), Stream);
+    Stream << " LOCAL USING bloom_ngram_filter ON (";
+
+    if (!min_max.HasColumnId()) {
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS, NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
+            NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+    }
+
+    const auto& columnName = columns.at(min_max.GetColumnId())->GetName();
+    EscapeName(columnName, Stream);
+    Stream << ")";
+
 }
 
 } // NSysView

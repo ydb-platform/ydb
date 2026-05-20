@@ -1,3 +1,6 @@
+* Added CPU Time statistics to benchmarks run commands.
+* `ydb sql`: add `--resource-pool` option
+* `ydb` interactive mode add `SET resource_pool` command
 
 ## 2.31.0 ##
 

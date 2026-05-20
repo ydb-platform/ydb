@@ -18,6 +18,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/acl.h>
+#include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/security.h>
@@ -32,8 +33,6 @@
 #include <util/string/join.h>
 
 namespace NKikimr::NSQS {
-
-constexpr char const ConsumerName[] = "sqs_consumer";
 
 class TMigrationFeatureFlags
 {

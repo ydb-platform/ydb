@@ -4452,6 +4452,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const PQGroupReserve reserve(config, activePartitionDelta);
 
                 inclusiveDomainInfo->IncPQPartitionsInside(partitionDelta);
+                inclusiveDomainInfo->IncPQGroupsInside();
                 inclusiveDomainInfo->IncPQReservedStorage(reserve.Storage);
 
                 Self->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionDelta);

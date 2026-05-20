@@ -1311,6 +1311,7 @@ enum EIndexType {
     EIndexTypeGlobalJson = 7;
     EIndexTypeLocalBloomFilter = 8;
     EIndexTypeLocalBloomNgramFilter = 9;
+    EIndexTypeLocalMinMax = 10;
 }
 
 enum EIndexState {
@@ -1389,6 +1390,7 @@ message TIndexAlteringConfig {
     oneof SpecializedIndexDescription {
         TBloomFilter BloomFilterDescription = 8;
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+        TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 10;
     }
 }
 
@@ -1868,6 +1870,7 @@ message TIndexBuildControl {
     optional string IndexName = 2;
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
+    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 5;
 }
 
 message TLockConfig {
@@ -2161,6 +2164,7 @@ enum EPathSubType {
     EPathSubTypeJsonIndexImplTable = 6;
     EPathSubTypeLocalBloomFilterIndex = 7;
     EPathSubTypeLocalBloomNgramFilterIndex = 8;
+    EPathSubTypeLocalMinMaxIndex = 9;
 }
 
 enum EPathState {

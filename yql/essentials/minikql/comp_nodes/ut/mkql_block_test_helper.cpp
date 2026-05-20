@@ -51,8 +51,8 @@ private:
 
 } // namespace
 
-TRuntimeNode TBlockHelper::ConvertLiteralListToDatum(TRuntimeNode::TList nodes, ui64 fuzzId) {
-    auto list = Pb_.NewList(nodes[0].GetStaticType(), std::move(nodes));
+TRuntimeNode TBlockHelper::ConvertLiteralListToDatum(TRuntimeNode::TList nodes, TType* type, ui64 fuzzId) {
+    auto list = Pb_.NewList(type, std::move(nodes));
     auto flowList = Pb_.ToFlow(list);
     auto blocksStream = Pb_.FromFlow(Pb_.ToBlocks(flowList));
     auto block = MaterializeBlockStream(*Setup_.PgmBuilder, blocksStream, fuzzId);
@@ -112,9 +112,7 @@ arrow::Datum ConvertDatumToArrowFormat(arrow::Datum datum, arrow::MemoryPool& po
     }
     MKQL_ENSURE(datum.is_array(), "Chunked array is not supported yet.");
     auto result = datum.array()->Copy();
-    if (result->type->id() == arrow::Type::STRUCT ||
-        result->type->id() == arrow::Type::DENSE_UNION ||
-        result->type->id() == arrow::Type::SPARSE_UNION) {
+    if (result->type->id() == arrow::Type::STRUCT) {
         if (result->buffers[0]) {
             result->buffers[0] = MakeDenseBitmapCopy(result->buffers[0]->data(), result->length, result->offset, &pool);
         }

@@ -40,7 +40,6 @@ struct TFmrUserJobOptions {
     bool WriteStatsToFile = false;
 };
 
-
 class TFmrUserJob: public TYqlUserJobBase {
 public:
     TFmrUserJob();
@@ -88,8 +87,8 @@ public:
         VanillaInfo_ = std::move(info);
     }
 
-    void SetIsOrdered(bool isOrdered) {
-        IsOrdered_ = isOrdered;
+    void SetFmrJobType(EFmrJobType jobType) {
+        FmrJobType_ = jobType;
     }
 
     void SetSettings(const TFmrUserJobSettings& settings) {
@@ -98,6 +97,10 @@ public:
 
     void SetTvmSettings(const TMaybe<TFmrTvmJobSettings>& tvmSettings) {
         TvmSettings_ = tvmSettings;
+    }
+
+    void SetReduceOperationSpec(const TReduceOperationSpec& reduceOperationSpec) {
+        ReduceOperationSpec_ = reduceOperationSpec;
     }
 
     void Save(IOutputStream& s) const override;
@@ -116,6 +119,7 @@ private:
     void FillQueueFromSingleInputTable(ui64 tableIndex);
     void FillQueueFromInputTablesUnordered();
     void FillQueueFromInputTablesOrdered();
+    void FillQueueFromReduceInput();
 
     void InitializeFmrUserJob();
 
@@ -127,10 +131,11 @@ private:
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections_;
     TString TableDataServiceDiscoveryFilePath_;
     TString YtJobServiceType_; // file or native
-    bool IsOrdered_ = false;
+    EFmrJobType FmrJobType_ = EFmrJobType::Map;
     TFmrUserJobSettings Settings_ = TFmrUserJobSettings();
     TMaybe<TFmrTvmJobSettings> TvmSettings_ = Nothing();
     TMaybe<TVanillaInfo> VanillaInfo_ = Nothing();
+    TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
     // End of serializable part
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.

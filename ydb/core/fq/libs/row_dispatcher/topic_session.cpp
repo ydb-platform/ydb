@@ -29,7 +29,9 @@ struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroupName, ui32 partitionId, bool enableStreamingQueriesCounters) {
         ReadGroup = counters;
         PartitionGroup = counters;
-        if (enableStreamingQueriesCounters) {
+        PartitionId = partitionId;
+        EnableStreamingQueriesCounters = enableStreamingQueriesCounters;
+        if (EnableStreamingQueriesCounters) {
             const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
             ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
             PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
@@ -44,6 +46,12 @@ struct TTopicSessionMetrics {
         WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         QueuedBytes = PartitionGroup->GetCounter("QueuedBytes");
     }
+
+    ~TTopicSessionMetrics() {
+        if (EnableStreamingQueriesCounters) {
+            ReadGroup->RemoveSubgroup("partition", ToString(PartitionId));
+        }
+    }
     ::NMonitoring::TDynamicCounterPtr PartitionGroup;
     ::NMonitoring::TDynamicCounterPtr ReadGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
@@ -54,6 +62,8 @@ struct TTopicSessionMetrics {
     ::NMonitoring::THistogramPtr WaitEventTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr AllSessionsDataRate;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueuedBytes;
+    ui32 PartitionId = 0;
+    bool EnableStreamingQueriesCounters = false;
 };
 
 struct TEvPrivate {

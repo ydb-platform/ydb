@@ -21,6 +21,7 @@
 #include <ydb/core/keyvalue/protos/events.pb.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <bitset>
+#include <memory>
 
 namespace NActors {
     struct TActorContext;
@@ -29,7 +30,7 @@ namespace NActors {
 namespace NKikimr {
 namespace NKeyValue {
 
-class TKeyValueState {
+class TKeyValueState : public std::enable_shared_from_this<TKeyValueState> {
 public:
     using TIndex = TMap<TString, TIndexRecord>;
     using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command;
@@ -745,6 +746,11 @@ public:
         return TotalTrashSize;
     }
 
+    ui32 GetRefCount(const TLogoBlobID& id) const {
+        const auto it = RefCounts.find(id);
+        return it != RefCounts.end() ? it->second : 0;
+    }
+
     ui32 GetTrashCount() const {
         return std::accumulate(TrashForVacuum.begin(), TrashForVacuum.end(), Trash.size(), [](ui64 acc, const auto& pair) {
             return acc + pair.second.size();
@@ -752,6 +758,14 @@ public:
     }
 
 public: // For testing
+    void SetRefCountForTesting(const TLogoBlobID& id, ui32 refCount) {
+        if (refCount) {
+            RefCounts[id] = refCount;
+        } else {
+            RefCounts.erase(id);
+        }
+    }
+
     TString Dump() const;
     void VerifyEqualIndex(const TKeyValueState& state) const;
 };

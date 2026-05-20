@@ -3028,8 +3028,8 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     TAutoPtr<TCounters> counters(new TCounters());
     Counters.reset(counters->GetSecondTabletCounters().Release());
 
-    State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
-    State.Clear();
+    State->SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
+    State->Clear();
 }
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)

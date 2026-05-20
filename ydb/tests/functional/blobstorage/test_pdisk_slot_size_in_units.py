@@ -138,17 +138,20 @@ class TestPDiskSlotSizeInUnits(object):
 
     def query_sysview_ds_groups(self):
         return self.session_pool.execute_with_retries(
-            """SELECT * FROM `.sys/ds_groups` WHERE StoragePoolId = 1""",
+            """SELECT * FROM `.sys/ds_groups` WHERE StoragePoolId = 1 ORDER BY GroupId""",
         )[0].rows
 
     def test_change_group_size_in_units(self):
         groups_old = []
+        total_size_old = 0
 
         def check_sysview_populated():
-            nonlocal groups_old
+            nonlocal groups_old, total_size_old
             groups_old = self.query_sysview_ds_groups()
-            logger.info(json.dumps(groups_old))
+            logger.info(json.dumps(groups_old, default=str))
             assert len(groups_old) == 2
+            total_size_old = int(groups_old[0]['AllocatedSize']) + int(groups_old[0]['AvailableSize'])
+            assert total_size_old > 0
         retry_assertions(check_sysview_populated)
 
         self.change_group_size_in_units(new_size=2, group_id=self.groups[0].GroupId)
@@ -169,10 +172,9 @@ class TestPDiskSlotSizeInUnits(object):
 
         def check_sysview_updated():
             groups_new = self.query_sysview_ds_groups()
-            logger.info(json.dumps(groups_new))
+            logger.info(json.dumps(groups_new, default=str))
 
             assert len(groups_new) == 2
-            total_size_old = int(groups_old[0]['AllocatedSize']) + int(groups_old[0]['AvailableSize'])
             total_size_new = int(groups_new[0]['AllocatedSize']) + int(groups_new[0]['AvailableSize'])
 
             assert int(groups_new[0]['GroupSizeInUnits']) == 2

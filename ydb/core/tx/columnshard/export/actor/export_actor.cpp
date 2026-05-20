@@ -145,7 +145,7 @@ public:
 };
 
 void TActor::OnSessionStateSaved() {
-    AFL_VERIFY(ExportSession->IsFinished() || ErrorMessage);
+    AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsAborted());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
         ExecuteTransaction(std::make_unique<TTxProposeFinish>(GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId()));

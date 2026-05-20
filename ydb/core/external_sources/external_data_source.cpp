@@ -63,6 +63,18 @@ struct TExternalDataSource : public IExternalSource {
             throw TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 
+        // Ydb source needs at least one of database_name or database_id;
+        // otherwise downstream consumers (e.g. PQ provider for streaming queries)
+        // silently default the database to empty and fail at query time with an
+        // opaque error far from the CREATE statement.
+        if (proto.GetSourceType() == ToString(NYql::EDatabaseType::Ydb)) {
+            const auto& props = proto.GetProperties().GetProperties();
+            if (!props.contains("database_name") && !props.contains("database_id")) {
+                throw TExternalSourceException()
+                    << proto.GetSourceType() << " source must provide database_name or database_id";
+            }
+        }
+
         if (proto.GetSourceType() == ToString(NYql::EDatabaseType::YdbTopics)) {
             throw TExternalSourceException() << "External source with type " << proto.GetSourceType() << " is not allowed, use " << ToString(NYql::EDatabaseType::Ydb)  << " source type to read from topics ";
         }

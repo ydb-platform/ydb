@@ -54,6 +54,7 @@ public:
                 nullptr,
                 actor.SelfId(),
                 actor.GetHolderFactory(),
+                actor.TypeEnv,
                 nullptr,
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 CreatePqNativeGateway(std::move(pqServices)),

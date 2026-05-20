@@ -63,17 +63,14 @@ struct TExternalDataSource : public IExternalSource {
             throw TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 
-        // Ydb source needs at least one of database_name or database_id;
-        // otherwise downstream consumers (e.g. PQ provider for streaming queries)
-        // silently default the database to empty and fail at query time with an
-        // opaque error far from the CREATE statement.
+        // Ydb source requires at least one non-empty database_name or database_id.
         if (proto.GetSourceType() == ToString(NYql::EDatabaseType::Ydb)) {
             const auto& props = proto.GetProperties().GetProperties();
             const bool hasDatabaseName = props.contains("database_name") && !props.at("database_name").empty();
             const bool hasDatabaseId = props.contains("database_id") && !props.at("database_id").empty();
             if (!hasDatabaseName && !hasDatabaseId) {
                 throw TExternalSourceException()
-                    << proto.GetSourceType() << " source must provide database_name or database_id";
+                    << proto.GetSourceType() << " source must provide a non-empty database_name or database_id";
             }
         }
 

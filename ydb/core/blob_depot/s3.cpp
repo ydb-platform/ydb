@@ -47,6 +47,11 @@ namespace NKikimr::NBlobDepot {
         STRICT_STFUNC_BODY(
             fFunc(TEvPrivate::EvDeleteResult, HandleDeleter)
             fFunc(TEvPrivate::EvScanFound, HandleScanner)
+<<<<<<< HEAD
+=======
+            cFunc(TEvPrivate::EvDeleteThrottleWakeup, HandleDeleteThrottleWakeup)
+            cFunc(TEvPrivate::EvPutThrottleWakeup, HandlePutThrottleWakeup)
+>>>>>>> 510309d4ea9 (Support SlowDown response for S3 PUT requests (#40668))
         )
     }
 

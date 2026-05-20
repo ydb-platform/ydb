@@ -29,8 +29,9 @@ runs:
         YDB_QA_CONFIG_INPUT: ${{ inputs.ydb_qa_config }}
       run: |
         set -eu
+        DELIM="YDB_QA_CONFIG_$(openssl rand -hex 8)"
         {
-          echo "YDB_QA_CONFIG<<EOF"
+          echo "YDB_QA_CONFIG<<$DELIM"
           printf '%s\n' "$YDB_QA_CONFIG_INPUT"
-          echo "EOF"
+          echo "$DELIM"
         } >> "$GITHUB_ENV"

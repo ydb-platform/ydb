@@ -50,7 +50,7 @@ public:
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
         pipeConfig.CheckAliveness = true;
         PipeClients[index] = {Register(NTabletPipe::CreateClient(SelfId(), tablet, pipeConfig)), tablet};
-        NTabletPipe::SendData(SelfId(), PipeClients[index].Client, new TEvTablet::TEvCompactTables());
+        NTabletPipe::SendData(SelfId(), PipeClients[index].Client, new TEvTablet::TEvMoveData());
         ++CompactsInFlight;
     }
 
@@ -69,7 +69,7 @@ public:
         return CheckCompletion();
     }
 
-    void Handle(TEvTablet::TEvCompactTablesResponse::TPtr& ev) {
+    void Handle(TEvTablet::TEvMoveDataResponse::TPtr& ev) {
         auto tablet = ev->Get()->Record.GetTabletId();
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
@@ -111,7 +111,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvTablet::TEvCompactTablesResponse, Handle);
+            hFunc(TEvTablet::TEvMoveDataResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         }

@@ -1113,13 +1113,14 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     Counters->Percentile().Populate(counters.Percentile());
     Counters->Cumulative().Populate(counters.Cumulative());
 
-    partition.ReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+    auto newReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+    auto combinedReservedBytes = ReservedBytes + newReservedBytes;
+    ReservedBytes = combinedReservedBytes > partition.ReservedBytes ? combinedReservedBytes - partition.ReservedBytes : 0;
+    partition.ReservedBytes = newReservedBytes;
 
     // restore cache's simple counters cleaned by partition's counters
     SetCacheCounters(CacheCounters);
-    ui64 reservedSize = std::accumulate(Partitions.begin(), Partitions.end(), 0ul,
-        [](ui64 sum, const auto& p) { return sum + p.second.ReservedBytes; });
-    Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
+    Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedBytes);
 
     // Features of the implementation of SimpleCounters. It is necessary to restore the value of
     // indicators for transactions.
@@ -5331,6 +5332,8 @@ void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorCo
 
     const TPartitionInfo& partition = p->second;
     ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
+
+    ReservedBytes = ReservedBytes > partition.ReservedBytes ? ReservedBytes - partition.ReservedBytes : 0;
 
     PQ_LOG_D("DeletePartition " << partitionId);
     Partitions.erase(partitionId);

@@ -34,6 +34,16 @@ public:
         static constexpr bool value = decltype(check<T>(0))::value;
     };
 
+    template <typename T>
+    class THasToStructuredMessageMethod {
+        // check the signature if it exists
+        template <typename X> static constexpr typename std::is_same<decltype(&X::ToStructuredMessage), TStructuredMessage(X::*)()const>::type check(int);
+        // in case when there is no such signature
+        template <typename>   static constexpr std::false_type check(...);
+    public:
+        static constexpr bool value = decltype(check<T>(0))::value;
+    };
+
     template <typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
     template <> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
     template <> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
@@ -156,6 +166,9 @@ public:
     TCreateMessageArg(K&& name, const T& value) {
         if constexpr (std::is_same<T, TStructuredMessage>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value);
+        } else if constexpr (THasToStructuredMessageMethod<std::decay_t<T>>::value) {
+            auto message = value.ToStructuredMessage();
+            TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, message);
         } else if constexpr (std::is_same<T, TMaybe<TStructuredMessage>>::value) {
             if (value.Defined()) {
                 TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value.GetRef());

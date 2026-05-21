@@ -35,6 +35,8 @@ ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task) {
 EDataFormat NextDataFormat(EDataFormat cur) {
     switch (cur) {
     case EDataFormat::Csv:
+        return EDataFormat::Parquet;
+    case EDataFormat::Parquet:
         return EDataFormat::Invalid;
     case EDataFormat::Invalid:
         return EDataFormat::Invalid;

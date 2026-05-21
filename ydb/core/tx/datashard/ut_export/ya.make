@@ -10,4 +10,6 @@ SRCS(
     export_s3_buffer_ut.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(export_enums.h)
+
 END()

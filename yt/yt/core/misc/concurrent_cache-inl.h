@@ -207,6 +207,19 @@ typename TConcurrentCache<T>::TInserter TConcurrentCache<T>::GetInserter()
 }
 
 template <class T>
+size_t TConcurrentCache<T>::GetSize() const
+{
+    auto head = Head_.Acquire();
+    return head->Size.load(std::memory_order::relaxed);
+}
+
+template <class T>
+size_t TConcurrentCache<T>::GetCapacity() const
+{
+    return Capacity_.load(std::memory_order::acquire);
+}
+
+template <class T>
 void TConcurrentCache<T>::SetCapacity(size_t capacity)
 {
     YT_VERIFY(capacity > 0);

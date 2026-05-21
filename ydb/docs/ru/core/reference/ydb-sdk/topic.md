@@ -1484,11 +1484,33 @@
 
 - Python
 
+<<<<<<< HEAD
   ```python
   while True:
       message = reader.receive_message()
       process(message)
   ```
+=======
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+    ```
+
+  {% endlist %}
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 
 - Java (sync)
 
@@ -1565,11 +1587,33 @@
 
 - Python
 
+<<<<<<< HEAD
   ```python
   while True:
     batch = reader.receive_batch()
     process(batch)
   ```
+=======
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+    ```
+
+  {% endlist %}
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 
 - Java (sync)
 
@@ -1649,12 +1693,36 @@
 
   `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
+<<<<<<< HEAD
   ```python
   while True:
       message = reader.receive_message()
       process(message)
       reader.commit(message)
   ```
+=======
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  {% endlist %}
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 
   `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
@@ -1750,12 +1818,36 @@
 
 - Python
 
+<<<<<<< HEAD
   ```python
   while True:
     batch = reader.receive_batch()
     process(batch)
     reader.commit(batch)
   ```
+=======
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 
   `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
@@ -2075,8 +2167,9 @@
 
   Для чтения сообщений в рамках транзакции следует использовать метод `reader.receive_batch_with_tx`. Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку - в противном случае транзакция получит ошибку на попытке сделать коммит. Проще всего это сделать, если использовать читателя в цикле.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+  {% list tabs %}
 
+<<<<<<< HEAD
   ```python
   with driver.topic_client.reader(topic, consumer) as reader:
       with ydb.QuerySessionPool(driver) as session_pool:
@@ -2092,21 +2185,25 @@
 - Python (asyncio)
 
   Для чтения сообщений в рамках транзакции следует использовать метод `reader.receive_batch_with_tx`. Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку - в противном случае транзакция получит ошибку на попытке сделать коммит. Проще всего это сделать, если использовать читателя в цикле.
+=======
+  - Native SDK
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-  ```python
-  async with driver.topic_client.reader(topic, consumer) as reader:
-      async with ydb.aio.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+    ```python
+    with driver.topic_client.reader(topic, consumer) as reader:
+        with ydb.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-              async def callee(tx: ydb.aio.QueryTxContext):
-                  batch = await reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+                def callee(tx: ydb.QueryTxContext):
+                    batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
 
-              await session_pool.retry_tx_async(callee)
-  ```
+                session_pool.retry_tx_sync(callee)
+    ```
 
+<<<<<<< HEAD
 - Java (sync)
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
@@ -2115,6 +2212,38 @@
 
   ```java
   Message message = reader.receive(ReceiveSettings.newBuilder()
+=======
+  - Native SDK (Asyncio)
+
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+
+    ```python
+    async with driver.topic_client.reader(topic, consumer) as reader:
+        async with ydb.aio.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
+
+                async def callee(tx: ydb.aio.QueryTxContext):
+                    batch = await reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+                await session_pool.retry_tx_async(callee)
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Синхронный API
+
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
+
+    В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
+
+    ```java
+    Message message = reader.receive(ReceiveSettings.newBuilder()
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
           .setTransaction(transaction)
           .build());
   ```
@@ -2219,12 +2348,36 @@
 
   Специальной обработки не требуется.
 
+<<<<<<< HEAD
   ```python
   while True:
     batch = reader.receive_batch()
     process(batch)
     reader.commit(batch)
   ```
+=======
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 
 - Java (sync)
 
@@ -2296,6 +2449,7 @@
 
   В этом примере обработка сообщений в батче остановится, если в процессе работы партиция будет отобрана. Такая оптимизация требует дополнительного кода на клиенте. В простых случаях, когда обработка отобранных партиций не является проблемой, ее можно не применять.
 
+<<<<<<< HEAD
   ```python
   def process_batch(batch):
       for message in batch.messages:
@@ -2303,11 +2457,41 @@
               return False
           process(message)
       return True
+=======
+  {% list tabs %}
 
-  batch = reader.receive_batch()
-  if process_batch(batch):
-      reader.commit(batch)
-  ```
+  - Native SDK
+
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  - Native SDK (Asyncio)
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
+
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = await reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
 - Java (sync)
 
@@ -2468,6 +2652,7 @@
 
   Включение автомасштабирования топика во время его создания производится с помощью аргумента `auto_partitioning_settings` у `create_topic`:
 
+<<<<<<< HEAD
   ```python
       driver.topic_client.create_topic(
           topic,
@@ -2482,6 +2667,44 @@
           ),
       )
   ```
+=======
+  {% list tabs %}
+  - Native SDK
+
+    ```python
+    driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  {% endlist %}
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 
   Внесение изменений в существующий топик производится с помощью аргумента `alter_auto_partitioning_settings` у `alter_topic`:
 
@@ -2525,10 +2748,51 @@
 
 {% list tabs group=lang %}
 
+<<<<<<< HEAD
+=======
+- Go
+
+  Подтверждение обработки вне читателя производится с помощью метода `db.Topic().CommitOffset`:
+
+  ```go
+  // Базовый способ — подтверждение оффсета без активной сессии чтения
+  err := db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+  )
+  ```
+
+  Если в момент подтверждения существует активная сессия чтения (через `StartReader` или `StartListener`), рекомендуется передать её идентификатор с помощью опции `WithCommitOffsetReadSessionID`. Это позволяет серверу не прерывать текущую сессию чтения:
+
+  ```go
+  import (
+    // ...
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  // Получение идентификатора сессии чтения
+  sessionID := reader.ReadSessionID()
+  // или: sessionID := listener.ReadSessionID()
+
+  err = db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+    topicoptions.WithCommitOffsetReadSessionID(sessionID),
+  )
+  ```
+
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 - Python
 
-  Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
+  Подтверждение обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
 
+<<<<<<< HEAD
   ```python
   driver.topic_client.commit_offset(
       topic_path,
@@ -2538,4 +2802,57 @@
   )
   ```
 
+=======
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
+    )
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  TopicClient client = ...;
+
+  String sessionID = reader.getSessionId();
+  // У AsyncReader идентификатор сессии можно получить при обработке события SessionStartedEvent
+
+  client.commitOffset(
+      topicPath,
+      CommitOffsetSettings.newBuilder()
+          .setReadSessionId(sessionID)
+          .setPartitionId(partitionID)
+          .setConsumer(consumer)
+          .setOffset(offset)
+          .build()
+  ).join().expectSuccess("Error commit!");
+  ```
+
+>>>>>>> 91c3a5058f9 (CommitOffset docs and small formatting fixes (#37551))
 {% endlist %}

@@ -789,7 +789,8 @@ void CmdWriteBatched(
     ui64 totalBatchMessages,
     TTestContext& tc,
     i64 offset,
-    bool disableDeduplication)
+    bool disableDeduplication,
+    std::optional<ui64> maxSeqNo)
 {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse* result = nullptr;
@@ -813,6 +814,9 @@ void CmdWriteBatched(
             write->SetSeqNo(seqNo);
             write->SetData(data);
             write->SetTotalBatchMessages(static_cast<i64>(totalBatchMessages));
+            if (maxSeqNo) {
+                write->SetMaxSeqNo(static_cast<i64>(*maxSeqNo));
+            }
             write->SetDisableDeduplication(disableDeduplication);
 
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());

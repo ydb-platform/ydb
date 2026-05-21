@@ -1249,8 +1249,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!p.Msg.DisableDeduplication &&
         ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
-        if (p.Msg.MaxSeqNo.has_value() && sourceId.SeqNo() && p.Msg.SeqNo <= *sourceId.SeqNo()
-            && *p.Msg.MaxSeqNo >= *sourceId.SeqNo() && p.Msg.SeqNo != *p.Msg.MaxSeqNo) {
+        if (p.Msg.MaxSeqNo.has_value() && sourceId.SeqNo() && p.Msg.SeqNo < *sourceId.SeqNo()
+            && *sourceId.SeqNo() < *p.Msg.MaxSeqNo) {
             CancelOneWriteOnWrite(ctx,
                                     TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId)
                                     << " seqNo: " << p.Msg.SeqNo

@@ -696,7 +696,8 @@ void CmdWriteBatched(
     ui64 totalBatchMessages,
     TTestContext& tc,
     i64 offset = -1,
-    bool disableDeduplication = false);
+    bool disableDeduplication = false,
+    std::optional<ui64> maxSeqNo = std::nullopt);
 
 void CmdRunCompaction(TTestActorRuntime& runtime,
                       ui64 tabletId,

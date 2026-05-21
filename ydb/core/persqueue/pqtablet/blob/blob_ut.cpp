@@ -88,6 +88,92 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
     }
+
+    Y_UNIT_TEST(BatchFindPosWithBatchSize) {
+        TBatch batch(0, 0);
+        const auto ts = TInstant::Seconds(100);
+
+        auto makeBlob = [&](ui64 seqNo, std::optional<ui64> batchSize) {
+            return TClientBlob(
+                TString("src"), seqNo, TString("data"), TMaybe<TPartData>(),
+                ts, ts, 0, "", "", batchSize);
+        };
+
+        batch.AddBlob(makeBlob(1, 5));
+        batch.AddBlob(makeBlob(2, 3));
+        batch.AddBlob(makeBlob(3, 1));
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 9u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 3u);
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(5, 0), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(8, 0), 2u);
+
+        // Offset inside a batched slot is not a valid message boundary.
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(3, 0), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 1), Max<ui32>());
+    }
+
+    Y_UNIT_TEST(BatchFindPosWithBatchSizeNonZeroStart) {
+        TBatch batch(10, 0);
+        const auto ts = TInstant::Seconds(100);
+
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("data"), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", std::optional<ui64>{5}));
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(10, 0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(15, 0), Max<ui32>());
+    }
+
+    Y_UNIT_TEST(BatchFindPosMultipart) {
+        TBatch batch(0, 0);
+        const auto ts = TInstant::Seconds(100);
+        constexpr ui32 totalSize = 100;
+
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("p0"), TPartData{0, 3, totalSize},
+            ts, ts, totalSize, "", ""));
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("p1"), TPartData{1, 3, totalSize},
+            ts, ts, totalSize, "", ""));
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("p2"), TPartData{2, 3, totalSize},
+            ts, ts, totalSize, "", ""));
+        batch.AddBlob(TClientBlob(
+            TString("src"), 2, TString("next"), TMaybe<TPartData>(),
+            ts, ts, 0, "", ""));
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 1), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 2), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 3), Max<ui32>());
+    }
+
+    Y_UNIT_TEST(BatchFindPosSurvivesPackUnpack) {
+        TBatch batch(0, 0);
+        const auto ts = TInstant::Seconds(100);
+
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("a"), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", std::optional<ui64>{5}));
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), Max<ui32>());
+
+        batch.Pack();
+        batch.Unpack();
+
+        UNIT_ASSERT(batch.Blobs[0].BatchSize.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*batch.Blobs[0].BatchSize, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), Max<ui32>());
+    }
 }
 
 bool operator ==(const TClientBlob &lhs, const TClientBlob &rhs) {

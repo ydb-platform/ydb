@@ -164,6 +164,8 @@ namespace {
             .PersistentBuffer = {
                 COUNTER(PersistentBuffer, AllocatedChunks, false)
                 COUNTER(PersistentBuffer, TotalBytes, false)
+                COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
+                COUNTER(PersistentBuffer, InMemoryCacheSize, false)
             },
         };
 

@@ -1,18 +1,25 @@
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/utils/log/log.h>
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_make_join_hypergraph.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <library/cpp/iterator/zip.h>
+
 #include <typeinfo>
 #include <bitset>
 #include <limits>
 #include <optional>
 
+namespace NKikimr::NKqp {
+
 namespace {
+
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
@@ -296,11 +303,7 @@ TIntrusivePtr<IOperator> ConvertOptimizedTree(std::shared_ptr<IBaseOptimizerNode
         return res;
     }
 }
-}
-
-namespace NKikimr {
-namespace NKqp {
-
+} // anonymous namespace
 
 /**
  * Run dynamic programming CBO and convert the resulting tree into operator tree
@@ -402,5 +405,4 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     return ConvertOptimizedTree(joinTree, cboTree->Props.Metadata->ColumnLineage, cboTree->Pos);
 }
 
-}
-}
+} // namespace NKikimr::NKqp

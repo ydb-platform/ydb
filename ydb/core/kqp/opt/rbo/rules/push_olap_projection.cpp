@@ -1,6 +1,12 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+namespace NKikimr::NKqp {
 
 namespace {
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
@@ -26,10 +32,8 @@ bool IsSuitableToPushProjectionToColumnTables(const TIntrusivePtr<IOperator>& in
     return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) &&
             filter->GetTypeAnn());
 }
-}
 
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
@@ -153,5 +157,5 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
                                           read->Ranges, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements, map->Project, map->Ordered);
 }
-} // namespace NKqp
-}
+
+} // namespace NKikimr::NKqp

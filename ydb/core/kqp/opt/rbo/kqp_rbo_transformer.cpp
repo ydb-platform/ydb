@@ -1,13 +1,20 @@
 #include "kqp_rbo_transformer.h"
 #include "kqp_operator.h"
 #include "kqp_plan_conversion_utils.h"
+#include "kqp_rbo_rules.h"
 
+#include <ydb/core/kqp/host/kqp_transform.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
+
 namespace {
 
 NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
@@ -19,7 +26,7 @@ NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpC
     return optimizerStats;
 }
 
-TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
+TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     Y_UNUSED(typeCtx);
     auto take = TCoTake(node);
     auto takeInput = take.Input();
@@ -43,7 +50,7 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx,
     }
 }
 
-TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, bool pgSyntax) {
+TExprNode::TPtr RewriteSublink(const TExprNode::TPtr& node, TExprContext& ctx, bool pgSyntax) {
     if (node->Child(0)->Content() == "expr") {
         // clang-format off
         return Build<TKqpExprSublink>(ctx, node->Pos())
@@ -73,7 +80,7 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
 
 }
 
-TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext &ctx) {
+TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto sublink = TKqpSublinkBase(node);
     if (auto root = sublink.Subquery().Maybe<TKqpOpRoot>()) {
         if (TKqpExprSublink::Match(node.Get())) {
@@ -103,12 +110,10 @@ TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext 
     }
     return node;
 }
-} // namespace
 
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
-IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
+IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
@@ -480,5 +485,4 @@ TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContex
     return new TKqpRBOCleanupTransformer(typeCtx);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

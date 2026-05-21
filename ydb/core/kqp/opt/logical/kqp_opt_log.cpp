@@ -2,21 +2,24 @@
 #include "kqp_opt_cbo.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
+
+namespace {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -460,6 +463,8 @@ private:
     TKqpOptimizeContext& KqpCtx;
     const TKikimrConfiguration::TPtr& Config;
 };
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)

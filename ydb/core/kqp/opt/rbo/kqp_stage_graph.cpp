@@ -1,6 +1,11 @@
 #include "kqp_stage_graph.h"
 
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
+
 namespace {
+
 using namespace NKikimr;
 using namespace NKqp;
 using namespace NYql;
@@ -35,13 +40,8 @@ NJson::TJsonValue MakeKeyColumnsJson(const TVector<TInfoUnit>& keys) {
     }
     return keyColumns;
 }
-}
 
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NNodes;
+} // anonymous namespace
 
 TString TSortElement::ToString() const {
     TStringBuilder result;
@@ -194,5 +194,5 @@ TList<ui32> TStageGraph::GetTopologicalOrder() const {
 void TStageGraph::TopologicalSort() {
     StageIds = GetTopologicalOrder();
 }
-}
-}
+
+} // namespace NKikimr::NKqp

@@ -1,12 +1,16 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace NKikimr::NKqp::NOpt {
+
+namespace {
 
 template<typename Container>
 TCoAtomList MakeColumnsList(Container rows, TExprContext& ctx, TPositionHandle pos) {
@@ -43,6 +47,8 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
         .Add(items)
         .Done();
 }
+
+} // anonymous namespace
 
 TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
     if (kqpCtx.Config->GetEnableIndexStreamWrite()) {

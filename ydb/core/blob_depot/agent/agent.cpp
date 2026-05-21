@@ -93,6 +93,7 @@ namespace NKikimr::NBlobDepot {
         S3PutBytesOk = s3->GetCounter("PutBytesOk", true);
         S3PutsOk = s3->GetCounter("PutsOk", true);
         S3PutsError = s3->GetCounter("PutsError", true);
+        S3PutsSlowDown = s3->GetCounter("PutsSlowDown", true);
     }
 
     void TBlobDepotAgent::SwitchMode(EMode mode) {

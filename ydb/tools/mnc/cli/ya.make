@@ -6,6 +6,7 @@ PY3_PROGRAM(mnc)
 
     PY_SRCS(
         arg_metadata.py
+        command_options.py
         main.py
         parser_factory.py
         tui/__init__.py
@@ -25,6 +26,8 @@ PY3_PROGRAM(mnc)
         commands/init.py
         commands/deploy.py
         commands/service.py
+        commands/nbs.py
+        commands/qemu.py
     )
 
     PEERDIR(

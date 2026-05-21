@@ -63,7 +63,7 @@ TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, 
     peepholeSettings.WithFinalStageRules = false;
     TExprNode::TPtr afterPeephole;
     bool hasNonDeterministicFunctions;
-    if (const auto status = PeepHoleOptimizeNode(olapPredicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, &(ctx.PeepholeTypeAnnTransformer),
+    if (const auto status = PeepHoleOptimizeNode(olapPredicateClosure.Ptr(), afterPeephole, ctx.ExprCtx, ctx.TypeCtx, nullptr,
                                                  hasNonDeterministicFunctions);
         status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO OLAP FILTER] Peephole failed with status: " << status << Endl;

@@ -1,9 +1,11 @@
 import asyncio
+import contextlib
+import io
 import shlex
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
-from ydb.tools.mnc.cli import arg_metadata
+from ydb.tools.mnc.cli import arg_metadata, command_options
 from ydb.tools.mnc.cli.tui.command_picker import CommandPickerApp
 from ydb.tools.mnc.cli.tui.common import (
     COMMON_OPTION_GROUP,
@@ -39,14 +41,15 @@ class TuiLauncher:
         self.expected_config_by_verb = expected_config_by_verb
         self.root = arg_metadata.command_metadata_from_parser(parser)
 
-    def run(self, initial_args=None) -> LauncherResult:
-        return asyncio.run(self.run_async(initial_args))
+    def run(self, initial_args=None, initial_argv: Optional[List[str]] = None) -> LauncherResult:
+        return asyncio.run(self.run_async(initial_args, initial_argv=initial_argv))
 
-    async def run_async(self, initial_args=None) -> LauncherResult:
+    async def run_async(self, initial_args=None, initial_argv: Optional[List[str]] = None) -> LauncherResult:
         command = await self._select_command(initial_args)
         if command is None:
             return LauncherResult(cancelled=True)
 
+        initial_args = self._initial_args_with_cached_options(command, initial_args, initial_argv)
         argv = self._global_argv(initial_args) + list(command.path)
 
         command_scheme = self.expected_config_by_verb.get(command.path[0])
@@ -149,6 +152,30 @@ class TuiLauncher:
             else:
                 argv.append(value)
         return argv
+
+    def _initial_args_with_cached_options(self, command, initial_args, initial_argv: Optional[List[str]] = None):
+        if initial_argv is not None:
+            path, _, _ = command_options.command_from_argv(self.parser, initial_argv)
+            if path == command.path:
+                return self._parse_initial_args(
+                    command_options.apply_cached_options(self.parser, initial_argv),
+                    initial_args,
+                )
+
+        cache_entry = command_options.load_cache().get(command_options.command_key(command.path), {})
+        cached_tokens = cache_entry.get("tokens", [])
+        if not isinstance(cached_tokens, list) or not cached_tokens:
+            return initial_args
+
+        argv = self._global_argv(initial_args) + list(command.path) + cached_tokens
+        return self._parse_initial_args(argv, initial_args)
+
+    def _parse_initial_args(self, argv: List[str], fallback):
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                return self.parser.parse_args(argv)
+        except (Exception, SystemExit):
+            return fallback
 
 
 def command_from_args(root: arg_metadata.CommandMeta, args) -> Optional[arg_metadata.CommandMeta]:

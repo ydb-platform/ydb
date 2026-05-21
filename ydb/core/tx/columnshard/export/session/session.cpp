@@ -29,6 +29,10 @@ bool TSession::IsStarted() const {
     return Status == EStatus::Started;
 }
 
+bool TSession::IsAborted() const {
+    return Status == EStatus::Aborted;
+}
+
 void TSession::Abort(const TString &errorMessage) {
     AFL_VERIFY(Status != EStatus::Finished && Status != EStatus::Aborted);
     Status = EStatus::Aborted;

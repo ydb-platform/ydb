@@ -49,6 +49,8 @@ struct TFmrYtGatewaySettings {
     TIntrusivePtr<ITimeProvider> TimeProvider = CreateDefaultTimeProvider();
     TDuration TimeToSleepBetweenGetOperationRequests = TDuration::Seconds(1);
     TDuration CoordinatorPingInterval = TDuration::Seconds(5);
+    ui64 MaxDirectPullBytes = 100 * 1024; // 100 KB
+    ui64 MaxDirectPullRows = 1000;
 };
 
 IYtGateway::TPtr CreateYtFmrGateway(

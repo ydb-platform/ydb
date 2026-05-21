@@ -1124,6 +1124,7 @@ TFuture<void> TTransaction::SendPing()
     auto req = Proxy_.PingTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
     req->set_ping_ancestors(PingAncestors_);
+    SetControlMultiplexingBandIfNeeded(*req);
 
     return req->Invoke().Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspPingTransactionPtr& rspOrError) {
@@ -1333,6 +1334,13 @@ void TTransaction::SubscribeModificationsFlushed(const TModificationsFlushedHand
 void TTransaction::UnsubscribeModificationsFlushed(const TModificationsFlushedHandler& handler)
 {
     ModificationsFlushed_.Unsubscribe(handler);
+}
+
+void TTransaction::SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req)
+{
+    if (Client_->GetOptions().EnableControlMultiplexingBand) {
+        req.SetMultiplexingBand(NRpc::EMultiplexingBand::Control);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

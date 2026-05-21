@@ -14,11 +14,17 @@ namespace NKikimr::NDDisk {
     };
 
     struct TPersistentBufferBarriersManager {
+        ui64 PersistentBufferUniqueId;
+        ui32 NodeId;
+        ui32 PDiskId;
+        ui32 SlotId;
+
         std::vector<TEraseBarrier> PersistentBufferBarriers;
         std::unordered_map<ui64, std::tuple<ui32, ui32>> PersistentBufferBarriersLocation;
         std::vector<std::tuple<ui32, ui32>> PersistentBufferBarrierHoles;
         ui32 FreeBarrierPosition = 0;
 
+        void Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId);
         bool CanMoveBarrier(ui64 tabletId, ui32 barriersLimit);
         ui64 GetBarrier(ui64 tabletId) const;
         std::unordered_map<ui64, ui64> GetBarriers() const;

@@ -112,6 +112,16 @@ TString ToString(const TLogTitle::TVChunk& data)
     return stream;
 }
 
+TString ToString(const TLogTitle::TDDiskDataCopier& data)
+{
+    TStringBuilder stream;
+
+    stream << "[copy:" << data.DiskId;
+    stream << " dst:" << data.Destination;
+
+    return stream;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////

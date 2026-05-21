@@ -226,6 +226,7 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3PutBytesOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
 
         enum class EMode {
             None,
@@ -445,7 +446,7 @@ namespace NKikimr::NBlobDepot {
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
             virtual void OnIdAllocated(bool /*success*/) {}
             virtual void OnDestroy(bool /*success*/) {}
-            virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/) { Y_ABORT(); }
+            virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
 
             NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,

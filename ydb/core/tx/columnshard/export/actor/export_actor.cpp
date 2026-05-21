@@ -9,6 +9,15 @@ void TActor::SwitchStage(const EStage from, const EStage to) {
     Stage = to;
 }
 
+void TActor::AbortExport(const TString& errorMessage) {
+    ErrorMessage = errorMessage;
+    AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
+    ExportSession->MutableCursor().InitNext({}, true);
+    Stage = EStage::WaitSaveCursor;
+    Become(&TActor::StateError);
+    SaveSessionProgress();
+}
+
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     SwitchStage(EStage::Initialization, EStage::WaitData);
     AFL_VERIFY(!ScanActorId);
@@ -83,11 +92,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
 }
 
 void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& ev) {
-    ErrorMessage = ev->Get()->ErrorMessage;
-    TOwnedCellVec lastKey;
-    AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
-    ExportSession->MutableCursor().InitNext(lastKey, true);
-    SaveSessionProgress();
+    AbortExport(ev->Get()->ErrorMessage);
 }
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator(const TCursor& cursor) const {
@@ -140,7 +145,7 @@ public:
 };
 
 void TActor::OnSessionStateSaved() {
-    AFL_VERIFY(ExportSession->IsFinished());
+    AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsAborted());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
         ExecuteTransaction(std::make_unique<TTxProposeFinish>(GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId()));

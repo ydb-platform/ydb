@@ -2,13 +2,6 @@ from .common import YsonError
 
 from yt.common import flatten
 
-try:
-    from yt.packages.six.moves import map as imap
-    from yt.packages.six import PY3
-except ImportError:
-    from six.moves import map as imap
-    from six import PY3
-
 import string
 
 
@@ -62,8 +55,7 @@ CHAR_TO_TOKEN_TYPE = {
 
 
 def char_to_token_type(char_or_byte):
-    if PY3:
-        char_or_byte = chr(char_or_byte)
+    char_or_byte = chr(char_or_byte)
     if char_or_byte not in CHAR_TO_TOKEN_TYPE:
         return TOKEN_END_OF_STREAM
     return CHAR_TO_TOKEN_TYPE[char_or_byte]
@@ -105,9 +97,8 @@ def token_type_to_string(token):
 
 
 def decode_token_value(value):
-    if not PY3 or not isinstance(value, bytes):
+    if not isinstance(value, bytes):
         return value
-
     chars = []
     for byte in value:
         char = chr(byte)
@@ -144,12 +135,12 @@ class YsonToken(object):
 
         if token_type not in expected_types:
             if token_type == TOKEN_END_OF_STREAM:
-                raise YsonError("Unexpected end of stream; expected types are {0}".format(list(imap(token_type_to_string, expected_types))))
+                raise YsonError("Unexpected end of stream; expected types are {0}".format(list(map(token_type_to_string, expected_types))))
             else:
                 raise YsonError('Unexpected token "{0}" of type {1}; '
                                 'expected types are {2}'.format(decode_token_value(self.get_value()),
                                                                 token_type_to_string(token_type),
-                                                                list(imap(token_type_to_string, expected_types))))
+                                                                list(map(token_type_to_string, expected_types))))
 
     def __str__(self):
         return str(self._value)

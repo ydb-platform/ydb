@@ -339,12 +339,17 @@ void MultiStep(TQueryClient client) {
     })); // The end of the retried lambda
 
     std::cout << "> MultiStep:" << std::endl;
-    for (auto& parser : TResultSetRange(std::move(*resultSet))) {
-        auto airDate = TInstant::Days(*parser.ColumnParser("air_date").GetOptionalUint64());
+    TResultSetRange range(std::move(*resultSet));
+    for (auto [episodeId, seasonId, title, airDateDays] : range.Get<
+            std::optional<uint64_t>,
+            std::optional<uint64_t>,
+            std::optional<std::string>,
+            std::optional<uint64_t>>({"episode_id", "season_id", "title", "air_date"})) {
+        auto airDate = TInstant::Days(*airDateDays);
 
-        std::cout << "Episode " << OptionalToString(parser.ColumnParser("episode_id").GetOptionalUint64())
-            << ", Season: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
-            << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
+        std::cout << "Episode " << OptionalToString(episodeId)
+            << ", Season: " << OptionalToString(seasonId)
+            << ", Title: " << OptionalToString(title)
             << ", Air date: " << airDate.FormatLocalTime("%a %b %d, %Y")
             << std::endl;
     }

@@ -39,7 +39,7 @@ TClientBlob::TClientBlob()
 
 TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
-        TString&& partitionKey, TString&& explicitHashKey, const std::optional<ui64>& batchSize)
+        TString&& partitionKey, TString&& explicitHashKey, const std::optional<ui32>& batchSize)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -199,9 +199,9 @@ ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
 
     ui64 curOffset = GetOffset();
     ui16 curPartNo = GetPartNo();
-    for (ui32 i = 0; i < Blobs.size(); ++i) {
+    for (size_t i = 0; i < Blobs.size(); ++i) {
         if (curOffset == offset && curPartNo == partNo) {
-            return i;
+            return static_cast<ui32>(i);
         }
         if (Blobs[i].IsLastPart()) {
             curOffset += Blobs[i].BatchSize.value_or(1);

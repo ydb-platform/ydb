@@ -1875,7 +1875,7 @@ void TPersQueue::FillBatchInfo(
         msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
     }
     if (cmd.HasTotalBatchMessages()) {
-        msg.MessagesInBatch = static_cast<ui64>(cmd.GetTotalBatchMessages());
+        msg.MessagesInBatch = static_cast<ui32>(cmd.GetTotalBatchMessages());
     }
     if (cmd.GetPartNo() > 0) {
         return;

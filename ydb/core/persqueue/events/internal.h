@@ -301,8 +301,8 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
-            std::optional<ui64> MessagesInBatch;
-            TVector<std::pair<TString, ui64>> PartitionKeys;
+            std::optional<ui32> MessagesInBatch;
+            std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)

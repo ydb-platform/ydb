@@ -82,7 +82,7 @@ ui32 BlobSize(const TClientBlob& blob) {
         size += sizeof(ui32);
     }
     if (flags.F.HasBatch) {
-        size += sizeof(ui64);
+        size += sizeof(ui32);
     }
     size += sizeof(ui16) + blob.SourceId.size();
     size += blob.Data.size();
@@ -299,10 +299,10 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
 
     if (hasBatch) {
         ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
-        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui64, false>>(Batch.PackedData);
+        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
-            ui64 batchSize = Batch.Blobs[i].BatchSize.value_or(0);
-            chunk->AddData((const char*)&batchSize, sizeof(ui64));
+            ui32 batchSize = Batch.Blobs[i].BatchSize.value_or(0);
+            chunk->AddData((const char*)&batchSize, sizeof(ui32));
         }
         chunk->Seal();
         WriteActualChunkSize(Batch.PackedData, sizeOffset);
@@ -457,13 +457,13 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         uncompressedSize.resize(totalBlobs); //fill with zero-s
     }
 
-    TVector<ui64> batchSize;
+    TVector<ui32> batchSize;
     batchSize.reserve(totalBlobs);
     if (data < dataEnd) {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            batchSize.push_back(ReadUnaligned<ui64>(iter->Next().Data()));
+            batchSize.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
         }
     } else {
         batchSize.resize(totalBlobs);

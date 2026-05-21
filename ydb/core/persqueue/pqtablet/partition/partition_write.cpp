@@ -1174,11 +1174,9 @@ void TPartition::TryCorrectStartOffset(TMaybe<ui64> offset)
 }
 
 void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
-    if (p.Msg.MessagesInBatch > 0) {
-        for (const auto& [partitionKey, size] : p.Msg.PartitionKeys) {
-            AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
-        }
-        return;
+    // if ChoosePartitionKey is provided, this cycle will be skipped (because PartitionKeys is empty)
+    for (const auto& [partitionKey, size] : p.Msg.PartitionKeys) {
+        AutopartitioningManager->OnWrite(p.Msg.SourceId, size, 1, partitionKey);
     }
 
     AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);

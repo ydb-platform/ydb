@@ -21,7 +21,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             << " InitialSeqNo=" << p.InitialSeqNo
     );
 
-    AFL_ENSURE(poffset >= curOffset); 
+    AFL_ENSURE(poffset >= curOffset);
 
     bool needCompactHead = poffset > curOffset;
     if (needCompactHead) { //got gap

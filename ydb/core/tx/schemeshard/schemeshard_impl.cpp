@@ -5374,6 +5374,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //operation schedule msg
         HFuncTraced(TEvPrivate::TEvProgressOperation, Handle);
+        HFuncTraced(TEvPrivate::TEvSolomonRollingUpdateDone, Handle);
 
         //coordination distributed transactions msg
         HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
@@ -6230,6 +6231,18 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
 
     Y_ABORT_UNLESS(ev->Get()->TxPartId != InvalidSubTxId);
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvSolomonRollingUpdateDone::TPtr& ev, const TActorContext& ctx) {
+    const auto opId = ev->Get()->OperationId;
+    if (!Operations.contains(opId.GetTxId())) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvPrivate::TEvSolomonRollingUpdateDone"
+                   << " for unknown txId " << opId.GetTxId());
+        return;
+    }
+
+    Execute(CreateTxOperationReply(opId, ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)

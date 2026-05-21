@@ -1281,6 +1281,7 @@ public:
     void Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvSolomonRollingUpdateDone::TPtr& ev, const TActorContext& ctx);
 
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);

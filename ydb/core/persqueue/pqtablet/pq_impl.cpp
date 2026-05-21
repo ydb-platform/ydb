@@ -1057,9 +1057,9 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         break;
     case WRITE_TX_COOKIE:
         PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
-        EndWriteTxs(resp, ctx);
-        // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
+        // The CmdWrite operation has been completed. We can send deferred TEvReadSetAck
         SendDeferredReadSetAcks(ctx);
+        EndWriteTxs(resp, ctx);
         break;
     default:
         PQ_LOG_ERROR("Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
@@ -3521,6 +3521,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::MovePendingDeferredReadSetAcks()
 {
+    AFL_ENSURE(DeferredReadSetAcks.empty())("DeferredReadSetAcks", DeferredReadSetAcks.size());
     DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
     PendingDeferredReadSetAcks.clear();
 }

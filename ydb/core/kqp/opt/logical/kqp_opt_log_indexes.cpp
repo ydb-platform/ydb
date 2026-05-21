@@ -1969,6 +1969,10 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
 }
 
 TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!kqpCtx.Config->FeatureFlags.GetEnableJsonIndexAutoSelect()) {
+        return node;
+    }
+
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
     }

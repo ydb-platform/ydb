@@ -29,9 +29,10 @@ const std::string trueSuffix = std::string("\0\1", 2);
 const std::string falseSuffix = std::string("\0\0", 2);
 const std::string nullSuffix = std::string("\0\2", 2);
 
-TKikimrRunner Kikimr(bool enableJsonIndex = true) {
+TKikimrRunner Kikimr(bool enableJsonIndex = true, bool enableJsonIndexAutoSelect = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableJsonIndex(enableJsonIndex);
+    featureFlags.SetEnableJsonIndexAutoSelect(enableJsonIndexAutoSelect);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     return TKikimrRunner(settings);
 }
@@ -291,9 +292,10 @@ void ValidateError(TQueryClient& db, const std::string& predicate, TParams param
 }
 
 void TestSelectJsonWithIndex(const std::string& jsonType, const std::optional<bool>& jsonExistsStrict,
-    const std::function<void(TQueryClient&, const std::function<std::string(const std::string&)>&)>& body)
+    const std::function<void(TQueryClient&, const std::function<std::string(const std::string&)>&)>& body,
+    bool enableJsonIndexAutoSelect = false)
 {
-    auto kikimr = Kikimr();
+    auto kikimr = Kikimr(/* enableJsonIndex */ true, enableJsonIndexAutoSelect);
     auto db = kikimr.GetQueryClient();
 
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -2050,7 +2052,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
             }
-        });
+        }, /* enableJsonIndexAutoSelect */ true);
     }
 
     Y_UNIT_TEST(TruncateTable) {
@@ -4914,7 +4916,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == true && @.k2 == false)'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == null || @.k2 == "str")'))");
-        });
+        }, /* enableJsonIndexAutoSelect */ true);
     }
 
     Y_UNIT_TEST(JsonValue) {
@@ -4927,7 +4929,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) BETWEEN 10 AND 20");
             ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) NOT BETWEEN 10 AND 20");
             ValidateAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) IN (1, 2, 3, 4)");
-        });
+        }, /* enableJsonIndexAutoSelect */ true);
     }
 
     Y_UNIT_TEST(AndOrCombinations) {
@@ -4936,11 +4938,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
             ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') AND JSON_EXISTS(Text, '$.k3'))");
             ValidateAutoSelect(db, R"((JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2')) OR JSON_EXISTS(Text, '$.k3'))");
-        });
+        }, /* enableJsonIndexAutoSelect */ true);
     }
 
     Y_UNIT_TEST(PrimaryColumnPredicate) {
-        auto kikimr = Kikimr();
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
         auto db = kikimr.GetQueryClient();
 
         CreateTestTable(db, "JsonDocument", /* withIndex */ true);
@@ -4960,7 +4962,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
     }
 
     Y_UNIT_TEST(SecondaryColumnPredicate) {
-        auto kikimr = Kikimr();
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
         auto db = kikimr.GetQueryClient();
 
         {
@@ -5017,11 +5019,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
 
             ValidateAutoSelect(db, "JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2') AND Data = 'd1'");
             ValidateNoAutoSelect(db, "JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2') OR Data = 'd1'");
-        });
+        }, /* enableJsonIndexAutoSelect */ true);
     }
 
     Y_UNIT_TEST(TwoJsonIndexes) {
-        auto kikimr = Kikimr();
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
         auto db = kikimr.GetQueryClient();
 
         {
@@ -5053,7 +5055,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
     }
 
     Y_UNIT_TEST(WrongColumn) {
-        auto kikimr = Kikimr();
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
         auto db = kikimr.GetQueryClient();
 
         {
@@ -5083,7 +5085,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
     }
 
     Y_UNIT_TEST(NoJsonIndex) {
-        auto kikimr = Kikimr();
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
         auto db = kikimr.GetQueryClient();
 
         CreateTestTable(db, "JsonDocument", /* withIndex */ false);
@@ -5134,7 +5136,18 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Int32) IS NULL");
             ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Int32) IS NOT NULL");
             ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.key' RETURNING Int32) NOT IN (1, 2, 3)");
-        });
+        }, /* enableJsonIndexAutoSelect */ true);
+    }
+
+    Y_UNIT_TEST(FlagDisabled) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
+            ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 2)'))");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Bool)");
+            ValidateNoAutoSelect(db, "JSON_VALUE(Text, '$.k1' RETURNING Int64) == 10");
+            ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') AND JSON_EXISTS(Text, '$.k2'))");
+            ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1') OR JSON_EXISTS(Text, '$.k2'))");
+        }, /* enableJsonIndexAutoSelect */ false);
     }
 }
 

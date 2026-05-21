@@ -2042,7 +2042,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 5);
             }
-        });
+        }, /* enableJsonIndexAutoSelect */ true);
     }
 
     Y_UNIT_TEST(SelectJsonIndex_TopSort) {

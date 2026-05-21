@@ -33,6 +33,7 @@ namespace NKikimr {
             std::unordered_map<ui32, ui32> ActivePerPDisk;
             std::list<TEntry> WaitQueue;
             std::unordered_map<TActorId, std::list<TEntry>::iterator> WaitingIndex;
+            bool ProcessQueueWakeupScheduled = false;
 
             static TString MakePDiskActorPageUrl(ui32 nodeId, ui32 pdiskId) {
                 return Sprintf("/node/%" PRIu32 "/actors/pdisks/pdisk%09" PRIu32, nodeId, pdiskId);
@@ -171,6 +172,13 @@ namespace NKikimr {
                 return numGranted;
             }
 
+            void ScheduleProcessQueueWakeup() {
+                if (!ProcessQueueWakeupScheduled && !WaitQueue.empty()) {
+                    this->Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+                    ProcessQueueWakeupScheduled = true;
+                }
+            }
+
         public:
             static constexpr auto ActorActivityType() {
                 return NKikimrServices::TActivity::NODE_WARDEN;
@@ -191,7 +199,7 @@ namespace NKikimr {
             {}
 
             void Bootstrap() {
-                this->Become(&TThis::StateFunc, TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+                this->Become(&TThis::StateFunc);
             }
 
             void Handle(TEvAcquireVDiskOperationToken::TPtr& ev) {
@@ -267,6 +275,7 @@ namespace NKikimr {
                         << ", enqueued, active: " << Active.size()
                         << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
                         << ", waiting: " << WaitQueue.size());
+                    ScheduleProcessQueueWakeup();
                     return;
                 }
 
@@ -297,6 +306,7 @@ namespace NKikimr {
                     << ", enqueued, active: " << Active.size()
                     << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
                     << ", waiting: " << WaitQueue.size());
+                ScheduleProcessQueueWakeup();
             }
 
             void Handle(TEvReleaseVDiskOperationToken::TPtr& ev) {
@@ -321,6 +331,7 @@ namespace NKikimr {
                     }
                     Deactivate(it);
                     ProcessQueue();
+                    ScheduleProcessQueueWakeup();
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvReleaseVDiskOperationToken"
@@ -389,14 +400,16 @@ namespace NKikimr {
                             << ", action: drop active token owner and process queue");
                         Deactivate(it);
                         ProcessQueue();
+                        ScheduleProcessQueueWakeup();
                         return;
                     }
                 }
             }
 
             void Handle(TEvents::TEvWakeup::TPtr&) {
+                ProcessQueueWakeupScheduled = false;
                 ProcessQueue();
-                this->Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+                ScheduleProcessQueueWakeup();
             }
 
             void Handle(NMon::TEvHttpInfo::TPtr& ev) {

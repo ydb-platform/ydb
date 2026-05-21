@@ -756,6 +756,12 @@ namespace NKikimr {
                             ctx.SelfID.ToString().data(), yardInitDelay.SecondsFloat()));
         }
 
+        void ContinueYardInit(const TActorContext &ctx) {
+            SendYardInit(ctx, TDuration::Zero());
+            Become(&TThis::StateInitialize);
+            VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::YardInit;
+        }
+
         void Bootstrap(const TActorContext &ctx) {
             LOG_NOTICE(ctx, BS_LOCALRECOVERY,
                        VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery START"));
@@ -766,18 +772,14 @@ namespace NKikimr {
 
         void Handle(TEvVDiskOperationToken::TPtr&, const TActorContext& ctx) {
             Y_ABORT_UNLESS(LocalRecoveryTokenRequested);
-            SendYardInit(ctx, TDuration::Zero());
-            Become(&TThis::StateInitialize);
-            VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::YardInit;
+            ContinueYardInit(ctx);
         }
 
         void HandleBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
                 // No localrecovery broker service. Continue without it.
                 LocalRecoveryTokenRequested = false;
-                SendYardInit(ctx, TDuration::Zero());
-                Become(&TThis::StateInitialize);
-                VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::YardInit;
+                ContinueYardInit(ctx);
             }
         }
 

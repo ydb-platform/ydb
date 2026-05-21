@@ -970,6 +970,7 @@ namespace {
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
                     env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    ev.Reset();
                 });
 
             TKqpWarmupConfig warmupActorConfig;

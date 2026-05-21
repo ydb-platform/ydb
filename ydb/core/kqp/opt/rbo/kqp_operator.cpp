@@ -925,9 +925,10 @@ void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
         sortElement.SortColumn = newIU;
         newSortElements.push_back(sortElement);
     }
+    SortElements = std::move(newSortElements);
 
     if (LimitCond.has_value()) {
-        LimitCond->ApplyRenames(renameMap);
+        LimitCond = LimitCond->ApplyRenames(renameMap);
     }
 }
 

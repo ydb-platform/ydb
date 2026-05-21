@@ -138,6 +138,7 @@ public:
             SetParsingError(error, jsonValue, "determine json value type", status);
             return false;
         }
+
         if (cellType == simdjson::builtin::ondemand::json_type::null) {
             if (isOptional || type->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
                 resultValue = NYql::NUdf::TUnboxedValuePod();
@@ -146,6 +147,7 @@ public:
             status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
             return false;
         }
+
         switch (type->GetKind()) {
             case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
                 auto maybeDataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
@@ -158,10 +160,12 @@ public:
                 }
                 break;
             }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional: {
                 Y_ENSURE(!isOptional);
                 return ParseNestedValue(std::move(jsonValue), resultValue, status, AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true);
             }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::List: {
                 if (cellType != simdjson::builtin::ondemand::json_type::array) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (List), expected array, but got " << JsonTypeToString(cellType));
@@ -184,6 +188,7 @@ public:
                 resultValue = HolderFactory->VectorAsArray(resultValues);
                 break;
             }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
                 if (cellType != simdjson::builtin::ondemand::json_type::array) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Tuple), expected array, but got " << JsonTypeToString(cellType));
@@ -217,6 +222,7 @@ public:
                 }
                 break;
             }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
                 if (cellType != simdjson::builtin::ondemand::json_type::object) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected object, but got " << JsonTypeToString(cellType));
@@ -224,10 +230,12 @@ public:
                 }
                 auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
                 auto membersCount = structType->GetMembersCount();
+
                 auto it = StructMembers.find(structType);
                 Y_ENSURE(it != StructMembers.end());
                 const auto& memberNames = it->second;
                 Y_ENSURE(memberNames.size() == membersCount);
+
                 NYql::NUdf::TUnboxedValue *resultValues;
                 resultValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
                 for (auto elt : jsonValue.get_object()) {
@@ -243,15 +251,18 @@ public:
                         continue;
                     }
                     auto idx = itName->second;
+
                     simdjson::builtin::ondemand::value eltValue;
                     CHECK_JSON_ERROR(elt.value().get(eltValue)) {
                         SetParsingError(error, jsonValue, "parse as object", status);
                         return false;
                     }
+
                     if (!ParseNestedValue(std::move(eltValue), resultValues[idx], status, structType->GetMemberType(idx), false)) {
                         return false;
                     }
                 }
+
                 for (ui32 idx = 0; idx != membersCount; ++idx) {
                     if (!resultValues[idx] && structType->GetMemberType(idx)->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
                         status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field " << structType->GetMemberName(idx));
@@ -260,6 +271,7 @@ public:
                 }
                 break;
             }
+
 #if 0 // TODO
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
                 if (cellType != simdjson::builtin::ondemand::json_type::object) {
@@ -361,26 +373,31 @@ private:
                 }
                 return TStatus::Success();
             }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional: {
                 if (isOptional) {
                     return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Nested optionals is not supported as input type");
                 }
                 return ParseNestedType(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true);
             }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct: {
                 auto structType = AS_TYPE(NKikimr::NMiniKQL::TStructType, type);
                 auto membersCount = structType->GetMembersCount();
+
                 auto [it, inserted] = StructMembers.try_emplace(structType);
                 auto& memberNames = it->second;
                 if (!inserted) {
                     Y_ENSURE(membersCount == memberNames.size());
                     break;
                 }
+
                 for (ui32 idx = 0; idx != membersCount; ++idx) {
                     auto success = ParseNestedType(structType->GetMemberType(idx));
                     if (!success) {
                         return success;
                     }
+
                     auto [_, nameInserted] = memberNames.emplace(structType->GetMemberName(idx), idx);
                     Y_ENSURE(nameInserted);
                 }
@@ -404,9 +421,11 @@ private:
                 auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
                 return ParseNestedType(listType->GetItemType());
             }
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple: {
                 auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
                 auto elementsCount = tupleType->GetElementsCount();
+
                 for (ui32 idx = 0; idx != elementsCount; ++idx) {
                     auto success = ParseNestedType(tupleType->GetElementType(idx));
                     if (!success) {
@@ -415,6 +434,7 @@ private:
                 }
                 break;
             }
+
             default: {
                 return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Unsupported type kind: " << type->GetKindAsStr());
             }

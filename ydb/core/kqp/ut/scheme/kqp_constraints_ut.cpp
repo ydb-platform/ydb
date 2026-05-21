@@ -2791,6 +2791,82 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
+    Y_UNIT_TEST(AlterTableSetDropDefaultBulkUpsert) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
+            .SetWithSampleTables(false));
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetDropDefaultBulkUpsert` (
+                    Key Uint32 NOT NULL,
+                    Value String,
+                    DefaultCol Int32,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDropDefaultBulkUpsert`
+                ALTER COLUMN DefaultCol SET DEFAULT 42;
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 1; i <= 3; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Uint32(i)
+                    .AddMember("Value").OptionalString("val")
+                    .EndStruct();
+            }
+            rowsBuilder.EndList();
+
+            auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: DefaultCol");
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDropDefaultBulkUpsert`
+                ALTER COLUMN DefaultCol DROP DEFAULT;
+            )";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 1; i <= 3; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key").Uint32(i)
+                    .AddMember("Value").OptionalString("val")
+                    .EndStruct();
+            }
+            rowsBuilder.EndList();
+
+            auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterTableDefaultConstantExpression) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);

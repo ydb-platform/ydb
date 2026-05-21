@@ -348,6 +348,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalAsync:
                 case EIndexType::GlobalUnique:
                 case EIndexType::GlobalJson:
+                case EIndexType::LocalMinMax:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
                     break;
                 case EIndexType::LocalBloomFilter:

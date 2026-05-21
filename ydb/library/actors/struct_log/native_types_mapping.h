@@ -16,8 +16,9 @@ enum class TNativeTypeCode : std::uint8_t {
 };
 
 using TInvoker = std::function<bool(const void* data, std::size_t length)>;
-template <typename TValueType, typename C>
-static TInvoker CreateTypedInvoker(C& callable) {
+
+template <typename TValueType, typename TCallable>
+static TInvoker CreateTypedInvoker(TCallable& callable) {
     TInvoker invoker = [&callable](const void* data, std::size_t length) -> bool {
         TValueType value;
         if (!TNativeTypeSupport<TValueType>::Deserialize(value, data, length)) {
@@ -82,16 +83,16 @@ struct TNativeTypeCodeMapping {
         }
     }
 
-    template <typename C>
-    static TInvokerMap CreateInvokerMap(C& callable) {
+    template <typename TCallable>
+    static TInvokerMap CreateInvokerMap(TCallable& callable) {
         TInvokerMap result = TBase::template CreateInvokerMap(callable);
         TInvoker invoker = CreateTypedInvoker<TValueType>(callable);
         result.insert({TPair::Code, invoker});
         return result;
     }
 
-    template <typename C>
-    static bool Invoke(TNativeTypeCode code, const void* data, std::size_t length, const C& callable) {
+    template <typename TCallable>
+    static bool Invoke(TNativeTypeCode code, const void* data, std::size_t length, const TCallable& callable) {
         if (TPair::Code == code) {
             TValueType value;
             if (!TNativeTypeSupport<TValueType>::Deserialize(value, data, length)) {
@@ -138,15 +139,15 @@ struct TNativeTypeCodeMapping<TPair> {
         return TNativeTypeSupport<TValueType>::AppendToString(value, stringBuffer);
     }
 
-    template <typename C>
-    static TInvokerMap CreateInvokerMap(C& callable) {
+    template <typename TCallable>
+    static TInvokerMap CreateInvokerMap(TCallable& callable) {
         TInvoker invoker = CreateTypedInvoker<TValueType>(callable);
         TInvokerMap result{{TPair::Code, invoker}};
         return result;
     }
 
-    template <typename C>
-    static bool Invoke(TNativeTypeCode code, const void* data, std::size_t length, const C& callable) {
+    template <typename TCallable>
+    static bool Invoke(TNativeTypeCode code, const void* data, std::size_t length, const TCallable& callable) {
         if (TPair::Code != code) {
             return false;
         }

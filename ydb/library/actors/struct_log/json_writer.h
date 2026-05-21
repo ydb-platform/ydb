@@ -1,7 +1,6 @@
 #pragma once
 
 #include "base_writer.h"
-#include "structured_message.h"
 
 #include <library/cpp/json/writer/json.h>
 
@@ -11,6 +10,8 @@
 #include <vector>
 
 namespace NActors::NStructuredLog {
+
+class TStructuredMessage;
 
 class TJsonKeyValueWriter {
 public:
@@ -99,6 +100,7 @@ protected:
 
 class TJsonWriter {
     friend class TBaseMessageWriter<TJsonWriter>;
+
 public:
     TJsonWriter(const TJsonKeyValueWriter::TNameSet& reservedKeyNames = TJsonKeyValueWriter::TNameSet());
 
@@ -109,7 +111,6 @@ protected:
     TJsonKeyValueWriter* KeyValueWriter{nullptr};
 
     struct TValueWriter : public TBaseValueWriter<TJsonWriter> {
-
         TValueWriter(TJsonWriter& writer);
 
         void operator()(const TString& value) const;

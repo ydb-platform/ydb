@@ -1,7 +1,6 @@
 #pragma once
 
 #include "base_writer.h"
-#include "structured_message.h"
 
 #include <library/cpp/logger/record.h>
 
@@ -9,8 +8,11 @@
 
 namespace NActors::NStructuredLog {
 
+class TStructuredMessage;
+
 class TMetaWriter {
     friend class TBaseMessageWriter<TMetaWriter>;
+
 public:
     TMetaWriter() = default;
 
@@ -20,7 +22,6 @@ protected:
     TLogRecord::TMetaFlags* MetaFlags{nullptr};
 
     struct TValueWriter : public TBaseValueWriter<TMetaWriter> {
-
         TValueWriter(TMetaWriter& writer);
 
         void operator()(const TString& value) const;

@@ -18,7 +18,7 @@ TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer)
 void TMetaWriter::TValueWriter::operator()(const TString& value) const {
     TStringBuilder metakeyName;
     metakeyName << "meta";
-    for (auto& keyItem : *KeyName) {
+    for (const auto& keyItem : *KeyName) {
         metakeyName << ".";
         metakeyName << keyItem.ToString();
     }

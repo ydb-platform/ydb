@@ -241,14 +241,32 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::make_unique<ui64>(1)}), "value=1");
     }
 
-    struct TTestType {
+    struct TTestTypeToString {
         TString ToString() const {
             return "some value";
         }
     };
 
-    Y_UNIT_TEST(CreateMessageToString) {
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestType{}}), "value=some value");
+    struct TTestTypeToStructuredMessage {
+        TStructuredMessage ToStructuredMessage() const {
+            return YDB_LOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2});
+        }
+    };
+
+    struct TTestTypeToBoth {
+        TString ToString() const {
+            return "some value";
+        }
+
+        TStructuredMessage ToStructuredMessage() const {
+            return YDB_LOG_CREATE_MESSAGE({"value1", 1}, {"value2", 2});
+        }
+    };
+
+    Y_UNIT_TEST(CreateMessageToMethods) {
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToString{}}), "value=some value");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToStructuredMessage{}}), "value.value1=1, value.value2=2");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TTestTypeToBoth{}}), "value.value1=1, value.value2=2");
     }
 
     Y_UNIT_TEST(CreateMessageIterable) {
@@ -273,9 +291,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(CreateMessageTuple) {
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1}}), "value=[1]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2}}), "value=[1:2]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2,3}}), "value=[1:2:3]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1}}), "value=(1)");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2}}), "value=(1:2)");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2,3}}), "value=(1:2:3)");
     }
 
     Y_UNIT_TEST(CreateMessageWithReusage) {

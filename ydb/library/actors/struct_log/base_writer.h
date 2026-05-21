@@ -8,21 +8,22 @@
 
 namespace NActors::NStructuredLog {
 
-template<typename TWriter>
+template <typename TWriter>
 class TBaseValueWriter {
 public:
     const std::vector<TKeyName>* KeyName{nullptr};
 
-    TBaseValueWriter(TWriter& writer) : Writer(writer) {}
+    TBaseValueWriter(TWriter& writer)
+        : Writer(writer)
+    {}
 
 protected:
     TWriter& Writer;
 };
 
-template<typename TWriter>
+template <typename TWriter>
 class TBaseMessageWriter {
 public:
-
     TBaseMessageWriter(TWriter& writer)
         : ValueWriter(writer)
     {}

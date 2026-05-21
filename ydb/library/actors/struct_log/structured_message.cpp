@@ -5,15 +5,15 @@ namespace NActors::NStructuredLog {
 TStructuredMessage::TStructuredMessage() {
     AttachedValues.reserve(PreallocatedValueCount);
     Data.reserve(PreallocatedDataSize);
-};
+}
 
 std::size_t TStructuredMessage::GetValuesCount() const {
-    CheckSorted();
+    EnsureSorted();
     return AttachedValues.size();
 }
 
 const std::vector<TKeyName>& TStructuredMessage::GetValueName(std::size_t index) const {
-    CheckSorted();
+    EnsureSorted();
     return AttachedValues[index].Name;
 }
 
@@ -22,25 +22,31 @@ std::optional<std::size_t> TStructuredMessage::GetValueIndex(const TString& name
 }
 
 std::optional<std::size_t> TStructuredMessage::GetValueIndex(const std::vector<TKeyName>& name) const {
-    CheckSorted();
+    EnsureSorted();
 
     auto it = std::upper_bound(begin(AttachedValues), end(AttachedValues), name,
         [](const auto& name, const auto& b) -> bool {
             return b.Name > name;
         }
     );
-    if (it == begin(AttachedValues)) return {};
+    if (it == begin(AttachedValues)) {
+        return std::nullopt;
+    }
 
     it--;
-    if (it->Name != name) return {};
+    if (it->Name != name) {
+        return std::nullopt;
+    }
 
     return it - begin(AttachedValues);
 }
 
-bool TStructuredMessage::HasValue(const TString& name) const { return GetValueIndex(name).has_value(); }
+bool TStructuredMessage::HasValue(const TString& name) const {
+    return GetValueIndex(name).has_value();
+}
 
 void TStructuredMessage::RemoveValue(std::size_t index) {
-    CheckSorted();
+    EnsureSorted();
     AttachedValues.erase(begin(AttachedValues) + index);
 }
 
@@ -52,13 +58,13 @@ void TStructuredMessage::RemoveValue(const TString& name) {
 }
 
 void TStructuredMessage::RemoveValues(const std::initializer_list<TString>& names) {
-    for (auto name : names) {
+    for (const auto& name : names) {
         RemoveValue(name);
     }
 }
 
 void TStructuredMessage::RenameValue(std::size_t index, std::vector<TKeyName>&& newName) {
-    CheckSorted();
+    EnsureSorted();
     AttachedValues[index].Name = std::move(newName);
 
     auto value = AttachedValues[index];
@@ -72,7 +78,7 @@ void TStructuredMessage::RenameValue(std::size_t index, std::vector<TKeyName>&& 
 }
 
 void TStructuredMessage::RenameValue(const TString& oldName, std::vector<TKeyName>&& newName) {
-    CheckSorted();
+    EnsureSorted();
     auto index = TStructuredMessage::GetValueIndex(oldName);
     if (index.has_value()) {
         RenameValue(index.value(), std::move(newName));
@@ -108,7 +114,7 @@ bool TStructuredMessage::TAttachedValue::operator<(const TAttachedValue& value) 
     return AddNumber > value.AddNumber;  // Last added value will be first and std::unique will has retained this value
 }
 
-void TStructuredMessage::CheckSorted() const {
+void TStructuredMessage::EnsureSorted() const {
     if (AttachedValuesSorted) {
         return;
     }

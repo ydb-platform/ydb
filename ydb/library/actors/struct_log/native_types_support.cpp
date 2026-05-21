@@ -10,10 +10,10 @@ void TNativeTypeSupport<TString>::Serialize(const TString& value, TBinaryData& d
     data.resize(oldSize + valueLength + sizeof(TLength));
 
     auto to = data.data() + oldSize;
-    std::memcpy(to, &valueLength, sizeof(TLength));
+    memcpy(to, &valueLength, sizeof(TLength));
 
     to = data.data() + oldSize + sizeof(TLength);
-    std::memcpy(to, value.data(), valueLength);
+    memcpy(to, value.data(), valueLength);
 }
 
 bool TNativeTypeSupport<TString>::Deserialize(TString& value, const void* data, std::size_t length) {

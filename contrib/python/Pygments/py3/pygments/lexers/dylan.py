@@ -4,7 +4,7 @@
 
     Lexers for the Dylan language.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -242,7 +242,7 @@ class DylanConsoleLexer(Lexer):
     """
     For Dylan interactive console output.
 
-    This is based on a copy of the RubyConsoleLexer.
+    This is based on a copy of the ``RubyConsoleLexer``.
     """
     name = 'Dylan session'
     aliases = ['dylan-console', 'dylan-repl']
@@ -250,7 +250,7 @@ class DylanConsoleLexer(Lexer):
     mimetypes = ['text/x-dylan-console']
     url = 'http://www.opendylan.org/'
     version_added = '1.6'
-    _example = 'dylan-console/console'
+    _example = 'dylan-console/console.dylan-console'
 
     _prompt_re = re.compile(r'\?| ')
 

@@ -3,21 +3,12 @@ from .yson_types import (
     YsonList, YsonMap, YsonEntity, YsonStringProxy, get_bytes)
 from .common import YsonError
 
-try:
-    from yt.packages.six import text_type, binary_type, integer_types, iteritems, PY3
-    from yt.packages.six.moves import map as imap
-except ImportError:
-    from six import text_type, binary_type, integer_types, iteritems, PY3
-    from six.moves import map as imap
-
 import copy
 
 
 def to_yson_type(value, attributes=None, always_create_attributes=True, encoding="utf-8"):
     """Wraps value with YSON type."""
     if not always_create_attributes and attributes is None:
-        if isinstance(value, text_type) and not PY3:
-            return value.encode("utf-8")
         return value
 
     if isinstance(value, YsonType):
@@ -26,16 +17,13 @@ def to_yson_type(value, attributes=None, always_create_attributes=True, encoding
             value.attributes = attributes
         return value
 
-    if isinstance(value, text_type):
-        if PY3:
-            result = YsonUnicode(value)
-        else:  # COMPAT
-            result = YsonString(value.encode("utf-8"))
-    elif isinstance(value, binary_type):
+    if isinstance(value, str):
+        result = YsonUnicode(value)
+    elif isinstance(value, bytes):
         result = YsonString(value)
     elif value is False or value is True:
         result = YsonBoolean(value)
-    elif isinstance(value, integer_types):
+    elif isinstance(value, int):
         if value < -2 ** 63 or value >= 2 ** 64:
             raise TypeError("Integer {0} cannot be represented in YSON "
                             "since it is out of range [-2^63, 2^64 - 1])".format(value))
@@ -74,10 +62,10 @@ def json_to_yson(json_tree, use_byte_strings=None):
         # In yt wrapper we expect here correct keys, but other usages in arcadia could not give this guarantee.
         # TODO(ignat): fix this usages.
         if use_byte_strings:
-            if not isinstance(string, binary_type):
+            if not isinstance(string, bytes):
                 string = string.encode("ascii")
         else:
-            if not isinstance(string, text_type):
+            if not isinstance(string, str):
                 string = string.decode("ascii")
 
         if string.startswith(to_literal("$")):
@@ -87,13 +75,13 @@ def json_to_yson(json_tree, use_byte_strings=None):
         return string
 
     if use_byte_strings is None:
-        use_byte_strings = not PY3
+        use_byte_strings = False
 
     has_attrs = isinstance(json_tree, dict) and to_literal("$value") in json_tree
     value = json_tree[to_literal("$value")] if has_attrs else json_tree
-    if isinstance(value, text_type):
+    if isinstance(value, str):
         result = YsonUnicode(value)
-    elif isinstance(value, binary_type):
+    elif isinstance(value, bytes):
         result = YsonString(value)
     elif value is False or value is True:
         result = YsonBoolean(value)
@@ -106,9 +94,9 @@ def json_to_yson(json_tree, use_byte_strings=None):
     elif isinstance(value, float):
         result = YsonDouble(value)
     elif isinstance(value, list):
-        result = YsonList(imap(lambda item: json_to_yson(item, use_byte_strings=use_byte_strings), value))
+        result = YsonList(map(lambda item: json_to_yson(item, use_byte_strings=use_byte_strings), value))
     elif isinstance(value, dict):
-        result = YsonMap((decode_key(k), json_to_yson(v, use_byte_strings=use_byte_strings)) for k, v in iteritems(YsonMap(value)))
+        result = YsonMap((decode_key(k), json_to_yson(v, use_byte_strings=use_byte_strings)) for k, v in YsonMap(value).items())
     elif value is None:
         result = YsonEntity()
     else:
@@ -129,7 +117,7 @@ def _yson_to_json(yson_tree, print_attributes=True, attributes_printed=False, an
     )
 
     def encode_key(key):
-        if isinstance(key, binary_type):
+        if isinstance(key, bytes):
             key = key.decode("ascii")
         if key and key[0] == "$":
             return "$" + key
@@ -140,7 +128,7 @@ def _yson_to_json(yson_tree, print_attributes=True, attributes_printed=False, an
             (
                 encode_key(k),
                 _yson_to_json(v, print_attributes=print_attributes, annotate_with_types=annotate_with_types, use_byte_strings=use_byte_strings),
-            ) for k, v in iteritems(d)
+            ) for k, v in d.items()
         )
 
     def get_type_name():
@@ -156,10 +144,10 @@ def _yson_to_json(yson_tree, print_attributes=True, attributes_printed=False, an
             return "int64"
         elif isinstance(yson_tree, float):
             return "double"
-        elif isinstance(yson_tree, text_type):
+        elif isinstance(yson_tree, str):
             # TODO: "utf8"
             return "string"
-        elif isinstance(yson_tree, binary_type):
+        elif isinstance(yson_tree, bytes):
             return "string"
         else:
             raise RuntimeError("Failed to perform yson to json conversion of {!r}, unknown type {!r} to annotate with types".format(
@@ -195,7 +183,7 @@ def _yson_to_json(yson_tree, print_attributes=True, attributes_printed=False, an
         if not use_byte_strings:
             tree_value = tree_value.decode("utf-8")
         return do_annotate_with_types(tree_value)
-    elif isinstance(yson_tree, binary_type) or isinstance(yson_tree, YsonString):
+    elif isinstance(yson_tree, bytes) or isinstance(yson_tree, YsonString):
         if use_byte_strings:
             tree_value = get_bytes(yson_tree)
         else:

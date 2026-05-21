@@ -16,7 +16,7 @@ TBusTraits::TBusTraits()
     , Address(Format("localhost:%v", Port))
 { }
 
-IBusServerPtr TBusTraits::StartServer(IMessageHandlerPtr handler)
+NBus::IBusServerPtr TBusTraits::StartServer(IMessageHandlerPtr handler)
 {
     auto config = TBusServerConfig::CreateTcp(Port);
     auto server = CreateBusServer(config);
@@ -24,12 +24,12 @@ IBusServerPtr TBusTraits::StartServer(IMessageHandlerPtr handler)
     return server;
 }
 
-IBusClientPtr TBusTraits::CreateClient()
+NBus::IBusClientPtr TBusTraits::CreateClient()
 {
     return CreateBusClient(TBusClientConfig::CreateTcp(Address));
 }
 
-IBusClientPtr TBusTraits::CreateUnreachableClient()
+NBus::IBusClientPtr TBusTraits::CreateUnreachableClient()
 {
     auto unreachablePort = NTesting::GetFreePort();
     return CreateBusClient(TBusClientConfig::CreateTcp(

@@ -42,14 +42,17 @@ Other contributors, listed alphabetically, are:
 * Frits van Bommel -- assembler lexers
 * Pierre Bourdon -- bugfixes
 * Martijn Braam -- Kernel log lexer, BARE lexer
+* JD Browne, Google LLC -- GoogleSQL lexer
 * Matthias Bussonnier -- ANSI style handling for terminal-256 formatter
 * chebee7i -- Python traceback lexer improvements
 * Hiram Chirino -- Scaml and Jade lexers
 * Mauricio Caceres -- SAS and Stata lexers.
 * Michael Camilleri, John Gabriele, sogaiu -- Janet lexer
+* Daren Chandisingh -- Gleam lexer
 * Ian Cooper -- VGL lexer
 * David Corbett -- Inform, Jasmin, JSGF, Snowball, and TADS 3 lexers
 * Leaf Corcoran -- MoonScript lexer
+* Fraser Cormack -- TableGen lexer
 * Gabriel Corona -- ASN.1 lexer
 * Christopher Creutzig -- MuPAD lexer
 * Daniël W. Crompton -- Pike lexer
@@ -69,6 +72,7 @@ Other contributors, listed alphabetically, are:
 * Paweł Fertyk -- GDScript lexer, HTML formatter improvements
 * Michael Ficarra -- CPSA lexer
 * James H. Fisher -- PostScript lexer
+* Amanda Fitch, Google LLC -- GoogleSQL lexer
 * William S. Fulton -- SWIG lexer
 * Carlos Galdino -- Elixir and Elixir Console lexers
 * Michael Galloy -- IDL lexer
@@ -139,6 +143,7 @@ Other contributors, listed alphabetically, are:
 * Jon Larimer, Google Inc. -- Smali lexer
 * Olov Lassus -- Dart lexer
 * Matt Layman -- TAP lexer
+* Dan Lazin, Google LLC -- GoogleSQL lexer
 * Kristian Lyngstøl -- Varnish lexers
 * Sylvestre Ledru -- Scilab lexer
 * Chee Sing Lee -- Flatline lexer
@@ -252,6 +257,7 @@ Other contributors, listed alphabetically, are:
 * Matthias Vallentin -- Bro lexer
 * Benoît Vinot -- AMPL lexer
 * Linh Vu Hong -- RSL lexer
+* Taavi Väänänen -- Debian control lexer
 * Immanuel Washington -- Smithy lexer
 * Nathan Weizenbaum -- Haml and Sass lexers
 * Nathan Whetsell -- Csound lexers
@@ -263,6 +269,7 @@ Other contributors, listed alphabetically, are:
 * Enrique Zamudio -- Ceylon lexer
 * Alex Zimin -- Nemerle lexer
 * Rob Zimmerman -- Kal lexer
+* Evgenii Zheltonozhskii -- Maple lexer
 * Vincent Zurczak -- Roboconf lexer
 * Hubert Gruniaux -- C and C++ lexer improvements
 * Thomas Symalla -- AMDGPU Lexer
@@ -279,5 +286,6 @@ Other contributors, listed alphabetically, are:
 * Nikolay Antipov -- OpenSCAD lexer
 * Markus Meyer, Nextron Systems -- YARA lexer
 * Hannes Römer -- Mojo lexer
+* Jan Frederik Schaefer -- PDDL lexer
 
 Many thanks for all contributions!

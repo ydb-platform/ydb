@@ -53,11 +53,8 @@ public:
         , Database(settings.GetDatabase())
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
-<<<<<<< HEAD
-=======
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
         , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
->>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -329,18 +326,9 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-<<<<<<< HEAD
-        auto overloaded = StreamLookupWorker->IsOverloaded(MaxRowsProcessing);
-        if (!overloaded.has_value()) {
-            FetchInputRows();
-        } else {
-            CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
-                << overloaded.value_or("empty"));
-=======
         // Fetch input rows if we have less than max in flight reads in the scheduled queue.
         if (StreamLookupWorker->ScheduledRequestsCount() < MaxInFlightReads) {
             FetchInputRows();
->>>>>>> b49c65a8e8c (add another variant of backpressure to sl (#37983))
         }
 
         if (Partitioning) {
@@ -687,11 +675,6 @@ private:
             return;
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-        while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
-            StreamLookupWorker->AddInputRow(std::move(row));
-=======
         size_t fetchCount = 0;
         i64 bytesBefore = allocState->GetAllocated();
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
@@ -703,18 +686,6 @@ private:
             if (fetchCount >= MaxRowsProcessing || static_cast<i64>(allocState->GetAllocated()) - bytesBefore > static_cast<i64>(MaxBytesPerFetch)) {
                 break;
             }
->>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
-=======
-        size_t fetchCount = 0;
-        while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
-            StreamLookupWorker->AddInputRow(std::move(row));
-            ++fetchCount;
-            // avoid fetching too many rows at once
-            // todo: it might be better to check memory usage instead of rows count
-            if (fetchCount >= MaxRowsProcessing) {
-                break;
-            }
->>>>>>> b49c65a8e8c (add another variant of backpressure to sl (#37983))
         }
     }
 
@@ -956,11 +927,8 @@ private:
     size_t TotalBytesQuota = 0;
     ui64 MaxTotalBytesQuota = 0;
     size_t MaxRowsProcessing = 0;
-<<<<<<< HEAD
-=======
     ui64 MaxInFlightReads = 50;
     ui64 MaxBytesPerFetch = 256_MB;
->>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
     size_t MaxBytesDefaultQuota = 0;
     size_t MaxRowsDefaultQuota = 0;
 

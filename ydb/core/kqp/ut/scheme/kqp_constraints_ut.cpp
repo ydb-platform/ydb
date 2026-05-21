@@ -3041,6 +3041,537 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             }
         }
     }
+
+    Y_UNIT_TEST(AlterTableSetDefaultDisabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(false);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/SetDefaultTestDisabled` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/SetDefaultTestDisabled` ALTER COLUMN Value SET DEFAULT "hello"u;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Set/drop default value is not enabled");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropDefaultDisabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(false);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/DropDefaultTestDisabled` (
+                    Key Int32,
+                    Value String DEFAULT "original"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/DropDefaultTestDisabled` ALTER COLUMN Value DROP DEFAULT;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Set/drop default value is not enabled");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SetDefaultNullableColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultNullable` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/SetDefaultNullable` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];#]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultNullable` ALTER COLUMN Value SET DEFAULT "default_value";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];#];
+                [[3];["default_value"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];#];
+                [[3];["default_value"]];
+                [[4];["data4"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (IsInsert) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                validateTable(R"([
+                    [[1];["data1"]];
+                    [[2];["default_value"]];
+                    [[3];["default_value"]];
+                    [[4];["data4"]]
+                ])");
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SetDefaultNotNullColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultNotNull` ORDER BY Key;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/SetDefaultNotNull` (
+                    Key Int32,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing not null column in input");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultNotNull` ALTER COLUMN Value SET DEFAULT "default_value";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[3];"default_value"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[3];"default_value"];
+                [[4];"data4"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/SetDefaultNotNull` (Key) VALUES (4);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (IsInsert) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                validateTable(R"([
+                    [[1];"data1"];
+                    [[3];"default_value"];
+                    [[4];"default_value"]
+                ])");
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DropDefaultNullableColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/DropDefaultNullable` ORDER BY Key;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/DropDefaultNullable` (
+                    Key Int32,
+                    Value String DEFAULT "default_value",
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];["default_value"]]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/DropDefaultNullable` ALTER COLUMN Value DROP DEFAULT;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];["default_value"]];
+                [[3];#]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["data1"]];
+                [[2];["default_value"]];
+                [[3];#];
+                [[4];["data4"]]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNullable` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (IsInsert) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                validateTable(R"([
+                    [[1];["data1"]];
+                    [[2];#];
+                    [[3];#];
+                    [[4];["data4"]]
+                ])");
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DropDefaultNotNullColumn_InsertOrReplace, IsInsert) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const std::string operation = IsInsert ? "INSERT" : "REPLACE";
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/DropDefaultNotNull` ORDER BY Key;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/DropDefaultNotNull` (
+                    Key Int32,
+                    Value String NOT NULL DEFAULT "default_value",
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key, Value) VALUES (1, "data1");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key) VALUES (2);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[2];"default_value"]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/DropDefaultNotNull` ALTER COLUMN Value DROP DEFAULT;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key) VALUES (3);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing not null column in input");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key, Value) VALUES (4, "data4");
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];"data1"];
+                [[2];"default_value"];
+                [[4];"data4"]
+            ])");
+        }
+
+        {
+            const std::string query = std::format(R"(
+                {} INTO `/Root/DropDefaultNotNull` (Key) VALUES (4);
+            )", operation);
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -1,5 +1,6 @@
 #include "backup.h"
 
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
@@ -23,8 +24,8 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
         NKikimr::NOlap::TSnapshot{ txBody.GetBackupTask().GetSnapshotStep(), txBody.GetBackupTask().GetSnapshotTxId() });
     auto columns = schema->GetIndexInfo().GetColumns();
     ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), columns, txBody.GetBackupTask(), GetTxId());
-    NOlap::NBackground::TTask task(
-        ::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
+    NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()),
+        std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
@@ -55,21 +56,37 @@ void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*
 bool TBackupTransactionOperator::ProgressOnExecute(
     TColumnShard& owner, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& txc) {
     AFL_VERIFY(!TxRemove);
-    auto status =
-        owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
-    owner.LastCompletedBackupTransaction.SetTxId(GetTxId());
-    auto& opResult = *owner.LastCompletedBackupTransaction.MutableOpResult();
+    const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
+
+    NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
+    backupTx.SetTxId(GetTxId());
+    auto& opResult = *backupTx.MutableOpResult();
     opResult.SetSuccess(status.Success);
     opResult.SetExplain(status.ErrorMessage);
-    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
+
+    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
     NIceDb::TNiceDb db(txc.DB);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedBackupTransaction, owner.LastCompletedBackupTransaction.SerializeAsString());
+
+    const auto tableId = owner.TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
+    if (const auto* previousBackupTx = owner.LastCompletedBackupTransactions.FindPtr(schemeShardLocalPathId)) {
+        owner.LastCompletedBackupTransactionsByTxId.erase(previousBackupTx->GetTxId());
+    }
+    const TString serializedBackupTx = backupTx.SerializeAsString();
+    owner.LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
+    owner.LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
+    owner.TablesManager.SetLastCompletedBackupTransaction(schemeShardLocalPathId, serializedBackupTx);
+
+    db.Table<Schema::TableInfoV1>()
+        .Key(tableId.GetRawValue(), schemeShardLocalPathId.GetRawValue())
+        .Update(NIceDb::TUpdate<Schema::TableInfoV1::LastCompletedBackupTransaction>(serializedBackupTx));
+
     return TxRemove->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
 bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
-    auto status =
-        owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetPathId()));
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(
+        ExportTask->GetClassName(), ::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue()));
     for (TActorId subscriber : NotifySubscribers) {
         auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
         auto& opResult = *event->Record.MutableOpResult();

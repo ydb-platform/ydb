@@ -3,6 +3,7 @@
 #include "ranges_stream_drain.h"
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <memory>
 #include <optional>
@@ -10,6 +11,18 @@
 #include <vector>
 
 namespace NYdb::inline Dev {
+
+namespace {
+
+template <typename TStatusCarrier>
+void ThrowIfUnsuccessful(TStatusCarrier&& carrier) {
+    if (!carrier.IsSuccess()) {
+        TStatus status(std::move(carrier));
+        throw NStatusHelpers::TYdbErrorException(status) << status;
+    }
+}
+
+} // namespace
 
 class TResultSetRange::TImpl {
 public:
@@ -35,10 +48,6 @@ public:
 
     explicit TImpl(NTable::TTablePartIterator&& iterator)
         : Producer_(std::make_unique<TReadTableStreamProducer>(std::move(iterator)))
-    {}
-
-    explicit TImpl(NScripting::TYqlResultPartIterator&& iterator)
-        : Producer_(std::make_unique<TYqlStreamProducer>(std::move(iterator)))
     {}
 
     bool Start() {
@@ -160,20 +169,6 @@ private:
         NTable::TTablePartIterator Iterator_;
     };
 
-    class TYqlStreamProducer : public IResultSetProducer {
-    public:
-        explicit TYqlStreamProducer(NScripting::TYqlResultPartIterator&& iterator)
-            : Iterator_(std::move(iterator))
-        {}
-
-        std::optional<TResultSet> TryGetNextResultSet() override {
-            return NResultRangesDetail::DrainStreamIterator(Iterator_);
-        }
-
-    private:
-        NScripting::TYqlResultPartIterator Iterator_;
-    };
-
     std::unique_ptr<IResultSetProducer> Producer_;
     std::optional<TResultSetParser> Parser_;
     bool Started_ = false;
@@ -239,25 +234,25 @@ TResultSetRange::TResultSetRange(TResultSet&& resultSet)
     : Impl_(std::make_unique<TImpl>(std::move(resultSet)))
 {}
 
-TResultSetRange::TResultSetRange(NTable::TDataQueryResult&& result)
-    : Impl_(std::make_unique<TImpl>(std::move(result)))
-{}
+TResultSetRange::TResultSetRange(NTable::TDataQueryResult&& result) {
+    ThrowIfUnsuccessful(result);
+    Impl_ = std::make_unique<TImpl>(std::move(result));
+}
 
-TResultSetRange::TResultSetRange(NQuery::TExecuteQueryIterator&& iterator)
-    : Impl_(std::make_unique<TImpl>(std::move(iterator)))
-{}
+TResultSetRange::TResultSetRange(NQuery::TExecuteQueryIterator&& iterator) {
+    ThrowIfUnsuccessful(iterator);
+    Impl_ = std::make_unique<TImpl>(std::move(iterator));
+}
 
-TResultSetRange::TResultSetRange(NTable::TScanQueryPartIterator&& iterator)
-    : Impl_(std::make_unique<TImpl>(std::move(iterator)))
-{}
+TResultSetRange::TResultSetRange(NTable::TScanQueryPartIterator&& iterator) {
+    ThrowIfUnsuccessful(iterator);
+    Impl_ = std::make_unique<TImpl>(std::move(iterator));
+}
 
-TResultSetRange::TResultSetRange(NTable::TTablePartIterator&& iterator)
-    : Impl_(std::make_unique<TImpl>(std::move(iterator)))
-{}
-
-TResultSetRange::TResultSetRange(NScripting::TYqlResultPartIterator&& iterator)
-    : Impl_(std::make_unique<TImpl>(std::move(iterator)))
-{}
+TResultSetRange::TResultSetRange(NTable::TTablePartIterator&& iterator) {
+    ThrowIfUnsuccessful(iterator);
+    Impl_ = std::make_unique<TImpl>(std::move(iterator));
+}
 
 TResultSetRange::TResultSetRange(TResultSetRange&&) noexcept = default;
 TResultSetRange& TResultSetRange::operator=(TResultSetRange&&) noexcept = default;

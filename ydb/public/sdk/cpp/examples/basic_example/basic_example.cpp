@@ -8,6 +8,7 @@
 using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NYdb::NStatusHelpers;
+using NYdb::NRetry::TRetryOperationSettings;
 
 template <class T>
 std::string OptionalToString(const std::optional<T>& opt) {
@@ -393,7 +394,7 @@ void ExplicitTcl(TQueryClient client) {
 void StreamQuerySelect(TQueryClient client) {
     std::cout << "> StreamQuery:" << std::endl;
 
-    ThrowOnError(client.RetryRangeQuerySync([](TSession session) -> TStatus {
+    ThrowOnError(client.RetryQuerySync([](TSession session) -> TStatus {
         auto query = R"(
             DECLARE $series AS List<UInt64>;
 
@@ -417,11 +418,8 @@ void StreamQuerySelect(TQueryClient client) {
                                 .Build()
                                 .Build();
 
-        auto resultStreamQuery = session.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
-        if (!resultStreamQuery.IsSuccess()) {
-            return resultStreamQuery;
-        }
-        for (auto& parser : TResultSetRange(std::move(resultStreamQuery))) {
+        for (auto& parser : TResultSetRange(
+                session.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync())) {
             std::cout << "Season" << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
                     << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
                     << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
@@ -429,7 +427,7 @@ void StreamQuerySelect(TQueryClient client) {
                     << std::endl;
         }
         return TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
-    }));
+    }, TRetryOperationSettings().CatchYdbExceptions(true)));
 }
 
 

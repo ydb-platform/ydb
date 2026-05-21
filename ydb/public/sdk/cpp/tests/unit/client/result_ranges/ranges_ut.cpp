@@ -13,6 +13,7 @@
 #include <vector>
 
 using namespace NYdb;
+using namespace NYdb::NStatusHelpers;
 
 namespace {
 
@@ -123,6 +124,19 @@ Y_UNIT_TEST_SUITE(TResultSetRangeTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(sum, 6);
     }
+
+    Y_UNIT_TEST(FailedDataQueryResultCtorThrows) {
+        auto data = NTable::TDataQueryResult(
+            TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{}),
+            {},
+            std::nullopt,
+            std::nullopt,
+            false,
+            std::nullopt);
+        UNIT_ASSERT_EXCEPTION(
+            TResultSetRange(std::move(data)),
+            TYdbErrorException);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TResultSetRangeStreamDrainTest) {
@@ -161,23 +175,6 @@ Y_UNIT_TEST_SUITE(TResultSetRangeStreamDrainTest) {
         auto rs = NYdb::NResultRangesDetail::DrainStreamIterator(it);
         UNIT_ASSERT(rs.has_value());
         UNIT_ASSERT_VALUES_EQUAL(SumColumnV(*rs), 33);
-
-        UNIT_ASSERT(!NYdb::NResultRangesDetail::DrainStreamIterator(it).has_value());
-    }
-
-    Y_UNIT_TEST(DrainYqlIteratorSkipsStatsOnlyParts) {
-        TMockStreamIterator<NScripting::TYqlResultPart> it;
-        it.Push(NScripting::TYqlResultPart(OkStatus()));
-        it.Push(NScripting::TYqlResultPart(OkStatus(), std::nullopt));
-        it.Push(NScripting::TYqlResultPart(
-            OkStatus(),
-            NScripting::TYqlPartialResult(0, MakeSingleInt32ResultSet(44)),
-            std::nullopt));
-        it.Push(NScripting::TYqlResultPart(EosStatus()));
-
-        auto rs = NYdb::NResultRangesDetail::DrainStreamIterator(it);
-        UNIT_ASSERT(rs.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(SumColumnV(*rs), 44);
 
         UNIT_ASSERT(!NYdb::NResultRangesDetail::DrainStreamIterator(it).has_value());
     }

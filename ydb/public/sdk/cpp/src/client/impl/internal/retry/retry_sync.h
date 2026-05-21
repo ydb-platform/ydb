@@ -130,12 +130,14 @@ protected:
     }
 
     TStatusType RunOperation() override {
-        TInRetryOperationContextClientGuard guard(this->Client_);
-        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
-            return Operation_(this->Client_);
-        } else {
-            return Operation_(this->Client_, this->GetRemainingTimeout());
-        }
+        return InvokeWithOptionalCatch<TStatusType>(this->Settings_.CatchYdbExceptions_, [&]() -> TStatusType {
+            TInRetryOperationContextClientGuard guard(this->Client_);
+            if constexpr (TFunctionArgs<TOperation>::Length == 1) {
+                return Operation_(this->Client_);
+            } else {
+                return Operation_(this->Client_, this->GetRemainingTimeout());
+            }
+        });
     }
 };
 
@@ -181,12 +183,22 @@ protected:
     }
 
     TStatusType RunOperation() override {
+<<<<<<< HEAD
         TInRetryOperationContextClientGuard guard(this->Client_);
         if constexpr (TFunctionArgs<TOperation>::Length == 1) {
             return Operation_(this->Session_.value());
         } else {
             return Operation_(this->Session_.value(), this->GetRemainingTimeout());
         }
+=======
+        return InvokeWithOptionalCatch<TStatusType>(this->Settings_.CatchYdbExceptions_, [&]() -> TStatusType {
+            if constexpr (TFunctionArgs<TOperation>::Length == 1) {
+                return Operation_(this->Session_.value());
+            } else {
+                return Operation_(this->Session_.value(), this->GetRemainingTimeout());
+            }
+        });
+>>>>>>> a37d7861181 (refactored the retry wrappers and remove yql script range handler.)
     }
 
     void Reset() override {

@@ -2,8 +2,8 @@
 
 #include "result.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/fwd.h>
 
 #include <memory>
 
@@ -72,7 +72,6 @@ public:
     explicit TResultSetRange(NQuery::TExecuteQueryIterator&& iterator);
     explicit TResultSetRange(NTable::TScanQueryPartIterator&& iterator);
     explicit TResultSetRange(NTable::TTablePartIterator&& iterator);
-    explicit TResultSetRange(NScripting::TYqlResultPartIterator&& iterator);
 
     TResultSetRange(const TResultSetRange&) = delete;
     TResultSetRange(TResultSetRange&&) noexcept;

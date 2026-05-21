@@ -136,6 +136,19 @@ protected:
     }
 };
 
+template <typename TStatusType, typename F>
+TStatusType InvokeWithOptionalCatch(bool catchYdbExceptions, F&& f) {
+    if (!catchYdbExceptions) {
+        return f();
+    }
+    try {
+        return f();
+    } catch (const NStatusHelpers::TYdbErrorException& e) {
+        TStatus status = e.GetStatus();
+        return TStatusType(std::move(status));
+    }
+}
+
 template<typename TClient>
 class TRetryDeadlineHelper {
 public:

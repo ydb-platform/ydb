@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -28,13 +27,6 @@ inline std::optional<TResultSet> TryExtractStreamPart(NTable::TScanQueryPart& pa
 
 inline std::optional<TResultSet> TryExtractStreamPart(NTable::TReadTableResultPart& part) {
     return std::make_optional(part.ExtractPart());
-}
-
-inline std::optional<TResultSet> TryExtractStreamPart(NScripting::TYqlResultPart& part) {
-    if (!part.HasPartialResult()) {
-        return std::nullopt;
-    }
-    return std::make_optional(TResultSet(part.GetPartialResult().GetResultSet()));
 }
 
 //! Drains one logical result set from a stream iterator (sync over async).

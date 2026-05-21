@@ -119,16 +119,34 @@ protected:
     }
 
     static void DoRunOperation(TPtr self) {
-        self->RunOperation().Subscribe(
-            [self](const TAsyncStatusType& result) {
-                [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
-                try {
-                    HandleStatusAsync(self, result.GetValue());
-                } catch (...) {
-                    HandleExceptionAsync(self, std::current_exception());
+        try {
+            self->RunOperation().Subscribe(
+                [self](const TAsyncStatusType& result) {
+                    [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
+                    try {
+                        HandleStatusAsync(self, result.GetValue());
+                    } catch (const NStatusHelpers::TYdbErrorException& e) {
+                        if (self->Settings_.CatchYdbExceptions_) {
+                            TStatus status = e.GetStatus();
+                            HandleStatusAsync(self, TStatusType(std::move(status)));
+                        } else {
+                            HandleExceptionAsync(self, std::current_exception());
+                        }
+                    } catch (...) {
+                        HandleExceptionAsync(self, std::current_exception());
+                    }
                 }
+            );
+        } catch (const NStatusHelpers::TYdbErrorException& e) {
+            if (self->Settings_.CatchYdbExceptions_) {
+                TStatus status = e.GetStatus();
+                HandleStatusAsync(self, TStatusType(std::move(status)));
+            } else {
+                HandleExceptionAsync(self, std::current_exception());
             }
-        );
+        } catch (...) {
+            HandleExceptionAsync(self, std::current_exception());
+        }
     }
 
 protected:

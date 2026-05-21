@@ -78,7 +78,7 @@ void TReadSingleLocationRequestExecutor::Run()
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Will read from %s of host %u",
+        "%s Will read from %s of host %zu",
         LogTitle.GetWithTime().c_str(),
         fromDDisk ? "DDisk" : "PBuffer",
         static_cast<size_t>(*host));
@@ -125,7 +125,7 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Retrying: %lu, Error: %s",
+        "%s Retrying: %zu, Error: %s",
         LogTitle.GetWithTime().c_str(),
         TryNumber,
         FormatError(response.Error).c_str());

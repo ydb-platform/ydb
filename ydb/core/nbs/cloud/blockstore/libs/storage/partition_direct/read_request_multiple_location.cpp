@@ -34,9 +34,14 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
 
     const size_t blockSize = Request->Headers.VolumeConfig->BlockSize;
 
+    auto guard = Request->Sglist.Acquire();
+    if (!guard) {
+        Reply(MakeError(E_CANCELLED, "Failed to acquire sglist guard"), 0);
+        return;
+    }
+
     SubRequestExecutors.reserve(readHint.RangeHints.size());
-    for (size_t i = 0; i < readHint.RangeHints.size(); ++i) {
-        auto& hint = readHint.RangeHints[i];
+    for (auto& hint: readHint.RangeHints) {
         // Compute offset for Sglist
         const size_t offsetBlocks = hint.RequestRelativeRange.Start;
         const size_t offsetBytes = offsetBlocks * blockSize;
@@ -46,17 +51,8 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
             Request->Headers.Clone(hint.VChunkRange));
 
         // Create subbuffer Sglist for current range
-
-        if (auto guard = Request->Sglist.Acquire()) {
-            const TSgList& fullSgList = guard.Get();
-            TSgList subSgList =
-                CreateSgListSubRange(fullSgList, offsetBytes, sizeBytes);
-            subRequest->Sglist =
-                Request->Sglist.CreateDepender(std::move(subSgList));
-        } else {
-            Reply(MakeError(E_CANCELLED, "Failed to acquire sglist guard"), i);
-            return;
-        }
+        subRequest->Sglist = Request->Sglist.CreateDepender(
+            CreateSgListSubRange(guard.Get(), offsetBytes, sizeBytes));
 
         TReadHint singleHint;
         singleHint.RangeHints.push_back(std::move(hint));
@@ -126,6 +122,10 @@ void TReadMultipleLocationRequestExecutor::Reply(
     NProto::TError error,
     size_t index)
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     if (HasError(error)) {
         LOG_ERROR(
             *ActorSystem,

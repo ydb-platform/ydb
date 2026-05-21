@@ -137,7 +137,7 @@ private:
     std::vector<TWriteIdForShard> WriteIds;
     const TMonotonic StartInstant = TMonotonic::Now();
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);
-    YDB_READONLY(std::shared_ptr<TCSUploadCounters>, Counters, std::make_shared<TCSUploadCounters>());
+    YDB_READONLY_DEF(std::shared_ptr<TCSUploadCounters>, Counters);
     void SendReply() {
         if (FailsCount.Val()) {
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
@@ -173,7 +173,7 @@ public:
     };
 
     TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
-                      std::shared_ptr<TCSUploadCounters> counters = std::make_shared<TCSUploadCounters>());
+                      std::shared_ptr<TCSUploadCounters> counters);
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };

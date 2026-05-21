@@ -6,38 +6,42 @@
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::LogUnboundBindingWarning() {
-        const ui32 selfNodeId = SelfId().NodeId();
+        auto& ctx = TActivationContext::AsActorContext();
+        const auto makeMessage = [&] {
+            const ui32 selfNodeId = SelfId().NodeId();
 
-        ui32 staticPeers = 0;
-        ui32 reachablePeers = 0;
-        for (const auto& item : AllNodeIds) {
-            const ui32 nodeId = item.first;
-            if (nodeId == selfNodeId) {
-                continue;
+            ui32 staticPeers = 0;
+            ui32 reachablePeers = 0;
+            for (const auto& item : AllNodeIds) {
+                const ui32 nodeId = item.first;
+                if (nodeId == selfNodeId) {
+                    continue;
+                }
+                ++staticPeers;
+                const auto it = SubscribedSessions.find(nodeId);
+                if (it != SubscribedSessions.end() && it->second.SessionId) {
+                    ++reachablePeers;
+                }
             }
-            ++staticPeers;
-            const auto it = SubscribedSessions.find(nodeId);
-            if (it != SubscribedSessions.end() && it->second.SessionId) {
-                ++reachablePeers;
+
+            const bool hasReachablePeers = reachablePeers != 0;
+            TStringBuilder msg;
+            msg << "[YDBE-DC01] local node " << selfNodeId << " cannot join cluster";
+            if (!hasReachablePeers) {
+                msg << ": no accepted interconnect sessions to configured remote nodes";
+            } else {
+                msg << ": distconf bind failing";
             }
-        }
+            if (staticPeers) {
+                msg << " (" << reachablePeers << "/" << staticPeers << " remote nodes connected)";
+            }
+            if (!hasReachablePeers) {
+                msg << "; check network or update config on running cluster nodes";
+            }
+            return msg;
+        };
 
-        const bool hasReachablePeers = reachablePeers != 0;
-        TStringBuilder msg;
-        msg << "[YDBE-DC01] local node " << selfNodeId << " cannot join cluster";
-        if (!hasReachablePeers) {
-            msg << ": no accepted interconnect sessions to configured remote nodes";
-        } else {
-            msg << ": distconf bind failing";
-        }
-        if (staticPeers) {
-            msg << " (" << reachablePeers << "/" << staticPeers << " remote nodes connected)";
-        }
-        if (!hasReachablePeers) {
-            msg << "; check network or update config on running cluster nodes";
-        }
-
-        LOG_WARN_SOURCELESS(TActivationContext::AsActorContext(), NKikimrServices::BS_NODE, "%s", msg.data());
+        LOG_WARN_SOURCELESS(ctx, NKikimrServices::BS_NODE, "%s", makeMessage().data());
     }
 
     void TDistributedConfigKeeper::Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {

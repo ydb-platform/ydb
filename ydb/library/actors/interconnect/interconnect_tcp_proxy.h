@@ -375,8 +375,11 @@ namespace NActors {
         void TransitToErrorState(TString explanation, bool updateErrorLog = true, const TEvHandshakeFail* handshakeFail = nullptr);
         TString FormatRemoteNodeForLog(const TEvHandshakeFail& handshakeFail) const;
         TString FormatHandshakeFailNotice(TStringBuf explanation, const TEvHandshakeFail& handshakeFail) const;
-        void LogHandshakeStatusNotice(TStringBuf marker, TStringBuf direction, const TEvHandshakeFail& handshakeFail,
-            TStringBuf extraDebugInfo) const;
+        enum class EHandshakeStatusDirection {
+            Incoming,
+            Outgoing,
+        };
+        void LogHandshakeStatusNotice(TStringBuf marker, EHandshakeStatusDirection direction, const TEvHandshakeFail& handshakeFail) const;
         void AppendSuppressedErrorStateLogs(TStringBuilder& stream, ui64 globalSuppressed, ui64 perPeerSuppressed) const;
         void AppendHandshakeFailDebugInfo(TStringBuilder& stream, TStringBuf marker, TStringBuf rawReason,
             TStringBuf extraDebugInfo = {}) const;

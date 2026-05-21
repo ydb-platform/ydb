@@ -423,8 +423,7 @@ namespace NActors {
 
         if (ev->Sender == IncomingHandshakeActor) {
             if (handshakeFailLogPriority == NLog::PRI_NOTICE) {
-                const TString extraDebugInfo = TStringBuilder() << "outgoing=" << OutgoingHandshakeActor;
-                LogHandshakeStatusNotice("ICP24", "incoming", *ev->Get(), extraDebugInfo);
+                LogHandshakeStatusNotice("ICP24", EHandshakeStatusDirection::Incoming, *ev->Get());
             } else {
                 LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP24", handshakeFailLogPriority,
                            "incoming handshake failed, temporary: %" PRIu32 " explanation: %s outgoing: %s",
@@ -433,9 +432,7 @@ namespace NActors {
             DropIncomingHandshake(false);
         } else if (ev->Sender == OutgoingHandshakeActor) {
             if (handshakeFailLogPriority == NLog::PRI_NOTICE) {
-                const TString extraDebugInfo = TStringBuilder() << "incoming=" << IncomingHandshakeActor
-                                                                << " held=" << (HeldHandshakeReply ? "yes" : "no");
-                LogHandshakeStatusNotice("ICP25", "outgoing", *ev->Get(), extraDebugInfo);
+                LogHandshakeStatusNotice("ICP25", EHandshakeStatusDirection::Outgoing, *ev->Get());
             } else {
                 LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP25", handshakeFailLogPriority,
                            "outgoing handshake failed, temporary: %" PRIu32 " explanation: %s incoming: %s held: %s",
@@ -859,19 +856,34 @@ namespace NActors {
         return notice;
     }
 
-    void TInterconnectProxyTCP::LogHandshakeStatusNotice(TStringBuf marker, TStringBuf direction, const TEvHandshakeFail& handshakeFail,
-                                                         TStringBuf extraDebugInfo) const {
-        TStringBuilder notice;
-        notice << FormatHandshakeFailNotice(handshakeFail.Explanation, handshakeFail);
+    void TInterconnectProxyTCP::LogHandshakeStatusNotice(TStringBuf marker, EHandshakeStatusDirection direction, const TEvHandshakeFail& handshakeFail) const {
+        auto& ctx = TActivationContext::AsActorContext();
+        const auto makeNotice = [&] {
+            const TStringBuf directionName = direction == EHandshakeStatusDirection::Incoming
+                                                        ? TStringBuf("incoming")
+                                                        : TStringBuf("outgoing");
 
-        TStringBuilder debugInfo;
-        debugInfo << direction << " handshake failed, temporary=" << ui32(handshakeFail.Temporary);
-        if (extraDebugInfo) {
-            debugInfo << " " << extraDebugInfo;
-        }
+            TStringBuilder notice;
+            notice << FormatHandshakeFailNotice(handshakeFail.Explanation, handshakeFail);
 
-        AppendHandshakeFailDebugInfo(notice, marker, handshakeFail.Explanation, debugInfo);
-        LOG_NOTICE_IC_SOURCELESS("[YDBE-IC01] %s", notice.data());
+            TStringBuilder debugInfo;
+            debugInfo << directionName << " handshake failed, temporary=" << ui32(handshakeFail.Temporary);
+            switch (direction) {
+                case EHandshakeStatusDirection::Incoming:
+                    debugInfo << " outgoing=" << OutgoingHandshakeActor;
+                    break;
+
+                case EHandshakeStatusDirection::Outgoing:
+                    debugInfo << " incoming=" << IncomingHandshakeActor
+                        << " held=" << (HeldHandshakeReply ? "yes" : "no");
+                    break;
+            }
+
+            AppendHandshakeFailDebugInfo(notice, marker, handshakeFail.Explanation, debugInfo);
+            return notice;
+        };
+
+        LOG_NOTICE_SOURCELESS(ctx, NActorsServices::INTERCONNECT, "[YDBE-IC01] %s", makeNotice().data());
     }
 
     void TInterconnectProxyTCP::AppendSuppressedErrorStateLogs(TStringBuilder& stream, ui64 globalSuppressed, ui64 perPeerSuppressed) const {
@@ -893,7 +905,9 @@ namespace NActors {
         static constexpr TDuration kErrorStateLogInterval = TDuration::Seconds(30);
 
         const TInstant now = TActivationContext::Now();
-        const bool logNotice = [&] {
+        auto& ctx = TActivationContext::AsActorContext();
+        const bool noticeEnabled = IS_CTX_LOG_PRIORITY_ENABLED(ctx, NLog::PRI_NOTICE, NActorsServices::INTERCONNECT, 0ull);
+        const bool logNotice = noticeEnabled && [&] {
             if (LastErrorStateLogAt != TInstant::Zero() && now - LastErrorStateLogAt < kErrorStateLogInterval) {
                 return false;
             }
@@ -914,24 +928,32 @@ namespace NActors {
             const ui64 globalSuppressed = Common->ErrorStateLogSuppressed.exchange(0, std::memory_order_acq_rel);
 
             if (handshakeFail) {
-                TStringBuilder notice;
-                notice << FormatHandshakeFailNotice(explanation, *handshakeFail);
-                AppendSuppressedErrorStateLogs(notice, globalSuppressed, perPeerSuppressed);
-                AppendHandshakeFailDebugInfo(notice, "ICP32", explanation);
-                LOG_NOTICE_IC_SOURCELESS("[YDBE-IC01] %s", notice.data());
+                const auto makeNotice = [&] {
+                    TStringBuilder notice;
+                    notice << FormatHandshakeFailNotice(explanation, *handshakeFail);
+                    AppendSuppressedErrorStateLogs(notice, globalSuppressed, perPeerSuppressed);
+                    AppendHandshakeFailDebugInfo(notice, "ICP32", explanation);
+                    return notice;
+                };
+                LOG_NOTICE_SOURCELESS(ctx, NActorsServices::INTERCONNECT, "[YDBE-IC01] %s", makeNotice().data());
 
                 LOG_DEBUG_IC("ICP32", "transit to hold-by-error state Explanation# %s", explanation.data());
             } else {
-                TStringBuilder notice;
-                notice << "transit to hold-by-error state Explanation# " << explanation;
-                AppendSuppressedErrorStateLogs(notice, globalSuppressed, perPeerSuppressed);
-                LOG_NOTICE_IC("ICP32", "%s", notice.data());
+                const auto makeNotice = [&] {
+                    TStringBuilder notice;
+                    notice << "transit to hold-by-error state Explanation# " << explanation;
+                    AppendSuppressedErrorStateLogs(notice, globalSuppressed, perPeerSuppressed);
+                    return notice;
+                };
+                LOG_NOTICE_IC("ICP32", "%s", makeNotice().data());
             }
             LastErrorStateLogAt = now;
             ErrorStateLogSuppressed = 0;
         } else {
-            ++ErrorStateLogSuppressed;
-            Common->ErrorStateLogSuppressed.fetch_add(1, std::memory_order_relaxed);
+            if (noticeEnabled) {
+                ++ErrorStateLogSuppressed;
+                Common->ErrorStateLogSuppressed.fetch_add(1, std::memory_order_relaxed);
+            }
             LOG_DEBUG_IC("ICP32", "transit to hold-by-error state Explanation# %s", explanation.data());
         }
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] error state: %s", PeerNodeId, explanation.data());

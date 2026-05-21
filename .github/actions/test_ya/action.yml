@@ -432,15 +432,16 @@ runs:
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
           set +e
-          (sudo -E systemd-run --scope --quiet \
+          # NB: with --scope systemd-run runs the command synchronously in the
+          # caller's process context and inherits its environment (via sudo -E),
+          # so we do NOT pass --setenv -- referencing an unset variable there
+          # would make systemd-run fail immediately and skip ya make entirely.
+          (sudo -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
              -p OOMPolicy=continue \
              --uid=$(id -u) --gid=$(id -g) \
-             --setenv=HOME --setenv=PATH --setenv=TMP_DIR --setenv=PUBLIC_DIR \
-             --setenv=CURRENT_PUBLIC_DIR --setenv=TEST_META_INFO --setenv=TEST_ICRDMA \
-             --setenv=BAZEL_REMOTE_PASSWORD_FILE --setenv=MUTED_YA_FILE \
              -- \
              ./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
              $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \

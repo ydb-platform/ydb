@@ -1612,7 +1612,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
-            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << '-' << SeqNo << ", InflightBytes=" << InflightBytes.load() << '-' << deltaBytes);
+            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", InflightBytes=" << InflightBytes.load() << '-' << deltaBytes);
             if (!Queue.empty()) {
                 for (auto item : Queue) {
                     SendMessage(item);
@@ -1651,7 +1651,8 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
-        LOG_W(LogPrefix << "UPDATE IGNORED/LOST, EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
+        // too verbose and useless, TODO: do smth
+        // LOG_W(LogPrefix << "UPDATE IGNORED/LOST, EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
         return;
     }
 
@@ -1869,10 +1870,10 @@ void TNodeState::DoReconciliation() {
     auto reconciliationTimeout = ReconciliationTimeout * (1ULL << std::min<ui64>(ReconciliationCount - 1, 20));
     if (ReconciliationCount > 1) {
         LOG_W(LogPrefix << "RECONCILIATION x" << ReconciliationCount << ", G=" << GenMajor << '.' << GenMinor
-            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << '-' << SeqNo);
+            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo);
     } else {
         LOG_D(LogPrefix << "RECONCILIATION, G" << GenMajor << '.' << GenMinor
-            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << '-' << SeqNo);
+            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo);
     }
 
     ui32 delta = 0;

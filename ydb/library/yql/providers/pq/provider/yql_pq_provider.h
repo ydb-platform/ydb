@@ -54,6 +54,11 @@ public:
     bool AddTransparentPrefixToTransparentSystemColumns = true;
     bool EnableUserAttributesInTopicQuery = false;
     bool StreamingTopicsReadByDefault = true;
+<<<<<<< HEAD
+=======
+    bool UseYtflowEngine = false;
+    bool EnableTopicsPredicatePushdown = false;
+>>>>>>> 7cbd497fd75 (YQ-5201 Predicate pushdown to topics  (#38764))
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

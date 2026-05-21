@@ -205,14 +205,10 @@ public:
                         .Name().Build(token)
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
-<<<<<<< HEAD
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-=======
-                    .RowType(expandedRowType)
                     .Partitions<TCoVoid>().Build()
                     .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
->>>>>>> 7cbd497fd75 (YQ-5201 Predicate pushdown to topics  (#38764))
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()

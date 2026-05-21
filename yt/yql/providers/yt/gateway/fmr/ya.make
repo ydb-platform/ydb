@@ -22,6 +22,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/vanilla/peer_tracker
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/lib/url_mapper
+    yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/provider
 )

@@ -8,6 +8,8 @@ namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DECLARE_REFCOUNTED_CLASS(TConnection)
+
 DECLARE_REFCOUNTED_STRUCT(ILocalMessageHandler)
 
 constexpr ui32 HandshakeMessageSignature = 0x68737562;

@@ -5,6 +5,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/localdb.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -6877,6 +6878,227 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(MaterializedIndexAbsentAuto) {
         MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, false);
+    }
+
+    void ShouldSucceedOnIndexedTableImpl(
+        bool enableIndexMaterialization,
+        const TString& tableColumns,
+        const TString& primaryKey,
+        const TString& indexProto,
+        NKikimrSchemeOp::EIndexType expectedIndexType,
+        const TVector<TString>& indexKeyColumns)
+    {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(enableIndexMaterialization));
+
+        auto scheme = TStringBuilder() << tableColumns << R"(
+            primary_key: ")" << primaryKey << R"("
+        )" << indexProto;
+
+        const auto data = GenerateTestData(scheme, {{"", 0}});
+
+        Run(runtime, env, ConvertTestData(data), R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::IndexesCount(1),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index", true, true), {
+            NLs::PathExist,
+            NLs::IndexType(expectedIndexType),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+            NLs::IndexKeys(indexKeyColumns),
+        });
+
+        for (const auto& implTable : NTableIndex::GetImplTables(expectedIndexType, indexKeyColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime,
+                    TString::Join("/MyRoot/Table/index/", implTable), true, true),
+                {NLs::PathExist, NLs::IsTable});
+        }
+    }
+
+    static const TString DefaultIndexedTableColumns = R"(
+        columns {
+          name: "key"
+          type { optional_type { item { type_id: UINT64 } } }
+        }
+        columns {
+          name: "value"
+          type { optional_type { item { type_id: UTF8 } } }
+        }
+    )";
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalSyncIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, DefaultIndexedTableColumns, "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobal,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalAsyncIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, DefaultIndexedTableColumns, "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_async_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalAsync,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalUniqueIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, DefaultIndexedTableColumns, "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_unique_index {}
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalUnique,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalVectorKmeansTreeIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "embedding"
+              type { optional_type { item { type_id: STRING } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "embedding"
+              global_vector_kmeans_tree_index {
+                vector_settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"embedding"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalVectorKmeansTreePrefixIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "prefix"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "embedding"
+              type { optional_type { item { type_id: STRING } } }
+            }
+        )", "prefix", R"(
+            indexes {
+              name: "index"
+              index_columns: "prefix"
+              index_columns: "embedding"
+              global_vector_kmeans_tree_index {
+                vector_settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"prefix", "embedding"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalFulltextPlainIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_fulltext_plain_index {
+                fulltext_settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain,
+        {"value"});
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldSucceedOnGlobalFulltextRelevanceIndexedTable, Materialized) {
+        ShouldSucceedOnIndexedTableImpl(Materialized, R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UINT64 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+        )", "key", R"(
+            indexes {
+              name: "index"
+              index_columns: "value"
+              global_fulltext_relevance_index {
+                fulltext_settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance,
+        {"value"});
     }
 
     Y_UNIT_TEST(ReplicationImport) {

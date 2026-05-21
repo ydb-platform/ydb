@@ -487,7 +487,7 @@ public:
         }
     }
 
-    void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config) final
+    void Reconfigure(const TBusServerDynamicConfigPtr& config) final
     {
         YT_VERIFY(config);
 
@@ -638,7 +638,7 @@ public:
         }
     }
 
-    void Reconfigure(const NBus::NTcp::TBusServerDynamicConfigPtr& config) final
+    void Reconfigure(const TBusServerDynamicConfigPtr& config) final
     {
         YT_VERIFY(config);
 

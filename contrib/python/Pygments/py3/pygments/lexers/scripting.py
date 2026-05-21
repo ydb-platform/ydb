@@ -4,7 +4,7 @@
 
     Lexer for scripting and embedded languages.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -20,6 +20,10 @@ __all__ = ['LuaLexer', 'LuauLexer', 'MoonScriptLexer', 'ChaiscriptLexer', 'LSLLe
            'AppleScriptLexer', 'RexxLexer', 'MOOCodeLexer', 'HybrisLexer',
            'EasytrieveLexer', 'JclLexer', 'MiniScriptLexer']
 
+
+def all_lua_builtins():
+    from pygments.lexers._lua_builtins import MODULES
+    return [w for values in MODULES.values() for w in values]
 
 class LuaLexer(RegexLexer):
     """
@@ -53,7 +57,7 @@ class LuaLexer(RegexLexer):
 
     _comment_multiline = r'(?:--\[(?P<level>=*)\[[\w\W]*?\](?P=level)\])'
     _comment_single = r'(?:--.*$)'
-    _space = r'(?:\s+)'
+    _space = r'(?:\s+(?!\s))'
     _s = rf'(?:{_comment_multiline}|{_comment_single}|{_space})'
     _name = r'(?:[^\W\d]\w*)'
 
@@ -66,7 +70,7 @@ class LuaLexer(RegexLexer):
         'ws': [
             (_comment_multiline, Comment.Multiline),
             (_comment_single, Comment.Single),
-            (_space, Text),
+            (_space, Whitespace),
         ],
         'base': [
             include('ws'),
@@ -82,21 +86,35 @@ class LuaLexer(RegexLexer):
             (r'::', Punctuation, 'label'),
             (r'\.{3}', Punctuation),
             (r'[=<>|~&+\-*/%#^]+|\.\.', Operator),
-            (r'[\[\]{}().,:;]', Punctuation),
+            (r'[\[\]{}().,:;]+', Punctuation),
             (r'(and|or|not)\b', Operator.Word),
 
-            ('(break|do|else|elseif|end|for|if|in|repeat|return|then|until|'
-             r'while)\b', Keyword.Reserved),
+            (words([
+                'break', 'do', 'else', 'elseif', 'end', 'for', 'if', 'in',
+                'repeat', 'return', 'then', 'until', 'while'
+            ], suffix=r'\b'), Keyword.Reserved),
             (r'goto\b', Keyword.Reserved, 'goto'),
             (r'(local)\b', Keyword.Declaration),
             (r'(true|false|nil)\b', Keyword.Constant),
 
             (r'(function)\b', Keyword.Reserved, 'funcname'),
 
-            (r'[A-Za-z_]\w*(\.[A-Za-z_]\w*)?', Name),
+            (words(all_lua_builtins(), suffix=r"\b"), Name.Builtin),
+            (fr'[A-Za-z_]\w*(?={_s}*[.:])', Name.Variable, 'varname'),
+            (fr'[A-Za-z_]\w*(?={_s}*\()', Name.Function),
+            (r'[A-Za-z_]\w*', Name.Variable),
 
             ("'", String.Single, combined('stringescape', 'sqs')),
             ('"', String.Double, combined('stringescape', 'dqs'))
+        ],
+
+        'varname': [
+            include('ws'),
+            (r'\.\.', Operator, '#pop'),
+            (r'[.:]', Punctuation),
+            (rf'{_name}(?={_s}*[.:])', Name.Property),
+            (rf'{_name}(?={_s}*\()', Name.Function, '#pop'),
+            (_name, Name.Property, '#pop'),
         ],
 
         'funcname': [
@@ -151,16 +169,15 @@ class LuaLexer(RegexLexer):
     def get_tokens_unprocessed(self, text):
         for index, token, value in \
                 RegexLexer.get_tokens_unprocessed(self, text):
-            if token is Name:
-                if value in self._functions:
-                    yield index, Name.Builtin, value
-                    continue
-                elif '.' in value:
+            if token is Name.Builtin and value not in self._functions:
+                if '.' in value:
                     a, b = value.split('.')
                     yield index, Name, a
                     yield index + len(a), Punctuation, '.'
                     yield index + len(a) + 1, Name, b
-                    continue
+                else:
+                    yield index, Name, value
+                continue
             yield index, token, value
 
 def _luau_make_expression(should_pop, _s):
@@ -521,7 +538,8 @@ class MoonScriptLexer(LuaLexer):
             (r'(self)\b', Name.Builtin.Pseudo),
             (r'@@?([a-zA-Z_]\w*)?', Name.Variable.Class),
             (r'[A-Z]\w*', Name.Class),  # proper name
-            (r'[A-Za-z_]\w*(\.[A-Za-z_]\w*)?', Name),
+            (words(all_lua_builtins(), suffix=r"\b"), Name.Builtin),
+            (r'[A-Za-z_]\w*', Name),
             ("'", String.Single, combined('stringescape', 'sqs')),
             ('"', String.Double, combined('stringescape', 'dqs'))
         ],

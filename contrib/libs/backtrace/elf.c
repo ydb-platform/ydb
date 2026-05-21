@@ -1,5 +1,5 @@
 /* elf.c -- Get debug data from an ELF file for backtraces.
-   Copyright (C) 2012-2024 Free Software Foundation, Inc.
+   Copyright (C) 2012-2026 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -4338,15 +4338,17 @@ elf_zstd_unpack_seq_decode (int mode,
   return 1;
 }
 
-/* Decompress a zstd stream from PIN/SIN to POUT/SOUT.  Code based on RFC 8878.
+/* Decompress a single zstd frame from *PPIN, ending at PINEND, to *PPOUT/SOUT.
    Return 1 on success, 0 on error.  */
 
 static int
-elf_zstd_decompress (const unsigned char *pin, size_t sin,
-		     unsigned char *zdebug_table, unsigned char *pout,
-		     size_t sout)
+elf_zstd_decompress_frame (const unsigned char **ppin,
+			   const unsigned char *pinend,
+			   unsigned char *zdebug_table, unsigned char **ppout,
+			   size_t sout)
 {
-  const unsigned char *pinend;
+  const unsigned char *pin;
+  unsigned char *pout;
   unsigned char *poutstart;
   unsigned char *poutend;
   struct elf_zstd_seq_decode literal_decode;
@@ -4366,9 +4368,9 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
   uint64_t content_size;
   int last_block;
 
-  pinend = pin + sin;
+  pin = *ppin;
+  pout = *ppout;
   poutstart = pout;
-  poutend = pout + sout;
 
   literal_decode.table = NULL;
   literal_decode.table_bits = -1;
@@ -4394,7 +4396,7 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
   repeated_offset2 = 4;
   repeated_offset3 = 8;
 
-  if (unlikely (sin < 4))
+  if (unlikely (pinend - pin < 4))
     {
       elf_uncompress_failed ();
       return 0;
@@ -4492,11 +4494,13 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
     }
 
   if (unlikely (content_size != (size_t) content_size
-		|| (size_t) content_size != sout))
+		|| (size_t) content_size > sout))
     {
       elf_uncompress_failed ();
       return 0;
     }
+
+  poutend = pout + content_size;
 
   last_block = 0;
   while (!last_block)
@@ -4996,7 +5000,42 @@ elf_zstd_decompress (const unsigned char *pin, size_t sin,
       pin += 4;
     }
 
-  if (pin != pinend)
+  *ppin = pin;
+  *ppout = pout;
+
+  return 1;
+}
+
+/* Decompress a zstd stream from PIN/SIN to POUT/SOUT.  Code based on RFC 8878.
+   Return 1 on success, 0 on error.  */
+
+static int
+elf_zstd_decompress (const unsigned char *pin, size_t sin,
+		     unsigned char *zdebug_table, unsigned char *pout,
+		     size_t sout)
+{
+  const unsigned char *pinend;
+
+  pinend = pin + sin;
+
+  while (sin > 0)
+    {
+      const unsigned char *pin_frame;
+      unsigned char *pout_frame;
+
+      pin_frame = pin;
+      pout_frame = pout;
+      if (!elf_zstd_decompress_frame (&pin_frame, pinend, zdebug_table,
+				      &pout_frame, sout))
+	return 0;
+
+      sin -= pin_frame - pin;
+      pin = pin_frame;
+      sout -= pout_frame - pout;
+      pout = pout_frame;
+    }
+
+  if (sout > 0)
     {
       elf_uncompress_failed ();
       return 0;

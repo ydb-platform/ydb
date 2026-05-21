@@ -4,7 +4,7 @@
 
     Lexers for semantic web and RDF query languages and markup.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -280,7 +280,7 @@ class TurtleLexer(RegexLexer):
         ],
         'triple-double-quoted-string': [
             (r'"""', String, 'end-of-string'),
-            (r'[^\\]+', String),
+            (r'[^\\]+(?=""")', String),
             (r'\\', String, 'string-escape'),
         ],
         'single-double-quoted-string': [
@@ -290,7 +290,7 @@ class TurtleLexer(RegexLexer):
         ],
         'triple-single-quoted-string': [
             (r"'''", String, 'end-of-string'),
-            (r'[^\\]+', String),
+            (r"[^\\]+(?=''')", String),
             (r'\\', String, 'string-escape'),
         ],
         'single-single-quoted-string': [

@@ -509,6 +509,8 @@ message TTableServiceConfig {
     optional bool EnableStreamingPartitionBalancing = 129 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableWatermarksAdvanced = 130 [default = false, (InvalidateCompileCache) = true];
-    
+
     optional bool EnableCompileCacheWarmup = 131 [default = false, (InvalidateCompileCache) = false];
+
+    optional bool EnableChannelMemoryTracking = 132 [default = true];
 };

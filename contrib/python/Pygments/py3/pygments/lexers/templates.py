@@ -4,7 +4,7 @@
 
     Lexers for various template engines' markup.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -1501,7 +1501,7 @@ class EvoqueHtmlLexer(DelegatingLexer):
     """
     name = 'HTML+Evoque'
     aliases = ['html+evoque']
-    filenames = ['*.html']
+    alias_filenames = ['*.html']
     mimetypes = ['text/html+evoque']
     url = 'https://gizmojo.org/templating'
     version_added = '1.1'
@@ -1520,7 +1520,7 @@ class EvoqueXmlLexer(DelegatingLexer):
     """
     name = 'XML+Evoque'
     aliases = ['xml+evoque']
-    filenames = ['*.xml']
+    alias_filenames = ['*.xml']
     mimetypes = ['application/xml+evoque']
     url = 'https://gizmojo.org/templating'
     version_added = '1.1'

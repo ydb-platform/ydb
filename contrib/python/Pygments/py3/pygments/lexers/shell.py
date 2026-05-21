@@ -4,7 +4,7 @@
 
     Lexers for various shells.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -232,6 +232,7 @@ class BashSessionLexer(ShellSessionBaseLexer):
     mimetypes = ['application/x-shell-session', 'application/x-sh-session']
     url = 'https://en.wikipedia.org/wiki/Unix_shell'
     version_added = '1.1'
+    _example = "console/example.sh-session"
 
     _innerLexerCls = BashLexer
     _ps1rgx = re.compile(
@@ -542,6 +543,7 @@ class MSDOSSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
     url = 'https://en.wikipedia.org/wiki/MS-DOS'
     version_added = '2.1'
+    _example = "doscon/session"
 
     _innerLexerCls = BatchLexer
     _ps1rgx = re.compile(r'^([^>]*>)(.*\n?)')
@@ -628,6 +630,7 @@ class TcshSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
     url = 'https://www.tcsh.org'
     version_added = '2.1'
+    _example = "tcshcon/session"
 
     _innerLexerCls = TcshLexer
     _ps1rgx = re.compile(r'^([^>]+>)(.*\n?)')
@@ -760,6 +763,7 @@ class PowerShellSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
     url = 'https://learn.microsoft.com/en-us/powershell'
     version_added = '2.1'
+    _example = "pwsh-session/session"
 
     _innerLexerCls = PowerShellLexer
     _bare_continuation = True

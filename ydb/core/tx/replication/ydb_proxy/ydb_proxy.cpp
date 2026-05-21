@@ -363,8 +363,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
 
             auto session = sessionResult.GetSession();
             auto cb = CreateCallback<TEvResponse>(request);
-            std::apply(func, std::tuple_cat(std::tie(session), std::move(args),
-                std::tuple<NRetry::TRetryOperationSettings>{})).Subscribe(std::move(cb));
+            auto retrySettings = NRetry::TRetryOperationSettings();
+            std::apply(func, std::tuple_cat(std::tie(session), std::move(args), std::tie(retrySettings))).Subscribe(std::move(cb));
         };
 
         client->GetSession().Subscribe(std::move(cb));

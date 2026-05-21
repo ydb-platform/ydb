@@ -96,6 +96,12 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         if (!subplanKeyRenames.empty()) {
             RenameSubtreeIUs(uncorrSubplan, subplanKeyRenames, ctx.ExprCtx);
+            // Non-equi conjuncts were captured before the subtree rename; rewrite
+            // them too, otherwise they keep dangling references to pre-rename IUs
+            // that no longer exist in uncorrSubplan's output.
+            for (auto& joinFilter : joinFilters) {
+                joinFilter = joinFilter.ApplyRenames(subplanKeyRenames);
+            }
         }
 
         auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);

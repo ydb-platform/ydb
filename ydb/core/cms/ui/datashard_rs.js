@@ -302,7 +302,7 @@ function loadReadSets() {
         return;
 
     ReadSetsState.loading = true;
-    var url = '../cms/api/datashard/json/getrsinfo?tabletid=' + TabletId;
+    var url = makeMonUrl('/cms/api/datashard/json/getrsinfo?tabletid=' + TabletId);
     $.get(url).done(onReadSetsLoaded).fail(onReadSetsFailed);
 }
 

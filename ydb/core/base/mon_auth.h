@@ -5,10 +5,8 @@
 namespace NKikimr {
 
 // Access model for mutating tablet DevUI requests under `/tablets/app/`:
-//   * admin-only operations are exposed under `/tablets/app/secure/`;
-//   * that secure subpath requires administrator-level access
-//     (`administration_allowed_sids`), not just monitoring operator access
-//     (`monitoring_allowed_sids`);
+//   * operations that require administrator-level access
+//     (`administration_allowed_sids`) are exposed under `/tablets/app/secure/`;
 //   * because tablet monitoring dispatches these requests by query parameters,
 //     protected handlers must also verify that they were invoked via the
 //     secure subpath and reject calls coming through plain `/tablets/app/`.

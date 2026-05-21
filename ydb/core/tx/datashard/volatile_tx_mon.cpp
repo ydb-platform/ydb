@@ -1,8 +1,8 @@
 #include "volatile_tx.h"
 #include "datashard_impl.h"
-#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <library/cpp/resource/resource.h>
+#include <util/generic/strbuf.h>
 #include <util/string/cast.h>
 
 namespace NKikimr::NDataShard {
@@ -26,10 +26,6 @@ namespace NKikimr::NDataShard {
             TryFromString(str, limit);
         }
 
-        const TStringBuf tabletDevUiAppPrefix = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
-            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
-            : TStringBuf("app");
-
         TStringStream html;
 
         HTML(html) {
@@ -38,7 +34,7 @@ namespace NKikimr::NDataShard {
                     html << "Volatile Transactions";
                     SMALL() {
                         html << "&nbsp;";
-                        html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID() << "\">";
+                        html << "<a href=\"?TabletID=" << TabletID() << "\">";
                         html << "Back to tablet " << TabletID();
                         html << "</a>";
                     }
@@ -70,7 +66,7 @@ namespace NKikimr::NDataShard {
                         const auto& info = VolatileTxManager.VolatileTxs.at(txId);
                         TABLER() {
                             TABLED() {
-                                html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID()
+                                html << "<a href=\"?TabletID=" << TabletID()
                                     << "&page=volatile-txs&TxId=" << txId << "\">"
                                     << txId << "</a>";
                             }
@@ -111,9 +107,9 @@ namespace NKikimr::NDataShard {
 
         const auto& info = it->second;
 
-        const TStringBuf tabletDevUiAppPrefix = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
-            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
-            : TStringBuf("app");
+        const TStringBuf tabletMonRoot = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? TStringBuf("../../")
+            : TStringBuf("../");
 
         TStringStream html;
 
@@ -133,12 +129,13 @@ namespace NKikimr::NDataShard {
         };
 
         auto linkToTxId = [&](ui64 txId) -> TString {
-            return TStringBuilder() << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID()
+            return TStringBuilder() << "<a href=\"?TabletID=" << TabletID()
                 << "&page=volatile-txs&TxId=" << txId << "\">" << txId << "</a>";
         };
 
         auto linkToTabletId = [&](ui64 tabletId) -> TString {
-            return TStringBuilder() << "<a href=\"../tablets?TabletID=" << tabletId << "\">" << tabletId << "</a>";
+            return TStringBuilder() << "<a href=\"" << tabletMonRoot << "tablets?TabletID=" << tabletId << "\">"
+                << tabletId << "</a>";
         };
 
         HTML(html) {
@@ -147,12 +144,11 @@ namespace NKikimr::NDataShard {
                     html << "Volatile Transaction " << txId;
                     SMALL() {
                         html << "&nbsp;";
-                        html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID()
-                            << "&page=volatile-txs\">";
+                        html << "<a href=\"?TabletID=" << TabletID() << "&page=volatile-txs\">";
                         html << "Back to volatile transactions";
                         html << "</a>";
                         html << "&nbsp;";
-                        html << "<a href=\"" << tabletDevUiAppPrefix << "?TabletID=" << TabletID() << "\">";
+                        html << "<a href=\"?TabletID=" << TabletID() << "\">";
                         html << "Back to tablet " << TabletID();
                         html << "</a>";
                     }

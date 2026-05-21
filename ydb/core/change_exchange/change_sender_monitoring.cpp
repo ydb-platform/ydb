@@ -19,7 +19,7 @@ TStringBuf TabletAppRelativePath(ETabletAppPath tabletAppPath) {
             return TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
     }
 
-    Y_ENSURE(false, "unreachable");
+    Y_UNREACHABLE();
 }
 
 } // namespace

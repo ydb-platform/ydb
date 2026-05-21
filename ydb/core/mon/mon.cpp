@@ -1169,7 +1169,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
-            TString user = result && result->UserToken ? result->UserToken->GetUserSID() : "anonymous";
+            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
             ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method

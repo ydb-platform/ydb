@@ -481,7 +481,7 @@ class Operation {
         $('#ds-op-sink-prepared').html(timeToString(info.WallClockPrepared));
         $('#ds-op-sink-planned').html(timeToString(info.WallClockPlanned));
         $('#ds-op-sink-timeout').html(this._durationToString(info.ExecTimeoutPeriod));
-        $('#ds-op-sink-coordinator').html(`<a href="../tablets?TabletID=${info.SelectedCoordinator}">${info.SelectedCoordinator}</a>`);
+        $('#ds-op-sink-coordinator').html(`<a href="${makeMonUrl(`/tablets?TabletID=${info.SelectedCoordinator}`)}">${info.SelectedCoordinator}</a>`);
         $('#ds-op-sink-source').html(info.RequestSource);
         $('#ds-op-sink-request-version').html(info.RequestVersion);
         $('#ds-op-sink-response-version').html(info.ResponseVersion);
@@ -589,8 +589,8 @@ class Operation {
 
         this.loadingSinkState = true;
         var _this = this;
-        var url = '../cms/api/datashard/json/getreadtablesinkstate?tabletid=' + TabletId
-            + '&opid=' + this.id;
+        var url = makeMonUrl('/cms/api/datashard/json/getreadtablesinkstate?tabletid=' + TabletId
+            + '&opid=' + this.id);
         $.get(url)
             .done(function(data) { _this._onSinkStateLoaded(data); })
             .fail(function(data) { _this._onSinkStateFailed(data); });
@@ -653,8 +653,8 @@ class Operation {
 
         this.loadingScanState = true;
         var _this = this;
-        var url = '../cms/api/datashard/json/getreadtablescanstate?tabletid=' + TabletId
-            + '&opid=' + this.id;
+        var url = makeMonUrl('/cms/api/datashard/json/getreadtablescanstate?tabletid=' + TabletId
+            + '&opid=' + this.id);
         $.get(url)
             .done(function(data) { _this._onScanStateLoaded(data); })
             .fail(function(data) { _this._onScanStateFailed(data); });
@@ -717,8 +717,8 @@ class Operation {
 
         this.loadingStreamState = true;
         var _this = this;
-        var url = '../cms/api/datashard/json/getreadtablestreamstate?tabletid=' + TabletId
-            + '&opid=' + this.id;
+        var url = makeMonUrl('/cms/api/datashard/json/getreadtablestreamstate?tabletid=' + TabletId
+            + '&opid=' + this.id);
         $.get(url)
             .done(function(data) { _this._onStreamStateLoaded(data); })
             .fail(function(data) { _this._onStreamStateFailed(data); });
@@ -835,8 +835,8 @@ function loadOperation(id) {
         return;
 
     OperationState.loading = true;
-    var url = '../cms/api/datashard/json/getoperation?tabletid=' + TabletId
-        + '&opid=' + OperationState.id;
+    var url = makeMonUrl('/cms/api/datashard/json/getoperation?tabletid=' + TabletId
+        + '&opid=' + OperationState.id);
     $.get(url)
         .done(function(data) { onOperationLoaded(id, data);})
         .fail(function(data) { onOperationFailed(id, data);});

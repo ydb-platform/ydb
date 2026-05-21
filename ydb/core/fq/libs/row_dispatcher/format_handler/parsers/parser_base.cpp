@@ -14,7 +14,7 @@ TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQ
     , FunctionRegistry(functionRegistry)
     , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
     , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))
-    , MemInfo("MemInfo")
+    , MemInfo("SharedReadingParser")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry))
 {}
 
@@ -116,10 +116,9 @@ void TTopicParserBase::ParseBuffer() {
 NYql::NUdf::TUnboxedValue LockObject(NYql::NUdf::TUnboxedValue&& value) {
     // Object must be one of:
     // 1) null (refs = -1)
-    // 2) embedded string (refs = -1)
+    // 2) embedded string/POD (refs = -1)
     // 3) large string (refs = 1)
-    // 4) (struct | tuple | list) as boxed -> direct array holder
-    // Zero-length direct array holder points to special shared zero-length container
+    // 4) (struct | tuple | list) as boxed -> direct array holder (refs = 1, except for special case: zero-length direct array holder points to special shared zero-length container)
     Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
     return std::move(value);
 }

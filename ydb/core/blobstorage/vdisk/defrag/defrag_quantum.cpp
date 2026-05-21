@@ -97,7 +97,7 @@ namespace NKikimr {
                         (ActorId, SelfActorId), (LockedChunks, lockedChunks));
 
                     if (lockedChunks.empty()) {
-                        STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD17, DCtx->VCtx->VDiskLogPrefix << "could not lock chunks", (ChunksToDefrag, *ChunksToDefrag));
+                        STLOG(PRI_NOTICE, BS_VDISK_DEFRAG, BSVDD17, DCtx->VCtx->VDiskLogPrefix << "could not lock chunks, going to run full compaction instead", (ChunksToDefrag, *ChunksToDefrag));
                     }
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();

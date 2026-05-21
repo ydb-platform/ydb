@@ -11,6 +11,9 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
+
+#include <atomic>
 
 namespace NYdb::NBS::NBlockStore::NVhost {
 
@@ -59,21 +62,15 @@ struct IVhostDevice
 
 struct IVhostQueue
 {
+    // Number of endpoints currently using this queue. Read by the server
+    // for load-balanced executor selection; managed atomically by
+    // TEndpoint's constructor/destructor without any external locking.
+    std::atomic<ui32> AssignedEndpointsCount{0};
+
     virtual ~IVhostQueue() = default;
 
     virtual int Run() = 0;
     virtual void Stop() = 0;
-
-    virtual IVhostDevicePtr CreateDevice(
-        TString socketPath,
-        TString deviceName,
-        ui32 blockSize,
-        ui64 blocksCount,
-        ui32 queuesCount,
-        bool discardEnabled,
-        ui32 optimalIoSize,
-        void* cookie,
-        const TVhostCallbacks& callbacks) = 0;
 
     virtual TVhostRequestPtr DequeueRequest() = 0;
 };
@@ -85,6 +82,23 @@ struct IVhostQueueFactory
     virtual ~IVhostQueueFactory() = default;
 
     virtual IVhostQueuePtr CreateQueue() = 0;
+
+    // Create a vhost block device backed by the given set of queues.
+    // The single cookie is placed into the TVhostRequest::Cookie of
+    // every request dequeued from any of the device's queues; the
+    // routing to the right caller-side endpoint is provided by libvhost
+    // via vhd_request.vdev (which always points to this device, since
+    // a queue can be shared between devices).
+    virtual IVhostDevicePtr CreateDevice(
+        TString socketPath,
+        TString deviceName,
+        ui32 blockSize,
+        ui64 blocksCount,
+        bool discardEnabled,
+        ui32 optimalIoSize,
+        TVector<IVhostQueuePtr> queues,
+        void* cookie,
+        const TVhostCallbacks& callbacks) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1053,6 +1053,64 @@ UuidNotNullValue:   [
     }
 
     /**
+     * Arrow format correctly preserves IEEE 754 special float values (NaN, +Infinity, -Infinity)
+     * for both Float and Double columns.
+     * Both VALUE and ARROW formats must return semantically equivalent results.
+     */
+    Y_UNIT_TEST(ArrowFormat_Types_Float_SpecialValues) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
+        auto client = kikimr.GetQueryClient();
+
+        const TString query = R"(
+            SELECT
+                Float('nan') AS float_nan,
+                Float('inf') AS float_pos_inf,
+                Float('-inf') AS float_neg_inf,
+                Double('nan') AS double_nan,
+                Double('inf') AS double_pos_inf,
+                Double('-inf') AS double_neg_inf;
+        )";
+
+        // Verify Arrow format preserves NaN and Infinity as IEEE 754 special values
+        auto arrowBatches = ExecuteAndCombineBatches(client, query, /* assertSize */ true);
+
+        UNIT_ASSERT_C(!arrowBatches.empty(), "Batches must not be empty");
+
+        const auto& batch = arrowBatches.front();
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 6);
+
+        auto floatNanCol    = static_pointer_cast<arrow::FloatArray>(batch->column(0));
+        auto floatPosInfCol = static_pointer_cast<arrow::FloatArray>(batch->column(1));
+        auto floatNegInfCol = static_pointer_cast<arrow::FloatArray>(batch->column(2));
+        auto doubleNanCol    = static_pointer_cast<arrow::DoubleArray>(batch->column(3));
+        auto doublePosInfCol = static_pointer_cast<arrow::DoubleArray>(batch->column(4));
+        auto doubleNegInfCol = static_pointer_cast<arrow::DoubleArray>(batch->column(5));
+
+        UNIT_ASSERT_C(std::isnan(floatNanCol->Value(0)), "Float NaN must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(floatPosInfCol->Value(0)) && floatPosInfCol->Value(0) > 0, "Float +Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(floatNegInfCol->Value(0)) && floatNegInfCol->Value(0) < 0, "Float -Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isnan(doubleNanCol->Value(0)), "Double NaN must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(doublePosInfCol->Value(0)) && doublePosInfCol->Value(0) > 0, "Double +Inf must be preserved in Arrow format");
+        UNIT_ASSERT_C(std::isinf(doubleNegInfCol->Value(0)) && doubleNegInfCol->Value(0) < 0, "Double -Inf must be preserved in Arrow format");
+
+        // Verify VALUE format sees the same special values (format consistency check)
+        auto valueSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Value);
+        auto valueResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), valueSettings).GetValueSync();
+        UNIT_ASSERT_C(valueResponse.IsSuccess(), valueResponse.GetIssues().ToString());
+
+        TResultSetParser parser(valueResponse.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+
+        UNIT_ASSERT_C(std::isnan(parser.ColumnParser("float_nan").GetFloat()), "Value format Float NaN must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("float_pos_inf").GetFloat()) && parser.ColumnParser("float_pos_inf").GetFloat() > 0, "Value format Float +Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("float_neg_inf").GetFloat()) && parser.ColumnParser("float_neg_inf").GetFloat() < 0, "Value format Float -Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isnan(parser.ColumnParser("double_nan").GetDouble()), "Value format Double NaN must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("double_pos_inf").GetDouble()) && parser.ColumnParser("double_pos_inf").GetDouble() > 0, "Value format Double +Inf must match Arrow format");
+        UNIT_ASSERT_C(std::isinf(parser.ColumnParser("double_neg_inf").GetDouble()) && parser.ColumnParser("double_neg_inf").GetDouble() < 0, "Value format Double -Inf must match Arrow format");
+    }
+
+    /**
      * Arrow format is supported for compression.
      * By default, unspecified compression codec is None (without compression).
      */

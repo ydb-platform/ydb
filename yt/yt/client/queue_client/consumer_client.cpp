@@ -60,6 +60,15 @@ static const TTableSchemaPtr YTConsumerTableSchema = New<TTableSchema>(std::vect
     TColumnSchema("meta", EValueType::Any).SetRequired(false),
 }, /*strict*/ true, /*uniqueKeys*/ true);
 
+static const TTableSchemaPtr YTMultiConsumerTableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
+    TColumnSchema("queue_consumer_name", EValueType::String, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("queue_cluster", EValueType::String, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("queue_path", EValueType::String, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("partition_index", EValueType::Uint64, ESortOrder::Ascending).SetRequired(true),
+    TColumnSchema("offset", EValueType::Uint64).SetRequired(true),
+    TColumnSchema("meta", EValueType::Any).SetRequired(false),
+}, /*strict*/ true, /*uniqueKeys*/ true);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TConsumerMeta::Register(TRegistrar registrar)
@@ -265,7 +274,6 @@ public:
 
         queryBuilder.AppendFormat(
             " from [%v] where ([%v] between 0 and %v) and (%v)",
-
             ConsumerPath_,
             PartitionIndexColumnName_,
             expectedPartitionCount - 1,
@@ -581,15 +589,22 @@ class TYTConsumerClient
     : public IConsumerClient
 {
 public:
-    TYTConsumerClient(IClientPtr consumerClusterClient, TYPath consumerPath, TTableSchemaPtr consumerTableSchema)
+    TYTConsumerClient(IClientPtr consumerClusterClient, TYPath consumerPath, std::optional<std::string> queueConsumerName, TTableSchemaPtr consumerTableSchema)
         : ConsumerClusterClient_(std::move(consumerClusterClient))
         , ConsumerPath_(std::move(consumerPath))
+        , QueueConsumerName_(std::move(queueConsumerName))
         , ConsumerTableSchema_(std::move(consumerTableSchema))
+        , ConsumerNameTable_(TNameTable::FromSchema(*ConsumerTableSchema_))
+        , QueueClusterColumnId_(ConsumerNameTable_->GetId("queue_cluster"))
+        , QueuePathColumnId_(ConsumerNameTable_->GetId("queue_path"))
     { }
 
     ISubConsumerClientPtr GetSubConsumerClient(const IClientPtr& queueClusterClient, const TCrossClusterReference& queueRef) const override
     {
         TUnversionedOwningRowBuilder builder;
+        if (QueueConsumerName_) {
+            builder.AddValue(MakeUnversionedStringValue(QueueConsumerName_.value(), ConsumerNameTable_->GetId("queue_consumer_name")));
+        }
         builder.AddValue(MakeUnversionedStringValue(queueRef.Cluster, QueueClusterColumnId_));
         builder.AddValue(MakeUnversionedStringValue(queueRef.Path, QueuePathColumnId_));
         auto row = builder.FinishRow();
@@ -619,45 +634,67 @@ public:
 private:
     const IClientPtr ConsumerClusterClient_;
     const TYPath ConsumerPath_;
+    const std::optional<std::string> QueueConsumerName_;
+
     const TTableSchemaPtr ConsumerTableSchema_;
-
-    static const TNameTablePtr ConsumerNameTable_;
-    static const int QueueClusterColumnId_;
-    static const int QueuePathColumnId_;
+    const TNameTablePtr ConsumerNameTable_;
+    const int QueueClusterColumnId_;
+    const int QueuePathColumnId_;
 };
-
-const TNameTablePtr TYTConsumerClient::ConsumerNameTable_ = TNameTable::FromSchema(*YTConsumerTableSchema);
-const int TYTConsumerClient::QueueClusterColumnId_ = TYTConsumerClient::ConsumerNameTable_->GetId("queue_cluster");
-const int TYTConsumerClient::QueuePathColumnId_ = TYTConsumerClient::ConsumerNameTable_->GetId("queue_path");
 
 ////////////////////////////////////////////////////////////////////////////////
 
 IConsumerClientPtr CreateConsumerClient(
     const IClientPtr& consumerClusterClient,
-    const TYPath& consumerPath,
+    TYPath consumerPath,
     const TTableSchema& consumerSchema)
 {
-    if (!consumerSchema.IsUniqueKeys()) {
-        THROW_ERROR_EXCEPTION("Consumer schema must have unique keys, schema does not")
-            << TErrorAttribute("actual_schema", consumerSchema);
-    }
-
-    if (consumerSchema == *YTConsumerTableSchema) {
-        return New<TYTConsumerClient>(consumerClusterClient, consumerPath, YTConsumerTableSchema);
-    } else if (consumerSchema == *YTConsumerWithoutMetaTableSchema) {
-        return New<TYTConsumerClient>(consumerClusterClient, consumerPath, YTConsumerWithoutMetaTableSchema);
-    } else {
-        THROW_ERROR_EXCEPTION("Table schema is not recognized as a valid consumer schema")
-            << TErrorAttribute("expected_schema", *YTConsumerTableSchema)
-            << TErrorAttribute("actual_schema", consumerSchema);
-    }
+    return CreateConsumerClient(consumerClusterClient, TRichYPath(std::move(consumerPath)), consumerSchema);
 }
 
 IConsumerClientPtr CreateConsumerClient(
     const IClientPtr& consumerClusterClient,
-    const TYPath& consumerPath)
+    TYPath consumerPath)
 {
-    auto tableInfo = WaitFor(consumerClusterClient->GetTableMountCache()->GetTableInfo(consumerPath))
+    return CreateConsumerClient(consumerClusterClient, TRichYPath(std::move(consumerPath)));
+}
+
+IConsumerClientPtr CreateConsumerClient(
+    const IClientPtr& consumerClusterClient,
+    const TRichYPath& consumerPath,
+    const TTableSchema& consumerSchema)
+{
+    if (consumerSchema == *YTMultiConsumerTableSchema) {
+        if (!consumerPath.GetQueueConsumerName()) {
+            THROW_ERROR_EXCEPTION("Queue consumer name is required for multi consumer schema")
+                << TErrorAttribute("consumer_schema", consumerSchema)
+                << TErrorAttribute("consumer_path", consumerPath);
+        }
+        return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), consumerPath.GetQueueConsumerName(), YTMultiConsumerTableSchema);
+    }
+
+    bool isConsumerSchemaWithMeta = consumerSchema == *YTConsumerTableSchema;
+    bool isConsumerSchemaWithoutMeta = consumerSchema == *YTConsumerWithoutMetaTableSchema;
+    if (!isConsumerSchemaWithMeta && !isConsumerSchemaWithoutMeta) {
+        THROW_ERROR_EXCEPTION("Table schema is not recognized as a valid consumer schema")
+            << TErrorAttribute("actual_schema", consumerSchema)
+            << TErrorAttribute("consumer_path", consumerPath);
+    }
+
+    if (consumerPath.GetQueueConsumerName()) {
+        THROW_ERROR_EXCEPTION("Queue consumer name is not supported for consumer schema")
+            << TErrorAttribute("consumer_schema", consumerSchema)
+            << TErrorAttribute("consumer_path", consumerPath);
+    }
+
+    return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), std::nullopt, isConsumerSchemaWithMeta ? YTConsumerTableSchema : YTConsumerWithoutMetaTableSchema);
+}
+
+IConsumerClientPtr CreateConsumerClient(
+    const IClientPtr& consumerClusterClient,
+    const TRichYPath& consumerPath)
+{
+    auto tableInfo = WaitFor(consumerClusterClient->GetTableMountCache()->GetTableInfo(consumerPath.GetPath()))
         .ValueOrThrow();
     auto schema = tableInfo->Schemas[ETableSchemaKind::Primary];
 
@@ -667,8 +704,17 @@ IConsumerClientPtr CreateConsumerClient(
 ISubConsumerClientPtr CreateSubConsumerClient(
     const IClientPtr& consumerClusterClient,
     const IClientPtr& queueClusterClient,
-    const TYPath& consumerPath,
-    TRichYPath queuePath)
+    TYPath consumerPath,
+    const TRichYPath& queuePath)
+{
+    return CreateSubConsumerClient(consumerClusterClient, queueClusterClient, TRichYPath(std::move(consumerPath)), queuePath);
+}
+
+ISubConsumerClientPtr CreateSubConsumerClient(
+    const IClientPtr& consumerClusterClient,
+    const IClientPtr& queueClusterClient,
+    const TRichYPath& consumerPath,
+    const TRichYPath& queuePath)
 {
     auto queueCluster = queuePath.GetCluster();
     if (!queueCluster && queueClusterClient) {
@@ -700,6 +746,11 @@ ISubConsumerClientPtr CreateSubConsumerClient(
 const TTableSchemaPtr& GetConsumerSchema()
 {
     return YTConsumerTableSchema;
+}
+
+const TTableSchemaPtr& GetMultiConsumerSchema()
+{
+    return YTMultiConsumerTableSchema;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

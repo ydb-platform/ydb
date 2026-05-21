@@ -1114,7 +1114,8 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     Counters->Cumulative().Populate(counters.Cumulative());
 
     auto newReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
-    ReservedBytes = std::max<i64>(ReservedBytes + newReservedBytes - partition.ReservedBytes, 0);
+    auto tmp = ReservedBytes + newReservedBytes;
+    ReservedBytes = tmp > partition.ReservedBytes ? tmp - partition.ReservedBytes : 0;
     partition.ReservedBytes = newReservedBytes;
 
     // restore cache's simple counters cleaned by partition's counters
@@ -5332,7 +5333,7 @@ void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorCo
     const TPartitionInfo& partition = p->second;
     ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
 
-    ReservedBytes = std::max<i64>(ReservedBytes - partition.ReservedBytes, 0);
+    ReservedBytes = ReservedBytes > partition.ReservedBytes ? ReservedBytes - partition.ReservedBytes : 0;
 
     PQ_LOG_D("DeletePartition " << partitionId);
     Partitions.erase(partitionId);

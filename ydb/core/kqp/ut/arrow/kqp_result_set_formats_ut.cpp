@@ -1162,6 +1162,71 @@ UuidNotNullValue:   [
     }
 
     /**
+     * ZSTD edge-case compression levels are accepted without error
+     */
+    Y_UNIT_TEST(ArrowFormat_Compression_ZSTD_LevelEdgeCases) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        // Level 0: ZSTD maps this to its default level (3). Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(0),
+            /* assertEqual */ false);
+
+        // Level -5: valid ZSTD fast mode. Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(-5),
+            /* assertEqual */ false);
+
+        // Level 100: above ZSTD maximum (22). ZSTD silently clamps to 22. Should produce compressed output.
+        CompareCompressedAndDefaultBatches(client,
+            TArrowFormatSettings::TCompressionCodec().Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd).Level(100),
+            /* assertEqual */ false);
+    }
+
+    /**
+     * Compression with ZSTD and LZ4_FRAME works correctly when the result set is empty (0 rows).
+     * The compressed empty batch must be deserializable and contain 0 rows.
+     */
+    Y_UNIT_TEST(ArrowFormat_Compression_EmptyBatch) {
+        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
+        auto client = kikimr.GetQueryClient();
+
+        const TString query = R"(
+            SELECT Comment, Amount, Name FROM Test WHERE Amount >= 999999;
+        )";
+
+        for (auto codecType : {
+                TArrowFormatSettings::TCompressionCodec::EType::Zstd,
+                TArrowFormatSettings::TCompressionCodec::EType::Lz4Frame }) {
+            auto settings = TExecuteQuerySettings()
+                .Format(TResultSet::EFormat::Arrow)
+                .ArrowFormatSettings(TArrowFormatSettings()
+                    .CompressionCodec(TArrowFormatSettings::TCompressionCodec().Type(codecType)));
+
+            auto result = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto resultSet = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Arrow);
+
+            const auto& schema = TArrowAccessor::GetArrowSchema(resultSet);
+            const auto& batches = TArrowAccessor::GetArrowBatches(resultSet);
+
+            UNIT_ASSERT_C(!schema.empty(), "Schema must not be empty even for empty result");
+            UNIT_ASSERT_C(!batches.empty(), "Expected at least one batch even for empty result");
+
+            auto arrowSchema = NArrow::DeserializeSchema(TString(schema));
+            auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchema);
+
+            UNIT_ASSERT_C(arrowBatch, "Empty compressed batch must be deserializable");
+            UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Empty compressed batch validation failed");
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->num_rows(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(arrowBatch->num_columns(), 3);
+        }
+    }
+
+    /**
      * Arrow batches are returned for different result set indexes.
      */
     Y_UNIT_TEST(ArrowFormat_Multistatement) {

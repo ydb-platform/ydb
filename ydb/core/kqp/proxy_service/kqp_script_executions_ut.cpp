@@ -671,6 +671,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         // Wait background finalization
         Sleep(TestLeaseDuration);
         NKqp::NTests::SetKqpFinalizeScriptServiceSettings(true, TDuration::Zero());
+        ydb.GetRuntime()->Register(CreateKqpFinalizeScriptService({}, std::nullopt, nullptr));
         ydb.WaitOperationStatus(executionId, Ydb::StatusIds::UNAVAILABLE);
 
         ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);

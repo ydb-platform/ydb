@@ -50,7 +50,7 @@ TMinMax MakeChunk(i32 min, i32 max) {
 }
 
 bool Skip(TMinMax indexValues, i32 request, EOp op) {
-    return NLocalIndex::NMinMax::TIndexMeta::Skip(
+    return NOlap::NIndexes::NMinMax::TIndexMeta::Skip(
         indexValues, std::make_shared<arrow::Int32Scalar>(request), NArrow::NSSA::TIndexCheckOperation(op, true));
 }
 

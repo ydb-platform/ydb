@@ -289,5 +289,11 @@ message TFeatureFlags {
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = false];
     optional bool DisableOnlineRO = 263 [default = false];
+<<<<<<< HEAD
     optional bool EnableUserAttributesInTopicQuery = 264 [default = false];
+=======
+    optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
+    optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
+    optional bool EnableTopicsPredicatePushdown = 266 [default = false];
+>>>>>>> 7cbd497fd75 (YQ-5201 Predicate pushdown to topics  (#38764))
 }

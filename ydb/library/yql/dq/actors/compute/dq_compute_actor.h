@@ -19,20 +19,10 @@
 namespace NYql {
 namespace NDq {
 
-struct TEvDqCompute {
+namespace TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
     struct TEvNodeState : public NActors::TEventPB<TEvNodeState, NDqProto::TEvNodeState, TDqComputeEvents::EvNodeState> {};
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
-
-    struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
-        TEvResumeExecution(EResumeSource source)
-            : Source(source)
-        { }
-
-        TEvResumeExecution() = default;
-
-        EResumeSource Source = EResumeSource::Default;
-    };
 
     struct TEvChannelsInfo : public NActors::TEventPB<TEvChannelsInfo, NDqProto::TEvChannelsInfo,
         TDqComputeEvents::EvChannelsInfo> {};

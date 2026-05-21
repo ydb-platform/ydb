@@ -5,6 +5,8 @@
 
 namespace NKikimr::NMiniKQL {
 
+using namespace NTest;
+
 namespace {
 
 template <typename T, typename V>

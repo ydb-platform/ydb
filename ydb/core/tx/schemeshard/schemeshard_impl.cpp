@@ -5149,6 +5149,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     }
 
     IndexBuildPipes.Shutdown(ctx);
+    IncrementalRestorePipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);
     ParentDomainLink.Shutdown(ctx);
@@ -5261,6 +5262,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     BackupSettings.Register(appData->Icb);
 
+    IncrementalRestoreSettings.Register(appData->Icb);
+
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
 
@@ -5295,6 +5298,11 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
+
+        // These may arrive during StateInit after a reboot; re-dispatch happens in TTxInit.
+        IgnoreFunc(TEvDataShard::TEvIncrementalRestoreShardProgress);
+        IgnoreFunc(TEvTabletPipe::TEvClientConnected);
+        IgnoreFunc(TEvTabletPipe::TEvClientDestroyed);
 
     default:
         StateInitImpl(ev, SelfId());
@@ -5526,7 +5534,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         //namespace NIncrementalRestore {
         HFuncTraced(TEvPrivate::TEvRunIncrementalRestore, Handle);
         HFuncTraced(TEvPrivate::TEvProgressIncrementalRestore, Handle);
-        HFuncTraced(TEvDataShard::TEvIncrementalRestoreResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvIncrementalRestoreShardProgress, Handle);
         // } // NIncrementalRestore
 
         // namespace NLongRunningCommon {
@@ -6270,6 +6278,12 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
         return;
     }
 
+    if (IncrementalRestorePipes.Has(clientId)) {
+        RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
+                                    IncrementalRestorePipes.GetTabletId(clientId), ctx);
+        return;
+    }
+
     if (CdcStreamScanPipes.Has(clientId)) {
         Execute(CreatePipeRetry(CdcStreamScanPipes.GetOwnerId(clientId), CdcStreamScanPipes.GetTabletId(clientId)), ctx);
         return;
@@ -6326,6 +6340,12 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
 
     if (IndexBuildPipes.Has(clientId)) {
         Execute(CreatePipeRetry(IndexBuildPipes.GetOwnerId(clientId), IndexBuildPipes.GetTabletId(clientId)), ctx);
+        return;
+    }
+
+    if (IncrementalRestorePipes.Has(clientId)) {
+        RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
+                                    IncrementalRestorePipes.GetTabletId(clientId), ctx);
         return;
     }
 
@@ -7351,7 +7371,7 @@ void TSchemeShard::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, con
     } else if (Imports.contains(id)) {
         return Execute(CreateTxProgressImport(ev), ctx);
     } else if (IncrementalRestoreStates.contains(id)) {
-        return Execute(CreateTxProgressIncrementalRestore(ev, ctx), ctx);
+        return Execute(CreateTxProgressIncrementalRestoreAllocateResult(ev), ctx);
     } else if (IndexBuilds.contains(TIndexBuildId(id))) {
         return Execute(CreateTxReply(ev), ctx);
     }

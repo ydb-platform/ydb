@@ -2206,6 +2206,7 @@ private:
         NYT::TNode attrs = NYT::TNode::CreateMap();
         attrs[YqlRowSpecAttribute] = rowSpecForSchema;
         PrepareAttributes(attrs, outputTable, execCtx, outputCluster, true, {});
+        attrs["optimize_for"] = "scan";
 
         const auto nativeTypeCompat = config->NativeYtTypeCompatibility.Get(outputCluster).GetOrElse(NTCF_LEGACY);
         attrs["schema"] = RowSpecToYTSchema(rowSpecForSchema, nativeTypeCompat, outputTable.ColumnGroups).ToNode();
@@ -2280,18 +2281,19 @@ private:
                 TFmrTableId inputId = GetAliasOrFmrId(TFmrTableId(inputTable.Cluster, inputTable.Name), sessionId);
                 const auto inputStatus = GetTablePresenceStatus(inputId, sessionId);
                 if (inputStatus == ETablePresenceStatus::OnlyInYt || inputStatus == ETablePresenceStatus::Undefined) {
-                    YQL_CLOG(INFO, FastMapReduce) << "SortedMerge fallback requested due to non-FMR input table: "
-                        << inputId << ", status=" << inputStatus;
-                    TFmrOperationResult result;
-                    result.Errors.emplace_back(TFmrError{
-                        .Component = EFmrComponent::Gateway,
-                        .Reason = EFmrErrorReason::FallbackOperation,
-                        .ErrorMessage = "SortedMerge has non-FMR inputs, fallback to native gateway"
-                    });
-                    return MakeFuture(result);
-                }
-
-                if (inputStatus == ETablePresenceStatus::OnlyInFmr || inputStatus == ETablePresenceStatus::Both) {
+                    if (execCtx->InputTables_.size() != 1) {
+                        YQL_CLOG(INFO, FastMapReduce) << "SortedMerge fallback requested due to non-FMR input table: "
+                            << inputId << ", status=" << inputStatus;
+                        TFmrOperationResult result;
+                        result.Errors.emplace_back(TFmrError{
+                            .Component = EFmrComponent::Gateway,
+                            .Reason = EFmrErrorReason::FallbackOperation,
+                            .ErrorMessage = "SortedMerge has non-FMR inputs, fallback to native gateway"
+                        });
+                        return MakeFuture(result);
+                    }
+                    YQL_CLOG(INFO, FastMapReduce) << "SortedMerge with single YT table: " << inputId;
+                } else if (inputStatus == ETablePresenceStatus::OnlyInFmr || inputStatus == ETablePresenceStatus::Both) {
                     const auto meta = GetFmrTableMeta(inputId, sessionId);
                     if (!meta.DoesExist) {
                         YQL_CLOG(INFO, FastMapReduce) << "SortedMerge fallback requested due to missing FMR meta for input table: "

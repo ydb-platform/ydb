@@ -826,8 +826,8 @@ public:
             UNIT_ASSERT(result.GetError().ShouldRetry());
             TString exceptionName(result.GetError().GetExceptionName().data(),
                 result.GetError().GetExceptionName().size());
-            UNIT_ASSERT_C(exceptionName == "FsUploadSessionLost",
-                TStringBuilder() << "Expected 'FsUploadSessionLost', got: " << exceptionName);
+            UNIT_ASSERT_C(exceptionName == "FsCompleteMultipartUploadFailed",
+                TStringBuilder() << "Expected 'FsCompleteMultipartUploadFailed', got: " << exceptionName);
         }
 
         TString newUploadId;

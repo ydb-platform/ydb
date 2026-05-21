@@ -16,6 +16,7 @@ SRCS(
     part_loadstate.cpp
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
+    part_updatevchunkconfig.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
     range_translate.cpp

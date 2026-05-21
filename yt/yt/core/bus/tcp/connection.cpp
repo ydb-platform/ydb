@@ -35,7 +35,7 @@
 
 #include <cerrno>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NConcurrency;
 using namespace NCrypto;
@@ -63,21 +63,21 @@ static constexpr i64 PendingOutBytesFlushThreshold = 1_MBs;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpServerConnectionReadBufferTag { };
-struct TTcpServerConnectionWriteBufferTag { };
+struct TServerConnectionReadBufferTag { };
+struct TServerConnectionWriteBufferTag { };
 
-struct TTcpClientConnectionReadBufferTag { };
-struct TTcpClientConnectionWriteBufferTag { };
+struct TClientConnectionReadBufferTag { };
+struct TClientConnectionWriteBufferTag { };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TTcpConnection::TPacket::MarkEncoded()
+bool TConnection::TPacket::MarkEncoded()
 {
     auto expected = EPacketState::Queued;
     return State.compare_exchange_strong(expected, EPacketState::Encoded);
 }
 
-void TTcpConnection::TPacket::OnCancel(const TError& /*error*/)
+void TConnection::TPacket::OnCancel(const TError& /*error*/)
 {
     auto expected = EPacketState::Queued;
     if (!State.compare_exchange_strong(expected, EPacketState::Canceled)) {
@@ -90,7 +90,7 @@ void TTcpConnection::TPacket::OnCancel(const TError& /*error*/)
     }
 }
 
-void TTcpConnection::TPacket::EnableCancel(TTcpConnectionPtr connection)
+void TConnection::TPacket::EnableCancel(TConnectionPtr connection)
 {
     Connection = std::move(connection);
     if (!Promise.OnCanceled(BIND(&TPacket::OnCancel, MakeWeak(this)))) {
@@ -100,7 +100,7 @@ void TTcpConnection::TPacket::EnableCancel(TTcpConnectionPtr connection)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTcpConnection::TTcpConnection(
+TConnection::TConnection(
     TBusConfigPtr config,
     EConnectionType connectionType,
     TConnectionId id,
@@ -143,12 +143,12 @@ TTcpConnection::TTcpConnection(
     , RejectConnectionOnMemoryOvercommit_(rejectConnectionOnMemoryOvercommit)
 { }
 
-TTcpConnection::~TTcpConnection()
+TConnection::~TConnection()
 {
     Close();
 }
 
-void TTcpConnection::Close()
+void TConnection::Close()
 {
     CloseSslSession(ESslState::Closed);
 
@@ -207,7 +207,7 @@ void TTcpConnection::Close()
     }
 }
 
-void TTcpConnection::Start()
+void TConnection::Start()
 {
     YT_LOG_DEBUG("Starting TCP connection (ConnectionType: %v, EncryptionMode: %v, VerificationMode: %v)",
         ConnectionType_,
@@ -227,7 +227,7 @@ void TTcpConnection::Start()
         return;
     }
 
-    TTcpDispatcher::TImpl::Get()->RegisterConnection(this);
+    TDispatcher::TImpl::Get()->RegisterConnection(this);
 
     try {
         InitBuffers();
@@ -263,7 +263,7 @@ void TTcpConnection::Start()
     }
 }
 
-void TTcpConnection::RunPeriodicCheck()
+void TConnection::RunPeriodicCheck()
 {
     if (State_ != EState::Open) {
         return;
@@ -297,12 +297,12 @@ void TTcpConnection::RunPeriodicCheck()
     }
 }
 
-const std::string& TTcpConnection::GetLoggingTag() const
+const std::string& TConnection::GetLoggingTag() const
 {
     return LoggingTag_;
 }
 
-void TTcpConnection::TryEnqueueHandshake()
+void TConnection::TryEnqueueHandshake()
 {
     if (std::exchange(HandshakeEnqueued_, true)) {
         return;
@@ -331,7 +331,7 @@ void TTcpConnection::TryEnqueueHandshake()
     YT_LOG_DEBUG("Handshake enqueued");
 }
 
-TSharedRefArray TTcpConnection::MakeHandshakeMessage(const NProto::THandshake& handshake)
+TSharedRefArray TConnection::MakeHandshakeMessage(const NProto::THandshake& handshake)
 {
     auto protoSize = handshake.ByteSizeLong();
     auto totalSize = sizeof(HandshakeMessageSignature) + protoSize;
@@ -349,7 +349,7 @@ TSharedRefArray TTcpConnection::MakeHandshakeMessage(const NProto::THandshake& h
     return builder.Finish();
 }
 
-std::optional<NProto::THandshake> TTcpConnection::TryParseHandshakeMessage(const TSharedRefArray& message)
+std::optional<NProto::THandshake> TConnection::TryParseHandshakeMessage(const TSharedRefArray& message)
 {
     if (message.Size() != 1) {
         YT_LOG_ERROR("Handshake packet contains invalid number of parts (PartCount: %v)",
@@ -381,7 +381,7 @@ std::optional<NProto::THandshake> TTcpConnection::TryParseHandshakeMessage(const
     return handshake;
 }
 
-void TTcpConnection::UpdateConnectionCount(int delta)
+void TConnection::UpdateConnectionCount(int delta)
 {
     switch (ConnectionType_) {
         case EConnectionType::Client:
@@ -397,7 +397,7 @@ void TTcpConnection::UpdateConnectionCount(int delta)
     }
 }
 
-void TTcpConnection::IncrementPendingOut(i64 packetSize)
+void TConnection::IncrementPendingOut(i64 packetSize)
 {
     UpdateBusCounter(&TBusNetworkBandCounters::PendingOutPackets, +1);
     if (UpdateBusCounter(&TBusNetworkBandCounters::PendingOutBytes, packetSize) > PendingOutBytesFlushThreshold) {
@@ -405,18 +405,18 @@ void TTcpConnection::IncrementPendingOut(i64 packetSize)
     }
 }
 
-void TTcpConnection::DecrementPendingOut(i64 packetSize)
+void TConnection::DecrementPendingOut(i64 packetSize)
 {
     UpdateBusCounter(&TBusNetworkBandCounters::PendingOutPackets, -1);
     UpdateBusCounter(&TBusNetworkBandCounters::PendingOutBytes, -packetSize);
 }
 
-TConnectionId TTcpConnection::GetId() const
+TConnectionId TConnection::GetId() const
 {
     return Id_;
 }
 
-void TTcpConnection::Open(TGuard<NThreading::TSpinLock>& guard)
+void TConnection::Open(TGuard<NThreading::TSpinLock>& guard)
 {
     State_ = EState::Open;
 
@@ -444,7 +444,7 @@ void TTcpConnection::Open(TGuard<NThreading::TSpinLock>& guard)
     }
 }
 
-void TTcpConnection::ResolveAddress()
+void TConnection::ResolveAddress()
 {
     if (UnixDomainSocketPath_) {
         if (!IsLocalBusTransportEnabled()) {
@@ -475,12 +475,12 @@ void TTcpConnection::ResolveAddress()
         EndpointHostName_ = hostName;
 
         TAddressResolver::Get()->Resolve(TString(hostName)).Subscribe(
-            BIND(&TTcpConnection::OnAddressResolveFinished, MakeStrong(this))
+            BIND(&TConnection::OnAddressResolveFinished, MakeStrong(this))
                 .Via(Poller_->GetInvoker()));
     }
 }
 
-void TTcpConnection::OnAddressResolveFinished(const TErrorOr<TNetworkAddress>& result)
+void TConnection::OnAddressResolveFinished(const TErrorOr<TNetworkAddress>& result)
 {
     if (!result.IsOK()) {
         Abort(result);
@@ -495,14 +495,14 @@ void TTcpConnection::OnAddressResolveFinished(const TErrorOr<TNetworkAddress>& r
     OnAddressResolved(address);
 }
 
-void TTcpConnection::OnAddressResolved(const TNetworkAddress& address)
+void TConnection::OnAddressResolved(const TNetworkAddress& address)
 {
     State_ = EState::Opening;
 
     SetupNetwork(address);
 
     if (Config_->EnableLocalBypass) {
-        if (auto localHandler = TTcpDispatcher::TImpl::Get()->FindLocalBypassMessageHandler(address)) {
+        if (auto localHandler = TDispatcher::TImpl::Get()->FindLocalBypassMessageHandler(address)) {
             InitLocalBypass(std::move(localHandler), address);
             return;
         }
@@ -511,10 +511,10 @@ void TTcpConnection::OnAddressResolved(const TNetworkAddress& address)
     ConnectSocket(address);
 }
 
-void TTcpConnection::SetupNetwork(const TNetworkAddress& address)
+void TConnection::SetupNetwork(const TNetworkAddress& address)
 {
-    NetworkName_ = TTcpDispatcher::TImpl::Get()->GetNetworkNameForAddress(address);
-    NetworkCounters_ = TTcpDispatcher::TImpl::Get()->GetCounters(NetworkName_, IsEncrypted());
+    NetworkName_ = TDispatcher::TImpl::Get()->GetNetworkNameForAddress(address);
+    NetworkCounters_ = TDispatcher::TImpl::Get()->GetCounters(NetworkName_, IsEncrypted());
 
     // Suppress checksum generation for local traffic.
     if (NetworkName_ == LocalNetworkName) {
@@ -522,7 +522,7 @@ void TTcpConnection::SetupNetwork(const TNetworkAddress& address)
     }
 }
 
-void TTcpConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
+void TConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
 {
     AbortSslSession();
 
@@ -567,9 +567,9 @@ void TTcpConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
     ReadyPromise_.TrySet(detailedError);
 }
 
-bool TTcpConnection::AbortIfNetworkingDisabled()
+bool TConnection::AbortIfNetworkingDisabled()
 {
-    if (!TTcpDispatcher::Get()->IsNetworkingDisabled()) {
+    if (!TDispatcher::Get()->IsNetworkingDisabled()) {
         return false;
     }
 
@@ -579,13 +579,13 @@ bool TTcpConnection::AbortIfNetworkingDisabled()
     return true;
 }
 
-void TTcpConnection::InitBuffers()
+void TConnection::InitBuffers()
 {
     ReadBuffer_ = TMemoryTrackedBlob::Build(
         MemoryUsageTracker_,
         ConnectionType_ == EConnectionType::Server
-            ? GetRefCountedTypeCookie<TTcpServerConnectionReadBufferTag>()
-            : GetRefCountedTypeCookie<TTcpClientConnectionReadBufferTag>());
+            ? GetRefCountedTypeCookie<TServerConnectionReadBufferTag>()
+            : GetRefCountedTypeCookie<TClientConnectionReadBufferTag>());
 
     if (RejectConnectionOnMemoryOvercommit_) {
         ReadBuffer_
@@ -602,8 +602,8 @@ void TTcpConnection::InitBuffers()
     auto trackedBlob = TMemoryTrackedBlob::Build(
         MemoryUsageTracker_,
         ConnectionType_ == EConnectionType::Server
-            ? GetRefCountedTypeCookie<TTcpServerConnectionWriteBufferTag>()
-            : GetRefCountedTypeCookie<TTcpClientConnectionWriteBufferTag>());
+            ? GetRefCountedTypeCookie<TServerConnectionWriteBufferTag>()
+            : GetRefCountedTypeCookie<TClientConnectionWriteBufferTag>());
 
     if (RejectConnectionOnMemoryOvercommit_) {
         trackedBlob
@@ -616,7 +616,7 @@ void TTcpConnection::InitBuffers()
     WriteBuffers_.push_back(std::move(trackedBlob));
 }
 
-int TTcpConnection::GetSocketPort()
+int TConnection::GetSocketPort()
 {
     TNetworkAddress address;
     auto* sockAddr = address.GetSockAddr();
@@ -638,7 +638,7 @@ int TTcpConnection::GetSocketPort()
     }
 }
 
-void TTcpConnection::InitLocalBypass(
+void TConnection::InitLocalBypass(
     ILocalMessageHandlerPtr localBypassHandler,
     const NNet::TNetworkAddress& address)
 {
@@ -658,7 +658,7 @@ void TTcpConnection::InitLocalBypass(
             LocalBypassHandler_,
             Handler_);
 
-        LocalBypassTerminatedCallback_ = BIND(&TTcpConnection::OnLocalBypassHandlerTerminated, MakeWeak(this));
+        LocalBypassTerminatedCallback_ = BIND(&TConnection::OnLocalBypassHandlerTerminated, MakeWeak(this));
         LocalBypassHandler_->SubscribeTerminated(LocalBypassTerminatedCallback_);
 
         UpdateConnectionCount(+1);
@@ -673,12 +673,12 @@ void TTcpConnection::InitLocalBypass(
     FlushQueuedMessagesToLocalBypass();
 }
 
-void TTcpConnection::OnLocalBypassHandlerTerminated(const TError& error)
+void TConnection::OnLocalBypassHandlerTerminated(const TError& error)
 {
     Abort(error);
 }
 
-void TTcpConnection::FlushQueuedMessagesToLocalBypass()
+void TConnection::FlushQueuedMessagesToLocalBypass()
 {
     QueuedMessages_.DequeueAll(
         /*reverse*/ true,
@@ -693,7 +693,7 @@ void TTcpConnection::FlushQueuedMessagesToLocalBypass()
         });
 }
 
-void TTcpConnection::ConnectSocket(const TNetworkAddress& address)
+void TConnection::ConnectSocket(const TNetworkAddress& address)
 {
     auto dialer = CreateAsyncDialer(
         Config_,
@@ -701,11 +701,11 @@ void TTcpConnection::ConnectSocket(const TNetworkAddress& address)
         Logger);
     DialerSession_ = dialer->CreateSession(
         address,
-        BIND(&TTcpConnection::OnDialerFinished, MakeWeak(this)));
+        BIND(&TConnection::OnDialerFinished, MakeWeak(this)));
     DialerSession_->Dial();
 }
 
-void TTcpConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
+void TConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
 {
     YT_LOG_DEBUG("Dialer finished");
 
@@ -738,17 +738,17 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError
     }
 }
 
-const std::string& TTcpConnection::GetEndpointDescription() const
+const std::string& TConnection::GetEndpointDescription() const
 {
     return EndpointDescription_;
 }
 
-const IAttributeDictionary& TTcpConnection::GetEndpointAttributes() const
+const IAttributeDictionary& TConnection::GetEndpointAttributes() const
 {
     return *EndpointAttributes_;
 }
 
-const std::string& TTcpConnection::GetEndpointAddress() const
+const std::string& TConnection::GetEndpointAddress() const
 {
     if (EndpointAddress_) {
         return *EndpointAddress_;
@@ -758,22 +758,22 @@ const std::string& TTcpConnection::GetEndpointAddress() const
     }
 }
 
-const TNetworkAddress& TTcpConnection::GetEndpointNetworkAddress() const
+const TNetworkAddress& TConnection::GetEndpointNetworkAddress() const
 {
     return EndpointNetworkAddress_;
 }
 
-bool TTcpConnection::IsEndpointLocal() const
+bool TConnection::IsEndpointLocal() const
 {
     return false;
 }
 
-bool TTcpConnection::IsEncrypted() const
+bool TConnection::IsEncrypted() const
 {
     return SslState_ != ESslState::None;
 }
 
-TBusNetworkStatistics TTcpConnection::GetNetworkStatistics() const
+TBusNetworkStatistics TConnection::GetNetworkStatistics() const
 {
     if (auto networkCounters = NetworkCounters_.AcquireHazard()) {
         return networkCounters->ToStatistics();
@@ -782,19 +782,19 @@ TBusNetworkStatistics TTcpConnection::GetNetworkStatistics() const
     }
 }
 
-TBusNetworkStatistics TTcpConnection::GetBusStatistics() const
+TBusNetworkStatistics TConnection::GetBusStatistics() const
 {
     return BusCounters_.ToStatistics();
 }
 
-TFuture<void> TTcpConnection::GetReadyFuture() const
+TFuture<void> TConnection::GetReadyFuture() const
 {
     return ReadyPromise_.ToFuture();
 }
 
-TFuture<void> TTcpConnection::Send(TSharedRefArray message, const TSendOptions& options)
+TFuture<void> TConnection::Send(TSharedRefArray message, const TSendOptions& options)
 {
-    if (TTcpDispatcher::Get()->IsNetworkingDisabled()) {
+    if (TDispatcher::Get()->IsNetworkingDisabled()) {
         return MakeFuture(TError(NBus::EErrorCode::TransportError, "Networking is disabled"));
     }
 
@@ -827,7 +827,7 @@ TFuture<void> TTcpConnection::Send(TSharedRefArray message, const TSendOptions& 
     return SendViaSocket(std::move(message), options);
 }
 
-void TTcpConnection::SetTosLevel(TTosLevel tosLevel)
+void TConnection::SetTosLevel(TTosLevel tosLevel)
 {
     if (TosLevel_.load() == tosLevel) {
         return;
@@ -843,7 +843,7 @@ void TTcpConnection::SetTosLevel(TTosLevel tosLevel)
     TosLevel_.store(tosLevel);
 }
 
-void TTcpConnection::Terminate(const TError& error)
+void TConnection::Terminate(const TError& error)
 {
     // Construct a detailed error.
     YT_VERIFY(!error.IsOK());
@@ -882,17 +882,17 @@ void TTcpConnection::Terminate(const TError& error)
     }
 }
 
-void TTcpConnection::SubscribeTerminated(const TCallback<void(const TError&)>& callback)
+void TConnection::SubscribeTerminated(const TCallback<void(const TError&)>& callback)
 {
     Terminated_.Subscribe(callback);
 }
 
-void TTcpConnection::UnsubscribeTerminated(const TCallback<void(const TError&)>& callback)
+void TConnection::UnsubscribeTerminated(const TCallback<void(const TError&)>& callback)
 {
     Terminated_.Unsubscribe(callback);
 }
 
-void TTcpConnection::OnEvent(EPollControl control)
+void TConnection::OnEvent(EPollControl control)
 {
     EPollControl action;
     {
@@ -997,7 +997,7 @@ void TTcpConnection::OnEvent(EPollControl control)
     }
 }
 
-void TTcpConnection::OnShutdown()
+void TConnection::OnShutdown()
 {
     // Perform the initial cleanup (the final one will be in dtor).
     Close();
@@ -1011,7 +1011,7 @@ void TTcpConnection::OnShutdown()
     Terminated_.Fire(error);
 }
 
-void TTcpConnection::OnSocketRead()
+void TConnection::OnSocketRead()
 {
     YT_LOG_TRACE("Started serving read request");
 
@@ -1102,12 +1102,12 @@ void TTcpConnection::OnSocketRead()
         bytesReadTotal);
 }
 
-bool TTcpConnection::HasUnreadData() const
+bool TConnection::HasUnreadData() const
 {
     return Decoder_->IsInProgress() || !UnackedPackets_.empty();
 }
 
-ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
+ssize_t TConnection::DoReadSocket(char* buffer, size_t size)
 {
     switch (SslState_) {
         case ESslState::None:
@@ -1126,7 +1126,7 @@ ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
     return 0;
 }
 
-bool TTcpConnection::ReadSocket(char* buffer, size_t size, size_t* bytesRead)
+bool TConnection::ReadSocket(char* buffer, size_t size, size_t* bytesRead)
 {
     NProfiling::TWallTimer timer;
     auto result = DoReadSocket(buffer, size);
@@ -1155,7 +1155,7 @@ bool TTcpConnection::ReadSocket(char* buffer, size_t size, size_t* bytesRead)
     return true;
 }
 
-bool TTcpConnection::CheckTcpReadError(ssize_t result)
+bool TConnection::CheckTcpReadError(ssize_t result)
 {
     if (result == 0) {
         Abort(TError(NBus::EErrorCode::TransportError, "Socket was closed"));
@@ -1175,7 +1175,7 @@ bool TTcpConnection::CheckTcpReadError(ssize_t result)
     return true;
 }
 
-bool TTcpConnection::CheckReadError(ssize_t result)
+bool TConnection::CheckReadError(ssize_t result)
 {
     if (SslState_ == ESslState::None) {
         return CheckTcpReadError(result);
@@ -1184,7 +1184,7 @@ bool TTcpConnection::CheckReadError(ssize_t result)
     return CheckSslReadError(result);
 }
 
-bool TTcpConnection::AdvanceDecoder(size_t size)
+bool TConnection::AdvanceDecoder(size_t size)
 {
     if (!Decoder_->Advance(size)) {
         UpdateBusCounter(&TBusNetworkBandCounters::DecoderErrors, 1);
@@ -1206,7 +1206,7 @@ bool TTcpConnection::AdvanceDecoder(size_t size)
     return true;
 }
 
-bool TTcpConnection::OnPacketReceived() noexcept
+bool TConnection::OnPacketReceived() noexcept
 {
     bool packetIsHandshake = Decoder_->GetPacketId() == HandshakePacketId;
     if (HandshakeReceived_) {
@@ -1241,7 +1241,7 @@ bool TTcpConnection::OnPacketReceived() noexcept
     }
 }
 
-bool TTcpConnection::OnAckPacketReceived()
+bool TConnection::OnAckPacketReceived()
 {
     if (UnackedPackets_.empty()) {
         Abort(TError(NBus::EErrorCode::TransportError, "Unexpected ack received"));
@@ -1270,7 +1270,7 @@ bool TTcpConnection::OnAckPacketReceived()
     return true;
 }
 
-bool TTcpConnection::OnMessagePacketReceived()
+bool TConnection::OnMessagePacketReceived()
 {
     // COMPAT(babenko)
     if (Decoder_->GetPacketId() == HandshakePacketId) {
@@ -1292,7 +1292,7 @@ bool TTcpConnection::OnMessagePacketReceived()
     return true;
 }
 
-bool TTcpConnection::OnHandshakePacketReceived()
+bool TConnection::OnHandshakePacketReceived()
 {
     YT_LOG_DEBUG("Handshake received");
 
@@ -1372,7 +1372,7 @@ bool TTcpConnection::OnHandshakePacketReceived()
     return true;
 }
 
-TFuture<void> TTcpConnection::SendViaSocket(TSharedRefArray message, const TSendOptions& options)
+TFuture<void> TConnection::SendViaSocket(TSharedRefArray message, const TSendOptions& options)
 {
     TQueuedMessage queuedMessage(std::move(message), options);
     auto promise = queuedMessage.Promise;
@@ -1412,7 +1412,7 @@ TFuture<void> TTcpConnection::SendViaSocket(TSharedRefArray message, const TSend
     return promise;
 }
 
-TFuture<void> TTcpConnection::SendViaLocalBypass(TSharedRefArray message, const TSendOptions& /*options*/)
+TFuture<void> TConnection::SendViaLocalBypass(TSharedRefArray message, const TSendOptions& /*options*/)
 {
     // Log first to avoid producing weird traces.
     YT_LOG_DEBUG("Outcoming message sent via local bypass");
@@ -1423,7 +1423,7 @@ TFuture<void> TTcpConnection::SendViaLocalBypass(TSharedRefArray message, const 
     return OKFuture;
 }
 
-TTcpConnection::TPacket* TTcpConnection::EnqueuePacket(
+TConnection::TPacket* TConnection::EnqueuePacket(
     EPacketType type,
     EPacketFlags flags,
     int checksummedPartCount,
@@ -1446,7 +1446,7 @@ TTcpConnection::TPacket* TTcpConnection::EnqueuePacket(
     return packet;
 }
 
-void TTcpConnection::OnSocketWrite()
+void TConnection::OnSocketWrite()
 {
     YT_LOG_TRACE("Started serving write request");
 
@@ -1482,12 +1482,12 @@ void TTcpConnection::OnSocketWrite()
     YT_LOG_TRACE("Finished serving write request (BytesWrittenTotal: %v)", bytesWrittenTotal);
 }
 
-bool TTcpConnection::HasUnsentData() const
+bool TConnection::HasUnsentData() const
 {
     return !EncodedFragments_.empty() || !QueuedPackets_.empty() || !EncodedPackets_.empty();
 }
 
-ssize_t TTcpConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
+ssize_t TConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
 {
     if (vec.empty()) {
         return 0;
@@ -1511,7 +1511,7 @@ ssize_t TTcpConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
     return 0;
 }
 
-bool TTcpConnection::WriteFragments(size_t* bytesWritten)
+bool TConnection::WriteFragments(size_t* bytesWritten)
 {
     YT_LOG_TRACE("Writing fragments (EncodedFragments: %v)", EncodedFragments_.size());
 
@@ -1552,7 +1552,7 @@ bool TTcpConnection::WriteFragments(size_t* bytesWritten)
     return isOK;
 }
 
-void TTcpConnection::FlushWrittenFragments(size_t bytesWritten)
+void TConnection::FlushWrittenFragments(size_t bytesWritten)
 {
     size_t bytesToFlush = bytesWritten;
     YT_LOG_TRACE("Flushing fragments (BytesWritten: %v)", bytesWritten);
@@ -1577,7 +1577,7 @@ void TTcpConnection::FlushWrittenFragments(size_t bytesWritten)
     }
 }
 
-void TTcpConnection::FlushWrittenPackets(size_t bytesWritten)
+void TConnection::FlushWrittenPackets(size_t bytesWritten)
 {
     size_t bytesToFlush = bytesWritten;
     YT_LOG_TRACE("Flushing packets (BytesWritten: %v)", bytesWritten);
@@ -1603,7 +1603,7 @@ void TTcpConnection::FlushWrittenPackets(size_t bytesWritten)
     }
 }
 
-bool TTcpConnection::MaybeEncodeFragments()
+bool TConnection::MaybeEncodeFragments()
 {
     if (!EncodedFragments_.empty() || QueuedPackets_.empty()) {
         return true;
@@ -1634,8 +1634,8 @@ bool TTcpConnection::MaybeEncodeFragments()
             auto trackedBlob = TMemoryTrackedBlob::Build(
                 MemoryUsageTracker_,
                 ConnectionType_ == EConnectionType::Server
-                    ? GetRefCountedTypeCookie<TTcpServerConnectionWriteBufferTag>()
-                    : GetRefCountedTypeCookie<TTcpClientConnectionWriteBufferTag>());
+                    ? GetRefCountedTypeCookie<TServerConnectionWriteBufferTag>()
+                    : GetRefCountedTypeCookie<TClientConnectionWriteBufferTag>());
             trackedBlob.Reserve(size);
 
             WriteBuffers_.push_back(std::move(trackedBlob));
@@ -1706,7 +1706,7 @@ bool TTcpConnection::MaybeEncodeFragments()
     return true;
 }
 
-bool TTcpConnection::CheckTcpWriteError(ssize_t result)
+bool TConnection::CheckTcpWriteError(ssize_t result)
 {
     if (result < 0) {
         int error = LastSystemError();
@@ -1721,7 +1721,7 @@ bool TTcpConnection::CheckTcpWriteError(ssize_t result)
     return true;
 }
 
-bool TTcpConnection::CheckWriteError(ssize_t result)
+bool TConnection::CheckWriteError(ssize_t result)
 {
     if (SslState_ == ESslState::None) {
         return CheckTcpWriteError(result);
@@ -1730,7 +1730,7 @@ bool TTcpConnection::CheckWriteError(ssize_t result)
     return CheckSslWriteError(result);
 }
 
-void TTcpConnection::OnPacketSent()
+void TConnection::OnPacketSent()
 {
     const auto& packet = EncodedPackets_.front();
     switch (packet->Type) {
@@ -1761,13 +1761,13 @@ void TTcpConnection::OnPacketSent()
     EncodedPackets_.pop();
 }
 
-void  TTcpConnection::OnAckPacketSent(const TPacket& packet)
+void  TConnection::OnAckPacketSent(const TPacket& packet)
 {
     YT_LOG_DEBUG("Ack sent (PacketId: %v)",
         packet.PacketId);
 }
 
-void TTcpConnection::OnMessagePacketSent(const TPacket& packet)
+void TConnection::OnMessagePacketSent(const TPacket& packet)
 {
     YT_LOG_DEBUG("Outcoming message sent (PacketId: %v)",
         packet.PacketId);
@@ -1782,14 +1782,14 @@ void TTcpConnection::OnMessagePacketSent(const TPacket& packet)
     }
 }
 
-void TTcpConnection::OnHandshakePacketSent()
+void TConnection::OnHandshakePacketSent()
 {
     YT_LOG_DEBUG("Handshake sent");
 
     HandshakeSent_ = true;
 }
 
-void TTcpConnection::OnTerminate()
+void TConnection::OnTerminate()
 {
     if (State_ == EState::Aborted || State_ == EState::Closed) {
         return;
@@ -1804,7 +1804,7 @@ void TTcpConnection::OnTerminate()
     Abort(error);
 }
 
-void TTcpConnection::ProcessQueuedMessages()
+void TConnection::ProcessQueuedMessages()
 {
     QueuedMessages_.DequeueAll(
         /*reverse*/ true,
@@ -1838,7 +1838,7 @@ void TTcpConnection::ProcessQueuedMessages()
         });
 }
 
-void TTcpConnection::DiscardOutcomingMessages()
+void TConnection::DiscardOutcomingMessages()
 {
     auto guard = Guard(Lock_);
     auto error = Error_;
@@ -1854,7 +1854,7 @@ void TTcpConnection::DiscardOutcomingMessages()
     }
 }
 
-void TTcpConnection::DiscardUnackedMessages()
+void TConnection::DiscardUnackedMessages()
 {
     auto guard = Guard(Lock_);
     auto error = Error_;
@@ -1869,12 +1869,12 @@ void TTcpConnection::DiscardUnackedMessages()
     }
 }
 
-int TTcpConnection::GetSocketError() const
+int TConnection::GetSocketError() const
 {
     return NNet::GetSocketError(Socket_);
 }
 
-bool TTcpConnection::IsSocketError(ssize_t result)
+bool TConnection::IsSocketError(ssize_t result)
 {
     return
         result != EWOULDBLOCK &&
@@ -1882,7 +1882,7 @@ bool TTcpConnection::IsSocketError(ssize_t result)
         result != EINPROGRESS;
 }
 
-void TTcpConnection::CloseSocket()
+void TConnection::CloseSocket()
 {
     YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
@@ -1892,7 +1892,7 @@ void TTcpConnection::CloseSocket()
     }
 }
 
-void TTcpConnection::ArmPoller()
+void TConnection::ArmPoller()
 {
     YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
     YT_VERIFY(Socket_ != INVALID_SOCKET);
@@ -1900,7 +1900,7 @@ void TTcpConnection::ArmPoller()
     Poller_->Arm(Socket_, this, EPollControl::Read | EPollControl::Write | EPollControl::EdgeTriggered);
 }
 
-void TTcpConnection::UnarmPoller()
+void TConnection::UnarmPoller()
 {
     YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
@@ -1909,7 +1909,7 @@ void TTcpConnection::UnarmPoller()
     }
 }
 
-void TTcpConnection::InitSocketTosLevel(TTosLevel tosLevel)
+void TConnection::InitSocketTosLevel(TTosLevel tosLevel)
 {
     if (TosLevel_ == BlackHoleTosLevel && tosLevel != BlackHoleTosLevel) {
         if (!TrySetSocketInputFilter(Socket_, false)) {
@@ -1931,7 +1931,7 @@ void TTcpConnection::InitSocketTosLevel(TTosLevel tosLevel)
     }
 }
 
-void TTcpConnection::FlushStatistics()
+void TConnection::FlushStatistics()
 {
     YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
     UpdateTcpStatistics();
@@ -1939,14 +1939,14 @@ void TTcpConnection::FlushStatistics()
 }
 
 template <class T, class U>
-i64 TTcpConnection::UpdateBusCounter(T TBusNetworkBandCounters::* field, U delta)
+i64 TConnection::UpdateBusCounter(T TBusNetworkBandCounters::* field, U delta)
 {
     auto band = MultiplexingBand_.load(std::memory_order::relaxed);
     (BusCountersDelta_.PerBandCounters[band].*field).fetch_add(delta, std::memory_order::relaxed);
     return (BusCounters_.PerBandCounters[band].*field).fetch_add(delta, std::memory_order::relaxed) + delta;
 }
 
-void TTcpConnection::UpdateTcpStatistics()
+void TConnection::UpdateTcpStatistics()
 {
 #ifdef _linux_
     if (Socket_ != INVALID_SOCKET) {
@@ -1968,7 +1968,7 @@ void TTcpConnection::UpdateTcpStatistics()
 #endif
 }
 
-void TTcpConnection::FlushBusStatistics()
+void TConnection::FlushBusStatistics()
 {
     auto networkCounters = NetworkCounters_.Acquire();
     if (!networkCounters) {
@@ -1984,12 +1984,12 @@ void TTcpConnection::FlushBusStatistics()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TTcpConnection::AbortSslSession()
+void TConnection::AbortSslSession()
 {
     CloseSslSession(ESslState::Aborted);
 }
 
-bool TTcpConnection::CheckSslReadError(ssize_t result)
+bool TConnection::CheckSslReadError(ssize_t result)
 {
     auto sslError = SSL_get_error(Ssl_.get(), result);
     switch (sslError) {
@@ -2020,7 +2020,7 @@ bool TTcpConnection::CheckSslReadError(ssize_t result)
     return false;
 }
 
-bool TTcpConnection::CheckSslWriteError(ssize_t result)
+bool TConnection::CheckSslWriteError(ssize_t result)
 {
     auto sslError = SSL_get_error(Ssl_.get(), result);
     switch (sslError) {
@@ -2050,7 +2050,7 @@ bool TTcpConnection::CheckSslWriteError(ssize_t result)
     return false;
 }
 
-void TTcpConnection::CloseSslSession(ESslState newSslState)
+void TConnection::CloseSslSession(ESslState newSslState)
 {
     switch (SslState_) {
         case ESslState::None:
@@ -2072,7 +2072,7 @@ void TTcpConnection::CloseSslSession(ESslState newSslState)
     SslState_ = newSslState;
 }
 
-bool TTcpConnection::DoSslHandshake()
+bool TConnection::DoSslHandshake()
 {
     auto result = SSL_do_handshake(Ssl_.get());
     switch (SSL_get_error(Ssl_.get(), result)) {
@@ -2115,7 +2115,7 @@ bool TTcpConnection::DoSslHandshake()
     return false;
 }
 
-void TTcpConnection::DoSslShutdown()
+void TConnection::DoSslShutdown()
 {
     for (int i = 0;; ++i) {
         YT_VERIFY(i < 2);
@@ -2145,12 +2145,12 @@ void TTcpConnection::DoSslShutdown()
     }
 }
 
-size_t TTcpConnection::GetSslAckPacketSize()
+size_t TConnection::GetSslAckPacketSize()
 {
     return Encoder_->GetPacketSize(EPacketType::SslAck, {}, 0);
 }
 
-void TTcpConnection::TryEnqueueSslAck()
+void TConnection::TryEnqueueSslAck()
 {
     if (!HandshakeSent_ || !HandshakeReceived_ || !EstablishSslSession_) {
         return;
@@ -2170,7 +2170,7 @@ void TTcpConnection::TryEnqueueSslAck()
     YT_LOG_DEBUG("TLS/SSL acknowledgement enqueued");
 }
 
-void TTcpConnection::TryEstablishSslSession()
+void TConnection::TryEstablishSslSession()
 {
     if (!SslAckReceived_ || !SslAckSent_ || Ssl_) {
         return;
@@ -2181,12 +2181,12 @@ void TTcpConnection::TryEstablishSslSession()
     NCrypto::TCertificatePathResolver pathResolver;
     if (Config_->LoadCertsFromBusCertsDirectory) {
         // FIXME(khlebnikov): Move this and config into proper place.
-        if (!TTcpDispatcher::TImpl::Get()->GetBusCertsDirectoryPath()) {
+        if (!TDispatcher::TImpl::Get()->GetBusCertsDirectoryPath()) {
             Abort(TError(NBus::EErrorCode::SslError, "bus_certs_directory_path is not set in tcp_dispatcher config"));
             return;
         }
-        pathResolver = [&](const TString fileName) {
-            return JoinPaths(*TTcpDispatcher::TImpl::Get()->GetBusCertsDirectoryPath(), fileName);
+        pathResolver = [&](const std::string& fileName) {
+            return JoinPaths(*TDispatcher::TImpl::Get()->GetBusCertsDirectoryPath(), fileName);
         };
     }
 
@@ -2294,12 +2294,12 @@ void TTcpConnection::TryEstablishSslSession()
     if (State_ == EState::Open) {
         UpdateConnectionCount(-1);
         FlushBusStatistics();
-        NetworkCounters_.Exchange(TTcpDispatcher::TImpl::Get()->GetCounters(NetworkName_, IsEncrypted()));
+        NetworkCounters_.Exchange(TDispatcher::TImpl::Get()->GetCounters(NetworkName_, IsEncrypted()));
         UpdateConnectionCount(1);
     }
 }
 
-bool TTcpConnection::OnSslAckPacketReceived()
+bool TConnection::OnSslAckPacketReceived()
 {
     YT_LOG_DEBUG("TLS/SSL acknowledgement received");
 
@@ -2315,7 +2315,7 @@ bool TTcpConnection::OnSslAckPacketReceived()
     return true;
 }
 
-void TTcpConnection::OnSslAckPacketSent()
+void TConnection::OnSslAckPacketSent()
 {
     YT_LOG_DEBUG("TLS/SSL acknowledgement sent");
 
@@ -2326,4 +2326,4 @@ void TTcpConnection::OnSslAckPacketSent()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

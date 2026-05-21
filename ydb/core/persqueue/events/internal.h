@@ -238,6 +238,7 @@ struct TEvPQ {
         EvMLPUpdateExternalLockedMessageGroupsId,
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
+        EvRewindCommitResult,
         EvEnd,
     };
 
@@ -1834,6 +1835,15 @@ struct TEvPQ {
         ui64 GetApproximateLockedMessageCount() const {
             return Record.GetApproximateLockedMessageCount();
         }
+    };
+
+    struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
+        explicit TEvRewindCommitResult(NYdb::TStatus status)
+            : Status(std::move(status))
+        {
+        }
+
+        NYdb::TStatus Status;
     };
 };
 

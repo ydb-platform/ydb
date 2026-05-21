@@ -435,6 +435,19 @@ private:
 
     void PassAway() final {
         Counters->StreamLookupActorsCount->Dec();
+        
+        if (!LockSendTime.empty()) {
+            TInstant now = AppData()->TimeProvider->Now();
+            TDuration maxInFlightTime = TDuration::Zero();
+            for (const auto& [requestId, sendTime] : LockSendTime) {
+                TDuration elapsed = now - sendTime;
+                if (elapsed > maxInFlightTime) {
+                    maxInFlightTime = elapsed;
+                }
+            }
+            Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
+        }
+        
         {
             auto alloc = BindAllocator();
             Input.Clear();
@@ -934,13 +947,22 @@ private:
         auto lockState = TLockState(requestId, shardId);
         lockState.State = TLockState::EState::Running;
         Reads.insertLock(requestId, std::move(lockState));
+        
+        LockSendTime[requestId] = AppData()->TimeProvider->Now();
     }
 
     void Handle(NEvents::TDataEvents::TEvLockRowsResult::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        CA_LOG_D("Received lock result, requestId: " << record.GetRequestId() 
+        CA_LOG_D("Received lock result, requestId: " << record.GetRequestId()
             << ", status: " << record.GetStatus());
+
+        ui64 requestId = record.GetRequestId();
+        
+        if (auto it = LockSendTime.find(requestId); it != LockSendTime.end()) {
+            Counters->LockLatencyHistogram->Collect((AppData()->TimeProvider->Now() - it->second).MilliSeconds());
+            LockSendTime.erase(it);
+        }
 
         auto getIssues = [&record]() {
             NYql::TIssues issues;
@@ -1007,13 +1029,15 @@ private:
             }
         }
 
+        Counters->ModifiedRowsCount->Add(record.ModifiedKeysSize());
+        Counters->LockedRowsCount->Add(record.LockedKeysSize());
+
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken
                     && lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
             Locks.push_back(lock);
         }
 
-        ui64 requestId = record.GetRequestId();
         StreamLockWorker->AddLockResult(requestId, ev->Get());
 
         bool hasModifiedRows = false;
@@ -1311,6 +1335,8 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     NWilson::TSpan LookupActorSpan;
     NWilson::TSpan LookupActorStateSpan;
+    
+    THashMap<ui64, TInstant> LockSendTime;
 };
 
 } // namespace

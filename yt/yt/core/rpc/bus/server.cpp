@@ -19,6 +19,7 @@ namespace NYT::NRpc::NBus {
 
 using namespace NConcurrency;
 using namespace NYT::NBus;
+using namespace NYT::NBus::NTcp;
 
 using NYT::FromProto;
 

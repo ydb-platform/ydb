@@ -12,6 +12,8 @@
 
 namespace NYdbWorkload {
 
+    class TFulltextQualityEvaluator;
+
     class TFulltextWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TFulltextWorkloadParams> {
     public:
         using TBase = TWorkloadQueryGeneratorBase<TFulltextWorkloadParams>;
@@ -28,9 +30,13 @@ namespace NYdbWorkload {
         TQueryInfoList Select();
         TQueryInfoList Upsert();
         void LoadQueries();
+        void LoadUpsertQueries();
 
         TVector<TString> Queries;
         size_t CurrentIndex = 0;
+
+        TVector<TString> UpsertData;
+        size_t UpsertCurrentIndex = 0;
 
         TMaybe<TMarkovModelEvaluator> Evaluator;
     };

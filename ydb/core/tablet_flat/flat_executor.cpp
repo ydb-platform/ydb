@@ -4302,8 +4302,8 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::StartVacuum(ui64 vacuumGeneration) {
-    if (VacuumLogic->TryStartVacuum(vacuumGeneration, OwnerCtx())) {
+void TExecutor::StartVacuum(TVacuumTag tag) {
+    if (VacuumLogic->TryStartVacuum(tag, OwnerCtx())) {
         for (const auto& [tableId, _] : Scheme().Tables) {
             auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
             VacuumLogic->OnCompactionPrepared(tableId, compactionId);
@@ -5321,6 +5321,23 @@ void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
     Counters->Simple()[TExecutorCounters::BACKUP_CHANGELOG_INFLIGHT_BYTES].Sub(ev->Get()->BytesWritten);
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].IncrementFor(msg->Latency.MicroSeconds());
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
+}
+
+void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
+    if (!Stats->IsFollower()) {
+        MoveDataSubscribers.insert(ev->Sender);
+        StartVacuum(TNoTag());
+    }
+}
+
+void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) {
+    if (generation) {
+        Owner->VacuumComplete(generation, ctx);
+    }
+    for (const auto& actor : MoveDataSubscribers) {
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+    }
+    MoveDataSubscribers.clear();
 }
 
 }

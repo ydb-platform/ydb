@@ -328,32 +328,6 @@ runs:
             $YA_MAKE_TARGET
         fi
 
-        # Scripts to checkout from main
-        MAIN_SCRIPTS=(
-          ".github/scripts/config/ydb_qa_config.json"
-          ".github/scripts/analytics/ydb_wrapper.py"
-          ".github/scripts/check_ydb_qa_config.py"
-          ".github/scripts/tests/fail-checker.py"
-        )
-        
-        # Ensure main is available (may be missing in shallow clone)
-        if ! git rev-parse --verify main >/dev/null 2>&1; then
-          git fetch origin main:main --depth=1 2>/dev/null || true
-        fi
-        
-        # For each script: if unchanged in PR - use from main
-        # git checkout main -- "$script" doesn't change HEAD, only files in working directory
-        for script in "${MAIN_SCRIPTS[@]}"; do
-          if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
-            git checkout main -- "$script" 2>/dev/null && echo "✅ $script"
-          else
-            echo "✅ $script (PR version)"
-          fi
-        done
-        
-        # Check YDB configuration (after checkout from main)
-        python3 .github/scripts/check_ydb_qa_config.py || true
-
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 

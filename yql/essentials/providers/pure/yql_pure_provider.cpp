@@ -165,7 +165,7 @@ public:
                                                nullptr,
                                                logProvider.Get(),
                                                State_->Types->LangVer,
-                                               *State_->Types->RuntimeSettings);
+                                               State_->Types->RuntimeSettings);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();

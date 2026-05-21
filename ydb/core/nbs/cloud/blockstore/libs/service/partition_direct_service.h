@@ -10,6 +10,10 @@
 #include <util/datetime/base.h>
 #include <util/system/types.h>
 
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+struct TVChunkConfig;
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -26,6 +30,11 @@ struct IPartitionDirectService
         TExecutorPtr executor,
         TDuration delay,
         TCallback callback) = 0;
+
+    // Asynchronously persists the given vchunk config to the partition's
+    // local DB. Caller must ensure cfg.IsValid().
+    virtual void UpdateVChunkConfig(
+        const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

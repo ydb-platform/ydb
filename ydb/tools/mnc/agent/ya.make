@@ -20,6 +20,7 @@ PY3_PROGRAM(mnc_agent)
         services/features.py
         services/database.py
         services/tasks.py
+        services/operations.py
         services/nodes.py
         services/disks.py
 
@@ -36,3 +37,7 @@ PY3_PROGRAM(mnc_agent)
     )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

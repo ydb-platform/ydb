@@ -149,6 +149,10 @@
    don't. */
 #define HAVE_DECL_STRNLEN 1
 
+/* Define to 1 if you have the declaration of `timingsafe_bcmp', and to 0 if
+   you don't. */
+#define HAVE_DECL_TIMINGSAFE_BCMP 0
+
 /* Define to 1 if you have the <editline/history.h> header file. */
 /* #undef HAVE_EDITLINE_HISTORY_H */
 
@@ -484,6 +488,9 @@
 /* Define to 1 if you have the <termios.h> header file. */
 #define HAVE_TERMIOS_H 1
 
+/* Define to 1 if you have the `timingsafe_bcmp' function. */
+/* #undef HAVE_TIMINGSAFE_BCMP */
+
 /* Define to 1 if your compiler understands `typeof' or something similar. */
 #define HAVE_TYPEOF 1
 
@@ -603,7 +610,7 @@
 #define PACKAGE_NAME "PostgreSQL"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "PostgreSQL 16.10"
+#define PACKAGE_STRING "PostgreSQL 16.14"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "postgresql"
@@ -612,7 +619,15 @@
 #define PACKAGE_URL "https://www.postgresql.org/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "16.10"
+#define PACKAGE_VERSION "16.14"
+
+/* Define to best C++ printf format archetype, usually gnu_printf if
+   available. */
+#define PG_CXX_PRINTF_ATTRIBUTE gnu_printf
+
+/* Define to best C printf format archetype, usually gnu_printf if available.
+   */
+#define PG_C_PRINTF_ATTRIBUTE __syslog__
 
 /* Define to the name of a signed 128-bit integer type. */
 #define PG_INT128_TYPE __int128
@@ -631,22 +646,19 @@
 #define PG_MAJORVERSION_NUM 16
 
 /* PostgreSQL minor version number */
-#define PG_MINORVERSION_NUM 10
-
-/* Define to best printf format archetype, usually gnu_printf if available. */
-#define PG_PRINTF_ATTRIBUTE gnu_printf
+#define PG_MINORVERSION_NUM 14
 
 /* Define to 1 to use <stdbool.h> to define type bool. */
 #define PG_USE_STDBOOL 1
 
 /* PostgreSQL version as a string */
-#define PG_VERSION "16.10"
+#define PG_VERSION "16.14"
 
 /* PostgreSQL version as a number */
-#define PG_VERSION_NUM 160010
+#define PG_VERSION_NUM 160014
 
 /* A string containing the version number, platform, and C compiler */
-#define PG_VERSION_STR "PostgreSQL 16.10 on x86_64-pc-linux-gnu, compiled by clang version 20.1.8, 64-bit"
+#define PG_VERSION_STR "PostgreSQL 16.14 on x86_64-pc-linux-gnu, compiled by clang version 20.1.8, 64-bit"
 
 /* Define to 1 to allow profiling output to be saved separately for each
    process. */

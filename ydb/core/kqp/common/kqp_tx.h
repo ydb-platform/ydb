@@ -201,9 +201,13 @@ public:
                 break;
 
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                    ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
-                    : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
+                    EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                } else {
+                    EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
+                        ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
+                        : NKqpProto::ISOLATION_LEVEL_ONLINE_RO;
+                }
                 Readonly = true;
                 break;
 

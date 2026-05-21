@@ -213,5 +213,9 @@ enum EOperationType {
     // Publish shadow data and take snapshot in one step
     ESchemeOpPrepareIndexValidation = 134;
 
+    // Incremental restore path-state lock/unlock; propose-only, no DS-side work.
+    ESchemeOpIncrementalRestoreLockTargets = 135;
+    ESchemeOpIncrementalRestoreUnlockTargets = 136;
+
     // Some entries are grouped by semantics, so are out of order
 }

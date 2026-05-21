@@ -12,6 +12,7 @@ class TWriteWithDirectReplicationRequestExecutor
 public:
     TWriteWithDirectReplicationRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,

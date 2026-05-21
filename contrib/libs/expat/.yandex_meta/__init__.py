@@ -5,7 +5,6 @@ from devtools.yamaker import fileutil
 from devtools.yamaker.modules import GLOBAL, Switch, Linkable
 from devtools.yamaker.project import GNUMakeNixProject
 
-
 WINDOWS_RANDOM_SRCS = [
     "lib/random_rand_s.c",
 ]
@@ -32,7 +31,7 @@ def post_build(self):
             "CFLAGS",
             Switch(
                 OS_WINDOWS=Linkable(
-		    CFLAGS=[GLOBAL("-DXML_STATIC")],
+                    CFLAGS=[GLOBAL("-DXML_STATIC")],
                     SRCS=WINDOWS_RANDOM_SRCS,
                 ),
                 OS_IOS=Linkable(

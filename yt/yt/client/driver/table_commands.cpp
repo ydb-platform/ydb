@@ -1008,6 +1008,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "enable_parallelize_unordered_group_by",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableParallelizeUnorderedGroupBy;
+        })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<EStatisticsAggregation>>(
         "statistics_aggregation",
         [] (TThis* command) -> auto& {

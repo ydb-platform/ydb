@@ -68,7 +68,7 @@
 
 Ниже описан общий порядок работы серверной команды **`import s3`**.
 
-{% include [_includes/server-export-workflow.md](_includes/server-export-workflow.md) %}
+{% include [server-export-workflow.md](server-export-workflow.md) %}
 
 ### Результат запуска {#result}
 

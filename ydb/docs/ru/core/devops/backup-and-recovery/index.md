@@ -38,15 +38,15 @@
 
 ### NFS {#nfs}
 
-Для выполнения резервного копирования в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запущена {{ ydb-short-name }} применяется команда `{{ ydb-cli }} export nfs`. Перейдите [по ссылке](../reference/ydb-cli/export-import/export-nfs.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения резервного копирования в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запущена {{ ydb-short-name }} применяется команда `{{ ydb-cli }} export nfs`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/export-nfs.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
-Для выполнения восстановления из резервной копии, созданной в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запущена {{ ydb-short-name }}, применяется команда `{{ ydb-cli }} import nfs`. Перейдите [по ссылке](../reference/ydb-cli/export-import/import-nfs.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения восстановления из резервной копии, созданной в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запущена {{ ydb-short-name }}, применяется команда `{{ ydb-cli }} import nfs`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/import-nfs.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
-Подробнее про настройку NFS для резервного копирования и восстановления см. рецепт [Резервное копирование и восстановление через NFS](../recipes/nfs-backup/nfs-backup.md).
+Подробнее про настройку NFS для резервного копирования и восстановления см. рецепт [Резервное копирование и восстановление через NFS](../../recipes/nfs-backup/nfs-backup.md).
 
 {% note info %}
 
-Скорость операций резервного копирования и восстановления в/из S3-совместимого хранилища или NFS подобрана таким образом, чтобы минимизировать влияние на пользовательскую нагрузку. Для управления скоростью операций настройте лимиты для соответствующей очереди [брокера ресурсов](../reference/configuration/resource_broker_config.md#resource-broker-config).
+Скорость операций резервного копирования и восстановления в/из S3-совместимого хранилища или NFS подобрана таким образом, чтобы минимизировать влияние на пользовательскую нагрузку. Для управления скоростью операций настройте лимиты для соответствующей очереди [брокера ресурсов](../../reference/configuration/resource_broker_config.md#resource-broker-config).
 
 {% endnote %}
 

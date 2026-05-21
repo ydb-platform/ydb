@@ -1627,41 +1627,6 @@ class TestViewer(object):
         return result
 
     @classmethod
-    def assert_access_denied(cls, response, case_name):
-        assert response.get('status_code') == 403, f"{case_name}: expected status_code=403, got {response}"
-        text = response.get('text', '')
-        assert (
-            text == 'Access denied'
-            or text == 'Administration access required when force=true'
-            or 'SID is not allowed' in text
-        ), (
-            f"{case_name}: expected access denied/admin-force message or HTML SID rejection, got {response}"
-        )
-
-    @classmethod
-    def assert_database_required(cls, response, path, case_name):
-        expected_text = f'`database` is required for {path}'
-        assert response.get('status_code') == 403, f"{case_name}: expected status_code=403, got {response}"
-        assert response.get('text') == expected_text, (
-            f"{case_name}: expected missing database message {expected_text!r}, got {response}"
-        )
-
-    @classmethod
-    def assert_force_retry_possible(cls, response, expected, case_name):
-        has_force_retry_possible = 'forceRetryPossible' in response
-        assert has_force_retry_possible == expected, (
-            f"{case_name}: expected forceRetryPossible present={expected}, got {response}"
-        )
-        if expected:
-            assert response.get('forceRetryPossible') is True, (
-                f"{case_name}: expected forceRetryPossible=true, got {response}"
-            )
-
-    @classmethod
-    def assert_access_allowed(cls, response, case_name):
-        assert response.get('status_code') != 403, f"{case_name}: expected access to be allowed, got {response}"
-
-    @classmethod
     def test_viewer_external_http_access_controls(cls):
         result = {}
 
@@ -1742,35 +1707,7 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
-        # Viewer-level endpoints allow viewer, monitoring and administration users, but deny database-only users.
-        cls.assert_access_allowed(result['viewer_simple_counter_root'], 'viewer_simple_counter_root')
-        cls.assert_access_allowed(result['viewer_simple_counter_monitoring'], 'viewer_simple_counter_monitoring')
-        cls.assert_access_allowed(result['viewer_simple_counter_viewer'], 'viewer_simple_counter_viewer')
-        cls.assert_access_denied(result['viewer_simple_counter_database'], 'viewer_simple_counter_database')
-
-        # Config endpoints are viewer-level under external HTTP access controls.
-        cls.assert_access_allowed(result['viewer_config_root'], 'viewer_config_root')
-        cls.assert_access_allowed(result['viewer_config_monitoring'], 'viewer_config_monitoring')
-        cls.assert_access_allowed(result['viewer_config_viewer'], 'viewer_config_viewer')
-        cls.assert_access_denied(result['viewer_config_database'], 'viewer_config_database')
-
-        # Administration-level endpoints allow only administration users.
-        cls.assert_access_allowed(result['administration_bscontrollerinfo_root'], 'administration_bscontrollerinfo_root')
-        cls.assert_access_denied(result['administration_bscontrollerinfo_monitoring'], 'administration_bscontrollerinfo_monitoring')
-        cls.assert_access_denied(result['administration_bscontrollerinfo_viewer'], 'administration_bscontrollerinfo_viewer')
-        cls.assert_access_denied(result['administration_bscontrollerinfo_database'], 'administration_bscontrollerinfo_database')
-
-        # Database-only users must pass ?database= for database-scoped /viewer/nodes.
-        cls.assert_access_allowed(result['database_nodes_root'], 'database_nodes_root')
-        cls.assert_access_allowed(result['database_nodes_monitoring'], 'database_nodes_monitoring')
-        cls.assert_access_allowed(result['database_nodes_viewer'], 'database_nodes_viewer')
-        cls.assert_access_allowed(result['database_nodes_database'], 'database_nodes_database')
-
-        cls.assert_database_required(
-            result['database_nodes_missing_database_database'],
-            '/viewer/nodes',
-            'database_nodes_missing_database_database',
-        )
+        return result
 
     @classmethod
     def test_security(cls):
@@ -1916,13 +1853,11 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
-        cls.assert_force_retry_possible(result['restart_pdisk_root'], True, 'restart_pdisk_root')
         result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         }), ['debugMessage'])
-        cls.assert_force_retry_possible(result['restart_pdisk_monitoring'], False, 'restart_pdisk_monitoring')
         result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
         }, headers={
@@ -1940,21 +1875,18 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         }), ['debugMessage'])
-        cls.assert_access_denied(result['restart_pdisk_database_force'], 'restart_pdisk_database_force')
         result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
         }), ['debugMessage'])
-        cls.assert_access_denied(result['restart_pdisk_viewer_force'], 'restart_pdisk_viewer_force')
         result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         }), ['debugMessage'])
-        cls.assert_access_denied(result['restart_pdisk_monitoring_force'], 'restart_pdisk_monitoring_force')
         result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
@@ -1968,13 +1900,11 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })
-        cls.assert_access_denied(result['status_pdisk_monitoring_force'], 'status_pdisk_monitoring_force')
         result['evict_vdisk_monitoring_force'] = cls.post_viewer("/vdisk/evict", body={
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })
-        cls.assert_access_denied(result['evict_vdisk_monitoring_force'], 'evict_vdisk_monitoring_force')
         return result
 
     @classmethod

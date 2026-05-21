@@ -1059,8 +1059,6 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     case WRITE_TX_COOKIE:
         PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
         EndWriteTxs(resp, ctx);
-        // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
-        SendDeferredReadSetAcks(ctx);
         break;
     default:
         PQ_LOG_ERROR("Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
@@ -3511,6 +3509,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::MovePendingDeferredReadSetAcks()
 {
+    AFL_ENSURE(DeferredReadSetAcks.empty())("DeferredReadSetAcks", DeferredReadSetAcks.size());
     DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
     PendingDeferredReadSetAcks.clear();
 }
@@ -3731,6 +3730,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
+    SendDeferredReadSetAcks(ctx);
 
     WriteTxsInProgress = false;
 

@@ -3653,6 +3653,7 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
     TExprNode::TPtr maxDelayedRows;
     TExprNode::TPtr isMultiget;
     TExprNode::TPtr isMultiMatches;
+    TExprNode::TPtr fullscanLimit;
     if (const auto maybeOptions = join.JoinAlgoOptions()) {
         for (auto&& option: maybeOptions.Cast()) {
             auto&& name = option.Name().Value();
@@ -3664,6 +3665,8 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
                 maxDelayedRows = option.Value().Cast().Ptr();
             } else if (name == "MultiGet"sv) {
                 isMultiget = option.Value().Cast().Ptr();
+            } else if (name == "FullscanLimit"sv) {
+                fullscanLimit = option.Value().Cast().Ptr();
             }
         }
     }
@@ -3688,7 +3691,6 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
             return {};
         }
         isMultiMatches = ctx.NewAtom(pos, true);
-        isMultiget = ctx.NewAtom(pos, false);
     }
 
     auto rightInput = join.RightInput().Ptr();
@@ -3711,12 +3713,24 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         .MaxCachedRows(maxCachedRows)
         .MaxDelayedRows(maxDelayedRows);
 
+    if (fullscanLimit && !isMultiMatches) { // gaps are not allowed in optional
+        isMultiMatches = ctx.NewAtom(pos, false);
+    }
+
+    if (isMultiMatches && !isMultiget) { // ditto
+        isMultiget = ctx.NewAtom(pos, false);
+    }
+
     if (isMultiget) {
         cn.IsMultiget(isMultiget);
     }
 
     if (isMultiMatches) {
         cn.IsMultiMatches(isMultiMatches);
+    }
+
+    if (fullscanLimit) {
+        cn.FullscanLimit(fullscanLimit);
     }
 
     auto lambda = Build<TCoLambda>(ctx, pos)
@@ -3737,6 +3751,47 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
             .Index().Build("0")
             .Build()
         .Done();
+}
+
+TExprBase DqPushWatermarkGeneratorToStage(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap
+) {
+    const auto maybeWatermarkGenerator = node.Maybe<TDqPhyWatermarkGenerator>();
+    if (!maybeWatermarkGenerator) {
+        return node;
+    }
+    const auto watermarkGenerator = maybeWatermarkGenerator.Cast();
+
+    const auto maybeConnection = watermarkGenerator.Input().Maybe<TDqCnUnionAll>();
+    if (!maybeConnection) {
+        return node;
+    }
+    const auto connection = maybeConnection.Cast();
+
+    if (!IsSingleConsumerConnection(connection, parentsMap)) {
+        return node;
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, watermarkGenerator.Pos())
+            .Args({"arg"})
+            .Body<TCoToFlow>()
+                .Input<TDqPhyWatermarkGenerator>()
+                    .InitFrom(watermarkGenerator)
+                    .Input<TCoFromFlow>()
+                        .Input("arg")
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(connection, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+    return result.Cast();
 }
 
 } // namespace NYql::NDq

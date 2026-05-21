@@ -24,6 +24,7 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
@@ -119,3 +120,8 @@ jobs:
     - name: Upload Nemesis aggregate data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/stability_aggregate_mart.sql --table_path nemesis/aggregated_mart --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite Test --ttl_min 43200 --ttl_key RunTs
+    - name: Upload mute latency data
+      continue-on-error: true
+      run: |
+        git fetch --shallow-since="90 days ago" origin HEAD
+        python3 .github/scripts/analytics/mute_latency_from_failure.py

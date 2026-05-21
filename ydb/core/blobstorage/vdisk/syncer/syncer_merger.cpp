@@ -270,9 +270,11 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
 
     struct TSync {
         TActorId ActorId;
+        NSyncer::TPeerSyncState Initial;
         NSyncer::TPeerSyncState Current;
         std::unique_ptr<TSyncerJobTask::TFullRecoverInfo> FullRecoverInfo;
         bool EndOfStream = false;
+        bool Cancelled = false;
     };
     std::unordered_map<TVDiskID, TSync> Syncs;
     std::unordered_set<TVDiskID> VSyncFullInFlight;
@@ -426,20 +428,29 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
         auto now = TAppData::TimeProvider->Now();
         sync.Current.LastSyncStatus = status;
         sync.Current.LastTry = now;
-        if (NSyncer::TPeerSyncState::Good(status)) {
-            sync.Current.LastGood = now;
-        }
+        sync.Current.SyncState = sync.Initial.SyncState;
+        sync.Cancelled = true;
 
         STLOG(PRI_DEBUG, BS_SYNCER, BSFS27, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexMergerActor: SyncError"),
             (VDiskId, vdiskId), (Status, status));
 
-        // TODO: invalidate iterator for this vdisk
+        LogoBlobMerger.EndOfStream(vdiskId);
+        BlockMerger.EndOfStream(vdiskId);
+        BarrierMerger.EndOfStream(vdiskId);
+
+        auto msg = std::make_unique<TEvSyncerFullSyncDiskCancelled>(vdiskId, sync.Current);
+        Send(SchedulerActorId, msg.release());
+
+        Progress();
     }
 
     void NotifySchedulerAndDie() {
         auto msg = std::make_unique<TEvSyncerFullSyncFinished>();
         for (const auto& [vDiskId, sync] : Syncs) {
+            if (sync.Cancelled) {
+                continue;
+            }
             msg->PeerSyncStates[vDiskId] = sync.Current;
         }
 
@@ -701,6 +712,7 @@ public:
         for (const auto& [vdiskId, syncState] : syncStates) {
             auto& sync = Syncs[vdiskId];
             sync.ActorId = GInfo->GetActorId(vdiskId);
+            sync.Initial = syncState;
             sync.Current = syncState;
             sync.Current.LastSyncStatus = TSyncStatusVal::FullRecover;
             sync.FullRecoverInfo = std::make_unique<TSyncerJobTask::TFullRecoverInfo>(

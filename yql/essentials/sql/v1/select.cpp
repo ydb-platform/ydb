@@ -3770,4 +3770,42 @@ TSourcePtr BuildCombine(TPosition pos, TSourcePtr leftSource, TVector<TSortSpeci
                               std::move(combineKeyExpr), udf, std::move(args), settings);
 }
 
+class TWatermarkSource: public IProxySource {
+public:
+    TWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda)
+        : IProxySource(pos, src.Get())
+        , SourcePtr_(src)
+        , WatermarkLambda_(std::move(watermarkLambda))
+    {
+    }
+
+    TNodePtr Build(TContext& ctx) final {
+        return Y("WatermarkGenerator", SourcePtr_->Build(ctx), WatermarkLambda_);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!SourcePtr_->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!WatermarkLambda_->Init(ctx, this)) {
+            return false;
+        }
+
+        return IProxySource::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return MakeIntrusive<TWatermarkSource>(Pos_, SourcePtr_->CloneSource(), WatermarkLambda_->Clone());
+    }
+
+private:
+    TSourcePtr SourcePtr_;
+    TNodePtr WatermarkLambda_;
+};
+
+TSourcePtr BuildWatermarkSource(TPosition pos, TSourcePtr src, TNodePtr watermarkLambda) {
+    return MakeIntrusive<TWatermarkSource>(pos, std::move(src), std::move(watermarkLambda));
+}
+
 } // namespace NSQLTranslationV1

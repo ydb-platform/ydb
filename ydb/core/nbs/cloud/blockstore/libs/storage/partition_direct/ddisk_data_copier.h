@@ -66,6 +66,7 @@ private:
     const THostIndex Destination;
     TBlocksDirtyMap* const DirtyMap;
 
+    TLogTitle LogTitle;
     EState State = EState::Stopped;
     size_t FreshWatermark = 0;
     NThreading::TPromise<EResult> Complete;

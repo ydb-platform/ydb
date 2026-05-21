@@ -111,7 +111,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(SystemExit):
                 parser.parse_args(["split"])
 
-        args = parser.parse_args(["split", "--part_count", "2"])
+        args = parser.parse_args(["split", "--part-count", "2"])
         self.assertEqual(args.cmd, "split")
         self.assertEqual(args.part_count, 2)
 
@@ -121,7 +121,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch("sys.stderr", io.StringIO()):
             with self.assertRaises(SystemExit):
-                parser.parse_args(["split", "--part_count", "2", "--part-size", "10GB"])
+                parser.parse_args(["split", "--part-count", "2", "--part-size", "10GB"])
 
     async def test_check_devices_returns_false_when_agent_returns_none(self):
         async def post_json(host, path, payload):
@@ -155,7 +155,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(parent_task)
             return {"success": True, "operations": [{"success": True, "partlabel": "label1"}]}
 
-        with mock.patch.object(disks.agent_client, "post_json", post_json):
+        with mock.patch.object(disks.agent_client, "post_json_and_wait", post_json):
             self.assertTrue(await disks.split("host1", devices, part_size=disks.common.Memory("10GB"), parent_task=parent_task))
 
     async def test_act_split_does_not_split_when_check_fails(self):
@@ -257,7 +257,8 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
                 return {"success": True, "operations": [{"success": True, "partlabel": "label1"}]}
             raise AssertionError(path)
 
-        with mock.patch.object(disks.agent_client, "post_json", post_json):
+        with mock.patch.object(disks.agent_client, "post_json", post_json), \
+                mock.patch.object(disks.agent_client, "post_json_and_wait", post_json):
             self.assertTrue(await disks.act_split(["host1"], self.disk_config(), part_count=2, parent_task=ParentTask()))
 
         self.assertEqual(calls, [
@@ -299,7 +300,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
             calls.append((path, payload, bool(kwargs.get("parent_task"))))
             return {"success": True, "operations": [{"success": True, "partlabel": "label1"}]}
 
-        with mock.patch.object(disks.agent_client, "post_json", post_json):
+        with mock.patch.object(disks.agent_client, "post_json_and_wait", post_json):
             self.assertTrue(await disks.act_unite(["host1"], self.disk_config(), parent_task=ParentTask()))
 
         self.assertEqual(calls, [(
@@ -321,7 +322,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
                 ],
             }
 
-        with mock.patch.object(disks.agent_client, "post_json", post_json):
+        with mock.patch.object(disks.agent_client, "post_json_and_wait", post_json):
             self.assertTrue(await disks.act_obliterate(["host1"], self.disk_config(), parent_task=ParentTask()))
 
         self.assertEqual(calls, [(
@@ -337,7 +338,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
         async def post_json(host, path, payload, **kwargs):
             return {"success": False, "operations": [{"success": False, "partlabel": "label1", "message": "failed"}]}
 
-        with mock.patch.object(disks.agent_client, "post_json", post_json):
+        with mock.patch.object(disks.agent_client, "post_json_and_wait", post_json):
             self.assertFalse(await disks.split(
                 "host1",
                 [disks.common.Device("label1", "/dev/sdb")],
@@ -349,7 +350,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
         async def post_json(host, path, payload, **kwargs):
             return {"success": False, "operations": [{"success": False, "partlabel": "label1", "message": "failed"}]}
 
-        with mock.patch.object(disks.agent_client, "post_json", post_json):
+        with mock.patch.object(disks.agent_client, "post_json_and_wait", post_json):
             self.assertFalse(await disks.unite(
                 "host1",
                 [disks.common.Device("label1", "/dev/sdb")],
@@ -360,7 +361,7 @@ class DisksCommandTest(unittest.IsolatedAsyncioTestCase):
         async def post_json(host, path, payload, **kwargs):
             return {"success": False, "operations": [{"success": False, "partlabel": "label1", "message": "failed"}]}
 
-        with mock.patch.object(disks.agent_client, "post_json", post_json):
+        with mock.patch.object(disks.agent_client, "post_json_and_wait", post_json):
             self.assertFalse(await disks.obliterate(
                 "host1",
                 [disks.common.Device("label1", "/dev/sdb")],

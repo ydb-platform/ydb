@@ -15,6 +15,13 @@ BoringSSL usage typically follows a
 model. Projects pin to whatever the current latest of BoringSSL is at the time
 of update, and regularly update it to pick up new changes.
 
+Some systems cannot consume git revisions and expect git tags. BoringSSL tags
+periodic snapshots as "releases", to meet the needs of those systems. These
+versions do not represent any kind of stability or development milestone.
+BoringSSL does not branch at these releases and will not cherry-pick bugfixes to
+them. Unless there is a technical constraint to use one of these revisions,
+projects should simply use the latest untagged revision when updating.
+
 While the BoringSSL repository may contain project-specific branches, e.g.
 `chromium-2214`, those are _not_ supported release branches and must not as
 such. In rare cases, BoringSSL will temporarily maintain a short-lived branch on
@@ -26,21 +33,17 @@ branch may not contain all changes relevant to a general BoringSSL consumer.
 
 ## Bazel
 
-If you are using [Bazel](https://bazel.build) then you can incorporate
-BoringSSL as an external repository by using a commit from the
-`master-with-bazel` branch. That branch is maintained by a bot from `master`
-and includes the needed generated files and a top-level BUILD file.
+If you are using [Bazel](https://bazel.build) then you can use the [boringssl
+module](https://registry.bazel.build/modules/boringssl) in the Bazel Central
+Registry with bzlmod. Look up the latest version and add the following to your
+`MODULE.bazel` file:
 
-For example:
+    bazel_dep(name = "boringssl", version = "INSERT_VERSION_HERE")
 
-    git_repository(
-        name = "boringssl",
-        commit = "_some commit_",
-        remote = "https://boringssl.googlesource.com/boringssl",
-    )
+Substitute the latest version in for `INSERT_VERSION_HERE`.
 
-You would still need to keep the referenced commit up to date if a specific
-commit is referred to.
+BoringSSL will periodically ship snapshots to Bazel Central Registry. As with
+other dependencies, periodically keep the referenced version up-to-date.
 
 ## Directory layout
 
@@ -50,45 +53,34 @@ BoringSSL-specific files into. The source code of BoringSSL itself goes into
 [submodule](https://git-scm.com/docs/git-submodule).
 
 It's generally a mistake to put BoringSSL's source code into
-`third_party/boringssl` directly because pre-built files and custom build files
-need to go somewhere and merging these with the BoringSSL source code makes
-updating things more complex.
+`third_party/boringssl` directly because custom build files need to go somewhere
+and merging these with the BoringSSL source code makes updating things more
+complex.
 
 ## Build support
 
-BoringSSL is designed to work with many different build systems. Currently,
-different projects use [GYP](https://gyp.gsrc.io/),
-[GN](https://gn.googlesource.com/gn/+/master/docs/quick_start.md),
-[Bazel](https://bazel.build/) and [Make](https://www.gnu.org/software/make/)  to
-build BoringSSL, without too much pain.
+BoringSSL is designed to work with many different build systems. The project
+currently has [CMake](https://cmake.org/) and [Bazel](https://bazel.build/)
+builds checked in. Other build systems, and embedders with custom build needs,
+are supported by separating the source list, maintained by BoringSSL, and the
+top-level build logic, maintained by the embedder.
 
-The development build system is CMake and the CMake build knows how to
-automatically generate the intermediate files that BoringSSL needs. However,
-outside of the CMake environment, these intermediates are generated once and
-checked into the incorporating project's source repository. This avoids
-incorporating projects needing to support Perl and Go in their build systems.
+Source lists for various build systems are pre-generated and live in the `gen`
+directory. For example, source lists for
+[GN](https://gn.googlesource.com/gn/+/main/docs/quick_start.md) live in
+[gen/sources.gni](./gen/sources.gni). There is also a generic
+[gen/sources.json](./gen/sources.json) file for projects to consume if needed.
+[util/build/build.go](./util/build/build.go) describes what the various source
+lists mean. Most projects should concatenate the `bcm` and `crypto` targets.
 
-The script [`util/generate_build_files.py`](./util/generate_build_files.py)
-expects to be run from the `third_party/boringssl` directory and to find the
-BoringSSL source code in `src/`. You should pass it a single argument: the name
-of the build system that you're using. If you don't use any of the supported
-build systems then you should augment `generate_build_files.py` with support
-for it.
+If you don't use any of the supported build systems, you should augment the
+[util/pregenerate](./util/pregenerate) tool to support it, or
+consume [gen/sources.json](./gen/sources.json).
 
-The script will pregenerate the intermediate files (see
-[BUILDING.md](./BUILDING.md) for details about which tools will need to be
-installed) and output helper files for that build system. It doesn't generate a
-complete build script, just file and test lists, which change often. For
-example, see the
-[file](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/boringssl/BUILD.generated.gni)
-and
-[test](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/boringssl/BUILD.generated_tests.gni)
-lists generated for GN in Chromium.
-
-Generally one checks in these generated files alongside the hand-written build
-files. Periodically an engineer updates the BoringSSL revision, regenerates
-these files and checks in the updated result. As an example, see how this is
-done [in Chromium](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/boringssl/).
+Historically, source lists were generated at update time with the
+[`util/generate_build_files.py`](./util/generate_build_files.py) script. We are
+in the process of transitioning builds to the pre-generated files, so that
+embedders do not need to run a custom script when updating BoringSSL.
 
 ## Defines
 
@@ -116,7 +108,7 @@ module system.
 If you are using multiple versions in a single binary, in different shared
 objects, ensure you build BoringSSL with `-fvisibility=hidden` and do not
 export any of BoringSSL's symbols. This will prevent any collisions with other
-verisons that may be included in other shared objects. Note that this requires
+versions that may be included in other shared objects. Note that this requires
 that all callers of BoringSSL APIs live in the same shared object as BoringSSL.
 
 If you require that BoringSSL APIs be used across shared object boundaries,

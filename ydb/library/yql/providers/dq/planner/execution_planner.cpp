@@ -266,7 +266,7 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
+        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("disable") != "disable");
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }
@@ -528,6 +528,9 @@ namespace NYql::NDqs {
 
         if (auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
             settings.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast().StringValue()));
+        }
+        if (auto maybeFullscanLimit = streamLookup.FullscanLimit().Maybe<TCoAtom>()) {
+            settings.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
         }
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());

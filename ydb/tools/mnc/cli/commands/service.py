@@ -13,13 +13,13 @@ def add_arguments(parser):
     hosts_parser = subparsers.add_parser('hosts')
     common.add_common_options(hosts_parser)
     hosts_parser.add_argument('operation', choices=tuple(service.allowed_commands))
-    hosts_parser.add_argument('--node-type', '--node_type', dest='node_type', choices=tuple(service.allowed_node_types), default=None)
+    hosts_parser.add_argument('--node-type', dest='node_type', choices=tuple(service.allowed_node_types), default=None)
 
     nodes_parser = subparsers.add_parser('nodes')
     common.add_common_options(nodes_parser)
     nodes_parser.add_argument('operation', choices=('stop', 'start', 'restart', 'rolling_restart'))
     nodes_parser.add_argument('--nodes', '-N', dest='nodes', nargs='*', default=None, help='default: All')
-    nodes_parser.add_argument('--exclude-nodes', '--exclude_nodes', dest='exclude_nodes', nargs='*', default=None)
+    nodes_parser.add_argument('--exclude-nodes', dest='exclude_nodes', nargs='*', default=None)
     nodes_parser.add_argument(
         '--type', '-t', dest='type', choices=('static', 'dynamic', 'all'), default='static', help='default: static'
     )

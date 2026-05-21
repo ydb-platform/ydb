@@ -293,12 +293,6 @@ namespace TEvPrivate {
             , IncrementalBackupNames(incrementalBackupNames)
         {}
 
-        // Backward compatibility constructor
-        TEvRunIncrementalRestore(const TPathId& backupCollectionPathId)
-            : BackupCollectionPathId(backupCollectionPathId)
-            , OperationId(0, 0)
-            , IncrementalBackupNames()
-        {}
     };
 
     struct TEvProgressIncrementalRestore : public TEventLocal<TEvProgressIncrementalRestore, EvProgressIncrementalRestore> {

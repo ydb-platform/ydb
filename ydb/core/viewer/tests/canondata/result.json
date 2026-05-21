@@ -4667,6 +4667,26 @@
             "TotalGroups": 5
         }
     ],
+    "test.TestViewer.test_viewer_groups_sort_by_vdisk_slot_usage_with_allocation_units": {
+        "with_allocation_units": {
+            "FoundGroups": 5,
+            "HasMaxVDiskSlotUsage": true,
+            "NeedFilter": false,
+            "NeedLimit": false,
+            "NeedSort": false,
+            "Problems": [],
+            "ReturnedGroups": 1
+        },
+        "without_allocation_units": {
+            "FoundGroups": 5,
+            "HasMaxVDiskSlotUsage": true,
+            "NeedFilter": false,
+            "NeedLimit": false,
+            "NeedSort": false,
+            "Problems": [],
+            "ReturnedGroups": 1
+        }
+    },
     "test.TestViewer.test_viewer_groups_with_invalid_database": {
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Unknown database\n</p></body></html>"

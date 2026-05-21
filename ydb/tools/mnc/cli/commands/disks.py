@@ -84,7 +84,7 @@ async def split(
         "part_count": part_count,
         "part_size": str(part_size) if part_size is not None else None,
     }
-    result = await agent_client.post_json(host, "/disks/split", payload, parent_task=task)
+    result = await agent_client.post_json_and_wait(host, "/disks/split", payload, parent_task=task)
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -115,7 +115,7 @@ async def unite(host: str, devices: list[common.Device], parent_task: progress.T
     if len(devices) == 0:
         return True
     task = await parent_task.add_subtask(f"[yellow]{host} [bold cyan]unite disks", total=len(devices))
-    result = await agent_client.post_json(host, "/disks/unite", {"devices": [_device_to_json(device) for device in devices]}, parent_task=task)
+    result = await agent_client.post_json_and_wait(host, "/disks/unite", {"devices": [_device_to_json(device) for device in devices]}, parent_task=task)
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -142,7 +142,7 @@ async def obliterate(host: str, devices: list[common.Device], parent_task: progr
     if len(devices) == 0:
         return True
     task = await parent_task.add_subtask(f"[yellow]{host} [bold cyan]obliterate disks", total=len(devices))
-    result = await agent_client.post_json(host, "/disks/obliterate", {"devices": [_device_to_json(device) for device in devices]}, parent_task=task)
+    result = await agent_client.post_json_and_wait(host, "/disks/obliterate", {"devices": [_device_to_json(device) for device in devices]}, parent_task=task)
     if result is None:
         await task.update(advance=len(devices), visible=False)
         return False
@@ -177,8 +177,8 @@ def add_arguments(parser):
     split_parser = subparsers.add_parser("split")
     common.add_common_options(split_parser)
     split_size = split_parser.add_mutually_exclusive_group(required=True)
-    split_size.add_argument("--part_count", type=int, default=None, help="count of parts which were made from each disk")
-    split_size.add_argument("--part-size", "--part_size", type=common.Memory, default=None, help="size of each part")
+    split_size.add_argument("--part-count", type=int, default=None, help="count of parts which were made from each disk")
+    split_size.add_argument("--part-size", type=common.Memory, default=None, help="size of each part")
 
     unite_parser = subparsers.add_parser("unite")
     common.add_common_options(unite_parser)

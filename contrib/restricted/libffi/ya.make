@@ -192,7 +192,7 @@ ELSEIF (ARCH_X86_64 AND OS_WINDOWS)
         configs/x86_64-microsoft-windows/win64_intel.masm
         src/x86/ffiw64.c
     )
-ELSEIF (OS_NONE)
+ELSEIF (OS_NONE OR OS_FREERTOS)
     ADDINCL(
         contrib/restricted/libffi/configs/x86_64-unknown-linux-gnu
         GLOBAL contrib/restricted/libffi/configs/x86_64-unknown-linux-gnu/include

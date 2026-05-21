@@ -107,11 +107,34 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                 onFinishWaiting();
             }
             Cerr << Endl << Colors.Red() << e.what() << Colors.OldColor() << Endl;
+
+            if (AuditEnabled) {
+                NJson::TJsonValue auditInfo;
+                auditInfo["seq"] = AuditSeq++;
+                auditInfo["error"] = e.what();
+                YDB_CLI_LOG(Info, "[AUDIT] fatal_error " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
+            }
             break;
+        }
+
+        if (AuditEnabled) {
+            NJson::TJsonValue auditInfo;
+            auditInfo["seq"] = AuditSeq++;
+            auditInfo["input_tokens"] = output.Usage.InputTokens;
+            auditInfo["output_tokens"] = output.Usage.OutputTokens;
+            auditInfo["cached_input_tokens"] = output.Usage.CachedInputTokens;
+            YDB_CLI_LOG(Info, "[AUDIT] model_usage " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
         }
 
         if (!output.Text && output.ToolCalls.empty()) {
             Cout << Colors.Yellow() << "Model answer is empty, try to reformulate question." << Colors.OldColor() << Endl;
+
+            if (AuditEnabled) {
+                NJson::TJsonValue auditInfo;
+                auditInfo["seq"] = AuditSeq++;
+                auditInfo["error"] = "Model answer is empty.";
+                YDB_CLI_LOG(Info, "[AUDIT] fatal_error " << NJson::WriteJson(&auditInfo, /* formatOutput = */ false));
+            }
             break;
         }
 

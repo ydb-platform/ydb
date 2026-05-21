@@ -419,7 +419,7 @@ public:
         return false;
     }
 
-    void AddChild(const TString& key, IYPathServicePtr service)
+    void AddChild(const std::string& key, IYPathServicePtr service)
     {
         YT_VERIFY(Services_.emplace(key, service).second);
     }
@@ -430,7 +430,7 @@ public:
     }
 
 private:
-    THashMap<TString, IYPathServicePtr> Services_;
+    THashMap<std::string, IYPathServicePtr> Services_;
     THashMap<TInternedAttributeKey, TYsonCallback> Attributes_;
 };
 
@@ -473,7 +473,7 @@ bool TCompositeMapService::GetBuiltinAttribute(TInternedAttributeKey key, NYson:
     return TVirtualMapBase::GetBuiltinAttribute(key, consumer);
 }
 
-TIntrusivePtr<TCompositeMapService> TCompositeMapService::AddChild(const TString& key, IYPathServicePtr service)
+TIntrusivePtr<TCompositeMapService> TCompositeMapService::AddChild(const std::string& key, IYPathServicePtr service)
 {
     Impl_->AddChild(key, std::move(service));
     return this;

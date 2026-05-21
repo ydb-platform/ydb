@@ -1,7 +1,8 @@
-
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_metrics.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #undef IS_CTX_LOG_PRIORITY_ENABLED

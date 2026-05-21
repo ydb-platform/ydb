@@ -214,6 +214,7 @@ message TEvCommitBlobSeqResult {
 message TEvDiscardSpoiledBlobSeq {
     repeated TBlobSeqId Items = 1;
     repeated TS3Locator S3Locators = 2;
+    optional bool S3SlowDown = 3; // set when at least one S3Locator is being discarded due to S3 SlowDown response
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

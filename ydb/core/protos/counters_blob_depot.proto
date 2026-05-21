@@ -33,6 +33,8 @@ enum ECumulativeCounters {
     COUNTER_S3_DELETES_OK = 8 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/Ok"}];
     COUNTER_S3_DELETES_ERROR = 9 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/Error"}];
     COUNTER_S3_DELETES_BYTES = 10 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/OkBytes"}];
+    COUNTER_S3_DELETES_SLOW_DOWN = 11 [(NKikimr.CounterOpts) = {Name: "S3/Deletes/SlowDown"}];
+    COUNTER_S3_PUTS_SLOW_DOWN = 12 [(NKikimr.CounterOpts) = {Name: "S3/Puts/SlowDown"}];
 }
 
 enum EPercentileCounters {

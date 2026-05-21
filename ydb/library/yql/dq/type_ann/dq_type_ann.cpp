@@ -561,7 +561,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
                     }
                     continue;
                 }
-                if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                if (name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows", "FullscanLimit"})) {
                    if (!EnsureConvertibleTo<ui64>(value, name.Content(), ctx)) {
                        return nullptr;
                    }
@@ -688,7 +688,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 11, 13, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 11, 14, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
@@ -759,6 +759,12 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
     const auto rightInputType = rightInput.Raw()->GetTypeAnn();
     const auto& rightRowType = GetSeqItemType(*rightInputType);
     if (!EnsureStructType(input->Pos(), rightRowType, ctx)) {
+        return TStatus::Error;
+    }
+    if (input->ChildrenSize() > TDqCnStreamLookup::idx_FullscanLimit &&
+        !input->Child(TDqCnStreamLookup::idx_FullscanLimit)->IsCallable("Void") &&
+        (!EnsureAtom(*input->Child(TDqCnStreamLookup::idx_FullscanLimit), ctx) ||
+         !EnsureConvertibleTo<ui64>(cnStreamLookup.FullscanLimit().Ref(), "FullscanLimit", ctx))) {
         return TStatus::Error;
     }
     bool isMultiget = input->ChildrenSize() > TDqCnStreamLookup::idx_IsMultiget
@@ -1430,6 +1436,89 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 4, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto stream = input->Child(TDqPhyWatermarkGenerator::idx_Input);
+    auto& watermarkExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_WatermarkExtractor);
+    auto& partitionIdExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_PartitionIdExtractor);
+    auto watermarkSettings = input->Child(TDqPhyWatermarkGenerator::idx_WatermarkSettings);
+
+    if (stream->GetTypeAnn() && stream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(stream->GetTypeAnn());
+        return TStatus::Ok;
+    }
+    bool isStream;
+    if (!EnsureSeqType(*stream, ctx, &isStream)) {
+        return TStatus::Error;
+    }
+    auto itemType = [&]() {
+        if (isStream) {
+            return stream->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
+        } else {
+            return stream->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        }
+    }();
+
+    bool isUniversal1;
+    bool isUniversal2;
+    auto status = ConvertToLambda(watermarkExtractor, ctx, isUniversal1, 1);
+    status = status.Combine(ConvertToLambda(partitionIdExtractor, ctx, isUniversal2, 1));
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (isUniversal1 || isUniversal2) {
+        input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+        return TStatus::Ok;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(watermarkExtractor, {itemType}, ctx)) {
+        return TStatus::Error;
+    }
+    if (!watermarkExtractor->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+    if (!EnsureSpecificDataType(*watermarkExtractor, EDataSlot::Timestamp, ctx, true)) {
+        return TStatus::Error;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(partitionIdExtractor, {itemType}, ctx)) {
+        return TStatus::Error;
+    }
+    if (!partitionIdExtractor->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+    if (!EnsureSpecificDataType(*partitionIdExtractor, EDataSlot::Uint64, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureValidSettings(
+        *watermarkSettings,
+        {"WatermarksLateArrivalDelayUs", "WatermarksGranularityUs", "WatermarksIdleTimeoutUs"},
+        [](TStringBuf /* name */, TExprNode& node, TExprContext& ctx) -> bool {
+            if (!EnsureArgsCount(node, 2, ctx)) {
+                return false;
+            }
+            if (!EnsureAtom(node.Tail(), ctx)) {
+                return false;
+            }
+            return true;
+        },
+        ctx
+    )) {
+        return TStatus::Error;
+    }
+
+    if (isStream) {
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
+    } else {
+        input->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
+    }
+    return TStatus::Ok;
+}
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -1551,6 +1640,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqPhyHashCombine::Match(input.Get())) {
                 return AnnotateDqHashCombine(input, ctx);
+            }
+
+            if (TDqPhyWatermarkGenerator::Match(input.Get())) {
+                return AnnotateDqWatermarkGenerator(input, ctx);
             }
 
             return coreTransformer->Transform(input, output, ctx);

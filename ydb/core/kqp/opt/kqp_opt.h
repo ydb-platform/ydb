@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 

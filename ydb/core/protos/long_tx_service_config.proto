@@ -16,4 +16,5 @@ message TLongTxServiceConfig {
     optional uint64 SnapshotsRegistryUpdateIntervalSeconds = 6 [default = 5];
     optional TRetrySettings PublisherSettings = 7;
     optional TRetrySettings SubscriberSettings = 8;
+    optional uint64 PrefillTimeoutSeconds = 9 [default = 5];
 }

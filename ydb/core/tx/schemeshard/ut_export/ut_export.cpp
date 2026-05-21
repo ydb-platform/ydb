@@ -3603,7 +3603,21 @@ state: STATE_ENABLED
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
-    void IndexMaterialization(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, bool enabled, const TString& indexDesc) {
+    // Round-trip: export an indexed table to S3, then import it back using the requested
+    // IndexPopulationMode. Verifies that on import the index ends up in Ready state with
+    // all impl tables present.
+    //
+    // The `includeIndexData` flag controls whether the backup contains materialized impl
+    // tables. Combined with `populationMode` it covers the full matrix:
+    //   - true  + BUILD  : materialized data is present in S3 but ignored; index is rebuilt.
+    //   - true  + IMPORT : materialized data is restored from S3.
+    //   - true  + AUTO   : "import materialized" branch of AUTO is taken.
+    //   - false + BUILD  : no materialized data; index is built (default path).
+    //   - false + AUTO   : "build otherwise" fallback branch of AUTO is taken.
+    //   - false + IMPORT : combination is invalid by design: there is nothing to import.
+    void ExportImportWithIndex(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, const TString& indexDesc,
+            bool includeIndexData, Ydb::Import::ImportFromS3Settings::IndexPopulationMode populationMode) {
+
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -3619,23 +3633,17 @@ state: STATE_ENABLED
         )", indexDesc.c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        const auto expectedStatus = enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED;
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              include_index_data: true
+              include_index_data: %s
               items {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""
               }
             }
-        )", s3Port), "", "", expectedStatus);
-
-        if (!enabled) {
-            return;
-        }
-
+        )", s3Port, includeIndexData ? "true" : "false"));
         env.TestWaitNotification(runtime, txId);
 
         auto desc = DescribePrivatePath(runtime, "/MyRoot/Table/index");
@@ -3643,11 +3651,19 @@ state: STATE_ENABLED
         const auto indexType = tableIndex.GetType();
         const TVector<TString> indexColumns(tableIndex.GetKeyColumnNames().begin(), tableIndex.GetKeyColumnNames().end());
 
+        // Verify that impl-table schemas were (or weren't) materialized to S3 as expected.
         for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
-            UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
+            const auto* schemePb = s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb");
+            if (includeIndexData) {
+                UNIT_ASSERT(schemePb);
+            } else {
+                UNIT_ASSERT(!schemePb);
+            }
         }
 
         // Round-trip: import back and verify impl tables exist on the imported table.
+        const TString populationModeStr =
+            Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(populationMode);
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
@@ -3656,9 +3672,9 @@ state: STATE_ENABLED
                 source_prefix: ""
                 destination_path: "/MyRoot/TableImported"
               }
-              index_population_mode: INDEX_POPULATION_MODE_IMPORT
+              index_population_mode: %s
             }
-        )", s3Port));
+        )", s3Port, populationModeStr.c_str()));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
@@ -3675,135 +3691,130 @@ state: STATE_ENABLED
         }
     }
 
-    Y_UNIT_TEST(IndexMaterializationDisabled) {
-        EnvOptions().EnableIndexMaterialization(false);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), false, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-            }
-        )");
+#define Y_UNIT_TEST_INDEX_POPULATION_MODES(name, indexDesc)                                              \
+    /* Materialized impl tables present in backup; import rebuilds the index from scratch. */           \
+    Y_UNIT_TEST(name##_Build) {                                                                          \
+        EnvOptions().EnableIndexMaterialization(true);                                                   \
+        ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/true,\
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD);                             \
+    }                                                                                                    \
+    /* Materialized impl tables present in backup; import restores them. */                              \
+    Y_UNIT_TEST(name##_Import) {                                                                         \
+        EnvOptions().EnableIndexMaterialization(true);                                                   \
+        ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/true,\
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT);                            \
+    }                                                                                                    \
+    /* AUTO with materialized data available: should take the "import materialized" branch. */          \
+    Y_UNIT_TEST(name##_AutoImport) {                                                                     \
+        EnvOptions().EnableIndexMaterialization(true);                                                   \
+        ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/true,\
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO);                              \
+    }                                                                                                    \
+    /* AUTO without materialized data: should fall back to the "build otherwise" branch. */             \
+    Y_UNIT_TEST(name##_AutoBuild) {                                                                      \
+        EnvOptions().EnableIndexMaterialization(true);                                                   \
+        ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/false,\
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO);                              \
     }
 
-    Y_UNIT_TEST(IndexMaterialization) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-            }
-        )");
-    }
+    Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterialization, R"(
+        IndexDescription {
+          Name: "index"
+          KeyColumnNames: ["value"]
+        }
+    )")
 
-    Y_UNIT_TEST(IndexMaterializationGlobal) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobal
-            }
-        )");
-    }
+    Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterializationGlobal, R"(
+        IndexDescription {
+          Name: "index"
+          KeyColumnNames: ["value"]
+          Type: EIndexTypeGlobal
+        }
+    )")
 
-    Y_UNIT_TEST(IndexMaterializationGlobalAsync) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalAsync
-            }
-        )");
-    }
+    Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterializationGlobalAsync, R"(
+        IndexDescription {
+          Name: "index"
+          KeyColumnNames: ["value"]
+          Type: EIndexTypeGlobalAsync
+        }
+    )")
 
-    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["embedding"]
-              Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription {
-                Settings {
-                  settings {
-                    metric: DISTANCE_COSINE
-                    vector_type: VECTOR_TYPE_FLOAT
-                    vector_dimension: 1024
-                  }
-                  clusters: 4
-                  levels: 5
+    Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterializationGlobalVectorKmeansTree, R"(
+        IndexDescription {
+          Name: "index"
+          KeyColumnNames: ["embedding"]
+          Type: EIndexTypeGlobalVectorKmeansTree
+          VectorIndexKmeansTreeDescription {
+            Settings {
+              settings {
+                metric: DISTANCE_COSINE
+                vector_type: VECTOR_TYPE_FLOAT
+                vector_dimension: 1024
+              }
+              clusters: 4
+              levels: 5
+            }
+          }
+        }
+    )")
+
+    Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterializationGlobalVectorKmeansTreePrefix, R"(
+        IndexDescription {
+          Name: "index"
+          KeyColumnNames: ["prefix", "embedding"]
+          Type: EIndexTypeGlobalVectorKmeansTree
+          VectorIndexKmeansTreeDescription {
+            Settings {
+              settings {
+                metric: DISTANCE_COSINE
+                vector_type: VECTOR_TYPE_FLOAT
+                vector_dimension: 1024
+              }
+              clusters: 4
+              levels: 5
+            }
+          }
+        }
+    )")
+
+    Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterializationGlobalFulltextPlain, R"(
+        IndexDescription {
+          Name: "index"
+          KeyColumnNames: ["value"]
+          Type: EIndexTypeGlobalFulltextPlain
+          FulltextIndexDescription {
+            Settings {
+              columns: {
+                column: "value"
+                analyzers: {
+                  tokenizer: STANDARD
+                  use_filter_lowercase: true
                 }
               }
             }
-        )");
-    }
+          }
+        }
+    )")
 
-    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTreePrefix) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["prefix", "embedding"]
-              Type: EIndexTypeGlobalVectorKmeansTree
-              VectorIndexKmeansTreeDescription {
-                Settings {
-                  settings {
-                    metric: DISTANCE_COSINE
-                    vector_type: VECTOR_TYPE_FLOAT
-                    vector_dimension: 1024
-                  }
-                  clusters: 4
-                  levels: 5
+    Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterializationGlobalFulltextRelevance, R"(
+        IndexDescription {
+          Name: "index"
+          KeyColumnNames: ["value"]
+          Type: EIndexTypeGlobalFulltextRelevance
+          FulltextIndexDescription {
+            Settings {
+              columns: {
+                column: "value"
+                analyzers: {
+                  tokenizer: STANDARD
+                  use_filter_lowercase: true
                 }
               }
             }
-        )");
-    }
-
-    Y_UNIT_TEST(IndexMaterializationGlobalFulltextPlain) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextPlain
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )");
-    }
-
-    Y_UNIT_TEST(IndexMaterializationGlobalFulltextRelevance) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextRelevance
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )");
-    }
+          }
+        }
+    )")
 
     Y_UNIT_TEST(IndexMaterializationTwoTables) {
         EnvOptions().EnableIndexMaterialization(true);

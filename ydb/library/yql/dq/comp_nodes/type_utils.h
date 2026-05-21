@@ -28,20 +28,21 @@ struct TWideUnboxedEqual {
 };
 
 struct TWideUnboxedHasher {
-    TWideUnboxedHasher(const TKeyTypes& types)
-        : Types(types)
+    TWideUnboxedHasher(const TKeyTypes& types, const ui64 seed = 0ULL)
+        : Seed(seed)
+        , Types(types)
     {}
 
     NUdf::THashType operator()(const NUdf::TUnboxedValuePod* values) const {
         if (Types.size() == 1U) {
             if (const auto v = *values) {
-                return NUdf::GetValueHash(Types.front().first, v);
+                return CombineHashes(Seed, NUdf::GetValueHash(Types.front().first, v));
             } else {
                 return HashOfNull;
             }
         }
 
-        NUdf::THashType hash = 0ULL;
+        NUdf::THashType hash = Seed;
         for (const auto& type : Types) {
             if (const auto v = *values++) {
                 hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
@@ -52,6 +53,8 @@ struct TWideUnboxedHasher {
         return hash;
     }
 
+private:
+    const ui64 Seed;
     const TKeyTypes& Types;
 };
 

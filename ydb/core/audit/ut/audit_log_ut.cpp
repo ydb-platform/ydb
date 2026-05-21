@@ -1,4 +1,4 @@
-#include "audit_log_impl.h"
+#include <ydb/core/audit/audit_log_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

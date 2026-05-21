@@ -301,7 +301,7 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
-            std::optional<ui32> MessagesInBatch;
+            ui32 MessagesCount = 1;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 

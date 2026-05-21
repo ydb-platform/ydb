@@ -668,7 +668,7 @@ void CmdWrite(const TCmdWriteOptions&);
 
 struct TBatchedMessageSpec {
     ui64 SeqNo = 0;
-    ui64 BatchSize = 1;
+    ui64 MessagesCount = 1;
     ui64 Offset = Max<ui64>();
     char Fill = 'a';
 };

@@ -1431,7 +1431,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(TString{p.Msg.SourceId}, p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey), p.Msg.MessagesInBatch); //remove curOffset when LB will report CTime
+                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey), p.Msg.MessagesCount); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1510,7 +1510,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             CurrentTimestamp,
             p.Msg.ProducerEpoch);
 
-        curOffset += p.Msg.MessagesInBatch.value_or(1);
+        curOffset += p.Msg.MessagesCount;
         BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;

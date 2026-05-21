@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         auto ts = TInstant::Seconds(100);
         batch.AddBlob(TClientBlob(
             TString("src"), 1, TString("data"), TMaybe<TPartData>(),
-            ts, ts, 0, "", "", std::optional<ui64>{5}
+            ts, ts, 0, "", "", 5
         ));
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
@@ -83,8 +83,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
-        UNIT_ASSERT(batch.Blobs[0].BatchSize.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*batch.Blobs[0].BatchSize, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].MessagesCount, 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
     }
@@ -93,10 +92,10 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         TBatch batch(0, 0);
         const auto ts = TInstant::Seconds(100);
 
-        auto makeBlob = [&](ui64 seqNo, std::optional<ui64> batchSize) {
+        auto makeBlob = [&](ui64 seqNo, ui32 messagesCount = 1) {
             return TClientBlob(
                 TString("src"), seqNo, TString("data"), TMaybe<TPartData>(),
-                ts, ts, 0, "", "", batchSize);
+                ts, ts, 0, "", "", messagesCount);
         };
 
         batch.AddBlob(makeBlob(1, 5));
@@ -122,7 +121,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
 
         batch.AddBlob(TClientBlob(
             TString("src"), 1, TString("data"), TMaybe<TPartData>(),
-            ts, ts, 0, "", "", std::optional<ui64>{5}));
+            ts, ts, 0, "", "", 5));
 
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0), Max<ui32>());
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(10, 0), 0u);
@@ -161,7 +160,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
 
         batch.AddBlob(TClientBlob(
             TString("src"), 1, TString("a"), TMaybe<TPartData>(),
-            ts, ts, 0, "", "", std::optional<ui64>{5}));
+            ts, ts, 0, "", "", 5));
 
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), Max<ui32>());
@@ -169,8 +168,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         batch.Pack();
         batch.Unpack();
 
-        UNIT_ASSERT(batch.Blobs[0].BatchSize.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*batch.Blobs[0].BatchSize, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].MessagesCount, 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), Max<ui32>());
     }
@@ -189,7 +187,8 @@ bool operator ==(const TClientBlob &lhs, const TClientBlob &rhs) {
         lhs.CreateTimestamp == rhs.CreateTimestamp &&
         lhs.UncompressedSize == rhs.UncompressedSize &&
         lhs.PartitionKey == rhs.PartitionKey &&
-        lhs.ExplicitHashKey == rhs.ExplicitHashKey;
+        lhs.ExplicitHashKey == rhs.ExplicitHashKey &&
+        lhs.MessagesCount == rhs.MessagesCount;
 }
 
 Y_UNIT_TEST_SUITE(ClientBlobSerialization) {

@@ -74,7 +74,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(std::move(p.Msg.SourceId), p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                        p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey), p.Msg.MessagesInBatch); //remove curOffset when LB will report CTime
+                        p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey), p.Msg.MessagesCount); //remove curOffset when LB will report CTime
 
     bool lastBlobPart = blob.IsLastPart();
 
@@ -135,7 +135,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                 << " NewHead: " << CompactionBlobEncoder.NewHead
         );
 
-        curOffset += p.Msg.MessagesInBatch.value_or(1);
+        curOffset += p.Msg.MessagesCount;
         CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
 
@@ -288,7 +288,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             ui16 partNo = blob.GetPartNo();
             const auto offsetPartNo = std::make_pair(offset, partNo);
             if (blob.IsLastPart()) {
-                offset += blob.BatchSize.value_or(1);
+                offset += blob.MessagesCount;
             }
 
             if (FirstCompactionPart && (offsetPartNo <= *FirstCompactionPart)) {
@@ -354,7 +354,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
-                .MessagesInBatch = blob.BatchSize,
+                .MessagesCount = blob.MessagesCount,
             }, std::nullopt};
             msg.Internal = true;
 

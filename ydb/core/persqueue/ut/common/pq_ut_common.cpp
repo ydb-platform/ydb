@@ -717,7 +717,7 @@ void AssertBatchedReadResults(
             UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
         }
         UNIT_ASSERT(msg.HasBatchSize());
-        UNIT_ASSERT_VALUES_EQUAL(msg.GetBatchSize(), exp.BatchSize);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetBatchSize(), exp.MessagesCount);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
         UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
     }
@@ -771,7 +771,7 @@ void CmdReadAndAssertBatched(
                 UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
             }
             UNIT_ASSERT(msg.HasBatchSize());
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetBatchSize(), exp.BatchSize);
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetBatchSize(), exp.MessagesCount);
             UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
             UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
         }

@@ -63,7 +63,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
     flags.F.HasKinesisData = !blob.PartitionKey.empty();
-    flags.F.HasBatch = blob.BatchSize.has_value();
+    flags.F.HasBatch = blob.MessagesCount > 1;
     return flags;
 }
 
@@ -137,7 +137,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
         if (Batch.Blobs[i].IsLastPart()) {
             ++lastPartCount;
-            offsetSpan += Batch.Blobs[i].BatchSize.value_or(1);
+            offsetSpan += Batch.Blobs[i].MessagesCount;
         }
         ++reorderMap[TStringBuf(Batch.Blobs[i].SourceId)];
     }
@@ -291,7 +291,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
 
     bool hasBatch = false;
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
-        if (Batch.Blobs[i].BatchSize.has_value()) {
+        if (Batch.Blobs[i].MessagesCount > 1) {
             hasBatch = true;
             break;
         }
@@ -301,8 +301,8 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
         ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
         auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
-            ui32 batchSize = Batch.Blobs[i].BatchSize.value_or(0);
-            chunk->AddData((const char*)&batchSize, sizeof(ui32));
+            ui32 messagesCount = Batch.Blobs[i].MessagesCount;
+            chunk->AddData((const char*)&messagesCount, sizeof(ui32));
         }
         chunk->Seal();
         WriteActualChunkSize(Batch.PackedData, sizeOffset);
@@ -457,16 +457,16 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         uncompressedSize.resize(totalBlobs); //fill with zero-s
     }
 
-    TVector<ui32> batchSize;
-    batchSize.reserve(totalBlobs);
+    TVector<ui32> messagesCounts;
+    messagesCounts.reserve(totalBlobs);
     if (data < dataEnd) {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            batchSize.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
+            messagesCounts.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
         }
     } else {
-        batchSize.resize(totalBlobs);
+        messagesCounts.resize(totalBlobs);
     }
 
     AFL_ENSURE(data == dataEnd);
@@ -497,9 +497,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         processedBlob.PartitionKey = std::move(partitionKey[i]);
         processedBlob.ExplicitHashKey = std::move(explicitHash[i]);
 
-        if (batchSize[pos[i]] != 0) {
-            processedBlob.BatchSize = batchSize[pos[i]];
-        }
+        processedBlob.MessagesCount = messagesCounts[pos[i]] != 0 ? messagesCounts[pos[i]] : 1;
 
         if (lastPart) {
             ++currentSID;
@@ -647,7 +645,7 @@ void Serialize(const TClientBlob& blob, TBuffer& res) {
     }
 
     if (flags.F.HasBatch) {
-        res.Append((const char*)&(blob.BatchSize.value()), sizeof(ui64));
+        res.Append((const char*)&blob.MessagesCount, sizeof(ui32));
     }
 
     ui64 writeTimestampMs = blob.WriteTimestamp.MilliSeconds();
@@ -705,10 +703,11 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
             data += explicitHashKey.size();
     }
 
-    std::optional<ui64> batchSize;
+    ui32 messagesCount = 1;
     if (flags.F.HasBatch) {
-        batchSize = ReadUnaligned<ui64>(data);
-        data += sizeof(ui64);
+        messagesCount = ReadUnaligned<ui32>(data);
+        data += sizeof(ui32);
+        Y_ENSURE(messagesCount >= 1);
     }
 
     TInstant writeTimestamp;
@@ -738,6 +737,6 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
 
     return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData,
                        writeTimestamp, createTimestamp, uncompressedSize,
-                       std::move(partitionKey), std::move(explicitHashKey), batchSize);
+                       std::move(partitionKey), std::move(explicitHashKey), messagesCount);
 }
 } //NKikimr :: NPQ

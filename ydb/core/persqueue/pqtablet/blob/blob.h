@@ -41,12 +41,12 @@ struct TClientBlob {
     ui32 UncompressedSize;
     TString PartitionKey;
     TString ExplicitHashKey;
-    std::optional<ui32> BatchSize;
+    ui32 MessagesCount = 1;
 
     TClientBlob();
     TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp,
-        const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey, const std::optional<ui32>& batchSize = {});
+        const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey, ui32 messagesCount = 1);
 
     ui32 GetSerializedSize() const;
     ui16 GetPartNo() const;

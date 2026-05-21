@@ -359,9 +359,7 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
             cc->SetTotalSize(blob.PartData->TotalSize);
     }
 
-    if (blob.BatchSize) {
-        cc->SetBatchSize(*blob.BatchSize);
-    }
+    cc->SetBatchSize(blob.MessagesCount);
 }
 
 template <typename T>
@@ -518,7 +516,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
                 if (res.IsLastPart()) {
                     PartNo = 0;
-                    Offset += res.BatchSize.value_or(1);
+                    Offset += res.MessagesCount;
                     if (ReachedLastOffset()) {
                         needStop = true;
                         break;
@@ -654,7 +652,7 @@ TReadAnswer TReadInfo::FormAnswer(
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
                 PartNo = 0;
-                Offset += writeBlob.BatchSize.value_or(1);
+                Offset += writeBlob.MessagesCount;
             } else {
                 ++PartNo;
             }

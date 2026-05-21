@@ -34,12 +34,13 @@ bool TPartData::IsLastPart() const {
 
 TClientBlob::TClientBlob()
     : SeqNo(0)
-    , UncompressedSize(0) {
+    , UncompressedSize(0)
+    , MessagesCount(1) {
 }
 
 TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
-        TString&& partitionKey, TString&& explicitHashKey, const std::optional<ui32>& batchSize)
+        TString&& partitionKey, TString&& explicitHashKey, ui32 messagesCount)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -49,8 +50,9 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , UncompressedSize(uncompressedSize)
         , PartitionKey(std::move(partitionKey))
         , ExplicitHashKey(std::move(explicitHashKey))
-        , BatchSize(batchSize) {
+        , MessagesCount(messagesCount) {
     Y_ENSURE(PartitionKey.size() <= 256);
+    Y_ENSURE(MessagesCount >= 1);
 }
 
 
@@ -141,7 +143,7 @@ void TBatch::AddBlob(const TClientBlob &b) {
     Blobs.push_back(b);
     unpackedSize += b.GetSerializedSize();
     if (b.IsLastPart()) {
-        count += b.BatchSize.value_or(1);
+        count += b.MessagesCount;
     } else {
         InternalPartsPos.push_back(i);
     }
@@ -204,7 +206,7 @@ ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
             return static_cast<ui32>(i);
         }
         if (Blobs[i].IsLastPart()) {
-            curOffset += Blobs[i].BatchSize.value_or(1);
+            curOffset += Blobs[i].MessagesCount;
             curPartNo = 0;
         } else {
             ++curPartNo;

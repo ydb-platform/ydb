@@ -368,7 +368,7 @@ class ClusterSuspendNodeNemesis(MonitoredAgentActor):
         self.on_success_inject_fault()
 
 
-class ClusterRollingUpdateNemesis(MonitoredAgentActor):
+class ClusterRollingRestartNemesis(MonitoredAgentActor):
     """Rolling switch_version + kill node + kill slots on the local host."""
 
     def __init__(self) -> None:
@@ -376,7 +376,9 @@ class ClusterRollingUpdateNemesis(MonitoredAgentActor):
         self._step_id = itertools.count(1)
 
     def inject_fault(self, payload=None) -> None:
+        self._logger.error("killing node with ic: %s, for: %s secs", payload['node_ic_port'], payload['duration'])
         del payload
+        return
         cluster = require_external_cluster()
         node = _resolve_local_node(cluster)
         if node is None:

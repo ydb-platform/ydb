@@ -34,7 +34,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterKillTenantSlotBrokerNemesis,
     ClusterKillTxAllocatorNemesis,
     ClusterReBalanceTabletsNemesis,
-    # ClusterRollingUpdateNemesis,
+    ClusterRollingRestartNemesis,
     ClusterSafelyBreakDiskNemesis,
     ClusterSafelyCleanupDisksNemesis,
     ClusterSerialKillNodeNemesis,
@@ -59,6 +59,9 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.serial_staggered_
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.topology_fanout_planner import (
     BridgePileFanoutPlanner,
     DataCenterFanoutPlanner,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.rolling_restart_planner import (
+    RollingRestartNemesisPlanner
 )
 
 # ---------------------------------------------------------------------------
@@ -146,6 +149,13 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     #     "ui_group": "NetworkNemesis",
     #     "planner_cls": DnsNemesisPlanner,
     # },
+
+    out["ClusterRollingRestartNemesis"] = {
+        "runner": ClusterRollingRestartNemesis(),
+        "schedule": 200,
+        "ui_group": _UI_GROUP,
+        "planner_factory": lambda nemesis_type_key: RollingRestartNemesisPlanner(),
+    }
     out["TimeSkewNemesis"] = {
         "runner": TimeSkewNemesis(),
         "schedule": 400,

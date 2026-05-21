@@ -7,14 +7,11 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-<<<<<<< HEAD
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
-=======
 #include <ydb/library/formats/arrow/size_calcer.h>
->>>>>>> 498aac2df31 (add ev read size calculator (#37292))
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>

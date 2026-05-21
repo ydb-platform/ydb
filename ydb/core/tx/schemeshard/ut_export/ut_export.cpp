@@ -3619,6 +3619,14 @@ state: STATE_ENABLED
             bool includeIndexData, Ydb::Import::ImportFromS3Settings::IndexPopulationMode populationMode,
             Ydb::StatusIds::StatusCode expectedImportStatus = Ydb::StatusIds::SUCCESS) {
 
+        // Enforce the contract documented above: importing in IMPORT mode requires materialized
+        // impl tables in the backup; otherwise the import must be expected to fail.
+        if (!includeIndexData && populationMode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT) {
+            UNIT_ASSERT_C(expectedImportStatus != Ydb::StatusIds::SUCCESS,
+                "includeIndexData=false with INDEX_POPULATION_MODE_IMPORT is invalid by design; "
+                "callers must pass a non-success expectedImportStatus");
+        }
+
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -3721,12 +3729,52 @@ state: STATE_ENABLED
         ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/false,\
             Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO);                              \
     }                                                                                                    \
+    /* No materialized data in backup + BUILD mode: index is built (default path). */                   \
+    Y_UNIT_TEST(name##_NoDataBuild) {                                                                    \
+        EnvOptions().EnableIndexMaterialization(true);                                                   \
+        ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/false,\
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD);                             \
+    }                                                                                                    \
     /* No materialized data in backup + IMPORT mode: invalid combination, import must fail. */          \
     Y_UNIT_TEST(name##_NoDataImport) {                                                                   \
         EnvOptions().EnableIndexMaterialization(true);                                                   \
         ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/false,\
             Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,                             \
             Ydb::StatusIds::CANCELLED);                                                                  \
+    }
+
+    // Negative test: when the EnableIndexMaterialization feature flag is off, an export request
+    // with `include_index_data: true` must be rejected
+    Y_UNIT_TEST(IndexMaterializationDisabledFeatureFlag) {
+        EnvOptions().EnableIndexMaterialization(false);
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), /*userSID=*/"", /*peerName=*/"", Ydb::StatusIds::PRECONDITION_FAILED);
     }
 
     Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterialization, R"(

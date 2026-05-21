@@ -94,7 +94,7 @@ message ExportToS3Settings {
     enum DataFormat {
         DATA_FORMAT_UNSPECIFIED = 0;
         CSV = 1;
-        PARQUET = 3;
+        PARQUET = 2;
     }
 
     message Item {

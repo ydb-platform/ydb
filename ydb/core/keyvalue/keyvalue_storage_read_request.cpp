@@ -342,9 +342,13 @@ public:
 
         ReceivedGetResults++;
         if (ReceivedGetResults == Batches.size()) {
-            SendResponseAndPassAway(IntermediateResult->IsTruncated ?
-                    NKikimrKeyValue::Statuses::RSTATUS_OVERRUN :
-                    NKikimrKeyValue::Statuses::RSTATUS_OK);
+            auto status = NKikimrKeyValue::Statuses::RSTATUS_OK;
+            if (IntermediateResult->IsTruncated) {
+                status = NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
+            } else if (IsRead()) {
+                status = ConvertStatus(std::get<TIntermediate::TRead>(GetCommand()).CumulativeStatus());
+            }
+            SendResponseAndPassAway(status);
         }
     }
 

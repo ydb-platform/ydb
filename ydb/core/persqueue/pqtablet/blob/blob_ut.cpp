@@ -68,6 +68,26 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.Capacity(), 0);
         UNIT_ASSERT(!batch.Blobs.empty());
     }
+
+    Y_UNIT_TEST(BatchSizePackUnpack) {
+        TBatch batch(100, 0);
+        auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("data"), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", std::optional<ui64>{5}
+        ));
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
+
+        batch.Pack();
+        batch.Unpack();
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT(batch.Blobs[0].BatchSize.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*batch.Blobs[0].BatchSize, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
+    }
 }
 
 bool operator ==(const TClientBlob &lhs, const TClientBlob &rhs) {

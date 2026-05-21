@@ -14,6 +14,13 @@ namespace {
 
 const ui32 CHUNK_SIZE_PLACEMENT = 0xCCCCCCCC;
 
+ui32 GetBatchClientBlobCount(const NKikimrPQ::TBatchHeader& header) {
+    if (header.HasClientBlobCount()) {
+        return header.GetClientBlobCount();
+    }
+    return header.GetCount() + header.GetInternalPartsCount();
+}
+
 NScheme::TDataRef GetChunk(const char*& data, const char *end)
 {
     ui32 size = ReadUnaligned<ui32>(data);
@@ -56,6 +63,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
     flags.F.HasKinesisData = !blob.PartitionKey.empty();
+    flags.F.HasBatch = blob.BatchSize.has_value();
     return flags;
 }
 
@@ -72,6 +80,9 @@ ui32 BlobSize(const TClientBlob& blob) {
     size += sizeof(ui64) /* WriteTimestamp */ + sizeof(ui64) /* CreateTimestamp */;
     if (flags.F.HasUncompressedSize) {
         size += sizeof(ui32);
+    }
+    if (flags.F.HasBatch) {
+        size += sizeof(ui64);
     }
     size += sizeof(ui16) + blob.SourceId.size();
     size += blob.Data.size();
@@ -119,17 +130,20 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
 
     Batch.Header.SetFormat(NKikimrPQ::TBatchHeader::ECompressed);
     Batch.Header.SetHasKinesis(hasKinesis);
-    ui32 totalCount = Batch.Blobs.size();
-    AFL_ENSURE(totalCount == Batch.Header.GetCount() + Batch.Header.GetInternalPartsCount());
-    ui32 cnt = 0;
+    const ui32 totalBlobs = Batch.Blobs.size();
+    ui32 offsetSpan = 0;
+    ui32 lastPartCount = 0;
     THashMap<TStringBuf, ui32> reorderMap;
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
         if (Batch.Blobs[i].IsLastPart()) {
-            ++cnt;
+            ++lastPartCount;
+            offsetSpan += Batch.Blobs[i].BatchSize.value_or(1);
         }
         ++reorderMap[TStringBuf(Batch.Blobs[i].SourceId)];
     }
-    AFL_ENSURE(cnt == Batch.Header.GetCount());
+    AFL_ENSURE(offsetSpan == Batch.Header.GetCount());
+    AFL_ENSURE(lastPartCount + Batch.Header.GetInternalPartsCount() == totalBlobs);
+    Batch.Header.SetClientBlobCount(totalBlobs);
     TVector<ui32> start(reorderMap.size(), 0);
     TVector<ui32> pos(Batch.Blobs.size(), 0);
     ui32 sum = 0;
@@ -275,6 +289,25 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
         WriteActualChunkSize(Batch.PackedData, sizeOffset);
     }
 
+    bool hasBatch = false;
+    for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
+        if (Batch.Blobs[i].BatchSize.has_value()) {
+            hasBatch = true;
+            break;
+        }
+    }
+
+    if (hasBatch) {
+        ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
+        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui64, false>>(Batch.PackedData);
+        for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
+            ui64 batchSize = Batch.Blobs[i].BatchSize.value_or(0);
+            chunk->AddData((const char*)&batchSize, sizeof(ui64));
+        }
+        chunk->Seal();
+        WriteActualChunkSize(Batch.PackedData, sizeOffset);
+    }
+
     Batch.Header.SetPayloadSize(Batch.PackedData.size());
 }
 
@@ -283,7 +316,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
     AFL_ENSURE(Batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     AFL_ENSURE(Batch.PackedData.size());
 
-    ui32 totalBlobs = Batch.Header.GetCount() + Batch.Header.GetInternalPartsCount();
+    ui32 totalBlobs = GetBatchClientBlobCount(Batch.Header);
     ui32 partsSize = 0;
     TVector<ui32> end;
     TVector<ui32> pos;
@@ -424,6 +457,18 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         uncompressedSize.resize(totalBlobs); //fill with zero-s
     }
 
+    TVector<ui64> batchSize;
+    batchSize.reserve(totalBlobs);
+    if (data < dataEnd) {
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
+        auto iter = chunk->MakeIterator();
+        for (ui32 i = 0; i < totalBlobs; ++i) {
+            batchSize.push_back(ReadUnaligned<ui64>(iter->Next().Data()));
+        }
+    } else {
+        batchSize.resize(totalBlobs);
+    }
+
     AFL_ENSURE(data == dataEnd);
 
     blobs->resize(totalBlobs);
@@ -452,6 +497,10 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         processedBlob.PartitionKey = std::move(partitionKey[i]);
         processedBlob.ExplicitHashKey = std::move(explicitHash[i]);
 
+        if (batchSize[pos[i]] != 0) {
+            processedBlob.BatchSize = batchSize[pos[i]];
+        }
+
         if (lastPart) {
             ++currentSID;
         }
@@ -474,7 +523,8 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::EUncompressed>::Unpack(TVector<
     AFL_ENSURE(Batch.PackedData.size());
     ui32 shift = 0;
 
-    for (ui32 i = 0; i < Batch.GetCount() + Batch.GetInternalPartsCount(); ++i) {
+    const ui32 totalBlobs = GetBatchClientBlobCount(Batch.Header);
+    for (ui32 i = 0; i < totalBlobs; ++i) {
         AFL_ENSURE(shift < Batch.PackedData.size());
         blobs->push_back(DeserializeClientBlob(Batch.PackedData.data() + shift, Batch.PackedData.size() - shift));
         shift += ReadUnaligned<ui32>(Batch.PackedData.data() + shift);
@@ -596,6 +646,10 @@ void Serialize(const TClientBlob& blob, TBuffer& res) {
                        blob.ExplicitHashKey.size());
     }
 
+    if (flags.F.HasBatch) {
+        res.Append((const char*)&(blob.BatchSize.value()), sizeof(ui64));
+    }
+
     ui64 writeTimestampMs = blob.WriteTimestamp.MilliSeconds();
     res.Append((const char*)&writeTimestampMs, sizeof(ui64));
 
@@ -651,6 +705,12 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
             data += explicitHashKey.size();
     }
 
+    std::optional<ui64> batchSize;
+    if (flags.F.HasBatch) {
+        batchSize = ReadUnaligned<ui64>(data);
+        data += sizeof(ui64);
+    }
+
     TInstant writeTimestamp;
     if (flags.F.HasWriteTimestamp) {
             writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
@@ -678,6 +738,6 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
 
     return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData,
                        writeTimestamp, createTimestamp, uncompressedSize,
-                       std::move(partitionKey), std::move(explicitHashKey));
+                       std::move(partitionKey), std::move(explicitHashKey), batchSize);
 }
 } //NKikimr :: NPQ

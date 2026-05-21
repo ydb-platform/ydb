@@ -39,7 +39,7 @@ TClientBlob::TClientBlob()
 
 TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
-        TString&& partitionKey, TString&& explicitHashKey)
+        TString&& partitionKey, TString&& explicitHashKey, const std::optional<ui64>& batchSize)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -48,7 +48,8 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , CreateTimestamp(createTimestamp)
         , UncompressedSize(uncompressedSize)
         , PartitionKey(std::move(partitionKey))
-        , ExplicitHashKey(std::move(explicitHashKey)) {
+        , ExplicitHashKey(std::move(explicitHashKey))
+        , BatchSize(batchSize) {
     Y_ENSURE(PartitionKey.size() <= 256);
 }
 
@@ -114,6 +115,7 @@ TBatch::TBatch(const ui64 offset, const ui16 partNo)
     Header.SetUnpackedSize(0);
     Header.SetCount(0);
     Header.SetInternalPartsCount(0);
+    Header.SetClientBlobCount(0);
 }
 
 TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
@@ -138,15 +140,16 @@ void TBatch::AddBlob(const TClientBlob &b) {
     ui32 i = Blobs.size();
     Blobs.push_back(b);
     unpackedSize += b.GetSerializedSize();
-    if (b.IsLastPart())
-        ++count;
-    else {
+    if (b.IsLastPart()) {
+        count += b.BatchSize.value_or(1);
+    } else {
         InternalPartsPos.push_back(i);
     }
 
     Header.SetUnpackedSize(unpackedSize);
     Header.SetCount(count);
     Header.SetInternalPartsCount(InternalPartsPos.size());
+    Header.SetClientBlobCount(Blobs.size());
 
     EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
 }
@@ -190,18 +193,24 @@ ui32 TBatch::GetPackedSize() const {
 
 ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
     AFL_ENSURE(!Packed);
-    if (offset < GetOffset() || offset == GetOffset() && partNo < GetPartNo())
+    if (offset < GetOffset() || offset == GetOffset() && partNo < GetPartNo()) {
         return Max<ui32>();
-    if (offset == GetOffset()) {
-        ui32 pos = partNo - GetPartNo();
-        return pos < Blobs.size() ? pos : Max<ui32>();
     }
-    ui32 pos = offset - GetOffset();
-    for (ui32 i = 0; i < InternalPartsPos.size() && InternalPartsPos[i] < pos; ++i)
-        ++pos;
-    //now pos is position of first client blob from offset
-    pos += partNo;
-    return  pos < Blobs.size() ? pos : Max<ui32>();
+
+    ui64 curOffset = GetOffset();
+    ui16 curPartNo = GetPartNo();
+    for (ui32 i = 0; i < Blobs.size(); ++i) {
+        if (curOffset == offset && curPartNo == partNo) {
+            return i;
+        }
+        if (Blobs[i].IsLastPart()) {
+            curOffset += Blobs[i].BatchSize.value_or(1);
+            curPartNo = 0;
+        } else {
+            ++curPartNo;
+        }
+    }
+    return Max<ui32>();
 }
 
 

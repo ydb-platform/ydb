@@ -101,6 +101,88 @@ Y_UNIT_TEST(TestCompaction) {
     });
 }
 
+Y_UNIT_TEST(BatchedMessagesWriteRead) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_batch_read";
+    const TString sessionId = "session_batch_read";
+    const TString user = "user1";
+    constexpr size_t dataSize = 16;
+
+    const TVector<TBatchedMessageSpec> writes = {
+        {.SeqNo = 1, .BatchSize = 5, .Offset = 0, .Fill = 'a'},
+        {.SeqNo = 2, .BatchSize = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 3, .BatchSize = 1, .Offset = 8, .Fill = 'c'},
+    };
+
+    for (const auto& w : writes) {
+        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.BatchSize, tc);
+    }
+
+    PQGetPartInfo(0, 9, tc);
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 0, 10, 16_MB, 0};
+    readSettings.User = user;
+    readSettings.Pipe = pipe;
+    readSettings.PartitionSessionId = 1;
+
+    CmdReadAndAssertBatched(readSettings, tc, writes, dataSize);
+}
+
+Y_UNIT_TEST(BatchedMessagesCompaction) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_batch_compact";
+    const TString sessionId = "session_batch_compact";
+    const TString user = "user1";
+    constexpr size_t dataSize = 7000_KB;
+
+    const TVector<TBatchedMessageSpec> writes = {
+        {.SeqNo = 1, .BatchSize = 5, .Offset = 0, .Fill = 'a'},
+        {.SeqNo = 2, .BatchSize = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 3, .BatchSize = 1, .Offset = 8, .Fill = 'c'},
+    };
+
+    for (const auto& w : writes) {
+        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.BatchSize, tc, static_cast<i64>(w.Offset));
+    }
+
+    PQGetPartInfo(0, 9, tc);
+
+    CmdRunCompaction(0, tc);
+
+    PQTabletRestart(tc);
+
+    PQGetPartInfo(0, 9, tc);
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    TPQCmdReadSettings readSettings{sessionId, 0, 0, 10, 64_MB, 0};
+    readSettings.User = user;
+    readSettings.Pipe = pipe;
+    readSettings.PartitionSessionId = 1;
+
+    CmdReadAndAssertBatched(readSettings, tc, writes, dataSize);
+}
+
 Y_UNIT_TEST(TestCmdReadWithLastOffset) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

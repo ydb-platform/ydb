@@ -427,6 +427,7 @@ message TCmdReadResult {
 
         optional string PartitionKey = 11;
         optional bytes ExplicitHash = 12;
+        optional uint64 BatchSize = 13;
     }
     optional uint64 MaxOffset = 2;
     repeated TResult Result = 3;

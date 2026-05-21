@@ -848,7 +848,7 @@ void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFu
                          const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
     Y_UNUSED(stopList);
-    LimitCond.ApplyRenames(renameMap);
+    LimitCond = LimitCond.ApplyRenames(renameMap);
 }
 
 TString TOpLimit::ToString(TExprContext& ctx) {

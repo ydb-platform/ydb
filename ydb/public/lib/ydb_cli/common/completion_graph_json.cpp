@@ -2,6 +2,7 @@
 
 #include <library/cpp/json/writer/json.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
@@ -12,17 +13,19 @@ namespace {
 using namespace NLastGetopt;
 
 // Write the JSON value describing what the option accepts:
-//   null         -- flag without a value (e.g. --help, --verbose)
-//   [v1, v2]     -- option with a fixed set of allowed values (TOpt::Choices)
-//   null         -- option that takes an arbitrary value (URL, path, number, ...)
-//                   (no completion choices available)
+//   null         -- flag without a value (e.g. --help, --verbose),
+//                   or option that takes an arbitrary value (URL, path, ...)
+//   [v1, v2]     -- option with a fixed set of allowed values (TOpt::Choices),
+//                   sorted lexicographically for stable output
 void WriteOptValue(NJsonWriter::TBuf& json, const TOpt& opt) {
     if (opt.GetHasArg() == NO_ARGUMENT) {
         json.WriteNull();
         return;
     }
-    // GetChoicesHelp() returns ", "-joined Choices_ set, the closest public
-    // accessor available. Empty string means "no choices configured".
+    // TOpt::Choices_ is a THashSet<TString>; GetChoicesHelp() is the only public
+    // accessor and exposes its contents as ", "-joined string. Choices in YDB CLI
+    // are plain identifiers (e.g. "csv", "json"), so splitting by ", " is safe in
+    // practice. Output is sorted to keep the JSON deterministic across runs.
     const TString choicesHelp = opt.GetChoicesHelp();
     if (choicesHelp.empty()) {
         json.WriteNull();
@@ -30,28 +33,37 @@ void WriteOptValue(NJsonWriter::TBuf& json, const TOpt& opt) {
     }
     TVector<TString> values;
     StringSplitter(choicesHelp).SplitByString(", ").SkipEmpty().Collect(&values);
+    for (TString& value : values) {
+        value = StripString(value);
+    }
+    Sort(values);
     json.BeginList();
     for (const TString& value : values) {
-        json.WriteString(StripString(value));
+        json.WriteString(value);
     }
     json.EndList();
 }
 
 void WriteOpts(NJsonWriter::TBuf& json, const TOpts& opts) {
-    json.WriteKey("options").BeginObject();
+    // Collect (key, opt) pairs and sort by key so that the resulting JSON does
+    // not depend on the order in which AddLongOption()/AddShortOption() were called.
+    TVector<std::pair<TString, const TOpt*>> entries;
     for (const TOpt* opt : opts.GetOpts()) {
         if (opt->IsHidden()) {
             continue;
         }
         for (const TString& name : opt->GetLongNames()) {
-            json.WriteKey("--" + name);
-            WriteOptValue(json, *opt);
+            entries.emplace_back("--" + name, opt);
         }
         for (char ch : opt->GetShortNames()) {
-            char buf[2] = {'-', ch};
-            json.WriteKey(TStringBuf(buf, sizeof(buf)));
-            WriteOptValue(json, *opt);
+            entries.emplace_back(TString("-") + ch, opt);
         }
+    }
+    SortBy(entries, [](const auto& e) { return e.first; });
+    json.WriteKey("options").BeginObject();
+    for (const auto& [key, opt] : entries) {
+        json.WriteKey(key);
+        WriteOptValue(json, *opt);
     }
     json.EndObject();
 }
@@ -74,11 +86,18 @@ void WriteNodeBody(NJsonWriter::TBuf& json, TMainClass* main) {
 }
 
 void WriteModes(NJsonWriter::TBuf& json, const TModChooser& chooser) {
-    json.WriteKey("handlers").BeginObject();
+    // Sort modes by name to keep the JSON deterministic; TModChooser stores them
+    // in registration order, which would otherwise leak into the output.
+    TVector<const TModChooser::TMode*> sortedModes;
     for (const auto* mode : chooser.GetUnsortedModes()) {
         if (mode->Hidden || mode->NoCompletion || mode->Name.empty()) {
             continue;
         }
+        sortedModes.push_back(mode);
+    }
+    SortBy(sortedModes, [](const auto* m) { return m->Name; });
+    json.WriteKey("handlers").BeginObject();
+    for (const auto* mode : sortedModes) {
         json.WriteKey(mode->Name).BeginObject();
         WriteNodeBody(json, mode->Main);
         json.EndObject();

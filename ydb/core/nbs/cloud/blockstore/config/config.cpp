@@ -38,6 +38,7 @@ TStorageConfig::TStorageConfig(
     xxx(ThreadPoolSize,                     ui32,     2                       )\
     xxx(OracleConfig,                       NProto::TOracleConfig, {}         )\
     xxx(DirtyMapDebugPrintInterval,         TDuration, TDuration::Seconds(0)  )\
+    xxx(BarrierCleanupInterval,             TDuration, TDuration::Seconds(0)  )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

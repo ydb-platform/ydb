@@ -235,6 +235,13 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
     return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
 }
 
+ui64 TVChunk::GetMinPendingLsn() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap.GetMinPendingLsn();
+}
+
 TString TVChunk::DebugPrintDirtyMap()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());

@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/event_local.h>
 
+#include <util/generic/hash.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -23,6 +25,9 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+        EvBarrierCleanupWakeup,
+        EvBarrierLsnsReady,
+        EvBarrierCycleDone,
 
         EvEnd,
     };
@@ -36,6 +41,34 @@ struct TEvPartitionDirectPrivate
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
         {}
+    };
+
+    // Tablet-internal trigger for one barrier cleanup cycle. Re-scheduled
+    // after each cycle's IssueBarrier futures complete.
+    struct TEvBarrierCleanupWakeup
+        : public NActors::
+              TEventLocal<TEvBarrierCleanupWakeup, EvBarrierCleanupWakeup>
+    {
+    };
+
+    // Carries per-DBG min LSNs computed on DBG executor threads back to the
+    // tablet thread so the persist Tx can run.
+    struct TEvBarrierLsnsReady
+        : public NActors::TEventLocal<TEvBarrierLsnsReady, EvBarrierLsnsReady>
+    {
+        THashMap<ui32, ui64> PerDbgLsn;
+
+        explicit TEvBarrierLsnsReady(THashMap<ui32, ui64> perDbgLsn)
+            : PerDbgLsn(std::move(perDbgLsn))
+        {}
+    };
+
+    // Fired (via ActorSystem->Send) when all per-DBG IssueBarrier futures
+    // for the current cycle have resolved. Tablet clears the in-flight flag
+    // and schedules the next cycle.
+    struct TEvBarrierCycleDone
+        : public NActors::TEventLocal<TEvBarrierCycleDone, EvBarrierCycleDone>
+    {
     };
 };
 

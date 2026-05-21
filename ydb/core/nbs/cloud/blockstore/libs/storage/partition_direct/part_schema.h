@@ -73,7 +73,27 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
         using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
-    using TTables = SchemaTables<TabletInfo, VChunkConfigs>;
+    // Persisted PBuffer barrier LSN per DirectBlockGroup. Updated by the
+    // periodic barrier cleanup cycle; loaded at boot to skip cycles that
+    // would not advance the barrier.
+    struct BarrierLsns: public TTableSchema<3>
+    {
+        struct DirectBlockGroupIndex
+            : public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
+        {
+        };
+
+        struct Lsn: public Column<2, NKikimr::NScheme::NTypeIds::Uint64>
+        {
+        };
+
+        using TKey = TableKey<DirectBlockGroupIndex>;
+        using TColumns = TableColumns<DirectBlockGroupIndex, Lsn>;
+
+        using StoragePolicy = TStoragePolicy<IndexChannel>;
+    };
+
+    using TTables = SchemaTables<TabletInfo, VChunkConfigs, BarrierLsns>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

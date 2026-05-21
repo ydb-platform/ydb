@@ -6,6 +6,8 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#include <util/generic/hash.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +40,8 @@ public:
 
     bool ReadAllVChunkConfigs(TVector<TVChunkConfig>& out);
 
+    bool ReadAllBarrierLsns(THashMap<ui32, ui64>& out);
+
     void StoreVolumeConfig(
         const NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
@@ -45,6 +49,8 @@ public:
         const TDirectBlockGroupsConnections& directBlockGroupsConnections);
 
     void StoreVChunkConfig(const TVChunkConfig& cfg);
+
+    void StoreBarrierLsn(ui32 dbgIndex, ui64 lsn);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

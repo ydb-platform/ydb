@@ -29,6 +29,11 @@ TEvTransportPrivate::TEraseFromPBuffer::~TEraseFromPBuffer()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
+TEvTransportPrivate::TEraseFromPBufferBarrier::~TEraseFromPBufferBarrier()
+{
+    Y_ABORT_UNLESS(Promise.IsReady());
+}
+
 TEvTransportPrivate::TReadFromPBuffer::~TReadFromPBuffer()
 {
     Y_ABORT_UNLESS(Promise.IsReady());

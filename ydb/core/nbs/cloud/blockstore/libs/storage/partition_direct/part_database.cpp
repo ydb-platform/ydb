@@ -131,6 +131,33 @@ bool TPartitionDatabase::ReadAllVChunkConfigs(TVector<TVChunkConfig>& out)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadAllBarrierLsns(THashMap<ui32, ui64>& out)
+{
+    using TTable = TPartitionSchema::BarrierLsns;
+
+    auto it = Table<TTable>()
+                  .Range()
+                  .Select<TTable::DirectBlockGroupIndex, TTable::Lsn>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::DirectBlockGroupIndex>() &&
+            it.HaveValue<TTable::Lsn>())
+        {
+            out[it.GetValue<TTable::DirectBlockGroupIndex>()] =
+                it.GetValue<TTable::Lsn>();
+        }
+        it.Next();
+    }
+
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TPartitionDatabase::StoreVolumeConfig(
     const NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
@@ -161,6 +188,16 @@ void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
     Table<TTable>()
         .Key(cfg.VChunkIndex)
         .Update(NKikimr::NIceDb::TUpdate<TTable::Config>(ToProto(cfg)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::StoreBarrierLsn(ui32 dbgIndex, ui64 lsn)
+{
+    using TTable = TPartitionSchema::BarrierLsns;
+
+    Table<TTable>().Key(dbgIndex).Update(
+        NKikimr::NIceDb::TUpdate<TTable::Lsn>(lsn));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

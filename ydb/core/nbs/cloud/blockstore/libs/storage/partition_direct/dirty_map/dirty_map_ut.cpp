@@ -1407,6 +1407,67 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "200{[H0,H1,H2][10..50][0..40]};",
             readHint1.DebugPrint());
     }
+
+    Y_UNIT_TEST(ShouldReturnMinPendingLsn)
+    {
+        const auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Empty dirty map: no pending records anywhere.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinFlushPendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinErasePendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinPendingLsn());
+
+        const THostMask requested = MakePrimaryHosts();
+        const THostMask confirmed = MakePrimaryHosts();
+
+        // After two writes complete: both records sit in ReadyToFlush. The
+        // min should be the smaller of the two LSNs.
+        dirtyMap.WriteFinished(
+            500,
+            TBlockRange64::WithLength(10, 5),
+            requested,
+            confirmed);
+        dirtyMap.WriteFinished(
+            700,
+            TBlockRange64::WithLength(20, 5),
+            requested,
+            confirmed);
+
+        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinFlushPendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinErasePendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinPendingLsn());
+
+        // Take a flush hint for both records, then complete the flush on all
+        // hosts: they move to ReadyToErase.
+        auto flushHint = dirtyMap.MakeFlushHint(2);
+        UNIT_ASSERT_VALUES_UNEQUAL(true, flushHint.Empty());
+
+        for (THostIndex h: MakePrimaryHosts()) {
+            dirtyMap.FlushFinished(
+                THostRoute{.SourceHostIndex = h, .DestinationHostIndex = h},
+                {500, 700},
+                {});
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinFlushPendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinErasePendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinPendingLsn());
+
+        // A third write that lands BEFORE we drain the erase queue should
+        // push GetMinPendingLsn back down via the flush side.
+        dirtyMap.WriteFinished(
+            300,
+            TBlockRange64::WithLength(30, 5),
+            requested,
+            confirmed);
+        UNIT_ASSERT_VALUES_EQUAL(300, dirtyMap.GetMinFlushPendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinErasePendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(300, dirtyMap.GetMinPendingLsn());
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

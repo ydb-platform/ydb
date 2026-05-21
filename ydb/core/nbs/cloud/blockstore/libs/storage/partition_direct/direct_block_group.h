@@ -194,6 +194,14 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) = 0;
 
+    // Persistent barrier erase on a single PBuffer host: removes all records
+    // with LSN <= lsn for the tablet that owns this DirectBlockGroup, and
+    // durably records the barrier on disk (survives restart).
+    virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBufferBarrier(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId) = 0;
+
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) = 0;
@@ -204,6 +212,20 @@ public:
 
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
+
+    // Periodic barrier cleanup helpers (called from the tablet thread; the
+    // implementation must hop onto its own executor thread internally).
+    // ComputeBarrierLsnAsync walks all live VChunks and returns the LSN
+    // strictly below which PBuffer records can be safely erased (0 if there
+    // is nothing to clean this cycle). IssueBarrierAsync sends a persistent
+    // barrier erase to every PBuffer host; the returned future resolves when
+    // all per-host requests complete.
+    virtual NThreading::TFuture<ui64> ComputeBarrierLsnAsync() = 0;
+    virtual NThreading::TFuture<void> IssueBarrierAsync(ui64 lsn) = 0;
+
+    // Index of this DBG within the partition. Used as the persistence key
+    // for per-DBG barrier LSN rows.
+    virtual size_t GetDirectBlockGroupIndex() const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

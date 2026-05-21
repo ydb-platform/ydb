@@ -5,6 +5,7 @@
 
 #include <ydb/core/protos/blockstore_config.pb.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -18,7 +19,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(LoadState, __VA_ARGS__)                     \
     xxx(StoreVolumeConfig, __VA_ARGS__)             \
     xxx(StorePartitionIds, __VA_ARGS__)             \
-    xxx(UpdateVChunkConfig, __VA_ARGS__)
+    xxx(UpdateVChunkConfig, __VA_ARGS__)            \
+    xxx(StoreBarrierLsns, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
 
@@ -51,6 +53,7 @@ struct TTxPartition
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TVector<TVChunkConfig> VChunkConfigs;
+        THashMap<ui32, ui64> BarrierLsns;
 
         explicit TLoadState()
         {}
@@ -60,6 +63,7 @@ struct TTxPartition
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
+            BarrierLsns.clear();
         }
     };
 
@@ -110,6 +114,23 @@ struct TTxPartition
 
         explicit TUpdateVChunkConfig(TVChunkConfig vChunkConfig)
             : VChunkConfig(std::move(vChunkConfig))
+        {}
+
+        void Clear()
+        {
+            // nothing to do
+        }
+    };
+
+    //
+    // TStoreBarrierLsns
+    //
+    struct TStoreBarrierLsns
+    {
+        THashMap<ui32, ui64> PerDbgLsn;
+
+        explicit TStoreBarrierLsns(THashMap<ui32, ui64> perDbgLsn)
+            : PerDbgLsn(std::move(perDbgLsn))
         {}
 
         void Clear()

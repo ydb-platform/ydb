@@ -110,6 +110,11 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
+    NThreading::TFuture<TDBGEraseResponse> EraseFromPBufferBarrier(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId) override;
+
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
 
@@ -121,6 +126,22 @@ public:
     // IHostStateController implementation
     void SetHostState(THostIndex hostIndex, EHostState state) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+
+    // Executor-thread compute of the min still-live LSN across all VChunks.
+    // 0 means there is nothing pending and the cycle should be skipped.
+    ui64 ComputeBarrierLsn() const;
+    // Executor-thread fan-out of a barrier erase to every PBuffer host.
+    NThreading::TFuture<void> IssueBarrier(ui64 lsn);
+
+    // IDirectBlockGroup async barrier-cleanup helpers (callable from any
+    // thread; internally hop onto the executor thread).
+    NThreading::TFuture<ui64> ComputeBarrierLsnAsync() override;
+    NThreading::TFuture<void> IssueBarrierAsync(ui64 lsn) override;
+
+    size_t GetDirectBlockGroupIndex() const override
+    {
+        return DirectBlockGroupIndex;
+    }
 
 private:
     using TEvSyncWithPersistentBufferResult =

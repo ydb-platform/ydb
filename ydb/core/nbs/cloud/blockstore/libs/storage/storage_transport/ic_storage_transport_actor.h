@@ -35,6 +35,11 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvEraseFromPBuffer>>
         EraseFromPBufferRequests;
 
+    THashMap<
+        ui64,
+        std::unique_ptr<TEvTransportPrivate::TEvEraseFromPBufferBarrier>>
+        EraseFromPBufferBarrierRequests;
+
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
@@ -85,6 +90,10 @@ private:
 
     void HandleErasePersistentBuffer(
         const TEvTransportPrivate::TEvEraseFromPBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleErasePersistentBufferBarrier(
+        const TEvTransportPrivate::TEvEraseFromPBufferBarrier::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleErasePersistentBufferResult(

@@ -110,6 +110,16 @@ public:
         TVector<ui64> lsns,
         NWilson::TSpan* span) = 0;
 
+    // Issues a persistent barrier erase: all PBuffer records with LSN <= lsn
+    // for the connection's TabletId are erased, and the barrier is durably
+    // recorded on the DDisk side (survives restart). Maps to a single
+    // NDDisk::TEvErasePersistentBuffer event.
+    virtual NThreading::TFuture<TEvErasePersistentBufferResult>
+    EraseFromPBufferBarrier(
+        const THostConnection& connection,
+        ui64 lsn,
+        NWilson::TSpan* span) = 0;
+
     virtual NThreading::TFuture<TEvListPersistentBufferResult>
     ListPBufferEntries(const THostConnection& connection) = 0;
 };

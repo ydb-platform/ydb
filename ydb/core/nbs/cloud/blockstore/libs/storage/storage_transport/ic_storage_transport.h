@@ -70,6 +70,11 @@ public:
         TVector<ui64> lsns,
         NWilson::TSpan* span) override;
 
+    NThreading::TFuture<TEvErasePersistentBufferResult> EraseFromPBufferBarrier(
+        const THostConnection& connection,
+        ui64 lsn,
+        NWilson::TSpan* span) override;
+
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
         const THostConnection& connection) override;
 

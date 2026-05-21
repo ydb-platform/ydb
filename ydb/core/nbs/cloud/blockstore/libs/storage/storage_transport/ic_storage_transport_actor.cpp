@@ -82,6 +82,8 @@ TICStorageTransportActor::~TICStorageTransportActor()
         FlushFromPBufferRequests);
     RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
         EraseFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
+        EraseFromPBufferBarrierRequests);
     RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
         ListPBufferEntriesRequests);
 
@@ -454,6 +456,39 @@ void TICStorageTransportActor::HandleErasePersistentBuffer(
         std::move(msg->TraceId)));
 }
 
+void TICStorageTransportActor::HandleErasePersistentBufferBarrier(
+    const TEvTransportPrivate::TEvEraseFromPBufferBarrier::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    const ui64 requestId = ++RequestIdGenerator;
+    auto [it, inserted] = EraseFromPBufferBarrierRequests.emplace(
+        requestId,
+        ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvEraseFromPBufferBarrier with requestId# %lu lsn# %lu",
+        requestId,
+        msg->Lsn);
+
+    auto request = std::make_unique<NDDisk::TEvErasePersistentBuffer>(
+        msg->Credentials,
+        msg->Lsn);
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        msg->ServiceId,
+        ctx.SelfID,
+        request.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(msg->TraceId)));
+}
+
 void TICStorageTransportActor::HandleErasePersistentBufferResult(
     const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
     const TActorContext& ctx)
@@ -470,14 +505,20 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
         auto& request = **r;
         request.Promise.SetValue(std::move(ev->Get()->Record));
         EraseFromPBufferRequests.erase(requestId);
-    } else {
-        // That means that request is already completed
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "ErasePersistentBufferEvent with requestId# %lu not found",
-            requestId);
+        return;
     }
+    if (auto* r = EraseFromPBufferBarrierRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        request.Promise.SetValue(std::move(ev->Get()->Record));
+        EraseFromPBufferBarrierRequests.erase(requestId);
+        return;
+    }
+    // That means that request is already completed
+    LOG_ERROR(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "ErasePersistentBufferEvent with requestId# %lu not found",
+        requestId);
 }
 
 void TICStorageTransportActor::HandleReadPersistentBuffer(
@@ -785,6 +826,9 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(
             TEvTransportPrivate::TEvEraseFromPBuffer,
             HandleErasePersistentBuffer);
+        HFunc(
+            TEvTransportPrivate::TEvEraseFromPBufferBarrier,
+            HandleErasePersistentBufferBarrier);
         HFunc(
             NDDisk::TEvErasePersistentBufferResult,
             HandleErasePersistentBufferResult);

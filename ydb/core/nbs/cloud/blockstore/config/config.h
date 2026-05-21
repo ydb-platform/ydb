@@ -39,6 +39,7 @@ public:
     [[nodiscard]] ui32 GetThreadPoolSize() const;
     [[nodiscard]] NProto::TOracleConfig GetOracleConfig() const;
     [[nodiscard]] TDuration GetDirtyMapDebugPrintInterval() const;
+    [[nodiscard]] TDuration GetBarrierCleanupInterval() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

@@ -146,6 +146,31 @@ TICStorageTransport::EraseFromPBuffer(
     return future;
 }
 
+TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
+TICStorageTransport::EraseFromPBufferBarrier(
+    const THostConnection& connection,
+    ui64 lsn,
+    NWilson::TSpan* span)
+{
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
+    auto request =
+        std::make_unique<TEvTransportPrivate::TEvEraseFromPBufferBarrier>(
+            connection.GetServiceId(),
+            connection.Credentials,
+            lsn,
+            span ? span->GetTraceId() : NWilson::TTraceId());
+
+    auto future = request->Promise.GetFuture();
+
+    if (span) {
+        span->Event("ActorSystem_Send");
+    }
+    ActorSystem->Send(ICStorageTransportActorId, request.release());
+
+    return future;
+}
+
 TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>
 TICStorageTransport::ReadFromPBuffer(
     const THostConnection& connection,

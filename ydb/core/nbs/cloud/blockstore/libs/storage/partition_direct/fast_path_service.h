@@ -63,6 +63,14 @@ public:
 
     void Run();
 
+    // Live DBGs owned by this service. Returned by reference so the caller
+    // does not extend their lifetime independently of this service.
+    [[nodiscard]] const TVector<IDirectBlockGroupPtr>&
+    GetDirectBlockGroups() const
+    {
+        return DirectBlockGroups;
+    }
+
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,

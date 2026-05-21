@@ -84,6 +84,11 @@ public:
             THostIndex hostIndex,
             const TVector<TPBufferSegment>& segments,
             const NWilson::TTraceId& traceId)>;
+    using TEraseFromPBufferBarrierHandler =
+        std::function<NThreading::TFuture<TDBGEraseResponse>(
+            THostIndex hostIndex,
+            ui64 lsn,
+            const NWilson::TTraceId& traceId)>;
     using TDBGRestoreHandler =
         std::function<NThreading::TFuture<TDBGRestoreResponse>(
             ui32 vChunkIndex)>;
@@ -104,6 +109,7 @@ public:
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
     TEraseFromPBufferHandler EraseFromPBufferHandler;
+    TEraseFromPBufferBarrierHandler EraseFromPBufferBarrierHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
@@ -179,6 +185,11 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
+    NThreading::TFuture<TDBGEraseResponse> EraseFromPBufferBarrier(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId) override;
+
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
 
@@ -186,6 +197,23 @@ public:
         THostIndex hostIndex) override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
+    NThreading::TFuture<ui64> ComputeBarrierLsnAsync() override;
+    NThreading::TFuture<void> IssueBarrierAsync(ui64 lsn) override;
+
+    size_t GetDirectBlockGroupIndex() const override
+    {
+        return DirectBlockGroupIndex;
+    }
+
+    using TComputeBarrierLsnHandler =
+        std::function<NThreading::TFuture<ui64>()>;
+    using TIssueBarrierHandler =
+        std::function<NThreading::TFuture<void>(ui64 lsn)>;
+
+    TComputeBarrierLsnHandler ComputeBarrierLsnHandler;
+    TIssueBarrierHandler IssueBarrierHandler;
+    size_t DirectBlockGroupIndex = 0;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

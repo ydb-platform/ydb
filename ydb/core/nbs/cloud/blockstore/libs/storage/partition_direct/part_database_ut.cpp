@@ -226,6 +226,51 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             });
     }
 
+    Y_UNIT_TEST(ShouldStoreAndReadBarrierLsns)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreBarrierLsn(0, 100);
+                partitionDb.StoreBarrierLsn(1, 200);
+                partitionDb.StoreBarrierLsn(2, 300);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                THashMap<ui32, ui64> read;
+                UNIT_ASSERT(partitionDb.ReadAllBarrierLsns(read));
+                UNIT_ASSERT_VALUES_EQUAL(3, read.size());
+                UNIT_ASSERT_VALUES_EQUAL(100, read[0]);
+                UNIT_ASSERT_VALUES_EQUAL(200, read[1]);
+                UNIT_ASSERT_VALUES_EQUAL(300, read[2]);
+            });
+
+        // Re-writing the same key should overwrite, not append.
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.StoreBarrierLsn(1, 250);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                THashMap<ui32, ui64> read;
+                UNIT_ASSERT(partitionDb.ReadAllBarrierLsns(read));
+                UNIT_ASSERT_VALUES_EQUAL(3, read.size());
+                UNIT_ASSERT_VALUES_EQUAL(250, read[1]);
+            });
+    }
+
     Y_UNIT_TEST(ShouldLoadStateAfterStoreVolumeConfigAndStorePartitionIds)
     {
         TTestExecutor executor;

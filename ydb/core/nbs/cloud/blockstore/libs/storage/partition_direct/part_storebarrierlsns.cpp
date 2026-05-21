@@ -10,10 +10,10 @@ using namespace NKikimr::NTabletFlatExecutor;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TPartitionActor::PrepareStorePartitionIds(
+bool TPartitionActor::PrepareStoreBarrierLsns(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TStorePartitionIds& args)
+    TTxPartition::TStoreBarrierLsns& args)
 {
     Y_UNUSED(ctx);
     Y_UNUSED(tx);
@@ -22,29 +22,24 @@ bool TPartitionActor::PrepareStorePartitionIds(
     return true;
 }
 
-void TPartitionActor::ExecuteStorePartitionIds(
+void TPartitionActor::ExecuteStoreBarrierLsns(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TStorePartitionIds& args)
+    TTxPartition::TStoreBarrierLsns& args)
 {
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    db.StoreDirectBlockGroupsConnections(args.DirectBlockGroupsConnections);
+    for (const auto& [dbgIndex, lsn]: args.PerDbgLsn) {
+        db.StoreBarrierLsn(dbgIndex, lsn);
+    }
 }
 
-void TPartitionActor::CompleteStorePartitionIds(
+void TPartitionActor::CompleteStoreBarrierLsns(
     const TActorContext& ctx,
-    TTxPartition::TStorePartitionIds& args)
+    TTxPartition::TStoreBarrierLsns& args)
 {
-    // No persisted vchunk configs at first allocation: vchunks fall back to
-    // TVChunkConfig::Make().
-    Start(
-        ctx,
-        args.DirectBlockGroupsConnections,
-        {},   // vChunkConfigs
-        {}    // barrierLsns
-    );
+    OnBarrierLsnsPersisted(ctx, std::move(args.PerDbgLsn));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

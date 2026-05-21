@@ -143,7 +143,11 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     }
     AFL_ENSURE(offsetSpan == Batch.Header.GetCount());
     AFL_ENSURE(lastPartCount + Batch.Header.GetInternalPartsCount() == totalBlobs);
-    Batch.Header.SetClientBlobCount(totalBlobs);
+    if (totalBlobs != Batch.Header.GetCount() + Batch.Header.GetInternalPartsCount()) {
+        Batch.Header.SetClientBlobCount(totalBlobs);
+    } else {
+        Batch.Header.ClearClientBlobCount();
+    }
     TVector<ui32> start(reorderMap.size(), 0);
     TVector<ui32> pos(Batch.Blobs.size(), 0);
     ui32 sum = 0;
@@ -460,7 +464,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
     TVector<ui32> messagesCounts;
     messagesCounts.reserve(totalBlobs);
     if (data < dataEnd) {
-        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
             messagesCounts.push_back(ReadUnaligned<ui32>(iter->Next().Data()));

@@ -359,7 +359,9 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
             cc->SetTotalSize(blob.PartData->TotalSize);
     }
 
-    cc->SetMessagesCount(blob.MessagesCount);
+    if (blob.MessagesCount > 1) {
+        cc->SetMessagesCount(blob.MessagesCount);
+    }
 }
 
 template <typename T>

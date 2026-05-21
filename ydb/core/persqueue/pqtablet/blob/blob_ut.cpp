@@ -55,10 +55,12 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         }
 
         UNIT_ASSERT(!batch.Packed);
+        UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(batch.GetUnpackedSize() > 0);
 
         batch.Pack();
         UNIT_ASSERT(batch.Packed);
+        UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(batch.PackedData.Size() > 0);
         UNIT_ASSERT(batch.PackedData.Capacity() > 0);
 

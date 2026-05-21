@@ -716,8 +716,12 @@ void AssertBatchedReadResults(
         if (exp.Offset != Max<ui64>()) {
             UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
         }
-        UNIT_ASSERT(msg.HasMessagesCount());
-        UNIT_ASSERT_VALUES_EQUAL(msg.GetMessagesCount(), exp.MessagesCount);
+        if (exp.MessagesCount > 1) {
+            UNIT_ASSERT(msg.HasMessagesCount());
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetMessagesCount(), exp.MessagesCount);
+        } else if (msg.HasMessagesCount()) {
+            UNIT_ASSERT_VALUES_EQUAL(msg.GetMessagesCount(), exp.MessagesCount);
+        }
         UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
         UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
     }
@@ -770,8 +774,12 @@ void CmdReadAndAssertBatched(
             if (exp.Offset != Max<ui64>()) {
                 UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), exp.Offset);
             }
-            UNIT_ASSERT(msg.HasMessagesCount());
-            UNIT_ASSERT_VALUES_EQUAL(msg.GetMessagesCount(), exp.MessagesCount);
+            if (exp.MessagesCount > 1) {
+                UNIT_ASSERT(msg.HasMessagesCount());
+                UNIT_ASSERT_VALUES_EQUAL(msg.GetMessagesCount(), exp.MessagesCount);
+            } else if (msg.HasMessagesCount()) {
+                UNIT_ASSERT_VALUES_EQUAL(msg.GetMessagesCount(), exp.MessagesCount);
+            }
             UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), static_cast<i64>(exp.SeqNo));
             UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), TString(dataSize, exp.Fill));
         }

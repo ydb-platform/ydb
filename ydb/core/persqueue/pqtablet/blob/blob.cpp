@@ -117,7 +117,6 @@ TBatch::TBatch(const ui64 offset, const ui16 partNo)
     Header.SetUnpackedSize(0);
     Header.SetCount(0);
     Header.SetInternalPartsCount(0);
-    Header.SetClientBlobCount(0);
 }
 
 TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
@@ -151,7 +150,11 @@ void TBatch::AddBlob(const TClientBlob &b) {
     Header.SetUnpackedSize(unpackedSize);
     Header.SetCount(count);
     Header.SetInternalPartsCount(InternalPartsPos.size());
-    Header.SetClientBlobCount(Blobs.size());
+    if (Blobs.size() != Header.GetCount() + Header.GetInternalPartsCount()) {
+        Header.SetClientBlobCount(Blobs.size());
+    } else {
+        Header.ClearClientBlobCount();
+    }
 
     EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
 }

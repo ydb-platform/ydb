@@ -109,13 +109,13 @@ public:
 
     template <typename T>
     bool CheckValueType(std::size_t index) const {
-        CheckSorted();
+        EnsureSorted();
         return AttachedValues[index].TypeCode == TTypesMapping::GetCode<T>();
     }
 
     template <typename T>
     std::optional<T> GetValue(std::size_t index) const {
-        CheckSorted();
+        EnsureSorted();
 
         T result;
         auto& attachedValue = AttachedValues[index];
@@ -146,25 +146,25 @@ public:
 
     void RenameValue(const TString& oldName, std::vector<TKeyName>&& newName);
 
-    template <typename C>
-    bool ForEachSerialized(const C& c) const {
-        CheckSorted();
+    template <typename TCallable>
+    bool ForEachSerialized(const TCallable& callable) const {
+        EnsureSorted();
 
         for (auto& item : AttachedValues) {
-            if (!c(item.Name, item.TypeCode, Data.data() + item.Offset, item.Length)) {
+            if (!callable(item.Name, item.TypeCode, Data.data() + item.Offset, item.Length)) {
                 return false;
             }
         }
         return true;
     }
 
-    template <typename C>
-    void ForEachTyped(const C& c) const {
-        CheckSorted();
+    template <typename TCallable>
+    void ForEachTyped(const TCallable& callable) const {
+        EnsureSorted();
 
         for (auto& item : AttachedValues) {
             TTypesMapping::Invoke(item.TypeCode, Data.data() + item.Offset, item.Length, [&](const auto& value) {
-                c(item.Name, value);
+                callable(item.Name, value);
             });
         }
     }
@@ -200,7 +200,7 @@ protected:
     unsigned AddNumber{0};
     TBinaryData Data;
 
-    void CheckSorted() const;
+    void EnsureSorted() const;
 
     void RemoveDups() const;
 };

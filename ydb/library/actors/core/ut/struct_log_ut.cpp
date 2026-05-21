@@ -273,9 +273,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(CreateMessageTuple) {
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1}}), "value=[1]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2}}), "value=[1:2]");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2,3}}), "value=[1:2:3]");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1}}), "value=(1)");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2}}), "value=(1:2)");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", std::tuple{1,2,3}}), "value=(1:2:3)");
     }
 
     Y_UNIT_TEST(CreateMessageWithReusage) {

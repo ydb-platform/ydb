@@ -1,13 +1,14 @@
 #pragma once
 
 #include "base_writer.h"
-#include "structured_message.h"
 
 #include <library/cpp/logger/record.h>
 
 #include <util/generic/string.h>
 
 namespace NActors::NStructuredLog {
+
+class TStructuredMessage;
 
 class TMetaWriter {
     friend class TBaseMessageWriter<TMetaWriter>;

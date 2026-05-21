@@ -1114,8 +1114,8 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     Counters->Cumulative().Populate(counters.Cumulative());
 
     auto newReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
-    auto tmp = ReservedBytes + newReservedBytes;
-    ReservedBytes = tmp > partition.ReservedBytes ? tmp - partition.ReservedBytes : 0;
+    auto combinedReservedBytes = ReservedBytes + newReservedBytes;
+    ReservedBytes = combinedReservedBytes > partition.ReservedBytes ? combinedReservedBytes - partition.ReservedBytes : 0;
     partition.ReservedBytes = newReservedBytes;
 
     // restore cache's simple counters cleaned by partition's counters

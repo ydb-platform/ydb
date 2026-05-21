@@ -73,7 +73,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
-#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -1438,6 +1437,8 @@ namespace Tests {
                 }
             }
 
+            NKqp::NTests::SetKqpFinalizeScriptServiceSettings(Settings->EnableScriptExecutionBackgroundChecks, TDuration::Zero());
+
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
@@ -1447,16 +1448,6 @@ namespace Tests {
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
-
-            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(
-                Settings->AppConfig->GetQueryServiceConfig(),
-                federatedQuerySetupFactory,
-                Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks,
-                TDuration::Zero()
-            );
-            TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }
 
         {

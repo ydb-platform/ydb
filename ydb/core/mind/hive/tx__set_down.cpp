@@ -46,7 +46,7 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
-    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSetDown(" << NodeId << ")::Complete");
     SideEffects.Complete(ctx);
 }
 

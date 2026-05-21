@@ -19,17 +19,17 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESPONSE_TABLET_SEQUENCE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxResponseTabletSequence()::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxResponseTabletSequence()::Execute");
         const auto& pbRecord(Event->Get()->Record);
         if (!pbRecord.HasOwner()) {
-            BLOG_ERROR("Invalid response received");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Invalid response received");
             return true;
         }
         if (pbRecord.GetBeginId() != pbRecord.GetEndId()) {
             Y_ABORT_UNLESS(pbRecord.GetOwner().GetOwner() == Self->TabletID());
             Owner = {TSequencer::NO_OWNER, pbRecord.GetOwner().GetOwnerIdx()};
             Sequence = {pbRecord.GetBeginId(), pbRecord.GetEndId()};
-            BLOG_D("Received sequence " << Sequence);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received sequence " << Sequence);
             if (Self->Sequencer.AddFreeSequence(Owner, Sequence)) {
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Sequences>()
@@ -41,11 +41,11 @@ public:
                         .Key(Sequence.Begin, Sequence.End)
                         .Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
             } else {
-                BLOG_D("This sequence " << Sequence << " already exists");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"This sequence " << Sequence << " already exists");
                 Sequence.Clear();
             }
         } else {
-            BLOG_D("Received empty sequence");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received empty sequence");
         }
         if (pbRecord.GetOwner().GetOwnerIdx() >= Self->RequestingSequenceIndex) {
             Self->RequestingSequenceNow = false;
@@ -54,7 +54,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxResponseTabletSequence()::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxResponseTabletSequence()::Complete");
         if (!Sequence.Empty()) {
             Self->ProcessPendingOperations();
         }

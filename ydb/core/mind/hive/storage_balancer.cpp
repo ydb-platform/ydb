@@ -60,7 +60,7 @@ protected:
     }
 
     void PassAway() override {
-        BLOG_I("StorageBalancer finished");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer finished");
         Stats.TotalRuns++;
         Stats.TotalMovements += Reassigns;
         Stats.LastRunMovements = Reassigns;
@@ -89,7 +89,7 @@ protected:
                 continue;
             }
             tablet->ActorsToNotifyOnRestart.emplace_back(SelfId());
-            BLOG_D("StorageBalancer initiating reassign for tablet " << NextReassign->first);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer initiating reassign for tablet " << NextReassign->first);
             Send(Hive->SelfId(), NextReassign->second.release());
             ++ReassignInFlight;
         }
@@ -100,7 +100,7 @@ protected:
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
         auto tabletId = ev->Get()->TabletId;
-        BLOG_D("StorageBalancer received " << ev->Get()->Status << " for tablet " << tabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer received " << ev->Get()->Status << " for tablet " << tabletId);
         if (SkippedTablets.contains(tabletId)) {
             return;
         }
@@ -111,7 +111,7 @@ protected:
 
     void Handle(TEvPrivate::TEvRestartCancelled::TPtr& ev) {
         auto tabletId = ev->Get()->TabletId;
-        BLOG_D("StorageBalancer received RestartCancelled for tablet " << tabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer received RestartCancelled for tablet " << tabletId);
         SkippedTablets.insert(tabletId);
         auto tablet = Hive->FindTablet(tabletId);
         if (tablet) {
@@ -157,7 +157,7 @@ public:
                 }
             }
         }
-        BLOG_D("StorageBalancer for pool " << Settings.StoragePool << ": " << channels.size() << " tablet channels suitable for balancing");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer for pool " << Settings.StoragePool << ": " << channels.size() << " tablet channels suitable for balancing");
         auto metricToBalance = Hive->GetStorageBalanceStrategy();
         switch (Hive->GetChannelBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM:

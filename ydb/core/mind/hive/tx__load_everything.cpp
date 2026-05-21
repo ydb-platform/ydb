@@ -13,7 +13,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOAD_EVERYTHING; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_NOTICE("THive::TTxLoadEverything::Execute");
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything::Execute");
 
         TAppData* appData = AppData();
         TDomainsInfo* domainsInfo = appData->DomainsInfo.Get();
@@ -236,13 +236,13 @@ public:
 
             // remove after upgrade vvvv
             if (ownerId != TSequencer::NO_OWNER && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << ownerId);
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << ownerId);
                 Self->Keeper.AddOwnedSequence(ownerId, seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(ownerId);
             }
 
             if (ownerId == TSequencer::NO_OWNER && !isRootHive && Self->Keeper.GetOwner(seq.Begin) == TSequencer::NO_OWNER) {
-                BLOG_W("THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << Self->TabletID());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything fixing TabletOwners for " << seq << " to " << Self->TabletID());
                 Self->Keeper.AddOwnedSequence(Self->TabletID(), seq);
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
             }
@@ -253,7 +253,7 @@ public:
             }
         }
 
-        BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSequences << " sequences");
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numSequences << " sequences");
 
         auto tabletTypeAllowedMetrics = db.Table<Schema::TabletTypeMetrics>().Select();
         if (!tabletTypeAllowedMetrics.IsReady())
@@ -297,7 +297,7 @@ public:
                 if (!domainRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numSubDomains << " subdomains");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numSubDomains << " subdomains");
         }
 
         {
@@ -311,7 +311,7 @@ public:
                 if (!blockedOwnerRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numBlockedOwners << " blocked owners");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numBlockedOwners << " blocked owners");
         }
 
         {
@@ -331,7 +331,7 @@ public:
                     return false;
                 }
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
         }
 
         {
@@ -386,7 +386,7 @@ public:
                 if (!nodeRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numNodes << " nodes");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numNodes << " nodes");
         }
 
         {
@@ -403,7 +403,7 @@ public:
                 if (!categoryRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
         }
 
         if (auto systemCategoryId = Self->CurrentConfig.GetSystemTabletCategoryId(); systemCategoryId != 0 && Self->TabletCategories.empty()) {
@@ -526,7 +526,7 @@ public:
                 if (!tabletRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTablets << " tablets");
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numTablets << " tablets");
         }
 
         {
@@ -565,7 +565,7 @@ public:
                 if (!tabletChannelRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannels << " tablet/channel pairs ("
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numTabletChannels << " tablet/channel pairs ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -603,14 +603,14 @@ public:
                 if (!tabletChannelGenRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletChannelHistories << " tablet/channel history items ("
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numTabletChannelHistories << " tablet/channel history items ("
                     << numMissingTablets << " for missing tablets)");
         }
 
         for (auto& [tabletId, tabletInfo] : Self->Tablets) {
             tabletInfo.AcquireAllocationUnits();
         }
-        BLOG_NOTICE("THive::TTxLoadEverything initialized allocation units for " << Self->Tablets.size() << " tablets");
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything initialized allocation units for " << Self->Tablets.size() << " tablets");
 
         {
             size_t numTabletFollowerGroups = 0;
@@ -656,7 +656,7 @@ public:
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowerGroups << " tablet follower groups ("
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numTabletFollowerGroups << " tablet follower groups ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -699,7 +699,7 @@ public:
                 if (!tabletFollowerRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numTabletFollowers << " tablet followers ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -784,7 +784,7 @@ public:
                 if (!metricsRowset.Next())
                     return false;
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
                     << numMissingTablets << " for missing tablets)");
         }
 
@@ -810,7 +810,7 @@ public:
                     return false;
                 }
             }
-            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numRestrictions << " tablet availability restrictions ("
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything loaded " << numRestrictions << " tablet availability restrictions ("
                         << numMissingNodes << " for missing nodes)");
         }
 
@@ -855,7 +855,7 @@ public:
                 ++itNode;
             }
         }
-        BLOG_NOTICE("THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything deleted " << numDeletedNodes << " unnecessary nodes << (and " << numDeletedRestrictions << " restrictions for them)");
 
         TTabletId nextTabletId = Max(maxTabletId + 1, Self->NextTabletId);
 
@@ -870,7 +870,7 @@ public:
         if (isRootHive) {
             if (numSequences == 0) {
                 ui64 freeSequenceIdx = 0;
-                BLOG_D("THive::TTxLoadEverything Self->NextTabletId = " << Self->NextTabletId << " NextTabletId = " << nextTabletId);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything Self->NextTabletId = " << Self->NextTabletId << " NextTabletId = " << nextTabletId);
                 if (nextTabletId < TABLET_ID_BLACKHOLE_BEGIN) {
                     TSequencer::TOwnerType owner(TSequencer::NO_OWNER, freeSequenceIdx++);
                     TSequencer::TSequence sequence({0x10000, std::max<TTabletId>(nextTabletId, 0x10000), TABLET_ID_BLACKHOLE_BEGIN});
@@ -892,19 +892,19 @@ public:
 
         if (numSequences != 0) {
             std::vector<TSequencer::TOwnerType> modified;
-            BLOG_D("THive::TTxLoadEverything NextElement = " << Self->Sequencer.GetNextElement() << " NextTabletId = " << nextTabletId);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything NextElement = " << Self->Sequencer.GetNextElement() << " NextTabletId = " << nextTabletId);
             while (Self->Sequencer.GetNextElement() < nextTabletId) {
                 TSequencer::TElementType element = Self->Sequencer.AllocateElement(modified);
                 SortUnique(modified);
                 if (element == TSequencer::NO_ELEMENT) {
-                    BLOG_ERROR("THive::TTxLoadEverything - unable to equalize NextTabletId " << nextTabletId << " - could not allocate free element");
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything - unable to equalize NextTabletId " << nextTabletId << " - could not allocate free element");
                     break;
                 }
             }
             if (!modified.empty()) {
                 for (auto owner : modified) {
                     auto sequence = Self->Sequencer.GetSequence(owner);
-                    BLOG_CRIT("THive::TTxLoadEverything - equalizing sequence " << owner << " to " << sequence);
+                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything - equalizing sequence " << owner << " to " << sequence);
                     db.Table<Schema::Sequences>()
                             .Key(owner)
                             .Update<Schema::Sequences::Begin, Schema::Sequences::Next, Schema::Sequences::End>(sequence.Begin, sequence.Next, sequence.End);
@@ -916,7 +916,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_NOTICE("THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLoadEverything::Complete " << Self->DatabaseConfig.ShortDebugString());
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;

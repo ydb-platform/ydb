@@ -71,7 +71,7 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
         auto scaleInWindowEnd = UsageHistory.end();
         double usageBottomThreshold = TargetUsage - config.GetTargetTrackingCPUMargin();
 
-        BLOG_TRACE("[MSR] Scale in window: [" << JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Scale in window: [" << JoinRange(", ", scaleInWindowBegin, scaleInWindowEnd)
                    << "], bottom threshold: " << usageBottomThreshold);
         bool needScaleIn = std::all_of(
             scaleInWindowBegin,
@@ -86,17 +86,17 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
                 readyNodesCount,
                 TargetUsage
             );
-            BLOG_TRACE("[MSR] Need scale in, rounded recommended nodes: " << recommendedNodes);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Need scale in, rounded recommended nodes: " << recommendedNodes);
         }
     } else {
-        BLOG_TRACE("[MSR] Not enough history for scale in");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Not enough history for scale in");
     }
 
     if (UsageHistory.size() >= config.GetScaleOutWindowSize()) {
         auto scaleOutWindowBegin = UsageHistory.end() - config.GetScaleOutWindowSize();
         auto scaleOutWindowEnd = UsageHistory.end();
 
-        BLOG_TRACE("[MSR] Scale out window: [" << JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Scale out window: [" << JoinRange(", ", scaleOutWindowBegin, scaleOutWindowEnd)
                    << "], target: " << TargetUsage);
         bool needScaleOut = std::all_of(
             scaleOutWindowBegin,
@@ -111,10 +111,10 @@ std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNod
                 readyNodesCount,
                 TargetUsage
             );
-            BLOG_TRACE("[MSR] Need scale out, rounded recommended nodes: " << recommendedNodes);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Need scale out, rounded recommended nodes: " << recommendedNodes);
         }
     } else {
-        BLOG_TRACE("[MSR] Not enough history for scale out");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Not enough history for scale out");
     }
 
     return recommendedNodes ? std::max(*recommendedNodes, 1u) : recommendedNodes;

@@ -23,7 +23,7 @@ public:
         const NKikimrHive::TEvReleaseTablets& request(Request->Get()->Record);
         NKikimrHive::TEvReleaseTabletsReply& response(Response->Record);
         SideEffects.Reset(Self->SelfId());
-        BLOG_D("THive::TTxReleaseTablets::Execute " << request);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTablets::Execute " << request);
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : request.GetTabletIDs()) {
             TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
@@ -78,7 +78,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxReleaseTablets::Complete " << Request->Get()->Record << " SideEffects: " << SideEffects);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTablets::Complete " << Request->Get()->Record << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
@@ -86,7 +86,7 @@ public:
         }
         ctx.Send(Request->Sender, Response.Release());
         if (NeedToProcessPendingOperations) {
-            BLOG_D("THive::TTxReleaseTablets::Complete - retrying pending operations");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTablets::Complete - retrying pending operations");
             Self->ProcessPendingOperations();
         }
     }

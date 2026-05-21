@@ -19,7 +19,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_KILL_NODE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxKillNode(" << NodeId << ")::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxKillNode(" << NodeId << ")::Execute");
         SideEffects.Reset(Self->SelfId());
         TInstant now = TActivationContext::Now();
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -47,7 +47,7 @@ public:
                 Self->RemoveRegisteredDataCentersNode(node->Location.GetDataCenterId(), node->Id);
             }
             for (const TActorId& pipeServer : node->PipeServers) {
-                BLOG_TRACE("THive::TTxKillNode - killing pipe server " << pipeServer);
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxKillNode - killing pipe server " << pipeServer);
                 SideEffects.Send(pipeServer, new TEvents::TEvPoisonPill());
             }
             node->PipeServers.clear();
@@ -62,12 +62,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxKillNode(" << NodeId << ")::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxKillNode(" << NodeId << ")::Complete");
         SideEffects.Complete(ctx);
         if (Local) {
             TNodeInfo* node = Self->FindNode(Local.NodeId());
             if (node == nullptr || node->IsDisconnected()) {
-                BLOG_D("THive::TTxKillNode(" << NodeId << ")::Complete - send Reconnect to " << Local);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxKillNode(" << NodeId << ")::Complete - send Reconnect to " << Local);
                 Self->SendReconnect(Local); // defibrillation
             }
         }

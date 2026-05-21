@@ -21,7 +21,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_STOP_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStopTablet::Execute Tablet: " << TabletId);
         SideEffects.Reset(Self->SelfId());
         NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -32,7 +32,7 @@ public:
                     return true;
                 }
             }
-            BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId << " State: " << ETabletStateName(tablet->State) << " VolatileState: " << TTabletInfo::EVolatileStateName(tablet->GetVolatileState()));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStopTablet::Execute Tablet: " << TabletId << " State: " << ETabletStateName(tablet->State) << " VolatileState: " << TTabletInfo::EVolatileStateName(tablet->GetVolatileState()));
             ETabletState state = tablet->State;
             ETabletState newState = state;
             NIceDb::TNiceDb db(txc.DB);
@@ -88,7 +88,7 @@ public:
                     SideEffects.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
                 }
                 Self->ReportStoppedToWhiteboard(*tablet);
-                BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
             }
             Self->ProcessBootQueue();
         }
@@ -96,7 +96,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxStopTablet::Complete TabletId: " << TabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStopTablet::Complete TabletId: " << TabletId);
         SideEffects.Complete(ctx);
         Self->ProcessPendingStopTablet();
     }

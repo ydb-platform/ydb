@@ -46,7 +46,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxShrinkPool::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxShrinkPool::Execute");
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         auto* storagePool = Self->FindStoragePool(StoragePool);
@@ -68,7 +68,7 @@ public:
         std::ranges::sort(storagePool->InactiveGroups, TGroupCmp(), [storagePool](auto groupId) { return &storagePool->GetStorageGroup(groupId); });
         while (groupsToRemove < std::ssize(storagePool->InactiveGroups)) {
             auto groupId = storagePool->InactiveGroups.back();
-            BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << "as active");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxShrinkPool::Execute marking group " << groupId << "as active");
             auto& groupInfo = storagePool->GetStorageGroup(groupId);
             groupInfo.Status = EGroupState::Active;
             db.Table<Schema::Group>().Key(groupId).Delete();
@@ -87,7 +87,7 @@ public:
                 | std::views::take(groupsToRemove - std::ssize(storagePool->InactiveGroups));
             storagePool->InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
             for (auto* group : newGroupsToRemove) {
-                BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << "as inactive");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxShrinkPool::Execute marking group " << group->Id << "as inactive");
                 group->Status = EGroupState::Inactive;
                 db.Table<Schema::Group>().Key(group->Id).Update(
                     NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),

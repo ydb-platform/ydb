@@ -20,7 +20,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
-        BLOG_D("THive::TTxBlockStorageResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxBlockStorageResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             NIceDb::TNiceDb db(txc.DB);
@@ -31,7 +31,7 @@ public:
                     || msg->Status == NKikimrProto::NO_GROUP) {
                 if (tablet->IsDeleting()) {
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
-                        BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
                     }
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
                         follower.InitiateStop(SideEffects);
@@ -48,7 +48,7 @@ public:
                     }
                 }
             } else {
-                BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status) << ": " << msg->ErrorReason);
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status) << ": " << msg->ErrorReason);
                 if (tablet->IsDeleting()) {
                     --Self->DeleteTabletInProgress;
                     Self->UpdateCounterTabletsDeleting();
@@ -61,7 +61,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
-        BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         SideEffects.Complete(ctx);
     }
 };

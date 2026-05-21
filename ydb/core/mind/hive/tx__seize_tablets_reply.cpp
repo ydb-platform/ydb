@@ -18,7 +18,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvSeizeTabletsReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxSeizeTabletsReply::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTabletsReply::Execute");
         NIceDb::TNiceDb db(txc.DB);
         for (const NKikimrHive::TTabletInfo& protoTabletInfo : request.GetTablets()) {
             TTabletId tabletId = protoTabletInfo.GetTabletID();
@@ -161,7 +161,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxSeizeTabletsReply::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSeizeTabletsReply::Complete");
         if (!TabletIds.empty()) {
             THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
             request->Record.SetNewOwnerID(Self->TabletID());
@@ -170,7 +170,7 @@ public:
             }
             ctx.Send(Request->Sender, request.Release());
         } else {
-            BLOG_D("Migration complete (" << Self->MigrationProgress << " tablets migrated)");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Migration complete (" << Self->MigrationProgress << " tablets migrated)");
             Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_COMPLETE;
         }
     }

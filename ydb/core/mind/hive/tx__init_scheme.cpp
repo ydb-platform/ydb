@@ -14,7 +14,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_INIT_SCHEME; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxInitScheme::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxInitScheme::Execute");
         bool wasEmpty = txc.DB.GetScheme().IsEmpty();
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
         if (!wasEmpty) {
@@ -94,7 +94,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxInitScheme::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxInitScheme::Complete");
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         if (IsBridgeMode(ctx)) {

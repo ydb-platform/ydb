@@ -18,11 +18,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_OWNERS; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("THive::TTxRequestTabletOwners::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRequestTabletOwners::Execute");
         auto ownerId = Request->Get()->Record.GetOwnerID();
         std::vector<TSequencer::TSequence> sequences;
         Self->Keeper.GetOwnedSequences(ownerId, sequences);
-        BLOG_D("THive::TTxRequestTabletOwners - replying with " << sequences.size() << " sequences");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRequestTabletOwners - replying with " << sequences.size() << " sequences");
         for (const auto& seq : sequences) {
             auto* tabletOwners = Response->Record.AddTabletOwners();
             tabletOwners->SetOwnerID(ownerId);
@@ -33,7 +33,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxRequestTabletOwners::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRequestTabletOwners::Complete");
         Self->Send(Request->Sender, Response.Release());
     }
 };

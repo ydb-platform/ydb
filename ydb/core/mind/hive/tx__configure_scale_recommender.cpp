@@ -16,7 +16,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_CONFIGURE_SCALE_RECOMMENDER; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxConfigureScaleRecommender::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxConfigureScaleRecommender::Execute");
         SideEffects.Reset(Self->SelfId());
 
         auto response = MakeHolder<TEvHive::TEvConfigureScaleRecommenderReply>();
@@ -48,7 +48,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxConfigureScaleRecommender::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxConfigureScaleRecommender::Complete");
         SideEffects.Complete(ctx);
     }
 };

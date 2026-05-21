@@ -25,7 +25,7 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOn::Execute Node: " << NodeId
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSwitchDrainOn::Execute Node: " << NodeId
                 << " Persist: " << Settings.Persist << " DownPolicy: " << static_cast<int>(Settings.DownPolicy));
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -73,7 +73,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
         if (Initiator) {
             if (StartingDrain) {
                 Self->Send(Initiator, new TEvHive::TEvDrainNodeAck(SeqNo), 0, Cookie);
@@ -114,7 +114,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOff::Execute Target: " << Target);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSwitchDrainOff::Execute Target: " << Target);
         NIceDb::TNiceDb db(txc.DB);
 
         if (std::holds_alternative<TNodeId>(Target)) {
@@ -130,7 +130,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOff::Complete Target: " << Target
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSwitchDrainOff::Complete Target: " << Target
             << " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " Movements: " << Movements);
         for (const TActorId& initiator : Initiators) {
             Self->Send(initiator, new TEvHive::TEvDrainNodeResult(Status, Movements));

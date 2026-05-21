@@ -13,11 +13,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_PENDING_OPERATIONS; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        BLOG_D("THive::TTxProcessPendingOperations()::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessPendingOperations()::Execute");
         for (auto& [owner, pendingCreateTablet] : Self->PendingCreateTablets) {
             THolder<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
             evCreateTablet->Record = pendingCreateTablet.CreateTablet;
-            BLOG_D("THive::TTxProcessPendingOperations(): retry CreateTablet");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessPendingOperations(): retry CreateTablet");
             TlsActivationContext->Send(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
         }
         for (auto& handle : Self->PendingOperations) {
@@ -28,7 +28,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxProcessPendingOperations()::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessPendingOperations()::Complete");
     }
 };
 

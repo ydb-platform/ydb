@@ -25,7 +25,7 @@ protected:
     }
 
     void PassAway() override {
-        BLOG_I("Fill " << SelfId() << " finished with " << Movements << " movements made");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Fill " << SelfId() << " finished with " << Movements << " movements made");
         Hive->RemoveSubActor(this);
         Hive->BalancerNodes.erase(NodeId);
         return IActor::PassAway();
@@ -64,7 +64,7 @@ protected:
                         tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                         ++KickInFlight;
                         ++Movements;
-                        BLOG_D("Fill " << SelfId() << " moving tablet " << tablet->ToString()
+                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Fill " << SelfId() << " moving tablet " << tablet->ToString()
                                << " from node " << tablet->Node->Id
                                << " to node " << node->Id);
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_FILL_EXECUTED].Increment(1);
@@ -81,7 +81,7 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev, const TActorContext& ctx) {
-        BLOG_D("Fill " << SelfId() << " received " << ev->Get()->Status << " for tablet " << ev->Get()->TabletId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Fill " << SelfId() << " received " << ev->Get()->Status << " for tablet " << ev->Get()->TabletId);
         --KickInFlight;
         KickNextTablet(ctx);
     }
@@ -148,7 +148,7 @@ void THive::StartHiveFill(TNodeId nodeId, const TActorId& initiator) {
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
     } else {
-        BLOG_W("It's not possible to start fill on node " << nodeId << ", the node is already busy");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"It's not possible to start fill on node " << nodeId << ", the node is already busy");
         Send(initiator, new TEvHive::TEvFillNodeResult(NKikimrProto::ALREADY));
     }
 }

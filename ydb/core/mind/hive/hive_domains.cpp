@@ -12,7 +12,7 @@ void TDomainsView::RegisterNode(const TNodeInfo& node) {
 
 void TDomainsView::DeregisterNode(const TNodeInfo& node) {
     for (auto &domainKey: node.ServicedDomains) {
-         BLOG_TRACE("Node(" << node.Id << ")"
+         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << node.Id << ")"
                     << " DeregisterInDomains (" << domainKey << ") : " << TotalCount[domainKey] << " -> " << TotalCount[domainKey] - 1);
          Y_ABORT_UNLESS(TotalCount[domainKey], "try decrement empty counter for DomainKey %s", ToString(domainKey).c_str());
         --TotalCount[domainKey];
@@ -39,7 +39,7 @@ void THive::ResolveDomain(TSubDomainKey domain) {
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     entry.RedirectRequired = false;
-    BLOG_D("Resolving domain " << entry.TableId);
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Resolving domain " << entry.TableId);
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -54,18 +54,18 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
                 Domains[key].HiveId = entry.DomainInfo->Params.GetHive();
             }
-            BLOG_D("Received NavigateKeySetResult for domain " << entry.TableId << " with path " << path);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received NavigateKeySetResult for domain " << entry.TableId << " with path " << path);
             Execute(CreateUpdateDomain(key));
         } else {
-            BLOG_W("Received NavigateKeySetResult for domain " << entry.TableId << " with status " << entry.Status);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received NavigateKeySetResult for domain " << entry.TableId << " with status " << entry.Status);
         }
     } else {
-        BLOG_W("Received empty NavigateKeySetResult");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received empty NavigateKeySetResult");
     }
 }
 
 void THive::Handle(TEvHive::TEvUpdateDomain::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvUpdateDomain(" << ev->Get()->Record.ShortDebugString() << ")");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvHive::TEvUpdateDomain(" << ev->Get()->Record.ShortDebugString() << ")");
     const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
     TDomainInfo& domainInfo = Domains[subdomainKey];
     if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {

@@ -23,7 +23,7 @@ public:
         SideEffects.Reset(Self->SelfId());
         Success = true;
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
-        BLOG_D("THive::TTxDeleteTabletResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTabletResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK) {
@@ -60,7 +60,7 @@ public:
                 Self->DeleteTablet(tablet->Id);
             } else {
                 Success = false;
-                BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
                 Y_ENSURE_LOG(tablet->IsDeleting(), " tablet " << tablet->Id);
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
             }
@@ -69,7 +69,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << ")::Complete SideEffects " << SideEffects);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTabletResult(" << TabletId << ")::Complete SideEffects " << SideEffects);
         if (Success) {
             --Self->DeleteTabletInProgress;
             while (!Self->DeleteTabletQueue.empty() && Self->DeleteTabletInProgress < Self->GetMaxDeleteTabletInProgress()) {

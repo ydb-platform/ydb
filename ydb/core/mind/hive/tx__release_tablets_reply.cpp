@@ -30,7 +30,7 @@ public:
     void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
         ++TabletsDone;
         if (TabletsDone >= TabletsTotal) {
-            BLOG_D("THive::TTxReleaseTabletsReply::Complete - continue migration");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTabletsReply::Complete - continue migration");
             Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
             PassAway();
         }
@@ -39,7 +39,7 @@ public:
     void Bootstrap(const TActorContext&) {
         Become(&TThis::StateWork);
         if (TabletsTotal == 0) {
-            BLOG_D("THive::TTxReleaseTabletsReply::Complete - continue migration");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTabletsReply::Complete - continue migration");
             Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
             PassAway();
         }
@@ -67,7 +67,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxReleaseTabletsReply::Execute " << request);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTabletsReply::Execute " << request);
         NIceDb::TNiceDb db(txc.DB);
         for (const TTabletId tabletId : request.GetTabletIDs()) {
             db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::NeedToReleaseFromParent>(false);
@@ -77,7 +77,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         const NKikimrHive::TEvReleaseTabletsReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxReleaseTabletsReply::Complete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTabletsReply::Complete");
 
         TActorId waitActorId;
         TReleaseTabletsWaitActor* waitActor = nullptr;
@@ -111,7 +111,7 @@ public:
         Self->MigrationProgress += request.TabletIDsSize();
         // continue migration
         if (waitActor) {
-            BLOG_D("THive::TTxReleaseTabletsReply::Complete - waiting for tablets to rise");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTabletsReply::Complete - waiting for tablets to rise");
             return; // waiting for tablets
         } else {
             Self->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Self->MigrationFilter));

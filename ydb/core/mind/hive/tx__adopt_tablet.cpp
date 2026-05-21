@@ -37,7 +37,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_ADOPT_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxAdoptTablet::Execute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxAdoptTablet::Execute");
         NIceDb::TNiceDb db(txc.DB);
 
         const TOwnerIdxType::TValueType prevOwner(PrevOwner, PrevOwnerIdx);
@@ -111,7 +111,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxAdoptTablet::Complete TabletId: " << TabletId <<
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxAdoptTablet::Complete TabletId: " << TabletId <<
                " Status: " << NKikimrProto::EReplyStatus_Name(Status) <<
                " Explain: " << Explain);
 

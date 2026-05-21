@@ -29,9 +29,9 @@ public:
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             if (PreferredNodeId == 0) {
-                BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << ")::Execute");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRestartTablet(" << tablet->ToString() << ")::Execute");
             } else {
-                BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << " to node " << PreferredNodeId << ")::Execute");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRestartTablet(" << tablet->ToString() << " to node " << PreferredNodeId << ")::Execute");
             }
             if (!tablet->IsStopped()) {
                 NIceDb::TNiceDb db(txc.DB);
@@ -57,7 +57,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxRestartTablet(" << TabletId << ")::Complete SideEffects: " << SideEffects);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRestartTablet(" << TabletId << ")::Complete SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
     }
 };

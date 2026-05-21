@@ -65,7 +65,7 @@ public:
         SideEffects.Reset(Self->SelfId());
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
         if (tablet != nullptr) {
-            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet "
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletStatus::Execute for tablet "
                         << tablet->ToString()
                         << " status "
                         << GetStatus()
@@ -83,7 +83,7 @@ public:
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
-                        BLOG_W("Tablet " << tablet->GetFullTabletId() << " was starting for " << startTime.Seconds() << " seconds");
+                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet " << tablet->GetFullTabletId() << " was starting for " << startTime.Seconds() << " seconds");
                     }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
                     Self->UpdateCounterTabletsStarting(-1);
@@ -153,7 +153,7 @@ public:
                     if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                         if (IsGoodStatusForPenalties()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
-                            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
+                            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
                                 << " postponed start until " << leader.PostponedStart);
                         }
                     }
@@ -194,7 +194,7 @@ public:
 
                 case ETabletState::Stopped:
                     Self->ReportStoppedToWhiteboard(tablet->GetLeader());
-                    BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
                     break;
                 case ETabletState::BlockStorage:
                     // do nothing - let the tablet die
@@ -210,7 +210,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
     }
 };

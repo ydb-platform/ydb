@@ -114,15 +114,15 @@ TString TTabletInfo::FamilyString() const {
 void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     if (VolatileState == state) {
         if (Node != nullptr) {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " (Node " << Node->Id << ")");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " (Node " << Node->Id << ")");
         } else {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState));
         }
     } else {
         if (Node != nullptr) {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state) << " (Node " << Node->Id << ")");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state) << " (Node " << Node->Id << ")");
         } else {
-            BLOG_D("Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet(" << ToString() << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
         }
     }
     if (Node != nullptr) {
@@ -350,7 +350,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)) {
         if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
-                BLOG_W("Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
             }
@@ -362,7 +362,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)) {
         if (metrics.HasMemory()) {
             if (metrics.GetMemory() > static_cast<ui64>(std::get<NMetrics::EResource::Memory>(maximum))) {
-                BLOG_W("Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
             }
@@ -374,7 +374,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)) {
         if (metrics.HasNetwork()) {
             if (metrics.GetNetwork() > static_cast<ui64>(std::get<NMetrics::EResource::Network>(maximum))) {
-                BLOG_W("Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
             }
@@ -515,7 +515,7 @@ void TTabletInfo::SendStopTablet(const TActorId& local, TSideEffects& sideEffect
         if (IsLeader()) {
             gen = AsLeader().KnownGeneration;
         }
-        BLOG_D("Sending TEvStopTablet(" << ToString() << " gen " << gen << ") to node " << local.NodeId());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Sending TEvStopTablet(" << ToString() << " gen " << gen << ") to node " << local.NodeId());
         sideEffects.Send(local, new TEvLocal::TEvStopTablet(tabletId, gen));
     }
 }

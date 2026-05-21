@@ -22,7 +22,7 @@ TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
 {}
 
 void TNodeInfo::ChangeVolatileState(EVolatileState state) {
-    BLOG_W("Node(" << Id << ", " << ResourceValues << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
+    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ", " << ResourceValues << ") VolatileState: " << EVolatileStateName(VolatileState) << " -> " << EVolatileStateName(state));
 
     if (VolatileState != state) {
         if (VolatileState == EVolatileState::Connected) {
@@ -74,7 +74,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
             }
         } else {
             if (oldState != newState) {
-                BLOG_W("Node(" << Id << ") could not delete tablet " << tablet->ToString() << " from state " << TTabletInfo::EVolatileStateName(oldState));
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") could not delete tablet " << tablet->ToString() << " from state " << TTabletInfo::EVolatileStateName(oldState));
             }
         }
     }
@@ -94,7 +94,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
                 LastScheduledTablet = {.TabletId = tablet->GetFullTabletId(), .UsageBefore = NodeTotalUsage};
             }
         } else {
-            BLOG_W("Node(" << Id << ") could not insert tablet " << tablet->ToString() << " to state " << TTabletInfo::EVolatileStateName(newState));
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") could not insert tablet " << tablet->ToString() << " to state " << TTabletInfo::EVolatileStateName(newState));
         }
     }
     if (IsAliveState(newState)) {
@@ -115,7 +115,7 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     ResourceValues += delta;
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
-    BLOG_TRACE("Node(" << Id << ", " << oldResourceValues << "->" << ResourceValues << ")");
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ", " << oldResourceValues << "->" << ResourceValues << ")");
     Hive.UpdateTotalResourceValues(this, tablet, before, after, ResourceValues - oldResourceValues, normalizedValues - oldNormalizedValues);
 }
 
@@ -372,12 +372,12 @@ void TNodeInfo::DeregisterInDomains() {
 
 void TNodeInfo::Ping() {
     Y_ABORT_UNLESS((bool)Local);
-    BLOG_D("Node(" << Id << ") Ping(" << Local << ")");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") Ping(" << Local << ")");
     Hive.QueuePing(Local);
 }
 
 void TNodeInfo::SendReconnect(const TActorId& local) {
-    BLOG_D("Node(" << Id << ") Reconnect(" << local << ")");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Node(" << Id << ") Reconnect(" << local << ")");
     Hive.SendReconnect(local);
 }
 
@@ -520,7 +520,7 @@ void TNodeInfo::UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& me
                 usageImpact = std::max<double>(usageImpact, 0);
                 auto* tablet = Hive.FindTablet(LastScheduledTablet->TabletId);
                 if (tablet) {
-                    BLOG_D("Estimate impact of tablet " << LastScheduledTablet->TabletId << " on usage of node " << Id << " as " << usageImpact);
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Estimate impact of tablet " << LastScheduledTablet->TabletId << " on usage of node " << Id << " as " << usageImpact);
                     tablet->UsageImpact = usageImpact;
                     db.Table<Schema::Metrics>().Key(LastScheduledTablet->TabletId).Update<Schema::Metrics::UsageImpact>(usageImpact);
                 }

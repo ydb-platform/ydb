@@ -16,7 +16,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_DC_FOLLOWERS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxProcessUpdateFollowers::Execute()");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"TTxProcessUpdateFollowers::Execute()");
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
         for (size_t i = 0; !Self->PendingFollowerUpdates.Empty() && i < MAX_UPDATES_PROCESSED; ++i) {
@@ -49,7 +49,7 @@ public:
                     follower.BecomeStopped();
                     follower.InitiateBoot();
                     followers.push_back(std::prev(tablet->AsLeader().Followers.end()));
-                    BLOG_D("THive::TTxProcessUpdateFollowers::Execute(): created follower " << follower.GetFullTabletId());
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessUpdateFollowers::Execute(): created follower " << follower.GetFullTabletId());
                     break;
                 }
                 case TFollowerUpdates::EAction::Update:

@@ -1084,8 +1084,6 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
 
 void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
     ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const TChannelLogFunc& logFunc) {
-    YQL_ENSURE(stageInfo.Tasks.size() == 1);
-
     auto* settings = GetMeta().Allocate<NDqProto::TDqInputTransformLookupSettings>();
     settings->SetLeftLabel(dqSourceStreamLookup.GetLeftLabel());
     settings->SetRightLabel(dqSourceStreamLookup.GetRightLabel());
@@ -1106,6 +1104,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     } else if (dqSourceStreamLookup.HasFullscanLimit()) {
         settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
     }
+    /* ShuffleMode intentionally omitted */
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
     settings->MutableLeftJoinKeyNames()->Assign(leftJointKeys.begin(), leftJointKeys.end());
@@ -1140,8 +1139,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
             task.Meta.SecureParams.emplace(sourceName, structuredToken);
         }
     }
-
-    BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+            BuildMapChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
 }
 
 void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination) {
@@ -3749,7 +3747,11 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
         const auto& inputStageId = NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex());
         inputs.push_back(inputStageId);
 
-        switch (input.GetTypeCase()) {
+        auto inputTypeCase = input.GetTypeCase();
+        if (inputTypeCase == NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup) {
+                    inputTypeCase = NKqpProto::TKqpPhyConnection::kMap;
+        }
+        switch (inputTypeCase) {
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
                 inputTasks += MaxTasksGraph.GetStageTasksCount(inputStageId);
                 isShuffle = true;

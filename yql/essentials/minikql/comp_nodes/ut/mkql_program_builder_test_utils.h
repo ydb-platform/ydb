@@ -51,13 +51,41 @@ struct TUnpackedMaybe {
     const T* Value = nullptr;
 };
 
+template <size_t N>
+struct TMemberName {
+    char Data[N];
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    constexpr TMemberName(const char (&str)[N]) {
+        std::copy_n(str, N, Data);
+    }
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    constexpr operator std::string_view() const {
+        return {Data, N - 1};
+    }
+};
+
 } // namespace NPrivate
+
+template <NPrivate::TMemberName Name, typename T>
+struct TStructMember {
+    T Value;
+    static constexpr std::string_view MemberName() {
+        return Name;
+    }
+};
+
+template <typename... TMembers>
+struct TStructType {
+    std::tuple<TMembers...> Members;
+};
 
 // Forward declarations so all overloads are visible to each other's template bodies.
 template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TMaybe<T>& maybeNode);
 template <typename... TArgs>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::tuple<TArgs...>& node);
+template <typename... TArgs>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructType<TArgs...>& node);
 template <typename... Args>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::variant<Args...>& v);
 template <typename T>
@@ -191,9 +219,22 @@ TRuntimeNode ConvertValueToLiteralNodeTuple(TProgramBuilder& pb, const std::tupl
     return pb.NewTuple(data);
 }
 
+template <typename... TArgs, std::size_t... Is>
+TRuntimeNode ConvertValueToLiteralNodeStruct(TProgramBuilder& pb, const TStructType<TArgs...>& structNode, std::index_sequence<Is...>) {
+    std::vector<std::pair<std::string_view, TRuntimeNode>> members = {
+        {std::tuple_element_t<Is, std::tuple<TArgs...>>::MemberName(),
+         ConvertValueToLiteralNode(pb, std::get<Is>(structNode.Members).Value)}...};
+    return pb.NewStruct(members);
+}
+
 template <typename... TArgs>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::tuple<TArgs...>& node) {
     return ConvertValueToLiteralNodeTuple(pb, node, std::index_sequence_for<TArgs...>{});
+}
+
+template <typename... TArgs>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructType<TArgs...>& node) {
+    return ConvertValueToLiteralNodeStruct(pb, node, std::index_sequence_for<TArgs...>{});
 }
 
 template <typename... Args>

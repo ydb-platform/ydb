@@ -376,28 +376,43 @@ class ClusterRollingRestartNemesis(MonitoredAgentActor):
         self._step_id = itertools.count(1)
 
     def inject_fault(self, payload=None) -> None:
-        self._logger.error("killing node with ic: %s, for: %s secs", payload['node_ic_port'], payload['duration'])
-        del payload
-        return
-        cluster = require_external_cluster()
-        node = _resolve_local_node(cluster)
-        if node is None:
-            self._logger.warning("No local node found in cluster — cannot rolling-update")
+        if not payload or "node_ic_port" not in payload:
+            self._logger.error("inject_fault: missing node_ic_port in payload=%s", payload)
             return
-        local_slots = _resolve_local_slots(cluster)
-        self._logger.info("Rolling update step %d on local host", next(self._step_id))
+
+        node_ic_port = int(payload["node_ic_port"])
+        duration = int(payload.get("duration", 60))
+        if node_ic_port == 19001:
+            service = "kikimr.service"
+        else:
+            service = "kikimr-multi@{}.service".format(node_ic_port)
+        self._logger.info(
+            "Rolling restart step %d: stopping %s for %ds",
+            next(self._step_id), service, duration,
+        )
         try:
-            _local_switch_version()
-            _local_kill_daemon_and_process(int(node.ic_port))
-            for slot in local_slots:
-                try:
-                    _local_kill_daemon_and_process(int(slot.ic_port))
-                except Exception as e:
-                    self._logger.error("slot kill failed: %s", e)
-            self.on_success_inject_fault()
-        except Exception as e:
-            self._logger.error("rolling update failed: %s", e)
+            subprocess.run(
+                ["sudo", "systemctl", "stop", service],
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            self._logger.error("systemctl stop %s failed: %s", service, e)
             raise
+
+        try:
+            time.sleep(duration)
+        finally:
+            try:
+                subprocess.run(
+                    ["sudo", "systemctl", "start", service],
+                    check=True,
+                )
+                self._logger.info("Restarted %s after %ds", service, duration)
+            except subprocess.CalledProcessError as e:
+                self._logger.error("systemctl start %s failed: %s", service, e)
+                raise
+
+        self.on_success_inject_fault()
 
     def extract_fault(self, payload=None) -> None:
         del payload

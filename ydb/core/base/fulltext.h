@@ -31,11 +31,11 @@ class TDeltaWriter {
     ui64 MaxId = 0;
     ui64 Count = 0;
     ui64 TotalFreq = 0;
+    bool WithFreq = false;
 public:
-    void Reset();
-    void Add(ui64 DocId);
+    void Reset(bool withFreq);
     void Add(ui64 DocId, ui32 Freq);
-    size_t AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, bool withFreq, size_t maxSize);
+    size_t AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, size_t maxSize);
     ui64 GetMinId() const;
     ui64 GetMaxId() const;
     ui64 GetCount() const;
@@ -46,24 +46,23 @@ public:
 class IDeltaReader {
 public:
     virtual ~IDeltaReader() = default;
-    virtual bool Read(ui64& docId) = 0;
     virtual bool Read(ui64& docId, ui32& freq) = 0;
     virtual bool IsEnded() const = 0;
 };
 
-class TDeltaReader {
+class TDeltaReader: public IDeltaReader {
     TConstArrayRef<ui8> Buf;
     size_t Pos = 0;
     ui64 LastId = 0;
+    bool WithFreq = false;
 public:
-    void Reset(ui64 firstId, TConstArrayRef<ui8> buf);
-    bool Read(ui64& docId);
-    bool Read(ui64& docId, ui32& freq);
+    void Reset(ui64 firstId, TConstArrayRef<ui8> buf, bool withFreq);
+    bool Read(ui64& docId, ui32& freq) override;
     size_t GetPos() const;
-    bool IsEnded() const;
+    bool IsEnded() const override;
 };
 
-class TMultiDeltaReader {
+class TMultiDeltaReader: public IDeltaReader {
     struct TReaderRef {
         TDeltaReader Reader;
         bool Added = false;
@@ -88,9 +87,8 @@ public:
     void Reset(bool withFreq);
     void Add(TConstArrayRef<ui8> buf, bool added);
     void Start();
-    bool Read(ui64& docId);
-    bool Read(ui64& docId, ui32& freq);
-    bool IsEnded() const;
+    bool Read(ui64& docId, ui32& freq) override;
+    bool IsEnded() const override;
 };
 
 }

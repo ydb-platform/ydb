@@ -159,6 +159,7 @@ public:
             PostingBuf = Uploader.AddDestination(request.GetPostingTableName(), std::move(uploadTypes));
 
             WithFreq = (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance);
+            Delta.Reset(WithFreq);
             MaxSegmentDocuments = request.GetMaxSegmentDocuments();
             if (!MaxSegmentDocuments) {
                 MaxSegmentDocuments = 10000;
@@ -346,7 +347,7 @@ protected:
             ui64 maxId = 0;
             while (true) {
                 auto prev = Delta.GetCount();
-                inPos += Delta.AddCompressed(maxId, inBuf.Slice(inPos), WithFreq, MaxSegmentDocuments);
+                inPos += Delta.AddCompressed(maxId, inBuf.Slice(inPos), MaxSegmentDocuments);
                 LastTokenRows += (Delta.GetCount() - prev);
                 if (inPos < inBuf.size()) {
                     if (inPos > 0) {
@@ -377,7 +378,7 @@ protected:
             };
             PostingBuf->AddRow(uploadKey, uploadValue);
         }
-        Delta.Reset();
+        Delta.Reset(WithFreq);
     }
 
     void FinishToken(bool last)

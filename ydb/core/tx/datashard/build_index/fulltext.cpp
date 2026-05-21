@@ -337,17 +337,15 @@ public:
                 if (state.Token.empty()) {
                     state.Token = tokens[i];
                     state.Gen = Generation;
+                    state.Segment.Reset(WithRelevance);
                     BufferedBytes += tokens[i].size(); // count token sizes
                 } else if (!state.Segment.GetCount()) {
                     EmptyTokenBytes -= tokens[i].size();
+                    state.Segment.Reset(WithRelevance);
                 }
                 TokensBySize.erase(&state);
                 BufferedBytes -= state.Segment.GetBuf().size();
-                if (WithRelevance) {
-                    state.Segment.Add(docId, freq);
-                } else {
-                    state.Segment.Add(docId);
-                }
+                state.Segment.Add(docId, freq);
                 BufferedBytes += state.Segment.GetBuf().size();
                 TokensBySize.insert(&state);
                 freq = 1;

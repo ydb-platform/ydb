@@ -10,11 +10,11 @@ Y_UNIT_TEST_SUITE(NFulltext) {
     Y_UNIT_TEST(MultiDeltaReader) {
         TDeltaWriter wr;
         for (ui64 i = 1; i <= 100; i++) {
-            wr.Add(i);
+            wr.Add(i, 1);
         }
         TDeltaWriter wr2;
         for (ui64 i = 5; i <= 25; i += 2) {
-            wr2.Add(i);
+            wr2.Add(i, 1);
         }
         TMultiDeltaReader rdr;
         rdr.Add(wr.GetBuf(), true);
@@ -25,8 +25,10 @@ Y_UNIT_TEST_SUITE(NFulltext) {
                 continue;
             }
             ui64 docId;
-            UNIT_ASSERT(rdr.Read(docId));
+            ui32 freq;
+            UNIT_ASSERT(rdr.Read(docId, freq));
             UNIT_ASSERT_VALUES_EQUAL(docId, i);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1);
         }
         UNIT_ASSERT(rdr.IsEnded());
     }

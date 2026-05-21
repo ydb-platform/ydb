@@ -511,28 +511,25 @@ ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
     return r;
 }
 
-void TDeltaReader::Reset(ui64 firstId, TConstArrayRef<ui8> buf)
+void TDeltaReader::Reset(ui64 firstId, TConstArrayRef<ui8> buf, bool withFreq)
 {
     Buf = buf;
     Pos = 0;
     LastId = firstId;
-}
-
-bool TDeltaReader::Read(ui64& docId)
-{
-    if (Pos >= Buf.size())
-        return false;
-    docId = LastId + ReadVarint(Buf, Pos);
-    LastId = docId;
-    return true;
+    WithFreq = withFreq;
 }
 
 bool TDeltaReader::Read(ui64& docId, ui32& freq)
 {
-    if (Pos >= Buf.size())
+    if (Pos >= Buf.size()) {
         return false;
+    }
     bool hasFreq = false;
-    docId = LastId + ReadVarintWithFlag(Buf, Pos, hasFreq);
+    if (WithFreq) {
+        docId = LastId + ReadVarintWithFlag(Buf, Pos, hasFreq);
+    } else {
+        docId = LastId + ReadVarint(Buf, Pos);
+    }
     freq = hasFreq ? ReadVarint(Buf, Pos) : 1;
     LastId = docId;
     return true;
@@ -548,25 +545,14 @@ bool TDeltaReader::IsEnded() const
     return Pos >= Buf.size();
 }
 
-void TDeltaWriter::Reset()
+void TDeltaWriter::Reset(bool withFreq)
 {
     Buf.clear();
     MinId = 0;
     MaxId = 0;
     Count = 0;
     TotalFreq = 0;
-}
-
-void TDeltaWriter::Add(ui64 DocId)
-{
-    Y_ENSURE(DocId > MaxId || !Count);
-    if (!Count) {
-        MinId = DocId;
-    }
-    AddVarint(Buf, DocId - MaxId);
-    MaxId = DocId;
-    Count++;
-    TotalFreq++;
+    WithFreq = withFreq;
 }
 
 void TDeltaWriter::Add(ui64 DocId, ui32 Freq)
@@ -575,22 +561,26 @@ void TDeltaWriter::Add(ui64 DocId, ui32 Freq)
     if (!Count) {
         MinId = DocId;
     }
-    AddVarintWithFlag(Buf, DocId - MaxId, Freq > 1);
-    if (Freq > 1) {
-        AddVarint(Buf, Freq);
+    if (WithFreq) {
+        AddVarintWithFlag(Buf, DocId - MaxId, Freq > 1);
+        if (Freq > 1) {
+            AddVarint(Buf, Freq);
+        }
+    } else {
+        AddVarint(Buf, DocId - MaxId);
     }
     MaxId = DocId;
     Count++;
     TotalFreq += Freq;
 }
 
-size_t TDeltaWriter::AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, bool withFreq, ui64 maxCount)
+size_t TDeltaWriter::AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, ui64 maxCount)
 {
     if (!other.size() || maxCount > 0 && Count >= maxCount) {
         return 0;
     }
     size_t pos = 0;
-    if (withFreq) {
+    if (WithFreq) {
         bool hasFreq = false;
         ui64 docId = firstId+ReadVarintWithFlag(other, pos, hasFreq);
         ui64 freq = hasFreq ? ReadVarint(other, pos) : 1;
@@ -605,7 +595,7 @@ size_t TDeltaWriter::AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, bool
         Add(docId);
         while (pos < other.size() && (!maxCount || Count < maxCount)) {
             ui64 deltaId = ReadVarint(other, pos);
-            Add(MaxId+deltaId);
+            Add(MaxId+deltaId, 0);
         }
     }
     return pos;
@@ -654,7 +644,7 @@ void TMultiDeltaReader::Add(TConstArrayRef<ui8> buf, bool added)
     Readers.emplace_back();
     auto& rdr = Readers.back();
     rdr.Added = added;
-    rdr.Reader.Reset(0, buf);
+    rdr.Reader.Reset(0, buf, WithFreq);
 }
 
 void TMultiDeltaReader::Start()
@@ -685,19 +675,9 @@ void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr)
 {
     ui64 docId = 0;
     ui32 freq = 1;
-    if (WithFreq) {
-        rdr.Reader.Read(docId, freq);
-    } else {
-        rdr.Reader.Read(docId);
-    }
+    rdr.Reader.Read(docId, freq);
     Items.push_back(TItem{docId, (rdr.Added ? (i32)freq : -(i32)freq), rdrId});
     std::push_heap(Items.begin(), Items.end(), CompareItems);
-}
-
-bool TMultiDeltaReader::Read(ui64& docId)
-{
-    ui32 freq = 0;
-    return Read(docId, freq);
 }
 
 bool TMultiDeltaReader::Read(ui64& docId, ui32& freq)
@@ -707,7 +687,7 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq)
     if (OneLeft) {
         auto& rdr = Readers[0];
         freq = 1;
-        return WithFreq ? rdr.Reader.Read(docId, freq) : rdr.Reader.Read(docId);
+        return rdr.Reader.Read(docId, freq);
     }
     if (Items.size() == 1) {
         // Bypass heap :)

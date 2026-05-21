@@ -118,17 +118,6 @@ void SlowLogQuery(const TActorContext &ctx, const NYql::TKikimrConfiguration* co
     const TDuration& duration, Ydb::StatusIds::StatusCode status, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, ui64 parametersSize,
     NKikimrKqp::TEvQueryResponse *record, const std::function<TString()> extractQueryText);
 
-// Temporary per-query logging.
-// TODO(anely-d): remove once the query logging system is ready.
-// Errors are logged at PRI_WARN, other events at PRI_INFO.
-void LogQueryEvent(const TActorContext &ctx, const TKqpRequestInfo& requestInfo,
-    const TDuration& duration, Ydb::StatusIds::StatusCode status,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    const TString& database, const TString& databaseId,
-    NKikimrKqp::EQueryAction queryAction, NKikimrKqp::EQueryType queryType,
-    NKikimrKqp::TEvQueryResponse* record,
-    const std::function<TString()>& extractQueryText, ui64 parametersSize);
-
 NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);
 
 inline bool IsDocumentApiRestricted(const TString& requestType) {

@@ -845,12 +845,6 @@ private:
             auto requestInfo = TKqpRequestInfo(QueryState->RequestEv->GetTraceId(), SessionId);
             SlowLogQuery(ctx, Config.Get(), requestInfo, queryDuration, record.GetYdbStatus(), QueryState->RequestEv->GetUserToken(),
                 QueryState->RequestEv->GetParametersSize(), &record, [this] () { return this->ExtractQueryText(); });
-            LogQueryEvent(ctx, requestInfo, queryDuration, record.GetYdbStatus(),
-                QueryState->RequestEv->GetUserToken(),
-                QueryState->RequestEv->GetDatabase(), QueryState->RequestEv->GetDatabaseId(),
-                QueryState->RequestEv->GetAction(), QueryState->RequestEv->GetType(), &record,
-                [this]() { return this->ExtractQueryText(); },
-                QueryState->RequestEv->GetParametersSize());
         }
 
         bool reportStats = (GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::None) != EKikimrStatsMode::None);

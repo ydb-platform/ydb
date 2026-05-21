@@ -52,7 +52,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/security/util.h>
 
+#include <util/charset/utf8.h>
 #include <util/string/printf.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
@@ -2732,35 +2735,88 @@ public:
     }
 
 
-    void LogQueryFinalState(NKikimrKqp::TEvQueryResponse* record) {
-        if (!record || !QueryState || !QueryState->UserRequestContext
-                || !IsExecuteAction(QueryState->GetAction())) {
+    // Temporary per-query logging.
+    // TODO(anely-d): remove once the query logging system is ready.
+    // Errors are logged at PRI_WARN, other events at PRI_INFO.
+    void LogQueryFinalState(const NKikimrKqp::TEvQueryResponse& record) {
+        if (!QueryState || !QueryState->UserRequestContext
+                || !IsExecuteAction(QueryState->GetAction())
+                || !IsQueryTypeSupported(QueryState->GetType())) {
             return;
         }
+
+        auto ctx = TlsActivationContext->AsActorContext();
+        auto logSettings = ctx.LoggerSettings();
+        if (!logSettings) {
+            return;
+        }
+
+        const auto status = record.GetYdbStatus();
+        const bool isError = (status != Ydb::StatusIds::SUCCESS);
+        const auto priority = isError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
+        if (!logSettings->Satisfies(priority, NKikimrServices::KQP_SESSION)) {
+            return;
+        }
+
         ui64 durationUs = QueryState->QueryStats.DurationUs;
         if (!durationUs) {
             durationUs = (TInstant::Now() - QueryState->StartTime).MicroSeconds();
         }
+        const auto duration = TDuration::MicroSeconds(durationUs);
+
+        auto username = QueryState->UserToken ? QueryState->UserToken->GetUserSID() : TString();
+        if (username.empty()) {
+            username = "UNAUTHENTICATED";
+        }
+
+        ui64 resultsSize = 0;
+        for (const auto& result : record.GetResponse().GetYdbResults()) {
+            resultsSize += result.ByteSize();
+        }
+
+        TString queryText;
+        if (QueryState->CompileResult && QueryState->CompileResult->Query) {
+            queryText = QueryState->CompileResult->Query->Text;
+        } else if (QueryState->RequestEv) {
+            queryText = QueryState->RequestEv->GetQuery();
+        } else {
+            queryText = "<failed to extract query text>";
+        }
+        constexpr size_t MaxQueryTextLen = 10_KB;
+        const size_t origQueryLen = queryText.size();
+        if (queryText.size() > MaxQueryTextLen) {
+            Utf8TruncateInplaceRobust(queryText, MaxQueryTextLen);
+        }
+
+        TStringBuilder line;
+        line << "Query event"
+            << ", database: " << QueryState->Database
+            << ", databaseId: " << QueryState->UserRequestContext->DatabaseId
+            << ", user: " << username
+            << ", action: " << NKikimrKqp::EQueryAction_Name(QueryState->GetAction())
+            << ", type: " << NKikimrKqp::EQueryType_Name(QueryState->GetType())
+            << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
+            << ", duration: " << duration.ToString()
+            << ", results: " << resultsSize << 'b'
+            << ", parameters: " << QueryState->ParametersSize << 'b'
+            << ", queryLen: " << origQueryLen
+            << ", query: \"" << EscapeC(queryText) << '"';
+
+        if (isError) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+            if (!issues.Empty()) {
+                constexpr size_t MaxIssuesLen = 1024;
+                TString issuesStr = issues.ToString(true);
+                if (issuesStr.size() > MaxIssuesLen) {
+                    Utf8TruncateInplaceRobust(issuesStr, MaxIssuesLen);
+                }
+                line << ", issues: \"" << EscapeC(issuesStr) << '"';
+            }
+        }
+
         auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
-        auto queryDuration = TDuration::MicroSeconds(durationUs);
-        static const TString FailedToExtractQueryText = "<failed to extract query text>";
-        LogQueryEvent(TlsActivationContext->AsActorContext(), requestInfo, queryDuration,
-            record->GetYdbStatus(), QueryState->UserToken,
-            QueryState->Database, QueryState->UserRequestContext->DatabaseId,
-            QueryState->GetAction(), QueryState->GetType(), record,
-            [this, failed = FailedToExtractQueryText]() -> TString {
-                if (QueryState->CompileResult) {
-                    if (QueryState->CompileResult->Query) {
-                        return QueryState->CompileResult->Query->Text;
-                    }
-                    return failed;
-                }
-                if (QueryState->RequestEv) {
-                    return QueryState->RequestEv->GetQuery();
-                }
-                return failed;
-            },
-            QueryState->ParametersSize);
+        LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SESSION, requestInfo << line);
     }
 
     template<class TEvRecord>
@@ -2960,8 +3016,6 @@ public:
             (action, QueryState->GetAction()),
             (trace_id, TraceId()));
 
-        LogQueryFinalState(&resEv->Record);
-
         QueryResponse = std::move(resEv);
 
 
@@ -3011,8 +3065,6 @@ public:
         FillPoolId(response);
         record->SetConsumedRu(1);
 
-        LogQueryFinalState(record);
-
         Cleanup(IsFatalError(record->GetYdbStatus()));
     }
 
@@ -3032,8 +3084,6 @@ public:
 
         FillTxInfo(&response);
         FillPoolId(&response);
-
-        LogQueryFinalState(&record);
 
         Cleanup(false);
     }
@@ -3162,6 +3212,8 @@ public:
         );
 
         KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record));
+
+        LogQueryFinalState(record);
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         STLOG_D("Sent query response back to proxy",
@@ -3521,8 +3573,6 @@ public:
 
         FillTxInfo(response);
         FillPoolId(response);
-
-        LogQueryFinalState(&QueryResponse->Record);
 
         ExecuterId = TActorId{};
         Cleanup(IsFatalError(ydbStatus));

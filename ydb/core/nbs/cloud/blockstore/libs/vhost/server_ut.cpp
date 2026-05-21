@@ -1087,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
         // are picked up and processed by N different executor threads in
         // parallel. This exercises the multi-queue support end-to-end:
         //
-        //   vhost queues ──► N executor threads ──► shared device handler
+        //   vhost queues -> N executor threads -> shared device handler
         //
         // Even though all queues share a single IDeviceHandler, dispatch
         // happens in the executor thread of the originating queue, so the

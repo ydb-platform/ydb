@@ -24,7 +24,6 @@
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 
-#include <algorithm>
 #include <atomic>
 
 namespace NYdb::NBS::NBlockStore::NVhost {
@@ -664,10 +663,6 @@ TFuture<NProto::TError> TServer::StartEndpoint(
     // The whole storage-wrapper chain is built once per endpoint.
     auto deviceHandler = CreateDeviceHandler(options, std::move(storage));
 
-    // TEndpoint's constructor atomically increments the assigned-queue
-    // counter on each queue; its destructor decrements them. No locking
-    // is needed for either side because the counter lives on the queue
-    // itself.
     auto endpoint = std::make_shared<TEndpoint>(
         *this,
         std::move(deviceHandler),
@@ -841,26 +836,25 @@ TVector<TExecutor*> TServer::PickExecutors(ui32 count)
     Y_ABORT_UNLESS(!Executors.empty());
     Y_ABORT_UNLESS(count <= Executors.size());
 
-    // Copy the executor pointers, sort them by the current assigned-queue
-    // count (read atomically), then crop to the requested size.
-    TVector<TExecutor*> picked;
-    picked.reserve(Executors.size());
+    // Snapshot each executor's assigned-endpoint count into a multimap so
+    // the ordering is computed against a stable set of values, even if
+    // other threads are concurrently (de)assigning endpoints. The multimap
+    // sorts by key ascending, so the first `count` entries are the least
+    // loaded executors.
+    TMultiMap<ui32, TExecutor*> byLoad;
     for (const auto& executor: Executors) {
-        picked.push_back(executor.get());
+        const ui32 load = executor->GetQueue()->AssignedEndpointsCount.load();
+        byLoad.emplace(load, executor.get());
     }
 
-    std::stable_sort(
-        picked.begin(),
-        picked.end(),
-        [](const TExecutor* a, const TExecutor* b)
-        {
-            return a->GetQueue()->AssignedEndpointsCount.load(
-                       std::memory_order_relaxed) <
-                   b->GetQueue()->AssignedEndpointsCount.load(
-                       std::memory_order_relaxed);
-        });
-
-    picked.resize(count);
+    TVector<TExecutor*> picked;
+    picked.reserve(count);
+    for (const auto& [load, executor]: byLoad) {
+        if (picked.size() == count) {
+            break;
+        }
+        picked.push_back(executor);
+    }
     return picked;
 }
 

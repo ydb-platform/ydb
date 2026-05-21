@@ -24,6 +24,7 @@
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 
+#include <algorithm>
 #include <atomic>
 
 namespace NYdb::NBS::NBlockStore::NVhost {
@@ -161,6 +162,10 @@ private:
     const TString SocketPath;
     const TStorageOptions Options;
     const ui32 SocketAccessMode;
+    // Queues assigned to this endpoint. Kept here so that the endpoint's
+    // lifetime governs the per-queue assignment counter (atomic, no locks
+    // required for inc/dec).
+    const TVector<IVhostQueuePtr> Queues;
     IVhostDevicePtr VhostDevice;
 
     TIntrusiveList<TRequest> RequestsInFlight;
@@ -175,15 +180,32 @@ public:
         IPartitionDirectServicePtr partitionDirectService,
         TString socketPath,
         const TStorageOptions& options,
-        ui32 socketAccessMode)
+        ui32 socketAccessMode,
+        TVector<IVhostQueuePtr> queues)
         : AppCtx(appCtx)
         , DeviceHandler(std::move(deviceHandler))
         , PartitionDirectService(std::move(partitionDirectService))
         , SocketPath(std::move(socketPath))
         , Options(options)
         , SocketAccessMode(socketAccessMode)
+        , Queues(std::move(queues))
     {
         Y_ABORT_UNLESS(DeviceHandler);
+        Y_ABORT_UNLESS(!Queues.empty());
+        for (const auto& queue: Queues) {
+            queue->AssignedEndpointsCount.fetch_add(
+                1,
+                std::memory_order_relaxed);
+        }
+    }
+
+    ~TEndpoint()
+    {
+        for (const auto& queue: Queues) {
+            queue->AssignedEndpointsCount.fetch_sub(
+                1,
+                std::memory_order_relaxed);
+        }
     }
 
     // The cookie attached to every request dispatched through this
@@ -292,21 +314,15 @@ public:
             return;
         }
 
-        auto& handler = *DeviceHandler;
-
         switch (requestType) {
             case EBlockStoreRequest::WriteBlocks:
-                ProcessRequest<TWriteBlocksLocalMethod>(
-                    handler,
-                    std::move(request));
+                ProcessRequest<TWriteBlocksLocalMethod>(std::move(request));
                 break;
             case EBlockStoreRequest::ReadBlocks:
-                ProcessRequest<TReadBlocksLocalMethod>(
-                    handler,
-                    std::move(request));
+                ProcessRequest<TReadBlocksLocalMethod>(std::move(request));
                 break;
             case EBlockStoreRequest::ZeroBlocks:
-                ProcessRequest<TZeroBlocksMethod>(handler, std::move(request));
+                ProcessRequest<TZeroBlocksMethod>(std::move(request));
                 break;
             default:
                 Y_ABORT(
@@ -318,10 +334,10 @@ public:
 
 private:
     template <typename TMethod>
-    void ProcessRequest(IDeviceHandler& handler, TRequestPtr request)
+    void ProcessRequest(TRequestPtr request)
     {
         auto future = TMethod::Execute(
-            handler,
+            *DeviceHandler,
             request->CallContext,
             *request->VhostRequest);
 
@@ -425,11 +441,6 @@ private:
     const IVhostQueuePtr VhostQueue;
     TAffinity Affinity;
 
-    // Number of vhost queues assigned to this executor across all endpoints.
-    // Used by TServer::PickExecutors() to balance load. Updated under server
-    // lock only.
-    ui32 AssignedQueueCount = 0;
-
 public:
     TExecutor(
         TString name,
@@ -449,22 +460,6 @@ public:
     const IVhostQueuePtr& GetQueue() const
     {
         return VhostQueue;
-    }
-
-    ui32 GetAssignedQueueCount() const
-    {
-        return AssignedQueueCount;
-    }
-
-    void IncAssignedQueueCount()
-    {
-        ++AssignedQueueCount;
-    }
-
-    void DecAssignedQueueCount()
-    {
-        Y_ABORT_UNLESS(AssignedQueueCount > 0);
-        --AssignedQueueCount;
     }
 
 private:
@@ -518,18 +513,12 @@ class TServer final
     , public std::enable_shared_from_this<TServer>
 {
 private:
-    struct TEndpointEntry
-    {
-        TEndpointPtr Endpoint;
-        TVector<TExecutor*> Executors;
-    };
-
     TMutex Lock;
 
     TVector<TExecutorPtr> Executors;
 
-    TMap<TString, TEndpointEntry> Endpoints;
-    TMap<TString, TEndpointEntry> StoppingEndpoints;
+    TMap<TString, TEndpointPtr> Endpoints;
+    TMap<TString, TEndpointPtr> StoppingEndpoints;
 
 public:
     TServer(
@@ -649,7 +638,7 @@ TFuture<NProto::TError> TServer::StartEndpoint(
     const ui32 queuesCount =
         Min<ui32>(requestedQueuesCount, static_cast<ui32>(Executors.size()));
 
-    TVector<TExecutor*> pickedExecutors;
+    TVector<IVhostQueuePtr> queues;
 
     with_lock (Lock) {
         auto it = Endpoints.find(socketPath);
@@ -662,12 +651,12 @@ TFuture<NProto::TError> TServer::StartEndpoint(
             return MakeFuture(error);
         }
 
-        pickedExecutors = PickExecutors(queuesCount);
+        auto pickedExecutors = PickExecutors(queuesCount);
         Y_ABORT_UNLESS(pickedExecutors.size() == queuesCount);
 
-        // Reserve the load immediately so concurrent starts see it.
+        queues.reserve(queuesCount);
         for (auto* executor: pickedExecutors) {
-            executor->IncAssignedQueueCount();
+            queues.push_back(executor->GetQueue());
         }
     }
 
@@ -675,19 +664,18 @@ TFuture<NProto::TError> TServer::StartEndpoint(
     // The whole storage-wrapper chain is built once per endpoint.
     auto deviceHandler = CreateDeviceHandler(options, std::move(storage));
 
+    // TEndpoint's constructor atomically increments the assigned-queue
+    // counter on each queue; its destructor decrements them. No locking
+    // is needed for either side because the counter lives on the queue
+    // itself.
     auto endpoint = std::make_shared<TEndpoint>(
         *this,
         std::move(deviceHandler),
         std::move(partitionDirectService),
         socketPath,
         options,
-        Config.SocketAccessMode);
-
-    TVector<IVhostQueuePtr> queues;
-    queues.reserve(queuesCount);
-    for (auto* executor: pickedExecutors) {
-        queues.push_back(executor->GetQueue());
-    }
+        Config.SocketAccessMode,
+        queues);
 
     auto vhostDevice = VhostQueueFactory->CreateDevice(
         socketPath,
@@ -703,20 +691,12 @@ TFuture<NProto::TError> TServer::StartEndpoint(
 
     auto error = SafeExecute<NProto::TError>([&] { return endpoint->Start(); });
     if (HasError(error)) {
-        with_lock (Lock) {
-            for (auto* executor: pickedExecutors) {
-                executor->DecAssignedQueueCount();
-            }
-        }
         return MakeFuture(error);
     }
 
     with_lock (Lock) {
-        TEndpointEntry entry{
-            .Endpoint = std::move(endpoint),
-            .Executors = std::move(pickedExecutors)};
         auto [it, inserted] =
-            Endpoints.emplace(std::move(socketPath), std::move(entry));
+            Endpoints.emplace(std::move(socketPath), std::move(endpoint));
         Y_ABORT_UNLESS(inserted);
     }
 
@@ -732,7 +712,7 @@ TFuture<NProto::TError> TServer::StopEndpoint(const TString& socketPath)
         return MakeFuture(error);
     }
 
-    TEndpointEntry entry;
+    TEndpointPtr endpoint;
 
     with_lock (Lock) {
         auto it = Endpoints.find(socketPath);
@@ -745,17 +725,12 @@ TFuture<NProto::TError> TServer::StopEndpoint(const TString& socketPath)
             return MakeFuture(error);
         }
 
-        entry = std::move(it->second);
+        endpoint = std::move(it->second);
         Endpoints.erase(it);
 
-        for (auto* executor: entry.Executors) {
-            executor->DecAssignedQueueCount();
-        }
-
-        StoppingEndpoints.emplace(socketPath, entry);
+        StoppingEndpoints.emplace(socketPath, endpoint);
     }
 
-    auto endpoint = entry.Endpoint;
     auto ptr = shared_from_this();
     return endpoint->Stop(true).Apply(
         [ptr = std::move(ptr), socketPath](const auto& future)
@@ -790,7 +765,7 @@ NProto::TError TServer::UpdateEndpoint(
             return error;
         }
 
-        endpoint = it->second.Endpoint;
+        endpoint = it->second;
     }
 
     if (endpoint) {
@@ -807,17 +782,13 @@ void TServer::StopAllEndpoints()
     with_lock (Lock) {
         for (auto& it: Endpoints) {
             const auto& socketPath = it.first;
-            auto& entry = it.second;
+            auto& endpoint = it.second;
 
-            for (auto* executor: entry.Executors) {
-                executor->DecAssignedQueueCount();
-            }
-
-            auto future = entry.Endpoint->Stop(false);
+            auto future = endpoint->Stop(false);
             sockets.push_back(socketPath);
             futures.push_back(future);
 
-            StoppingEndpoints.emplace(socketPath, std::move(entry));
+            StoppingEndpoints.emplace(socketPath, std::move(endpoint));
         }
 
         Endpoints.clear();
@@ -870,36 +841,26 @@ TVector<TExecutor*> TServer::PickExecutors(ui32 count)
     Y_ABORT_UNLESS(!Executors.empty());
     Y_ABORT_UNLESS(count <= Executors.size());
 
+    // Copy the executor pointers, sort them by the current assigned-queue
+    // count (read atomically), then crop to the requested size.
     TVector<TExecutor*> picked;
-    picked.reserve(count);
-
-    // Pick N distinct executors with the lowest assigned-queue count. Ties
-    // are broken by executor index (earlier executors preferred) so the
-    // result is deterministic.
-    TVector<bool> used(Executors.size(), false);
-    for (ui32 i = 0; i < count; ++i) {
-        size_t bestIdx = 0;
-        bool bestSet = false;
-        for (size_t j = 0; j < Executors.size(); ++j) {
-            if (used[j]) {
-                continue;
-            }
-            if (!bestSet) {
-                bestIdx = j;
-                bestSet = true;
-                continue;
-            }
-            if (Executors[j]->GetAssignedQueueCount() <
-                Executors[bestIdx]->GetAssignedQueueCount())
-            {
-                bestIdx = j;
-            }
-        }
-        Y_ABORT_UNLESS(bestSet);
-        used[bestIdx] = true;
-        picked.push_back(Executors[bestIdx].get());
+    picked.reserve(Executors.size());
+    for (const auto& executor: Executors) {
+        picked.push_back(executor.get());
     }
 
+    std::stable_sort(
+        picked.begin(),
+        picked.end(),
+        [](const TExecutor* a, const TExecutor* b)
+        {
+            return a->GetQueue()->AssignedEndpointsCount.load(
+                       std::memory_order_relaxed) <
+                   b->GetQueue()->AssignedEndpointsCount.load(
+                       std::memory_order_relaxed);
+        });
+
+    picked.resize(count);
     return picked;
 }
 

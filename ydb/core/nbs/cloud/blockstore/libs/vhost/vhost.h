@@ -13,6 +13,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <atomic>
+
 namespace NYdb::NBS::NBlockStore::NVhost {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -60,6 +62,11 @@ struct IVhostDevice
 
 struct IVhostQueue
 {
+    // Number of endpoints currently using this queue. Read by the server
+    // for load-balanced executor selection; managed atomically by
+    // TEndpoint's constructor/destructor without any external locking.
+    std::atomic<ui32> AssignedEndpointsCount{0};
+
     virtual ~IVhostQueue() = default;
 
     virtual int Run() = 0;

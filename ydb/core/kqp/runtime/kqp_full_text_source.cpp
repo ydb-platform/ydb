@@ -891,7 +891,7 @@ class TCompactTokenStream: public TTokenStream<TDocId> {
             ui64 gen = row[1].AsValue<ui64>();
             bool added = row[2].AsValue<bool>();
             TConstArrayRef<ui8> buf((const ui8*)row[3].Data(), row[3].Size());
-            Reader.Add(buf, added);
+            Reader.Add(added, 0, buf, UINT64_MAX);
             if (gen == UINT64_MAX) {
                 // This is the last segment, we can start reading
                 Started = true;

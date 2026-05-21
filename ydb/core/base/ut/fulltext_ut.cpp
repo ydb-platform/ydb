@@ -7,7 +7,7 @@ namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
-    Y_UNIT_TEST(MultiDeltaReader) {
+    Y_UNIT_TEST(MultiDeltaReader1) {
         TDeltaWriter wr;
         for (ui64 i = 1; i <= 100; i++) {
             wr.Add(i, 1);
@@ -17,8 +17,8 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             wr2.Add(i, 1);
         }
         TMultiDeltaReader rdr;
-        rdr.Add(wr.GetBuf(), true);
-        rdr.Add(wr2.GetBuf(), false);
+        rdr.Add(true, 0, wr.GetBuf(), UINT64_MAX);
+        rdr.Add(true, 0, wr2.GetBuf(), UINT64_MAX);
         rdr.Start();
         for (ui64 i = 1; i <= 100; i++) {
             if (i >= 5 && i <= 25 && !((i-5) % 2)) {
@@ -30,6 +30,31 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(docId, i);
             UNIT_ASSERT_VALUES_EQUAL(freq, 1);
         }
+        UNIT_ASSERT(rdr.IsEnded());
+    }
+
+    Y_UNIT_TEST(MultiDeltaReader2) {
+        TMultiDeltaReader rdr;
+        rdr.Add(true, 0, TConstArrayRef<ui8>((const ui8*)"2\x0A", 2), 203);
+        rdr.Add(false, 0, TConstArrayRef<ui8>((const ui8*)"dd", 2), UINT64_MAX);
+        rdr.Add(true, 0, TConstArrayRef<ui8>((const ui8*)"\x0A\x0A\x0A", 3), UINT64_MAX);
+        rdr.Add(true, 0, TConstArrayRef<ui8>((const ui8*)"dd\x01\x02", 4), UINT64_MAX);
+        rdr.Start();
+        auto check = [&](ui64 expectedDoc) {
+            ui64 docId;
+            ui32 freq;
+            rdr.Read(docId, freq);
+            Cerr << "Read: " << docId << " == " << expectedDoc << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(docId, expectedDoc);
+            UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        };
+        check(10);
+        check(20);
+        check(30);
+        check(50);
+        check(60);
+        check(201);
+        check(203);
         UNIT_ASSERT(rdr.IsEnded());
     }
 

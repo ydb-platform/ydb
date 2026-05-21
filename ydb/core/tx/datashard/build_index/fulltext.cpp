@@ -94,7 +94,7 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     ui64 MaxBatchBytes = 0;
     ui64 Generation = 0;
     ui64 MaxGeneration = 0;
-    ui64 MaxSegmentDocuments = 10000; // FIXME
+    ui64 MaxSegmentDocuments = 0;
 
     TVector<NScheme::TTypeInfo> KeyTypes;
     TSerializedTableRange RequestedRange;
@@ -181,6 +181,8 @@ public:
             WithRelevance = true;
             MakeDocsTypes(table, addType);
         }
+
+        MaxSegmentDocuments = gFulltextMaxSegment;
     }
 
     void MakeTokenTypes(const TUserTable& table, const TColumnsTypes& types, std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TString& column)> addType)

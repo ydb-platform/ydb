@@ -282,32 +282,17 @@ void TDataShardUserDb::InsertFulltext(
     }
 
     // Unpack the list
-    bool added = false;
-    TConstArrayRef<ui8> segment;
+    bool insertAdded = false;
+    TConstArrayRef<ui8> insertSegment;
     for (const auto& op: ops) {
         if (op.Tag == addedTag && op.Op == NTable::ECellOp::Set) {
-            added = op.AsCell().AsValue<bool>();
+            insertAdded = op.AsCell().AsValue<bool>();
         } else if (op.Tag == segmentTag && op.Op == NTable::ECellOp::Set) {
-            segment = TConstArrayRef<ui8>((const ui8*)op.Value.Data(), op.Value.Size());
+            insertSegment = TConstArrayRef<ui8>((const ui8*)op.Value.Data(), op.Value.Size());
         }
     }
-    if (!segment.size()) {
+    if (!insertSegment.size()) {
         return;
-    }
-    TCell addedCell = TCell::Make(added);
-    TRawTypeValue addedValue(addedCell.Data(), addedCell.Size(), NScheme::NTypeIds::Bool);
-
-    NFulltext::TDeltaReader reader;
-    reader.Reset(0, segment);
-
-    bool valid = true;
-    ui64 docId = 0;
-    ui32 freq = 0;
-    ui64 zero = 0;
-    if (withRelevance) {
-        reader.Read(docId, freq);
-    } else {
-        reader.Read(docId);
     }
 
     auto version = MvccVersion;
@@ -320,7 +305,15 @@ void TDataShardUserDb::InsertFulltext(
     auto txObserver = GetReadTxObserver(tableId);
     InvisibleRowSkips = 0;
 
-    while (valid) {
+    NFulltext::TDeltaReader reader;
+    reader.Reset(0, insertSegment, withRelevance, UINT64_MAX);
+
+    ui64 docId = 0;
+    ui32 freq = 0;
+    ui64 zero = 0;
+    ui64 lastId = 0;
+    size_t lastPos = 0;
+    while (reader.Read(docId, freq)) {
         // FIXME: Forbid splits between different __ydb_generations
         auto minKey = TVector<const TRawTypeValue>{
             key[0],
@@ -350,44 +343,90 @@ void TDataShardUserDb::InsertFulltext(
         case NTable::EReady::Gone:
             break;
         }
-        NFulltext::TDeltaWriter wr;
-        if (withRelevance) {
-            wr.Add(docId, freq);
-        } else {
-            wr.Add(docId);
-        }
-        valid = false;
-        while (!reader.IsEnded()) {
-            if (withRelevance) {
-                reader.Read(docId, freq);
-            } else {
-                reader.Read(docId);
-            }
-            if (docId <= maxId) {
-                if (withRelevance) {
-                    wr.Add(docId, freq);
-                } else {
-                    wr.Add(docId);
+        if (gen > 0 && gen <= UINT64_MAX-gFulltextMaxDelta) {
+            // Amount of changes exceeded the limit
+            // Read all rows for this MaxId and merge/compact them
+            TVector<TVector<ui8>> segments;
+            NFulltext::TMultiDeltaReader merger;
+            merger.Add(insertAdded, lastId, insertSegment.Slice(lastPos), maxId);
+            iter = Db.IterateRange(localTableId, NTable::TKeyRange{minKey, {}, true, false}, {addedTag, segmentTag}, version, txMap, txObserver);
+            while (true) {
+                ready = iter->Next(NTable::ENext::Data);
+                if (ready == NTable::EReady::Page) {
+                    throw TNotReadyTabletException();
                 }
-            } else {
-                valid = true;
-                break;
+                if (ready != NTable::EReady::Data) {
+                    break;
+                }
+                auto existingKey = iter->GetKey().Cells();
+                auto nextMaxId = existingKey[1].AsValue<ui64>();
+                auto nextGen = existingKey[2].AsValue<ui64>();
+                IncreaseSelectCounters(existingKey);
+                if (nextMaxId != maxId) {
+                    break;
+                }
+                auto rowValues = iter->GetValues().Cells();
+                auto nextAdded = rowValues[0].AsValue<bool>();
+                segments.emplace_back((const ui8*)rowValues[1].Data(), (const ui8*)rowValues[1].Data() + rowValues[1].Size());
+                merger.Add(nextAdded, 0, segments[segments.size()-1], UINT64_MAX);
+                // Last row will be overwritten, we don't have to erase it
+                if (nextGen != UINT64_MAX) {
+                    UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, NStreamScan::MakeKey(existingKey, tableInfo.KeyColumnTypes), {}, userCtx);
+                    ui64 keyBytes = CalculateKeyBytes(existingKey);
+                    Counters.NEraseRow++;
+                    Counters.EraseRowBytes += keyBytes + 8;
+                }
             }
+            // Copy from merger to new segment(s)
+            merger.Start();
+            while (!merger.IsEnded()) {
+                InsertFulltextSegment(tableId, localTableId, addedTag, segmentTag, userCtx,
+                    key[0], 0, 0, true, merger, gFulltextMaxSegment, withRelevance);
+            }
+            lastPos += merger.GetPos(0);
+            lastId = merger.GetLastId(0);
+        } else {
+            // Copy from reader to a single new segment
+            reader.Reset(lastId, insertSegment, withRelevance, maxId);
+            InsertFulltextSegment(tableId, localTableId, addedTag, segmentTag, userCtx,
+                key[0], maxId, gen, insertAdded, reader, 0, withRelevance);
+            lastPos += reader.GetPos();
+            lastId = reader.GetLastId();
         }
-        auto newSegment = wr.GetBuf();
-        maxId = gen ? maxId : wr.GetMaxId();
-        gen = gen ? gen-newSegment.size()-50 : UINT64_MAX;
-        // FIXME: Add compaction here if gen exceeds some size
-        TVector<TRawTypeValue> newKey;
-        newKey.push_back(key[0]);
-        newKey.emplace_back(&maxId, sizeof(maxId), NScheme::NTypeIds::Uint64);
-        newKey.emplace_back(&gen, sizeof(gen), NScheme::NTypeIds::Uint64);
-        TVector<const NIceDb::TUpdateOp> newOps;
-        newOps.emplace_back(addedTag, NTable::ECellOp::Set, addedValue);
-        newOps.emplace_back(segmentTag, NTable::ECellOp::Set, TRawTypeValue(newSegment.data(), newSegment.size(), NScheme::NTypeIds::String));
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, newKey, newOps, userCtx);
-        IncreaseUpdateCounters(newKey, newOps);
+        reader.Reset(lastId, insertSegment.Slice(lastPos), withRelevance, UINT64_MAX);
     }
+}
+
+void TDataShardUserDb::InsertFulltextSegment(const TTableId& tableId, ui64 localTableId, ui32 addedTag, ui32 segmentTag,
+    TIntrusivePtr<NACLib::TUserContext> userCtx, const TRawTypeValue& token, ui64 maxId, ui64 gen,
+    bool added, NFulltext::IDeltaReader& reader, ui64 maxSegmentDocs, bool withRelevance)
+{
+    NFulltext::TDeltaWriter wr;
+    wr.Reset(withRelevance);
+    while (!reader.IsEnded()) {
+        ui64 docId = 0;
+        ui32 freq = 0;
+        reader.Read(docId, freq);
+        wr.Add(docId, freq);
+        if (maxSegmentDocs > 0 && wr.GetCount() >= maxSegmentDocs) {
+            break;
+        }
+    }
+    if (!wr.GetCount()) {
+        return;
+    }
+    maxId = gen ? maxId : wr.GetMaxId();
+    gen = gen ? gen - wr.GetCount() - gFulltextSegmentPenalty : UINT64_MAX;
+    auto newSegment = wr.GetBuf();
+    TVector<TRawTypeValue> newKey;
+    newKey.push_back(token);
+    newKey.emplace_back(&maxId, sizeof(maxId), NScheme::NTypeIds::Uint64);
+    newKey.emplace_back(&gen, sizeof(gen), NScheme::NTypeIds::Uint64);
+    TVector<const NIceDb::TUpdateOp> newOps;
+    newOps.emplace_back(addedTag, NTable::ECellOp::Set, TRawTypeValue(&added, 1, NScheme::NTypeIds::Bool));
+    newOps.emplace_back(segmentTag, NTable::ECellOp::Set, TRawTypeValue(newSegment.data(), newSegment.size(), NScheme::NTypeIds::String));
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, newKey, newOps, userCtx);
+    IncreaseUpdateCounters(newKey, newOps);
 }
 
 void TDataShardUserDb::IncrementRow(

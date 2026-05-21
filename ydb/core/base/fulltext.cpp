@@ -511,12 +511,13 @@ ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
     return r;
 }
 
-void TDeltaReader::Reset(ui64 firstId, TConstArrayRef<ui8> buf, bool withFreq)
+void TDeltaReader::Reset(ui64 firstId, TConstArrayRef<ui8> buf, bool withFreq, ui64 maxId)
 {
     Buf = buf;
     Pos = 0;
     LastId = firstId;
     WithFreq = withFreq;
+    MaxId = maxId;
 }
 
 bool TDeltaReader::Read(ui64& docId, ui32& freq)
@@ -524,6 +525,7 @@ bool TDeltaReader::Read(ui64& docId, ui32& freq)
     if (Pos >= Buf.size()) {
         return false;
     }
+    ui64 prevPos = Pos;
     bool hasFreq = false;
     if (WithFreq) {
         docId = LastId + ReadVarintWithFlag(Buf, Pos, hasFreq);
@@ -531,6 +533,10 @@ bool TDeltaReader::Read(ui64& docId, ui32& freq)
         docId = LastId + ReadVarint(Buf, Pos);
     }
     freq = hasFreq ? ReadVarint(Buf, Pos) : 1;
+    if (docId > MaxId) {
+        Pos = prevPos;
+        return false;
+    }
     LastId = docId;
     return true;
 }
@@ -538,6 +544,11 @@ bool TDeltaReader::Read(ui64& docId, ui32& freq)
 size_t TDeltaReader::GetPos() const
 {
     return Pos;
+}
+
+ui64 TDeltaReader::GetLastId() const
+{
+    return LastId;
 }
 
 bool TDeltaReader::IsEnded() const
@@ -592,10 +603,10 @@ size_t TDeltaWriter::AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, ui64
         }
     } else {
         ui64 docId = firstId+ReadVarint(other, pos);
-        Add(docId);
+        Add(docId, 1);
         while (pos < other.size() && (!maxCount || Count < maxCount)) {
             ui64 deltaId = ReadVarint(other, pos);
-            Add(MaxId+deltaId, 0);
+            Add(MaxId+deltaId, 1);
         }
     }
     return pos;
@@ -635,7 +646,7 @@ void TMultiDeltaReader::Reset(bool withFreq)
     Started = false;
 }
 
-void TMultiDeltaReader::Add(TConstArrayRef<ui8> buf, bool added)
+void TMultiDeltaReader::Add(bool added, ui64 firstId, TConstArrayRef<ui8> buf, ui64 maxId)
 {
     Y_ENSURE(!Started);
     if (!buf.size()) {
@@ -644,7 +655,7 @@ void TMultiDeltaReader::Add(TConstArrayRef<ui8> buf, bool added)
     Readers.emplace_back();
     auto& rdr = Readers.back();
     rdr.Added = added;
-    rdr.Reader.Reset(0, buf, WithFreq);
+    rdr.Reader.Reset(firstId, buf, WithFreq, maxId);
 }
 
 void TMultiDeltaReader::Start()
@@ -748,6 +759,16 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq)
 bool TMultiDeltaReader::IsEnded() const
 {
     return !Items.size() && !NextItem.RdrId;
+}
+
+size_t TMultiDeltaReader::GetPos(size_t n) const
+{
+    return Readers.at(n).Reader.GetPos();
+}
+
+ui64 TMultiDeltaReader::GetLastId(size_t n) const
+{
+    return Readers.at(n).Reader.GetLastId();
 }
 
 }

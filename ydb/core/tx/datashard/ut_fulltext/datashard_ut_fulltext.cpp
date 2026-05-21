@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(DataShardFulltext) {
         const auto tableId = ResolveTableId(server, sender, "/Root/table/ft_idx/indexImplTable");
         const auto shards = GetTableShards(server, sender, "/Root/table/ft_idx/indexImplTable");
 
-        Cout << "========= Send immediate writes =========\n";
+        Cout << "========= Initial writes =========\n";
         {
             // 1, 2, 3
             // 100, 200, 201, 203
@@ -80,8 +80,38 @@ Y_UNIT_TEST_SUITE(DataShardFulltext) {
             auto tableState = ReadTable(server, shards, tableId);
             Cerr << "Data: " << tableState << "\n";
             TString expectedState = "__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\1\\1\\1\n"
-                "__ydb_token = red, __ydb_max_id = 203, __ydb_generation = 18446744073709551562, __ydb_added = true, __ydb_segment = \\n\\n\\n\n"
+                "__ydb_token = red, __ydb_max_id = 203, __ydb_generation = 18446744073709551608, __ydb_added = true, __ydb_segment = \\n\\n\\n\n"
                 "__ydb_token = red, __ydb_max_id = 203, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = dd\\1\\2\n";
+            UNIT_ASSERT_VALUES_EQUAL(tableState, expectedState);
+        }
+
+        Cout << "========= Writes with compaction =========\n";
+        {
+            gFulltextMaxDelta = 10;
+            gFulltextMaxSegment = 3;
+
+            // del 100, 200
+            // add 50, 60
+            // max_id 203 should become: 10 20 30 50 60 201 203 -> split in 3 parts
+            ExecSQL(server, sender, Q_(R"(
+                INSERT INTO `/Root/table/ft_idx/indexImplTable`
+                (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
+                ("red", 0, 0, false, "dd"),
+                ("red", 0, 0, true, "2\x0A");
+            )"));
+
+            gFulltextMaxDelta = 10000;
+            gFulltextMaxSegment = 10000;
+        }
+
+        Cout << "========= Read table =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            Cerr << "Data: " << tableState << "\n";
+            TString expectedState = "__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\1\\1\\1\n"
+                "__ydb_token = red, __ydb_max_id = 30, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\n\\n\\n\n"
+                "__ydb_token = red, __ydb_max_id = 201, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = 2\\n\\x8D\\1\n"
+                "__ydb_token = red, __ydb_max_id = 203, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\xCB\\1\n";
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedState);
         }
     }

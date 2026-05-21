@@ -162,7 +162,7 @@ public:
             Delta.Reset(WithFreq);
             MaxSegmentDocuments = request.GetMaxSegmentDocuments();
             if (!MaxSegmentDocuments) {
-                MaxSegmentDocuments = 10000;
+                MaxSegmentDocuments = gFulltextMaxSegment;
             }
 
             auto tags = GetAllTags(table);

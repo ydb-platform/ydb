@@ -55,10 +55,12 @@ class TDeltaReader: public IDeltaReader {
     size_t Pos = 0;
     ui64 LastId = 0;
     bool WithFreq = false;
+    ui64 MaxId = 0;
 public:
-    void Reset(ui64 firstId, TConstArrayRef<ui8> buf, bool withFreq);
+    void Reset(ui64 firstId, TConstArrayRef<ui8> buf, bool withFreq, ui64 maxId);
     bool Read(ui64& docId, ui32& freq) override;
     size_t GetPos() const;
+    ui64 GetLastId() const;
     bool IsEnded() const override;
 };
 
@@ -85,10 +87,12 @@ class TMultiDeltaReader: public IDeltaReader {
     void SelectNext();
 public:
     void Reset(bool withFreq);
-    void Add(TConstArrayRef<ui8> buf, bool added);
+    void Add(bool added, ui64 firstId, TConstArrayRef<ui8> buf, ui64 maxId);
     void Start();
-    bool Read(ui64& docId, ui32& freq) override;
-    bool IsEnded() const override;
+    bool Read(ui64& docId, ui32& freq);
+    bool IsEnded() const;
+    size_t GetPos(size_t n) const;
+    ui64 GetLastId(size_t n) const;
 };
 
 }

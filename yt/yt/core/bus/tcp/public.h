@@ -24,9 +24,10 @@ DECLARE_REFCOUNTED_STRUCT(TBusServerDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TBusClientConfig)
 DECLARE_REFCOUNTED_STRUCT(TBusClientDynamicConfig)
 
-struct IPacketTranscoderFactory;
+DECLARE_REFCOUNTED_STRUCT(IBusServer)
+DECLARE_REFCOUNTED_STRUCT(IBusClient)
 
-DECLARE_REFCOUNTED_CLASS(TConnection)
+struct IPacketTranscoderFactory;
 
 YT_DECLARE_RECONFIGURABLE_SINGLETON(TDispatcherConfig, TDispatcherDynamicConfig);
 

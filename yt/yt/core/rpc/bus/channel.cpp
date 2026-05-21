@@ -35,7 +35,6 @@
 namespace NYT::NRpc::NBus {
 
 using namespace NYT::NBus;
-using namespace NYT::NBus::NTcp;
 using namespace NConcurrency;
 using namespace NTracing;
 using namespace NYPath;
@@ -1329,7 +1328,7 @@ class TTcpBusChannelFactory
 {
 public:
     TTcpBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1339,11 +1338,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateTcp(address);
+        auto config = NTcp::TBusClientConfig::CreateTcp(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1356,7 +1355,7 @@ private:
 };
 
 IChannelFactoryPtr CreateTcpBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TTcpBusChannelFactory>(
@@ -1371,7 +1370,7 @@ class TUdsBusChannelFactory
 {
 public:
     TUdsBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1381,11 +1380,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateUds(address);
+        auto config = NTcp::TBusClientConfig::CreateUds(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1398,7 +1397,7 @@ private:
 };
 
 IChannelFactoryPtr CreateUdsBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TUdsBusChannelFactory>(

@@ -19,7 +19,6 @@ namespace NYT::NRpc::NBus {
 
 using namespace NConcurrency;
 using namespace NYT::NBus;
-using namespace NYT::NBus::NTcp;
 
 using NYT::FromProto;
 
@@ -276,7 +275,7 @@ private:
     }
 };
 
-IServerPtr CreateBusServer(NBus::IBusServerPtr busServer)
+IServerPtr CreateBusServer(IBusServerPtr busServer)
 {
     return New<TBusServer>(busServer);
 }

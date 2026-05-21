@@ -10,20 +10,58 @@
 
 - С++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
+  {% list tabs %}
 
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+  - Native SDK
 
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
 
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
+- Go
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

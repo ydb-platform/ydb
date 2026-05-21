@@ -13,7 +13,28 @@
 
 {% list tabs %}
 
-- Go (native)
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/helpers/helpers.h>
+
+    NYdb::TDriver CreateDriverFromEnvironment(const std::string& connectionString) {
+        return NYdb::TDriver(NYdb::CreateFromEnvironment(connectionString));
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
+- Go
 
   ```go
   package main

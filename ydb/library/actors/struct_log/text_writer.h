@@ -21,7 +21,6 @@ protected:
     bool FirstValue{true};
 
     struct TValueWriter : public TBaseValueWriter<TTextWriter> {
-
         TValueWriter(TTextWriter& writer);
 
         void operator()(const TString& value) const;

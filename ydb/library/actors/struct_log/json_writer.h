@@ -99,6 +99,7 @@ protected:
 
 class TJsonWriter {
     friend class TBaseMessageWriter<TJsonWriter>;
+
 public:
     TJsonWriter(const TJsonKeyValueWriter::TNameSet& reservedKeyNames = TJsonKeyValueWriter::TNameSet());
 
@@ -109,7 +110,6 @@ protected:
     TJsonKeyValueWriter* KeyValueWriter{nullptr};
 
     struct TValueWriter : public TBaseValueWriter<TJsonWriter> {
-
         TValueWriter(TJsonWriter& writer);
 
         void operator()(const TString& value) const;

@@ -16,6 +16,7 @@ enum class TNativeTypeCode : std::uint8_t {
 };
 
 using TInvoker = std::function<bool(const void* data, std::size_t length)>;
+
 template <typename TValueType, typename C>
 static TInvoker CreateTypedInvoker(C& callable) {
     TInvoker invoker = [&callable](const void* data, std::size_t length) -> bool {

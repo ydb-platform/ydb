@@ -26,14 +26,14 @@ void TTextWriter::TValueWriter::operator()(const TString& value) const {
 
     bool first = true;
 
-    for (auto& keyItem : *KeyName) {
+    for (const auto& keyItem : *KeyName) {
         if (first) {
             first = false;
         } else {
             outputText << ".";
         }
         auto str = keyItem.ToString();
-        for(auto& ch: str) {
+        for (auto& ch: str) {
             if (ch == '\n') {
                 ch = ' ';
             }
@@ -43,4 +43,5 @@ void TTextWriter::TValueWriter::operator()(const TString& value) const {
     outputText << "=";
     outputText << TTypesMapping::ToString(value);
 }
+
 }  // namespace NActors::NStructuredLog

@@ -34,45 +34,45 @@ public:
         static constexpr bool value = decltype(check<T>(0))::value;
     };
 
-    template<typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
-    template<> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
-    template<> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
-    template<> struct TOptionalTraits<const void*> { static constexpr bool HasOptionalValue = false; };
-    template<> struct TOptionalTraits<void*> { static constexpr bool HasOptionalValue = false; };
-    template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
-    template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
-    template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
-    template<typename... Ts> struct TOptionalTraits<std::unique_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
-    template<typename... Ts> struct TOptionalTraits<std::shared_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
+    template <typename Tx> struct TOptionalTraits { static constexpr bool HasOptionalValue = false; };
+    template <> struct TOptionalTraits<const char*> { static constexpr bool HasOptionalValue = false; };
+    template <> struct TOptionalTraits<char*> { static constexpr bool HasOptionalValue = false; };
+    template <> struct TOptionalTraits<const void*> { static constexpr bool HasOptionalValue = false; };
+    template <> struct TOptionalTraits<void*> { static constexpr bool HasOptionalValue = false; };
+    template <typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
+    template <typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
+    template <typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
+    template <typename... Ts> struct TOptionalTraits<std::unique_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
+    template <typename... Ts> struct TOptionalTraits<std::shared_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
 
-    template<typename T> struct TIsIterable { static constexpr bool value = false; };
-    template<typename T, size_t S> struct TIsIterable<std::span<T, S>> { static constexpr bool value = true; };
-    template<typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
-    template<typename T, typename Y> struct TIsIterable<std::list<T, Y>> { static constexpr bool value = true; };
-    template<typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
-    template<typename T, typename Y> struct TIsIterable<TVector<T, Y>> { static constexpr bool value = true; };
-    template<typename T, typename X, typename Y, typename Z> struct TIsIterable<THashSet<T, X, Y, Z>> { static constexpr bool value = true; };
-    template<typename... Ts> struct TIsIterable<std::set<Ts...>> { static constexpr bool value = true; };
-    template<typename... Ts> struct TIsIterable<std::unordered_set<Ts...>> { static constexpr bool value = true; };
-    template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
-    template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
+    template <typename T> struct TIsIterable { static constexpr bool value = false; };
+    template <typename T, size_t S> struct TIsIterable<std::span<T, S>> { static constexpr bool value = true; };
+    template <typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
+    template <typename T, typename Y> struct TIsIterable<std::list<T, Y>> { static constexpr bool value = true; };
+    template <typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
+    template <typename T, typename Y> struct TIsIterable<TVector<T, Y>> { static constexpr bool value = true; };
+    template <typename T, typename X, typename Y, typename Z> struct TIsIterable<THashSet<T, X, Y, Z>> { static constexpr bool value = true; };
+    template <typename... Ts> struct TIsIterable<std::set<Ts...>> { static constexpr bool value = true; };
+    template <typename... Ts> struct TIsIterable<std::unordered_set<Ts...>> { static constexpr bool value = true; };
+    template <typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
+    template <typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
 
-    template<typename T> struct TIsIterableKV { static constexpr bool value = false; };
-    template<typename... Ts> struct TIsIterableKV<THashMap<Ts...>> { static constexpr bool value = true; };
-    template<typename... Ts> struct TIsIterableKV<TMap<Ts...>> { static constexpr bool value = true; };
-    template<typename... Ts> struct TIsIterableKV<std::map<Ts...>> { static constexpr bool value = true; };
-    template<typename... Ts> struct TIsIterableKV<std::unordered_map<Ts...>> { static constexpr bool value = true; };
+    template <typename T> struct TIsIterableKV { static constexpr bool value = false; };
+    template <typename... Ts> struct TIsIterableKV<THashMap<Ts...>> { static constexpr bool value = true; };
+    template <typename... Ts> struct TIsIterableKV<TMap<Ts...>> { static constexpr bool value = true; };
+    template <typename... Ts> struct TIsIterableKV<std::map<Ts...>> { static constexpr bool value = true; };
+    template <typename... Ts> struct TIsIterableKV<std::unordered_map<Ts...>> { static constexpr bool value = true; };
 
-    template<typename T> struct TIsVariant { static constexpr bool value = false; };
-    template<typename... Ts> struct TIsVariant<std::variant<Ts...>> { static constexpr bool value = true; };
+    template <typename T> struct TIsVariant { static constexpr bool value = false; };
+    template <typename... Ts> struct TIsVariant<std::variant<Ts...>> { static constexpr bool value = true; };
 
-    template<typename T> struct TIsTuple { static constexpr bool value = false; };
-    template<typename... Ts> struct TIsTuple<std::tuple<Ts...>> { static constexpr bool value = true; };
+    template <typename T> struct TIsTuple { static constexpr bool value = false; };
+    template <typename... Ts> struct TIsTuple<std::tuple<Ts...>> { static constexpr bool value = true; };
 
     // TCreateMessageArg doesn't use Out<T> and uses own mechanics to convert various value types into string representation, but
     // it is uses Out<T> to convert simple standard types ultimately.
     // See details follow.
-    template<typename TValue>
+    template <typename TValue>
     static void OutputParam(IOutputStream& s, const TValue& value) {
         using Tx = std::decay_t<TValue>;
 
@@ -135,9 +135,9 @@ public:
         } else if constexpr (TIsTuple<Tx>::value) {
             // It is required to use self-made code because of tuple items must be processed by OutputParam<TValue> (instead of Out<T>).
             // See  distconf_binding.cpp as example. Is uses TNodeLocation inside tuple, and TNodeLocation has ToString method
-            s << '[';
+            s << '(';
             std::apply([&](const auto&... args) { OutputParam(s, args...); }, value);
-            s << ']';
+            s << ')';
         } else {
             // Finally, OutputParam<T> uses Out<T> to process simple standard types
             s << value;

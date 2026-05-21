@@ -15,6 +15,7 @@
 namespace NActors::NStructuredLog {
 
 class TCreateMessageArg;
+
 class TStructuredMessage {
     friend class TCreateMessageArg;
     static const unsigned PreallocatedValueCount = 16;
@@ -59,7 +60,7 @@ public:
 
     inline TStructuredMessage& AppendMessage(const TStructuredMessage& message) {
         auto offset = Data.size();
-        for (auto& subItem : message.AttachedValues) {
+        for (const auto& subItem : message.AttachedValues) {
             auto name = subItem.Name;
             AttachedValues.emplace_back(
                 std::move(name), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber
@@ -78,7 +79,7 @@ public:
     inline TStructuredMessage& AppendSubMessage(TKeyName&& name, const TStructuredMessage& subMessage) {
         auto offset = Data.size();
 
-        for (auto subItem : subMessage.AttachedValues) {
+        for (const auto& subItem : subMessage.AttachedValues) {
             std::vector<TKeyName> addKey{name};
             std::copy(begin(subItem.Name), end(subItem.Name), std::back_inserter(addKey));
 

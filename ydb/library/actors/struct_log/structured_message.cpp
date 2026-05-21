@@ -5,7 +5,7 @@ namespace NActors::NStructuredLog {
 TStructuredMessage::TStructuredMessage() {
     AttachedValues.reserve(PreallocatedValueCount);
     Data.reserve(PreallocatedDataSize);
-};
+}
 
 std::size_t TStructuredMessage::GetValuesCount() const {
     CheckSorted();
@@ -29,15 +29,21 @@ std::optional<std::size_t> TStructuredMessage::GetValueIndex(const std::vector<T
             return b.Name > name;
         }
     );
-    if (it == begin(AttachedValues)) return {};
+    if (it == begin(AttachedValues)) {
+        return std::nullopt;
+    }
 
     it--;
-    if (it->Name != name) return {};
+    if (it->Name != name) {
+        return std::nullopt;
+    }
 
     return it - begin(AttachedValues);
 }
 
-bool TStructuredMessage::HasValue(const TString& name) const { return GetValueIndex(name).has_value(); }
+bool TStructuredMessage::HasValue(const TString& name) const {
+    return GetValueIndex(name).has_value();
+}
 
 void TStructuredMessage::RemoveValue(std::size_t index) {
     CheckSorted();
@@ -52,7 +58,7 @@ void TStructuredMessage::RemoveValue(const TString& name) {
 }
 
 void TStructuredMessage::RemoveValues(const std::initializer_list<TString>& names) {
-    for (auto name : names) {
+    for (const auto& name : names) {
         RemoveValue(name);
     }
 }

@@ -3,6 +3,8 @@
 
 #include "sql_select_yql.h"
 
+#include <yql/essentials/utils/string/trim_indent.h>
+
 #include <library/cpp/iterator/cartesian_product.h>
 
 #include <util/generic/overloaded.h>
@@ -7039,6 +7041,37 @@ Y_UNIT_TEST(TooManyErrors) {
 <main>:3:40: Error: Column I is not in source column set. Did you mean b?
 <main>: Error: Too many issues, code: 1
 )");
+};
+
+Y_UNIT_TEST(TooManyErrorsOnBuild) {
+    TString q = R"sql(
+        SELECT AsStruct(
+            1 as '1',
+            2 as '2',
+            3 as '3',
+            4 as '4',
+            5 as '5',
+            6 as '6',
+            7 as '7',
+            8 as '8',
+            9 as '9',
+            10 as '10',
+            11 as '11',
+            12 as '12'
+        );
+    )sql";
+
+    NYql::TAstParseResult res = SqlToYql(q, 4);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(
+        Err2Str(res),
+        NYql::TrimIndent(R"(
+            <main>:3:18: Error: String literal can not be used here
+            <main>:4:18: Error: String literal can not be used here
+            <main>:5:18: Error: String literal can not be used here
+            <main>: Error: Too many issues, code: 1
+
+        )"));
 };
 
 Y_UNIT_TEST(ShouldCloneBindingForNamedParameter) {

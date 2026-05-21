@@ -54,7 +54,7 @@ struct TBuiltPredicate {
 
     // If true, the VIEW json_idx query must fail with an extract error.
     bool ExpectExtractError = false;
-    std::string ExpectedErrorSubstr = "Failed to extract search terms from predicate";
+    std::string ExpectedErrorSubstr = "Failed to extract jsonpath tokens from the predicate";
 };
 
 // Produces a batch of SQL JSON_* predicates

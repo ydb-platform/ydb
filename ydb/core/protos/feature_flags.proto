@@ -303,4 +303,5 @@ message TFeatureFlags {
     optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
+    optional bool EnableJsonIndexAutoSelect = 267 [default = false];
 }

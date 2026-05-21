@@ -36,6 +36,40 @@ namespace NKikimr::NDDisk {
         SectorInChunk = ChunkSize / SectorSize;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
         PersistentBufferBarriersManager.Initialize(PersistentBufferUniqueId, BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+        // Start collecting periodic snapshots of PB op counters to support a sliding-window
+        // latency/IOPS view on the monitoring page.
+        CollectPbStatsSnapshot();
+    }
+
+    void TDDiskActor::CollectPbStatsSnapshot() {
+        const TInstant now = TActivationContext::Now();
+        auto take = [&](const TString& name, const auto& opCounters) {
+            TPbOpSnapshot snap;
+            snap.Timestamp = now;
+            snap.Requests = opCounters.Requests ? opCounters.Requests->Val() : 0;
+            if (opCounters.ResponseTime) {
+                auto s = opCounters.ResponseTime->Snapshot();
+                const ui32 n = s->Count();
+                snap.BucketCounts.resize(n);
+                for (ui32 i = 0; i < n; ++i) {
+                    snap.BucketCounts[i] = s->Value(i);
+                }
+            }
+            auto& dq = PbStatsHistory[name];
+            dq.push_back(std::move(snap));
+            // Keep snapshots within [now - PbStatsWindow - PbStatsSnapshotPeriod, now]
+            // so we can always find one ~PbStatsWindow old.
+            const TInstant cutoff = now - PbStatsWindow - PbStatsSnapshotPeriod;
+            while (dq.size() > 1 && dq.front().Timestamp < cutoff) {
+                dq.pop_front();
+            }
+        };
+#define DDISK_TAKE_PB_SNAP(NAME) take(#NAME, Counters.Interface.NAME);
+        DDISK_TAKE_PB_SNAP(WritePersistentBuffer)
+        DDISK_TAKE_PB_SNAP(ReadPersistentBuffer)
+        DDISK_TAKE_PB_SNAP(ErasePersistentBuffer)
+#undef DDISK_TAKE_PB_SNAP
+        Schedule(PbStatsSnapshotPeriod, new TEvents::TEvWakeup(EWakeupTag::WakeupCollectPbStats));
     }
 
     void TDDiskActor::UpdateFreeSpaceInfo() {
@@ -1129,6 +1163,100 @@ namespace NKikimr::NDDisk {
         reply->InMemoryCacheLimit = PersistentBufferFormat.MaxInMemoryCache;
         reply->DiskOperationsInflight = PersistentBufferDiskOperationInflight.size();
         reply->PendingEvents = PendingPersistentBufferEvents.size();
+
+        // Take a fresh snapshot to ensure the window contains "now" even if the
+        // periodic wakeup hasn't fired recently.
+        CollectPbStatsSnapshot();
+
+        auto fillOpStats = [&](const TString& name, const auto& opCounters) {
+            TEvPersistentBufferInfo::TOpStats stats;
+            stats.Name = name;
+
+            if (opCounters.Requests && opCounters.ReplyOk && opCounters.ReplyErr) {
+                const ui64 reqs = opCounters.Requests->Val();
+                const ui64 done = opCounters.ReplyOk->Val() + opCounters.ReplyErr->Val();
+                stats.RequestsInFlight = reqs > done ? reqs - done : 0;
+            }
+
+            auto histIt = PbStatsHistory.find(name);
+            if (histIt == PbStatsHistory.end() || histIt->second.size() < 2) {
+                reply->OpStats.push_back(std::move(stats));
+                return;
+            }
+            const auto& dq = histIt->second;
+            const TPbOpSnapshot& cur = dq.back();
+            // Choose the oldest snapshot that is still within (cur.Timestamp - PbStatsWindow).
+            // If we don't have a full window of history yet, fall back to the oldest snapshot.
+            const TInstant target = cur.Timestamp - PbStatsWindow;
+            const TPbOpSnapshot* base = &dq.front();
+            for (const auto& s : dq) {
+                if (s.Timestamp <= target) {
+                    base = &s;
+                } else {
+                    break;
+                }
+            }
+            const TDuration dt = cur.Timestamp - base->Timestamp;
+            const double dtSec = dt.SecondsFloat();
+            if (dtSec <= 0) {
+                reply->OpStats.push_back(std::move(stats));
+                return;
+            }
+
+            const ui64 dReq = cur.Requests >= base->Requests ? cur.Requests - base->Requests : 0;
+            stats.Requests = dReq;
+            stats.WindowSeconds = dtSec;
+
+            if (!opCounters.ResponseTime || cur.BucketCounts.empty()) {
+                reply->OpStats.push_back(std::move(stats));
+                return;
+            }
+            auto histSnap = opCounters.ResponseTime->Snapshot();
+            const ui32 nBuckets = histSnap->Count();
+            std::vector<ui64> deltaBuckets(nBuckets, 0);
+            ui64 total = 0;
+            for (ui32 i = 0; i < nBuckets; ++i) {
+                const ui64 curVal = i < cur.BucketCounts.size() ? cur.BucketCounts[i] : 0;
+                const ui64 baseVal = i < base->BucketCounts.size() ? base->BucketCounts[i] : 0;
+                deltaBuckets[i] = curVal >= baseVal ? curVal - baseVal : 0;
+                total += deltaBuckets[i];
+            }
+            if (total > 0) {
+                // Linear interpolation inside the matching bucket gives much
+                // better precision than reporting the bucket upper bound.
+                // Histogram bucket bounds are already in milliseconds.
+                auto percentile = [&](double frac) -> double {
+                    const double target = frac * static_cast<double>(total);
+                    double acc = 0.0;
+                    for (ui32 i = 0; i < nBuckets; ++i) {
+                        const double bucketCount = static_cast<double>(deltaBuckets[i]);
+                        const double next = acc + bucketCount;
+                        if (next >= target && bucketCount > 0) {
+                            const double lowerMs = i == 0 ? 0.0 : histSnap->UpperBound(i - 1);
+                            const double upperMs = histSnap->UpperBound(i);
+                            const double withinBucket = (target - acc) / bucketCount;
+                            return lowerMs + withinBucket * (upperMs - lowerMs);
+                        }
+                        acc = next;
+                    }
+                    return histSnap->UpperBound(nBuckets - 1);
+                };
+                stats.LatencyP50Ms = percentile(0.5);
+                stats.LatencyP99Ms = percentile(0.99);
+                // Max: upper bound of the last non-empty bucket.
+                for (ui32 i = 0; i < nBuckets; ++i) {
+                    if (deltaBuckets[i] > 0) {
+                        stats.LatencyMaxMs = histSnap->UpperBound(i);
+                    }
+                }
+            }
+            reply->OpStats.push_back(std::move(stats));
+        };
+#define DDISK_FILL_PB_OP_STATS(NAME) fillOpStats(#NAME, Counters.Interface.NAME);
+        DDISK_FILL_PB_OP_STATS(WritePersistentBuffer)
+        DDISK_FILL_PB_OP_STATS(ReadPersistentBuffer)
+        DDISK_FILL_PB_OP_STATS(ErasePersistentBuffer)
+#undef DDISK_FILL_PB_OP_STATS
 
         if (ev->Get()->DescribeTablets) {
             for (auto& [k, v] : PersistentBuffers) {

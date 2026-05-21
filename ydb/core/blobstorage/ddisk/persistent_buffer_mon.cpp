@@ -161,6 +161,37 @@ namespace NKikimr {
                         str << "<br> Pending events: " << b->PendingEvents;
                         str << "<br> Disk operations inflight: " << b->DiskOperationsInflight;
 
+                        if (!b->OpStats.empty()) {
+                            str << "<h3>Operation latency &amp; IOPS (last 15 sec)</h3>";
+                            TABLE_CLASS ("table") {
+                                TABLEHEAD() {
+                                    TABLER() {
+                                        TABLEH() {str << "Operation";}
+                                        TABLEH() {str << "InFlight";}
+                                        TABLEH() {str << "IOPS";}
+                                        TABLEH() {str << "Latency p50, ms";}
+                                        TABLEH() {str << "Latency p99, ms";}
+                                        TABLEH() {str << "Latency max, ms";}
+                                    }
+                                }
+                                TABLEBODY() {
+                                    for (const auto& op : b->OpStats) {
+                                        const ui64 iops = op.WindowSeconds > 0
+                                            ? static_cast<ui64>(op.Requests / op.WindowSeconds + 0.5)
+                                            : 0;
+                                        TABLER() {
+                                            TABLED() {str << op.Name;}
+                                            TABLED() {str << op.RequestsInFlight;}
+                                            TABLED() {str << iops;}
+                                            TABLED() {str << Sprintf("%.3f", op.LatencyP50Ms);}
+                                            TABLED() {str << Sprintf("%.3f", op.LatencyP99Ms);}
+                                            TABLED() {str << Sprintf("%.3f", op.LatencyMaxMs);}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         if (inflight.DescribeFreeSpace && !b->FreeSpace.empty() && b->SectorSize > 0 && b->ChunkSize > 0) {
                             const ui32 sectorsPerChunk = b->ChunkSize / b->SectorSize;
                             str << "<br><br><b>Free space map (green = free, red = used):</b><br>";

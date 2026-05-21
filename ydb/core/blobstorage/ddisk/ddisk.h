@@ -524,6 +524,7 @@ struct TPersistentBufferFormat {
         ui64 InMemoryCacheLimit;
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
+        ui64 PerTabletStorageLimit;
         std::vector<TTabletInfo> TabletInfos;
         std::unordered_map<ui64, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;

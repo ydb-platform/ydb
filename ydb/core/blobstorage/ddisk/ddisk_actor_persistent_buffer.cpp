@@ -1163,10 +1163,7 @@ namespace NKikimr::NDDisk {
         reply->InMemoryCacheLimit = PersistentBufferFormat.MaxInMemoryCache;
         reply->DiskOperationsInflight = PersistentBufferDiskOperationInflight.size();
         reply->PendingEvents = PendingPersistentBufferEvents.size();
-
-        // Take a fresh snapshot to ensure the window contains "now" even if the
-        // periodic wakeup hasn't fired recently.
-        CollectPbStatsSnapshot();
+        reply->PerTabletStorageLimit = PersistentBufferFormat.PerTabletStorageLimit;
 
         auto fillOpStats = [&](const TString& name, const auto& opCounters) {
             TEvPersistentBufferInfo::TOpStats stats;

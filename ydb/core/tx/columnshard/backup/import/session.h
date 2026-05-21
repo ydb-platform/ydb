@@ -85,7 +85,7 @@ public:
 
     const TImportTask &GetTask() const;
 
-    const TInternalPathId GetInternalPathId() const;
+    const NColumnShard::TSchemeShardLocalPathId GetSchemeShardLocalPathId() const;
 
     void Finish();
 };

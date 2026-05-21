@@ -4011,7 +4011,9 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
             return new TEvPrivate::TEvReassignInactiveGroupsComplete(PoolName);
         }
 
-        TShrinkPoolReassignCallback(const TString& poolName) : PoolName(poolName) {}
+        TShrinkPoolReassignCallback(const TString& poolName) 
+            : PoolName(poolName)
+        {}
     };
 
     std::vector<TReassignOperation> operations;
@@ -4039,23 +4041,28 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
 bool THive::CompactInactiveGroups(TStoragePoolInfo& pool) {
     std::unordered_set<TStorageGroupId> inactiveGroups(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
     std::vector<TTabletId> tabletsToCompact;
-    pool.RemainingHistory.clear();
-    for (const auto& [tabletId, tablet] : Tablets) {
-        bool foundHistory = false;
-        for (const auto& channel : tablet.TabletStorageInfo->Channels) {
-            if (channel.StoragePool != pool.Name) {
-                continue;
-            }
-            for (const auto& entry : channel.History) {
-                if (inactiveGroups.contains(entry.GroupID)) {
-                    pool.RemainingHistory.emplace(tabletId, channel.Channel, entry.FromGeneration);
-                    foundHistory = true;
+    if (pool.RemainingHistory.empty()) {
+        for (const auto& [tabletId, tablet] : Tablets) {
+            bool foundHistory = false;
+            for (const auto& channel : tablet.TabletStorageInfo->Channels) {
+                if (channel.StoragePool != pool.Name) {
+                    continue;
+                }
+                for (const auto& entry : channel.History) {
+                    if (inactiveGroups.contains(entry.GroupID)) {
+                        pool.RemainingHistory.emplace(tabletId, channel.Channel, entry.FromGeneration);
+                        foundHistory = true;
+                    }
                 }
             }
+            if (foundHistory) {
+                tabletsToCompact.push_back(tabletId);
+            }
         }
-        if (foundHistory) {
-            tabletsToCompact.push_back(tabletId);
-        }
+    } else {
+        auto tabletsWithHistory = pool.RemainingHistory | std::views::transform(&TStoragePoolInfo::THistoryEntry::Tablet);
+        std::unordered_set<TTabletId> uniqueTablets(tabletsWithHistory.begin(), tabletsWithHistory.end());
+        tabletsToCompact.assign(uniqueTablets.begin(), uniqueTablets.end());
     }
     if (tabletsToCompact.empty()) {
         return false;

@@ -66,6 +66,8 @@ struct TDomainInfo {
     bool AddShrinkingPool(const TString& pool);
 
     TString ShrinkingPoolsString() const;
+
+    void ParseShrinkingPools(const TString& str);
 };
 
 } // NHive

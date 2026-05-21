@@ -45,6 +45,10 @@ public:
         return SelfId().LocalId();
     }
 
+    TString GetDescription() const override {
+        return TStringBuilder() << "Compact(" << PoolName << ")";
+    }
+
     void SendCompact(size_t index, TTabletId tablet) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
@@ -74,12 +78,13 @@ public:
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
+                --CompactsInFlight;
                 if (NextTablet != Tablets.end()) {
                     SendCompact(i, *(NextTablet++));
+                    break;
                 }
             }
         }
-        --CompactsInFlight;
         return CheckCompletion();
     }
 
@@ -102,8 +107,9 @@ public:
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
-                SendCompact(i, tablet);
                 --CompactsInFlight;
+                SendCompact(i, tablet);
+                break;
             }
         }
     }

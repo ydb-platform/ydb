@@ -174,5 +174,9 @@ TString TDomainInfo::ShrinkingPoolsString() const {
     return JoinStrings(ShrinkingStoragePools, ";");
 }
 
+void TDomainInfo::ParseShrinkingPools(const TString& str) {
+    ShrinkingStoragePools = SplitString(str, ";");
+}
+
 } // NHive
 } // NKikimr

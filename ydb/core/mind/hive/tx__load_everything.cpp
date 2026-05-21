@@ -293,7 +293,7 @@ public:
                     domain.SetScaleRecommenderPolicies(domainRowset.GetValue<Schema::SubDomain::ScaleRecommenderPolicies>());
                 }
                 domain.Stopped = domainRowset.GetValueOrDefault<Schema::SubDomain::Stopped>();
-                domain.ShrinkingStoragePools = SplitString(domainRowset.GetValueOrDefault<Schema::SubDomain::ShrinkingStoragePools>(), ";");
+                domain.ParseShrinkingPools(domainRowset.GetValueOrDefault<Schema::SubDomain::ShrinkingStoragePools>());
 
                 if (!domainRowset.Next())
                     return false;

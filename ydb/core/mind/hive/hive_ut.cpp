@@ -9405,7 +9405,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTablet::EvCompactTables);
+            options.FinalEvents.emplace_back(TEvTablet::EvMoveData);
             runtime.DispatchEvents(options);
         }
         for (int attempt = 0; attempt < 10; ++attempt) {

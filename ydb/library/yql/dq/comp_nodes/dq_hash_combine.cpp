@@ -22,6 +22,7 @@
 #include <util/system/backtrace.h>
 
 #include <yql/essentials/utils/yql_panic.h>
+#include <util/system/mutex.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -30,6 +31,8 @@ using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
 namespace {
+
+TMutex DumpMutex;
 
 bool HasMemoryForProcessing() {
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
@@ -529,7 +532,8 @@ enum class EFillState
     ContinueFilling,
     Drain,
     SourceEmpty,
-    SourceSkipped
+    SourceSkipped,
+    ImmediateOutput,
 };
 
 namespace {
@@ -561,7 +565,7 @@ constexpr const float ExtraMapCapacity = 2.0; // hashmap size is target row coun
 constexpr const float MaxCompressionRatio = 32.0;
 constexpr const size_t CombineMemorySampleRowCount = 16384ULL; // sample size for row weight estimation in Combine mode, in rows
 constexpr const size_t SpillingMemorySampleRowCount = 1000ULL; // sample size for row weight estimation in Aggregate mode when trying to spill, in rows
-constexpr const size_t LowerFixedRowCount = 1024ULL; // minimum viable hash table size, rows
+constexpr const size_t LowerFixedRowCount = CombineMemorySampleRowCount; // minimum viable hash table size, rows
 constexpr const size_t UpperFixedRowCount = 128 * 1024ULL; // maximum hash table size, rows (fixed constant for now)
 constexpr const size_t BucketBits = 7;
 constexpr const size_t NumBuckets = 1ULL << BucketBits;
@@ -572,6 +576,7 @@ struct TDqHashCombineTestParams
 {
     bool DisableStateDehydration = false;
     bool DisableKeyPassthrough = false;
+    TTestStateCallback StateCallback;
 };
 
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
@@ -608,6 +613,7 @@ protected:
         }
     }
 
+    // Does not ref values in the keyBuffer; you have to ref them manually if you want to keep them after reading the input row
     void ExtractPassthroughKey(TUnboxedValuePod* keyBuffer, TUnboxedValue* const* input)
     {
         auto keys = keyBuffer;
@@ -618,6 +624,8 @@ protected:
         }
     }
 
+    // Does ref values in the keyBuffer; you have to unref them manually if you don't need to keep them after reading the input row
+    // (inverse of ExtractPassthroughKey)
     void ExtractKey(TUnboxedValuePod* keyBuffer)
     {
         auto keys = keyBuffer;
@@ -975,23 +983,60 @@ protected:
         }
     }
 
-    EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
-        TUnboxedValuePod* const tempKey = TempKeyBuffer.data();
-        const ui32 tempKeySize = TempKeyBuffer.size();
-
+    Y_FORCE_INLINE void LoadItemAndKey(TUnboxedValue* const* input, TUnboxedValuePod* const keyBuffer) {
         if (HasGenericAggregation) {
             LoadItem(input);
             if (PassthroughKeys) {
-                ExtractPassthroughKey(tempKey, input);
+                ExtractPassthroughKey(keyBuffer, input);
             } else {
-                ExtractKey(tempKey);
+                ExtractKey(keyBuffer);
             }
         } else {
             MKQL_ENSURE(false, "Not implemented yet");
         }
+    }
+
+    Y_FORCE_INLINE void DiscardComputedKey(TArrayRef<TUnboxedValuePod> keyBuf)
+    {
+        if (!PassthroughKeys) {
+            for (TUnboxedValuePod& k : keyBuf) {
+                k.UnRef();
+            }
+        }
+    }
+
+    void PassthroughFetchedRow(TUnboxedValue* const* input, TUnboxedValue* const* output) {
+        TArrayRef<TUnboxedValuePod> keyBuf(TempKeyBuffer);
+
+        LoadItemAndKey(input, keyBuf.data());
+
+        {
+            auto stateNodesIter = Nodes.InitResultNodes.begin();
+            std::for_each(Nodes.FinishStateNodes.cbegin(), Nodes.FinishStateNodes.cend(),
+                [&](IComputationExternalNode* item){ item->SetValue(Ctx, (*stateNodesIter++)->GetValue(Ctx)); });
+        }
+        {
+            auto keyNodesIter = Nodes.KeyNodes.begin();
+            std::for_each(Nodes.FinishKeyNodes.cbegin(), Nodes.FinishKeyNodes.cend(),
+                [&](IComputationExternalNode* item){ item->SetValue(Ctx, (*keyNodesIter++)->GetValue(Ctx)); });
+        }
+
+        TUnboxedValue* const* outputIter = output;
+
+        for (const auto& node : Nodes.FinishResultNodes) {
+            *(*outputIter++) = node->GetValue(Ctx);
+        }
+
+        DiscardComputedKey(keyBuf);
+    }
+
+    EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
+        TArrayRef<TUnboxedValuePod> keyBuf(TempKeyBuffer);
+
+        LoadItemAndKey(input, keyBuf.data());
 
         ui64 bucketId = 0;
-        ui64 hash = Hasher(tempKey);
+        ui64 hash = Hasher(keyBuf.data());
         if (EnableSpilling) {
             // Lower 16 bits are used by the hash shuffle connection to distribute keys among tasks, so we can't use these (even with the hash seed)
             // Another solution would be to rehash using a different function but shifted bits are uniform enough
@@ -1004,13 +1049,7 @@ protected:
                 rowBuffer[i] = *input[i];
                 rowBuffer[i].Ref();
             }
-            if (!PassthroughKeys) {
-                auto k = tempKey;
-                for (ui32 i = 0U; i < tempKeySize; ++i) {
-                    k->UnRef();
-                    k++;
-                }
-            }
+            DiscardComputedKey(keyBuf);
 
             if (SampleSpillingInput) {
                 auto estimated = EstimateUvPackSize(
@@ -1041,12 +1080,12 @@ protected:
 
         TUnboxedValuePod* keyBuffer = nullptr;
         bool isNew = false;
-        auto mapIt = Map->Insert(tempKey, hash, isNew);
+        auto mapIt = Map->Insert(keyBuf.data(), hash, isNew);
         char* statePtr = nullptr;
         if (isNew) {
             // Copy the value to the specified arena page
             keyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
-            memcpy(keyBuffer, tempKey, tempKeySize * sizeof(TUnboxedValuePod));
+            memcpy(keyBuffer, keyBuf.data(), keyBuf.size_bytes());
             // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), keyBuffer);
             *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = keyBuffer;
         } else {
@@ -1061,17 +1100,11 @@ protected:
             GenericAggregation->UpdateState(statePtr, input);
         }
 
-        if (!PassthroughKeys && !isNew) {
-            auto keys = tempKey;
-            for (ui32 i = 0U; i < tempKeySize; ++i) {
-                keys->UnRef();
-                keys++;
-            }
+        if (!isNew) {
+            DiscardComputedKey(keyBuf);
         } else if (PassthroughKeys && isNew) {
-            auto keys = tempKey;
-            for (ui32 i = 0U; i < tempKeySize; ++i) {
-                keys->Ref();
-                keys++;
+            for (TUnboxedValuePod& k : keyBuf) {
+                k.Ref();
             }
         }
 
@@ -1135,7 +1168,8 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
-        const TDqHashCombineTestParams testParams
+        const bool supportsBypass,
+        const TDqHashCombineTestParams& testParams
     )
         : TBase(memInfo)
         , Ctx(ctx)
@@ -1152,9 +1186,11 @@ public:
         , Equals(TWideUnboxedEqual(KeyTypes))
         , Draining(false)
         , SourceEmpty(false)
+        , CanBypass(!isAggregator && supportsBypass)
         , TestParams(testParams)
     {
-        TempKeyBuffer.resize(KeyTypes.size());
+        TempKeyBuffer.resize(KeyTypes.size(), {});
+        TempStateBuffer.resize(stateItemTypes.size(), {});
 
         if (!IsAggregation) {
             IsEstimating = !(MemoryHelper.KeySizeBound && MemoryHelper.StateSizeBound);
@@ -1163,6 +1199,7 @@ public:
             } else {
                 MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
             }
+            //AggregationBypassed = true;
         } else {
             MaxRowCount = 64ULL * 1024;
             MapAutoGrowEnabled = true;
@@ -1228,6 +1265,12 @@ public:
     }
 
     virtual ~TBaseAggregationState() {
+        {
+            TGuard<TMutex> dumpGuard(DumpMutex);
+            Cerr << "IsAggregation: " << IsAggregation << "; Bypassed: " << BypassActivated << "; MaxRowCount: " << MaxRowCount;
+            Cerr << "; Capacity: " << (Map ? Map->GetCapacity() : 0) << "; InputRows: " << InputRows << "; OutputRows: " << OutputRows << Endl;
+        }
+
         if (ForLLVM) {
             // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
             for (TUnboxedValue& val : InputBuffer) {
@@ -1241,9 +1284,18 @@ public:
     virtual NUdf::EFetchStatus TryDrain(TUnboxedValue* const* output) = 0;
     virtual TUnboxedValue* const* GetInputBuffer() = 0;
     virtual TUnboxedValueVector& GetDenseInputBuffer() = 0;
-    virtual EFillState ProcessInput(EFillState sourceState) = 0;
+    virtual EFillState ProcessInput(EFillState sourceState, TUnboxedValue* const* output) = 0;
 
 protected:
+    void CallTestStateCallback() {
+        if (!TestParams.StateCallback) {
+            return;
+        }
+        TestParams.StateCallback({
+            .BypassActivated = BypassActivated,
+        });
+    }
+
     size_t TryAllocMapForRowCount(size_t rowCount)
     {
         // Avoid reallocating the map
@@ -1288,12 +1340,15 @@ protected:
 
     void UpdateRowLimitFromSample()
     {
-        // If we have achieved a "good" compression ratio (defined by a constant) then we probably don't need to resize the map further
-        if (!Map->GetSize() || static_cast<double>(MaxRowCount) / Map->GetSize() >= MaxCompressionRatio) {
+        if (Map->GetSize() && (InputRows * 0.90 <= Map->GetSize())) {
+            Incompressible = true;
             return;
         }
 
-        // TODO: also check if the input stream is incompressible; we need to derive a statistical criterion for that
+        // If we have achieved a "good" compression ratio (defined by a constant) then we probably don't need to resize the map further
+        if (!Map->GetSize() || (static_cast<double>(InputRows) / Map->GetSize() >= MaxCompressionRatio)) {
+            return;
+        }
 
         size_t totalMem = 0;
         bool unbounded = false;
@@ -1331,6 +1386,15 @@ protected:
 
     void PrepareForNewBatch()
     {
+        if (CanBypass && Incompressible) {
+            IsEstimating = false;
+            BypassActivated = true;
+            CallTestStateCallback();
+            Map.Reset();
+            Store->Clear();
+            return;
+        }
+
         if (Map->GetSize() != 0) {
             if (IsEstimating && !SourceEmpty) {
                 IsEstimating = false;
@@ -1341,6 +1405,7 @@ protected:
         }
         Store->Clear();
         Store->Format(EnableSpilling ? NumBuckets : 1, KeyAndStatesByteSize);
+
     }
 
     [[nodiscard]] bool OpenDrain() {
@@ -1423,7 +1488,10 @@ protected:
     const bool IsAggregation;
     const bool EnableSpilling;
 
+    bool BypassActivated = false;
+    bool Incompressible = false;
     bool IsEstimating = false;
+
     size_t EstimateBatchSize = 0;
     size_t MaxRowCount = 0;
     size_t InitialMapCapacity = 0;
@@ -1449,6 +1517,7 @@ protected:
     TSegmentedArena::TIterator DrainArenaIterator;
     THolder<TMap> Map;
     std::vector<TUnboxedValuePod> TempKeyBuffer;
+    std::vector<TUnboxedValue> TempStateBuffer; // for passthrough mode in early combiner
     TUnboxedValueVector InputBuffer;
     size_t StatesOffset;
     bool Draining;
@@ -1459,9 +1528,13 @@ protected:
     size_t SampledInputRealMemoryUsage = 0;
     std::optional<double> InputRowMemoryUsageMultiplier;
 
+    size_t InputRows = 0;
+    size_t OutputRows = 0;
+
     TCoroTask CurrentAsyncTask;
 
-    const TDqHashCombineTestParams TestParams;
+    const bool CanBypass;
+    const TDqHashCombineTestParams& TestParams;
 };
 
 class TWideAggregationState: public TBaseAggregationState
@@ -1484,11 +1557,11 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
-        const TDqHashCombineTestParams testParams
+        const TDqHashCombineTestParams& testParams
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
-            keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
+            keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, true, testParams
         )
         , OutputRowCounter(outputRowCounter)
         , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
@@ -1525,11 +1598,15 @@ public:
         return result;
     }
 
-    EFillState ProcessInput(EFillState sourceState) override {
-        return ProcessInputDirect(sourceState);
+    EFillState ProcessInput(EFillState sourceState, TUnboxedValue* const* output) override {
+        return ProcessInputInternal(sourceState, output);
     }
 
     EFillState ProcessInputDirect(EFillState sourceState) {
+        return ProcessInputInternal(sourceState, OutputPtrs.data());
+    }
+
+    EFillState ProcessInputInternal(EFillState sourceState, TUnboxedValue* const* output) {
         if (sourceState == EFillState::Yield) {
             return sourceState;
         } else if (sourceState == EFillState::SourceEmpty) {
@@ -1541,7 +1618,13 @@ public:
         }
 
         ++InputRows;
-        return ProcessFetchedRow(Ctx.WideFields.data() + WideFieldsIndex);
+        if (BypassActivated) {
+            ++OutputRows;
+            PassthroughFetchedRow(Ctx.WideFields.data() + WideFieldsIndex, output);
+            return EFillState::ImmediateOutput;
+        } else {
+            return ProcessFetchedRow(Ctx.WideFields.data() + WideFieldsIndex);
+        }
     }
 
     NUdf::EFetchStatus TryDrain(NUdf::TUnboxedValue* const* outputPtrs) override {
@@ -1566,7 +1649,7 @@ public:
             if (!IsAggregation) {
                 PrepareForNewBatch();
             } else {
-                Map.Reset();
+                //Map.Reset();
                 Store->Clear();
             }
             Draining = false;
@@ -1593,6 +1676,7 @@ public:
         GenericAggregation->ExtractState(statePtr, outputPtrs);
 
         OutputRowCounter.Inc();
+        OutputRows++;
 
         if (HasGenericAggregation) {
             auto keyIter = key;
@@ -1605,7 +1689,6 @@ public:
     }
 
 private:
-    size_t InputRows = 0;
     NYql::NUdf::TCounter OutputRowCounter;
     TInstant StartMoment;
     [[maybe_unused]] size_t OutputWidth;
@@ -1648,11 +1731,11 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
-        const TDqHashCombineTestParams testParams
+        const TDqHashCombineTestParams& testParams
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
-            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
+            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, !forLLVM, testParams
         )
         , OutputRowCounter(outputRowCounter)
         , InputTypes(inputTypes)
@@ -1700,54 +1783,7 @@ public:
         BlockDatums.resize(OutputColumns);
     }
 
-    TUnboxedValue* const* GetInputBuffer() override {
-        if (CurrentInputBatchPtr < CurrentInputBatchSize) {
-            return nullptr;
-        }
-        return Ctx.WideFields.data() + WideFieldsIndex;
-    }
-
-    TUnboxedValueVector& GetDenseInputBuffer() override {
-        if (CurrentInputBatchPtr < CurrentInputBatchSize) {
-            return EmptyUVs;
-        }
-        return InputBuffer;
-    }
-
-    TUnboxedValue* GetDenseInputBufferDirect() {
-        if (CurrentInputBatchPtr < CurrentInputBatchSize) {
-            return nullptr;
-        }
-        return InputBuffer.data();
-    }
-
-    TUnboxedValue* GetDenseOutputBufferDirect() {
-        return DrainBuffer.data();
-    }
-
-    EFillState ProcessInput(EFillState fetchResult) override {
-        return ProcessInputDirect(fetchResult);
-    }
-
-    EFillState ProcessInputDirect(EFillState fetchResult) {
-        if (fetchResult != EFillState::SourceSkipped) {
-            if (fetchResult == EFillState::Yield) {
-                return fetchResult;
-            } else if (fetchResult == EFillState::SourceEmpty) {
-                SourceEmpty = true;
-                if (OpenDrain()) {
-                    return EFillState::Yield;
-                }
-                return fetchResult;
-            }
-
-            if (!OpenBlock()) {
-                return EFillState::ContinueFilling;
-            }
-        }
-
-        MKQL_ENSURE(!Draining && !SourceEmpty, "Can't fill while draining or when the source is exhausted");
-
+    void UnpackNextRowFromCurrentInputBlock() {
         for (size_t i = 0; i < InputColumns; ++i) {
             const auto& datum = TArrowBlock::From(InputBuffer[i]).GetDatum();
             NYql::NUdf::TBlockItem blockItem;
@@ -1765,27 +1801,10 @@ public:
         }
 
         ++CurrentInputBatchPtr;
-
-        return ProcessFetchedRow(RowBufferPointers.data());
     }
 
-    NUdf::EFetchStatus TryDrain(NUdf::TUnboxedValue* const* output) override {
-        return TryDrainBlocks(output);
-    }
-
-    NUdf::EFetchStatus TryDrainDirect() {
-        return TryDrainBlocks(DrainBufferPointers.data());
-    }
-
-    NUdf::EFetchStatus TryDrainBlocks(NUdf::TUnboxedValue* const* output) {
-        if (!HasPendingBlocks) {
-            auto status = TryDrainInternal();
-            if (status != NUdf::EFetchStatus::Ok) {
-                return status;
-            }
-        }
-
-        MKQL_ENSURE(HasPendingBlocks, "TryDrainInternal has promised us a block but did not deliver");
+    void OutputPendingSlicedBlock(NUdf::TUnboxedValue* const* output) {
+        MKQL_ENSURE(HasPendingBlocks, "Expected a pending output block but there is none");
 
         // Slice off the smallest chunk
         size_t sliceSize = BlockSizeRemaining;
@@ -1809,6 +1828,7 @@ public:
         *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(sliceSize)));
 
         OutputRowCounter.Add(sliceSize);
+        OutputRows += sliceSize;
         BlockSizeRemaining -= sliceSize;
 
         if (!BlockSizeRemaining) {
@@ -1818,20 +1838,161 @@ public:
                 MKQL_ENSURE(BlockArrays[i].empty(), "Not all columns have been drained completely");
             }
         }
-
-        return NUdf::EFetchStatus::Ok;
     }
 
+    void CreateBlockBuilders(TTypeInfoHelper& helper, std::vector<std::unique_ptr<NYql::NUdf::IArrayBuilder>>& blockBuilders) {
+        blockBuilders.clear();
+        blockBuilders.reserve(OutputTypes.size());
+        for (size_t i = 0; i < OutputTypes.size(); ++i) {
+            blockBuilders.push_back(MakeArrayBuilder(helper, OutputTypes[i], Ctx.ArrowMemoryPool, MaxOutputBlockLen, &Ctx.Builder->GetPgBuilder()));
+        }
+    }
+
+    void PackLargeOutputBlock(const size_t currentBlockSize, std::vector<std::unique_ptr<NYql::NUdf::IArrayBuilder>>& blockBuilders) {
+        // Generate and store "large" (potentially larger than MaxBlockSizeInBytes = 240_KB) block to be sliced later during actual output
+        BlockSizeRemaining = currentBlockSize;
+        HasPendingBlocks = true;
+        for (size_t i = 0; i < OutputColumns; ++i) {
+            auto& datum = BlockDatums[i];
+            auto& blockColumn = BlockArrays[i];
+            datum = blockBuilders[i]->Build(true);
+
+            MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
+            NYql::NUdf::ForEachArrayData(datum, [&blockColumn](const auto& arrayData) {
+                blockColumn.push_back(arrayData);
+            });
+        }
+    }
+
+    TUnboxedValue* const* GetInputBuffer() override {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize) {
+            return nullptr;
+        }
+        return Ctx.WideFields.data() + WideFieldsIndex;
+    }
+
+    TUnboxedValueVector& GetDenseInputBuffer() override {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks) {
+            return EmptyUVs;
+        }
+        return InputBuffer;
+    }
+
+    TUnboxedValue* GetDenseInputBufferDirect() {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks) {
+            return nullptr;
+        }
+        return InputBuffer.data();
+    }
+
+    TUnboxedValue* GetDenseOutputBufferDirect() {
+        return DrainBuffer.data();
+    }
+
+    EFillState ProcessInput(EFillState fetchResult, TUnboxedValue* const* output) override {
+        return ProcessInputInternal(fetchResult, output);
+    }
+
+    EFillState ProcessInputDirect(EFillState fetchResult) {
+        return ProcessInputInternal(fetchResult, DrainBufferPointers.data());
+    };
+
+    EFillState ProcessInputInternal(EFillState fetchResult, TUnboxedValue* const* output) {
+        if (fetchResult != EFillState::SourceSkipped) {
+            MKQL_ENSURE(!HasPendingBlocks, "Cannot read input while there are pending output blocks");
+
+            if (fetchResult == EFillState::Yield) {
+                return fetchResult;
+            } else if (fetchResult == EFillState::SourceEmpty) {
+                SourceEmpty = true;
+                if (OpenDrain()) {
+                    return EFillState::Yield;
+                }
+                return fetchResult;
+            }
+
+            if (!OpenBlock()) {
+                return EFillState::ContinueFilling;
+            }
+        } else if (HasPendingBlocks) {
+            // GetDenseInputBuffer/GetDenseInputBufferDirect must return nullptr when HasPendingBlocks is true
+            OutputPendingSlicedBlock(output);
+            return EFillState::ImmediateOutput;
+        }
+
+        // TODO: try to loop here, processing the entire block at once until we need to fetch the next block,
+        // as the outer loop in WideFetch has some small non-zero cost
+        if (!BypassActivated) {
+            MKQL_ENSURE(!Draining && !SourceEmpty, "Can't fill while draining or when the source is exhausted");
+
+            UnpackNextRowFromCurrentInputBlock();
+            ++InputRows;
+            return ProcessFetchedRow(RowBufferPointers.data());
+        } else {
+            ProcessBypassedBlock(output);
+            return EFillState::ImmediateOutput;
+        }
+    }
+
+    void ProcessBypassedBlock(TUnboxedValue* const* output)
+    {
+        // The input block (assumed non-empty) is locked into instance variables and can be iterated over with UnpackNextRowFromCurrentInputBlock();
+        // The output is also a block, so we return EFillState::ImmediateOutput (one or more sliced blocks to return; the first one is returned here, others from ProcessInputInternal)
+        // LLVM block support is scheduled for removal so all this logic will be simplified soon(tm)
+
+        TTypeInfoHelper helper;
+        std::vector<std::unique_ptr<NYql::NUdf::IArrayBuilder>> blockBuilders;
+
+        CreateBlockBuilders(helper, blockBuilders);
+
+        MKQL_ENSURE(CurrentInputBatchPtr < CurrentInputBatchSize, "Can't ProcessBypassedBlock when the input block has no rows left");
+
+        size_t currentBlockSize = 0;
+
+        while (CurrentInputBatchPtr < CurrentInputBatchSize && currentBlockSize < MaxOutputBlockLen) {
+            ++InputRows;
+            UnpackNextRowFromCurrentInputBlock();
+            PassthroughFetchedRow(RowBufferPointers.data(), OutputBufferPointers.data());
+            for (size_t i = 0; i < OutputColumns; ++i) {
+                auto blockItem = OutputItemConverters[i]->MakeItem(OutputBuffer[i]);
+                blockBuilders[i]->Add(blockItem);
+                OutputBuffer[i] = TUnboxedValuePod();
+            }
+            ++currentBlockSize;
+        }
+
+        PackLargeOutputBlock(currentBlockSize, blockBuilders);
+        OutputPendingSlicedBlock(output);
+    }
+
+    NUdf::EFetchStatus TryDrain(NUdf::TUnboxedValue* const* output) override {
+        return TryDrainBlocks(output);
+    }
+
+    NUdf::EFetchStatus TryDrainDirect() {
+        return TryDrainBlocks(DrainBufferPointers.data());
+    }
+
+    NUdf::EFetchStatus TryDrainBlocks(NUdf::TUnboxedValue* const* output) {
+        if (!HasPendingBlocks) {
+            // Try and generate some output blocks if there are none pending yet
+            auto status = TryDrainInternal();
+            if (status != NUdf::EFetchStatus::Ok) {
+                return status;
+            }
+        }
+
+        OutputPendingSlicedBlock(output);
+        return NUdf::EFetchStatus::Ok;
+    }
 
     NUdf::EFetchStatus TryDrainInternal() {
         MKQL_ENSURE(IsDraining(), "Cannot call TryDrain() unless IsDraining()");
 
         TTypeInfoHelper helper;
-
         std::vector<std::unique_ptr<NYql::NUdf::IArrayBuilder>> blockBuilders;
-        for (size_t i = 0; i < OutputTypes.size(); ++i) {
-            blockBuilders.push_back(MakeArrayBuilder(helper, OutputTypes[i], Ctx.ArrowMemoryPool, MaxOutputBlockLen, &Ctx.Builder->GetPgBuilder()));
-        }
+
+        CreateBlockBuilders(helper, blockBuilders);
 
         size_t currentBlockSize = 0;
         void* tuple = nullptr;
@@ -1882,21 +2043,11 @@ public:
             }
 
             ++currentBlockSize;
+            ++OutputRows;
         }
 
         if (currentBlockSize) {
-            BlockSizeRemaining = currentBlockSize;
-            HasPendingBlocks = true;
-            for (size_t i = 0; i < OutputColumns; ++i) {
-                auto& datum = BlockDatums[i];
-                auto& blockColumn = BlockArrays[i];
-                datum = blockBuilders[i]->Build(true);
-
-                MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
-                NYql::NUdf::ForEachArrayData(datum, [&blockColumn](const auto& arrayData) {
-                    blockColumn.push_back(arrayData);
-                });
-            }
+            PackLargeOutputBlock(currentBlockSize, blockBuilders);
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -1968,6 +2119,13 @@ public:
             return NUdf::EFetchStatus::Yield;
         }
 
+        if (width && (width != OutputPtrs.size() || output != OutputPtrs.front())) {
+            OutputPtrs.resize(width, nullptr);
+            std::transform(output, output + width, OutputPtrs.begin(), [&](TUnboxedValue& val) {
+                return &val;
+            });
+        }
+
         for (;;) {
             if (!state.IsDraining()) {
                 if (state.IsSourceEmpty()) {
@@ -1981,21 +2139,16 @@ public:
                     sourceState = EFillState::SourceSkipped;
                 }
 
-                auto fillResult = state.ProcessInput(sourceState);
+                auto fillResult = state.ProcessInput(sourceState, OutputPtrs.data());
                 if (fillResult == EFillState::Yield) {
                     return NUdf::EFetchStatus::Yield;
                 } else if (fillResult == EFillState::ContinueFilling) {
                     continue;
+                } else if (fillResult == EFillState::ImmediateOutput) {
+                    return NUdf::EFetchStatus::Ok;
                 } else {
                     MKQL_ENSURE(state.IsDraining(), "Expected state to be switched to draining");
                 }
-            }
-
-            if (width && (width != OutputPtrs.size() || output != OutputPtrs.front())) {
-                OutputPtrs.resize(width, nullptr);
-                std::transform(output, output + width, OutputPtrs.begin(), [&](TUnboxedValue& val) {
-                    return &val;
-                });
             }
 
             auto drainResult = state.TryDrain(OutputPtrs.data());
@@ -2050,7 +2203,7 @@ public:
     {
     }
 
-    static EFillState FetchResultToFillState(EFetchResult fetchResult)
+    static Y_FORCE_INLINE EFillState FetchResultToFillState(EFetchResult fetchResult)
     {
         switch (fetchResult) {
             case EFetchResult::Finish:
@@ -2089,12 +2242,14 @@ public:
                     fillState = EFillState::SourceSkipped;
                 }
 
-                auto processResult = state.ProcessInput(fillState);
+                auto processResult = state.ProcessInput(fillState, output);
 
                 if (processResult == EFillState::Yield) {
                     return EFetchResult::Yield;
                 } else if (processResult == EFillState::ContinueFilling) {
                     continue;
+                } else if (processResult == EFillState::ImmediateOutput) {
+                    return EFetchResult::One;
                 } else {
                     MKQL_ENSURE(state.IsDraining(), "Expected state to be switched to draining");
                 }
@@ -2129,6 +2284,10 @@ public:
 
     virtual void DisableKeyPassthrough(const bool disable) override {
         TestParams.DisableKeyPassthrough = disable;
+    }
+
+    virtual void SetTestStateCallback(const TTestStateCallback& callback) override {
+        TestParams.StateCallback = callback;
     }
 
 #if !defined(MKQL_DISABLE_CODEGEN)
@@ -2451,6 +2610,9 @@ public:
         TestParams.DisableKeyPassthrough = disable;
     }
 
+    virtual void SetTestStateCallback(const TTestStateCallback& callback) override {
+        TestParams.StateCallback = callback;
+    }
 
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -2502,8 +2664,66 @@ private:
     TDqHashCombineTestParams TestParams;
 };
 
+void DumpNode(TRuntimeNode node, int offset = 0) {
+    auto tabs = [offset]() -> IOutputStream& {
+        for (int i = 0; i < offset; ++i) {
+            Cerr << "\t";
+        }
+        return Cerr;
+    };
+
+    tabs() << (size_t)node.GetNode() << ": ";
+    if (node.IsImmediate()) {
+        Cerr << "Immediate of type: " << *node.GetRuntimeType() << Endl;
+    } else if (node.GetNode()->GetType()->IsCallable()) {
+        auto subCallable = static_cast<TCallable*>(node.GetNode());
+        auto name = subCallable->GetType()->GetName();
+        if (name == "Arg") {
+            Cerr << "Arg of type: ";
+        } else {
+            Cerr << "callable [" << name << "] returns ";
+        }
+        Cerr << *((TType*)(subCallable->GetType()->GetReturnType())) << Endl;
+        /*for (ui32 i = 0; i < subCallable->GetType()->GetArgumentsCount(); ++i) {
+            tabs() << "argument " << i << ": type " << *(subCallable->GetType()->GetArgumentType(i)) << Endl;
+        }*/
+        for (ui32 i = 0; i < subCallable->GetInputsCount(); ++i) {
+            tabs() << "input " << i << ":" << Endl;
+            DumpNode(subCallable->GetInput(i), offset + 1);
+        }
+    } else {
+        Cerr << "Unsupported node of type: " << *node.GetStaticType() << Endl;
+    }
+}
+
 IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNodeFactoryContext& ctx, const EOperatorKind kind) {
+    TGuard<TMutex> dumpGuard(DumpMutex);
     TDqHashOperatorParams params = ParseCommonDqHashOperatorParams(callable, ctx);
+
+    /*
+    auto printNodesFromTuple = [&](size_t inputIndex) {
+        int nodeIndex = 0;
+        NDqHashOperatorCommon::IterateInputNodes(callable, inputIndex, [&](TRuntimeNode node) {
+            Cerr << "Argument " << (++nodeIndex) << Endl;
+            DumpNode(node, 1);
+        });
+        Cerr << Endl << Endl;
+    };
+
+    Cerr << "----------- Argument dump begins --------------" << Endl;
+    Cerr << "isAggregator: " << (kind == EOperatorKind::Aggregator) << Endl;
+    Cerr << "GetKey nodes: " << Endl;
+    printNodesFromTuple(NDqHashOperatorParams::GetKey);
+
+    Cerr << "Item argument nodes: " << Endl;
+    printNodesFromTuple(NDqHashOperatorParams::ItemArgs);
+
+    Cerr << "Init nodes: " << Endl;
+    printNodesFromTuple(NDqHashOperatorParams::InitState);
+
+    Cerr << "Key argument nodes: " << Endl;
+    printNodesFromTuple(NDqHashOperatorParams::KeyArgs);
+    */
 
     auto inputComponents = GetWideComponents(callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
     std::vector<TType*> inputTypes;

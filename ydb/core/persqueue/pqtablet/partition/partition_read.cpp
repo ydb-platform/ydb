@@ -359,7 +359,7 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
             cc->SetTotalSize(blob.PartData->TotalSize);
     }
 
-    cc->SetBatchSize(blob.MessagesCount);
+    cc->SetMessagesCount(blob.MessagesCount);
 }
 
 template <typename T>

@@ -119,7 +119,7 @@ message TPersQueuePartitionRequest {
         optional string MessageDeduplicationId = 21; // Deduplication id for the message
 
         optional int64 MaxSeqNo = 22;
-        optional int64 TotalBatchMessages = 23;
+        optional int64 MessagesCount = 23;
         repeated TBatchMessagePartitionKey PartitionKeys = 24;
     }
 
@@ -427,7 +427,7 @@ message TCmdReadResult {
 
         optional string PartitionKey = 11;
         optional bytes ExplicitHash = 12;
-        optional uint64 BatchSize = 13;
+        optional uint64 MessagesCount = 13;
     }
     optional uint64 MaxOffset = 2;
     repeated TResult Result = 3;

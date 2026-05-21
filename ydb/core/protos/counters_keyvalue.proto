@@ -107,6 +107,8 @@ enum ECumulativeCounters {
     COUNTER_WRITE_BYTES_CHANNEL_13 = 80                              [(CounterOpts) = {Name: "WriteBytesChannel13"}];
     COUNTER_WRITE_BYTES_CHANNEL_14 = 81                              [(CounterOpts) = {Name: "WriteBytesChannel14"}];
     COUNTER_WRITE_BYTES_CHANNEL_15 = 82                              [(CounterOpts) = {Name: "WriteBytesChannel15"}];
+
+    COUNTER_STORAGE_CHANNEL_FALLBACK_TO_MAIN = 83                    [(CounterOpts) = {Name: "StorageChannelFallbackToMain"}];
 }
 
 enum ESimpleCounters {

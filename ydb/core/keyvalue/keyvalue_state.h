@@ -325,6 +325,7 @@ public:
     void CountTrashCommitted(const TLogoBlobID& id);
     void CountTrashDeleted(const TLogoBlobID& id);
     void CountOverrun();
+    void CountStorageChannelFallbackToMain();
     void CountLatencyBsOps(const TRequestStat &stat);
     void CountLatencyBsCollect();
     void CountLatencyQueue(const TRequestStat &stat);

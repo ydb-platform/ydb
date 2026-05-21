@@ -30,8 +30,8 @@ class TFairShareActionQueue
 public:
     TFairShareActionQueue(
         std::string threadName,
-        const std::vector<TString>& queueNames,
-        const THashMap<TString, std::vector<TString>>& bucketToQueues,
+        const std::vector<std::string>& queueNames,
+        const THashMap<std::string, std::vector<std::string>>& bucketToQueues,
         TThreadOptions threadOptions,
         NProfiling::IRegistryPtr registry)
         : ShutdownCookie_(RegisterShutdownCallback(
@@ -39,7 +39,7 @@ public:
             BIND_NO_PROPAGATE(&TFairShareActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
             /*priority*/ 100))
     {
-        THashMap<TString, int> queueNameToIndex;
+        THashMap<std::string, int> queueNameToIndex;
         for (int queueIndex = 0; queueIndex < std::ssize(queueNames); ++queueIndex) {
             EmplaceOrCrash(queueNameToIndex, queueNames[queueIndex], queueIndex);
         }
@@ -49,7 +49,7 @@ public:
         BucketNames_.reserve(queueNames.size());
 
         std::vector<TBucketDescription> bucketDescriptions;
-        THashSet<TString> createdQueues;
+        THashSet<std::string> createdQueues;
         int nextBucketIndex = 0;
         for (const auto& [bucketName, bucketQueues] : bucketToQueues) {
             int bucketIndex = nextBucketIndex++;
@@ -137,7 +137,7 @@ public:
             QueueIndexToBucketQueueIndex_[index]);
     }
 
-    void Reconfigure(const THashMap<TString, double>& newBucketWeights) override
+    void Reconfigure(const THashMap<std::string, double>& newBucketWeights) override
     {
         std::vector<double> weights(BucketNames_.size());
         for (int bucketIndex = 0; bucketIndex < std::ssize(BucketNames_); ++bucketIndex) {
@@ -164,7 +164,7 @@ private:
     std::vector<int> QueueIndexToBucketIndex_;
     std::vector<int> QueueIndexToBucketQueueIndex_;
 
-    std::vector<TString> BucketNames_;
+    std::vector<std::string> BucketNames_;
 
     std::atomic<bool> Stopped_ = false;
 
@@ -181,8 +181,8 @@ private:
 
 IFairShareActionQueuePtr CreateFairShareActionQueue(
     std::string threadName,
-    const std::vector<TString>& queueNames,
-    const THashMap<TString, std::vector<TString>>& bucketToQueues,
+    const std::vector<std::string>& queueNames,
+    const THashMap<std::string, std::vector<std::string>>& bucketToQueues,
     TThreadOptions threadOptions,
     NProfiling::IRegistryPtr registry)
 {

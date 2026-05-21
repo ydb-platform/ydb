@@ -11,10 +11,12 @@
 
 namespace NKikimr::NEvWrite {
 
-    TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId)
+    TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
+                                          std::shared_ptr<TCSUploadCounters> counters)
         : WritesCount(writesCount)
         , LongTxActorId(longTxActorId)
         , LongTxId(longTxId)
+        , Counters(counters)
     {
         Y_ABORT_UNLESS(writesCount);
         WriteIds.resize(WritesCount.Val());

@@ -49,6 +49,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RetryTimeoutCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadLimitExceededCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MemoryInflightBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr MemoryInflightLimit;
 
 public:
     TCSUploadCounters()
@@ -67,6 +69,8 @@ public:
         , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
         , RetryBySubscribeOnOverloadCount(TBase::GetDeriviative("RetryBySubscribeOnOverload"))
         , RetryBySubscribeOnOverloadLimitExceededCount(TBase::GetDeriviative("RetryBySubscribeOnOverloadLimitExceeded"))
+        , MemoryInflightBytes(TBase::GetValue("MemoryInflightBytes"))
+        , MemoryInflightLimit(TBase::GetValue("MemoryInflightLimit"))
     {
     }
 
@@ -111,6 +115,11 @@ public:
 
     void OnFailedFullReply(const TDuration d) const {
         FailedFullReplyDuration->Collect(d.MilliSeconds());
+    }
+
+    void OnMemoryInflight(const ui64 bytes, const ui64 limit) const {
+        MemoryInflightBytes->Set(bytes);
+        MemoryInflightLimit->Set(limit);
     }
 };
 // External transaction controller class
@@ -163,7 +172,8 @@ public:
         };
     };
 
-    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId);
+    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
+                      std::shared_ptr<TCSUploadCounters> counters = std::make_shared<TCSUploadCounters>());
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };

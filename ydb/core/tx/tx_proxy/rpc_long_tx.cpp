@@ -99,6 +99,9 @@ protected:
         AFL_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
+
+        auto counters = std::make_shared<NEvWrite::TCSUploadCounters>();
+        counters->OnMemoryInflight(sizeInFlight, GetMemoryInFlightLimit());
         if (GetMemoryInFlightLimit() < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
@@ -123,7 +126,7 @@ protected:
 
         const auto& splittedData = shardsSplitter->GetSplitData();
         const auto& shardsInRequest = splittedData.GetShardRequestsCount();
-        InternalController = std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId);
+        InternalController = std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId, counters);
 
         InternalController->GetCounters()->OnSplitByShards(shardsInRequest);
         ui32 sumBytes = 0;

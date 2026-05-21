@@ -3616,7 +3616,8 @@ state: STATE_ENABLED
     //   - false + AUTO   : "build otherwise" fallback branch of AUTO is taken.
     //   - false + IMPORT : combination is invalid by design: there is nothing to import.
     void ExportImportWithIndex(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, const TString& indexDesc,
-            bool includeIndexData, Ydb::Import::ImportFromS3Settings::IndexPopulationMode populationMode) {
+            bool includeIndexData, Ydb::Import::ImportFromS3Settings::IndexPopulationMode populationMode,
+            Ydb::StatusIds::StatusCode expectedImportStatus = Ydb::StatusIds::SUCCESS) {
 
         ui64 txId = 100;
 
@@ -3676,7 +3677,11 @@ state: STATE_ENABLED
             }
         )", s3Port, populationModeStr.c_str()));
         env.TestWaitNotification(runtime, txId);
-        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        TestGetImport(runtime, txId, "/MyRoot", expectedImportStatus);
+
+        if (expectedImportStatus != Ydb::StatusIds::SUCCESS) {
+            return;
+        }
 
         const TString importedIndexPath = "/MyRoot/TableImported/index";
         TestDescribeResult(DescribePrivatePath(runtime, importedIndexPath), {
@@ -3715,6 +3720,13 @@ state: STATE_ENABLED
         EnvOptions().EnableIndexMaterialization(true);                                                   \
         ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/false,\
             Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO);                              \
+    }                                                                                                    \
+    /* No materialized data in backup + IMPORT mode: invalid combination, import must fail. */          \
+    Y_UNIT_TEST(name##_NoDataImport) {                                                                   \
+        EnvOptions().EnableIndexMaterialization(true);                                                   \
+        ExportImportWithIndex(Env(), Runtime(), S3Mock(), S3Port(), indexDesc, /*includeIndexData=*/false,\
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,                             \
+            Ydb::StatusIds::CANCELLED);                                                                  \
     }
 
     Y_UNIT_TEST_INDEX_POPULATION_MODES(IndexMaterialization, R"(

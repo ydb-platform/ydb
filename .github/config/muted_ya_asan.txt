@@ -168,6 +168,7 @@ ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapTiering.ReconfigureTier
+ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertReturning-UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpReturning.ReturningColumnsOrder+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole

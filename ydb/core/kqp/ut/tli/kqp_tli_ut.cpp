@@ -1692,57 +1692,6 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
-    // Test: Concurrent UPSERT...SELECT transactions - sometimes, expected cancellation of victim transaction does not happen.
-    // The path to reproduce a problem is as follows:
-    // - upon start of the service coordinator queues the reduced resolution step update, aligned on a 1000ms boundary;
-    // - just before BeginTx for a victim is issued, coordinator adjusts it's step to an aligned value and pushes it as a mediator step to the DataShard;
-    // - BeginTx requests read snapshot, receives current mediator step and schedules step update because less than 1ms has passed since previous update;
-    // - breaker also uses current mediator step for it's MVCC version because less than 1ms has passed since previous update;
-    // - both, the victim and a breaker, have same MVCC version {step/u64max} because both are immidiate;
-    // - due to an equal MVCC versions TLI conflict is not detected and both operations succeed.
-    Y_UNIT_TEST(ConcurrentUpsertSelectRace) {
-        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) "
-                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/Table1` "
-                                           "WHERE Key = 1u";
-
-        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
-
-        const size_t resolution = 1000; // reduced step resolution
-        const size_t shift = 50; // time shift used to offset step off the clock
-        const size_t delays_limit = 10; // size of a delay averaging set
-        size_t delays[delays_limit]; // delays seen between victim's BeginTx and breaker query
-        size_t delays_count = 0; // number of delays seen between victim's BeginTx and breaker query
-        for (;;) {
-            TStringStream ss;
-            TTliTestContext ctx(ss);
-
-            ctx.CreateAndSeedTables(1);
-            if (delays_count) { // try to align a victim's BeginTx timestamp to reproduce a fail scenario
-                auto now = TAppData::TimeProvider->Now().MilliSeconds();
-                auto count = std::min(delays_count, delays_limit);
-                auto delay = std::accumulate(delays, delays + count, 0) / count; // average delay
-                auto aligned = (now + resolution - 1) / resolution * resolution; // aligned mediator step
-                auto drift = delays_count % 3 - 1; // some randomness
-                auto until = aligned - shift - delay + drift; // timepoint to sleep until
-                while (until < now) { // double check it's not in the past
-                    until += resolution;
-                }   
-                auto sleep = until - now;
-                Sleep(TDuration::MilliSeconds(sleep)); // breaker query should begin just after the step update
-            }
-            auto begin_ts = TAppData::TimeProvider->Now().MilliSeconds();
-            auto victimTx = BeginTx(ctx.VictimSession, victimUpsertSelect);
-            auto breaker_ts = TAppData::TimeProvider->Now().MilliSeconds();
-            ctx.ExecuteQuery(breakerUpsert);
-            auto [status, issues] = CommitTxWithIssues(*victimTx);
-
-            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
-
-            delays[delays_count % delays_limit] = breaker_ts - begin_ts; // save delay
-            delays_count++;
-        }
-    }
-
     // Test: Concurrent UPSERT...SELECT transactions - expected cancellation of victim transaction does not happen.
     // This test does not use real threads and due to a lower step resolution always reproduces a bug with detecting TLI conflicts
     // if MVCC versions of victim and breaker happen to be the same.
@@ -1791,7 +1740,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             //
             // TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate>(*ctx.Kikimr.GetTestServer().GetRuntime()).Wait();
             //
-            // in order to compile the previous line, add the following headers:
+            // in order to compile with the previous line, add the following headers:
             //
             // #include <ydb/core/testlib/actors/wait_events.h>
             // #include <ydb/core/tx/time_cast/time_cast.h>

@@ -4010,6 +4010,108 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(SetDefaultMultipleTimes) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value FROM `/Root/SetDefaultMultiple` ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/SetDefaultMultiple` (
+                    Key Int32,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultMultiple` ALTER COLUMN Value SET DEFAULT "first_default";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/SetDefaultMultiple` (Key) VALUES (1);
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["first_default"]]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultMultiple` ALTER COLUMN Value SET DEFAULT "second_default";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/SetDefaultMultiple` (Key) VALUES (2);
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["first_default"]];
+                [[2];["second_default"]]
+            ])");
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/SetDefaultMultiple` ALTER COLUMN Value SET DEFAULT "third_default";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/SetDefaultMultiple` (Key) VALUES (3);
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            validateTable(R"([
+                [[1];["first_default"]];
+                [[2];["second_default"]];
+                [[3];["third_default"]]
+            ])");
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

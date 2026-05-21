@@ -504,6 +504,27 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
     }
 
     /**
+     * Arrow format is rejected when EnableArrowResultSetFormat feature flag is false.
+     */
+    Y_UNIT_TEST(ArrowFormat_FeatureFlagDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableArrowResultSetFormat(false);
+
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto client = kikimr.GetQueryClient();
+
+        auto arrowSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
+
+        auto result = client.ExecuteQuery(R"(
+            SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
+        )", TTxControl::BeginTx().CommitTx(), arrowSettings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Arrow result set format is not enabled");
+    }
+
+    /**
      * Set Arrow format explicitly in TExecuteQuerySettings.
      */
     Y_UNIT_TEST(ArrowFormat_Simple) {

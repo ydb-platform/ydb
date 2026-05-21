@@ -20,6 +20,20 @@ namespace telemetry
 {
 
 /**
+  The name of the auto instrumentation agent or distribution, if used.
+  <p>
+  Official auto instrumentation agents and distributions SHOULD set the @code telemetry.distro.name
+  @endcode attribute to a string starting with @code opentelemetry- @endcode, e.g. @code
+  opentelemetry-java-instrumentation @endcode.
+ */
+static constexpr const char *kTelemetryDistroName = "telemetry.distro.name";
+
+/**
+  The version string of the auto instrumentation agent or distribution, if used.
+ */
+static constexpr const char *kTelemetryDistroVersion = "telemetry.distro.version";
+
+/**
   The language of the telemetry SDK.
  */
 static constexpr const char *kTelemetrySdkLanguage = "telemetry.sdk.language";

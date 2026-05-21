@@ -16,17 +16,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
-#error log macro definition clash
-#endif
-
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS, stream)
-#define BLOG_NOTICE(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS, stream)
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS, stream)
-#define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS, stream)
-
-
 namespace NKikimr::NConsole {
 
 using namespace NOperationId;
@@ -85,7 +74,7 @@ public:
 
     void OnPipeDestroyed(const TActorContext &ctx)
     {
-        BLOG_D(LogPrefix << "pipe destroyed");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "pipe destroyed");
 
         if (BSControllerPipe) {
             NTabletPipe::CloseClient(ctx, BSControllerPipe);
@@ -117,7 +106,7 @@ public:
         read.SetBoxId(Pool->Config.GetBoxId());
         read.AddName(Pool->Config.GetName());
 
-        BLOG_D(LogPrefix << "read pool state: " << request->Record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "read pool state: " << request->Record.ShortDebugString());
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -131,7 +120,7 @@ public:
             pool->SetKind(Pool->Kind);
         }
 
-        BLOG_D(LogPrefix << "send pool request: " << request->Record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "send pool request: " << request->Record.ShortDebugString());
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -139,7 +128,7 @@ public:
     void DeletePool(const TActorContext &ctx)
     {
         if (!PoolId) {
-            BLOG_D(LogPrefix << "cannot delete missing pool " << Pool->Config.GetName());
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot delete missing pool " << Pool->Config.GetName());
             ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvPoolDeleted(Tenant, Pool));
             Die(ctx);
             return;
@@ -151,14 +140,14 @@ public:
         del.SetStoragePoolId(PoolId);
         del.SetItemConfigGeneration(Pool->Config.GetItemConfigGeneration());
 
-        BLOG_D(LogPrefix << "send pool request: " << request->Record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "send pool request: " << request->Record.ShortDebugString());
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
 
     void Bootstrap(const TActorContext &ctx)
     {
-        BLOG_D(LogPrefix << "Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "Bootstrap");
 
         Become(&TThis::StateRead);
 
@@ -168,7 +157,7 @@ public:
     void ReplyAndDie(IEventBase *resp,
                      const TActorContext &ctx)
     {
-        BLOG_D(LogPrefix << "reply with " << resp->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "reply with " << resp->ToString());
         ctx.Send(OwnerId, resp);
         Die(ctx);
     }
@@ -198,7 +187,7 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        BLOG_D(LogPrefix << "got read response: " << rec.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got read response: " << rec.ShortDebugString());
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -231,7 +220,7 @@ public:
             if (resp.StatusSize() && resp.GetStatus(0).GetErrorDescription())
                 error = resp.GetStatus(0).GetErrorDescription();
 
-            BLOG_D(LogPrefix << "cannot read pool '" << Pool->Config.GetName() << "' ("
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot read pool '" << Pool->Config.GetName() << "' ("
                         << Pool->Config.GetStoragePoolId() << "): " << error);
             Pool->Issue = error;
             return false;
@@ -244,14 +233,14 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        BLOG_D(LogPrefix << "got config response: " << rec.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got config response: " << rec.ShortDebugString());
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
             if (rec.StatusSize() && rec.GetStatus(0).GetErrorDescription())
                 error = rec.GetStatus(0).GetErrorDescription();
 
-            BLOG_ERROR(LogPrefix << "cannot create pool '" << Pool->Config.GetName() << "' ("
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot create pool '" << Pool->Config.GetName() << "' ("
                         << Pool->Config.GetStoragePoolId() << "): " << error);
             Pool->Issue = error;
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, error), ctx);
@@ -276,7 +265,7 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        BLOG_D(LogPrefix << "got check response: " << rec.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got check response: " << rec.ShortDebugString());
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -284,14 +273,14 @@ public:
         }
 
         if (rec.GetStatus(0).StoragePoolSize() == 0) {
-            BLOG_ERROR(LogPrefix << "check response misses pool status");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "check response misses pool status");
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
             return;
         }
 
         const auto &scope = rec.GetStatus(0).GetStoragePool(0).GetScopeId();
         if (TTenantsManager::TDomainId(scope.GetX1(), scope.GetX2()) != Tenant->DomainId) {
-            BLOG_ERROR(LogPrefix << "scope id check failure "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "scope id check failure "
                         << Tenant->DomainId
                         << " vs " << scope.ShortDebugString());
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -306,14 +295,14 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        BLOG_D(LogPrefix << "got config response: " << rec.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got config response: " << rec.ShortDebugString());
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
             if (rec.StatusSize() && rec.GetStatus(0).GetErrorDescription())
                 error = rec.GetStatus(0).GetErrorDescription();
 
-            BLOG_ERROR(LogPrefix << "cannot delete pool '"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot delete pool '"
                         << Pool->Config.GetName() << "' ("
                         << Pool->Config.GetStoragePoolId() << "): " << error);
             Pool->Issue = error;
@@ -556,7 +545,7 @@ public:
     }
 
     void AlterUserAttribute(const TActorContext &ctx) {
-        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -567,7 +556,7 @@ public:
         tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
         tx.MutableAlterUserAttributes()->SetPathName(Subdomain.second);
 
-        BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send alter user attribute cmd: "
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send alter user attribute cmd: "
                     << request->ToString());
 
         ctx.Send(MakeTxProxyID(), request.Release());
@@ -575,7 +564,7 @@ public:
 
     void AlterSubdomain(const TActorContext &ctx)
     {
-        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter subdomain version " << Version);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") alter subdomain version " << Version);
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -589,7 +578,7 @@ public:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSubDomain);
         }
 
-        BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send alter subdomain cmd: "
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send alter subdomain cmd: "
                     << request->ToString());
 
         ctx.Send(MakeTxProxyID(), request.Release());
@@ -597,7 +586,7 @@ public:
 
     void CreateSubdomain(const TActorContext &ctx)
     {
-        BLOG_D("TSubDomainManip(" << Tenant->Path << ") create subdomain");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") create subdomain");
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -614,7 +603,7 @@ public:
         if (Tenant->Attributes.UserAttributesSize())
             tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
 
-        BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send subdomain creation cmd: "
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send subdomain creation cmd: "
                     << request->ToString());
 
         AuditLogBeginConfigureDatabase(
@@ -629,7 +618,7 @@ public:
 
     void DropSubdomain(const TActorContext &ctx)
     {
-        BLOG_D("TSubDomainManip(" << Tenant->Path << ") drop subdomain");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") drop subdomain");
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -641,7 +630,7 @@ public:
         tx.SetWorkingDir(Subdomain.first);
         tx.MutableDrop()->SetName(Subdomain.second);
 
-        BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send subdomain drop cmd: "
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send subdomain drop cmd: "
                     << request->ToString());
 
         AuditLogBeginRemoveDatabase(
@@ -659,7 +648,7 @@ public:
         auto *domain = AppData(ctx)->DomainsInfo->GetDomainByName(ExtractDomain(Tenant->Path));
         if (!domain) {
             TString error = "cannot find domain info";
-            BLOG_CRIT("TSubdomainManip(" << Tenant->Path << ") " << error);
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") " << error);
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, error), ctx);
             return;
         }
@@ -685,7 +674,7 @@ public:
 
     void ReplyAndDie(const TActorContext &ctx)
     {
-        BLOG_D("TSubdomainManip(" << Tenant->Path << ") done");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") done");
         if (Action == CREATE)
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainCreated(Tenant, SchemeshardId, PathId), ctx);
         else if (Action == CONFIGURE || Action == CONFIGURE_ATTR)
@@ -701,7 +690,7 @@ public:
     void ReplyAndDie(IEventBase *resp,
                      const TActorContext &ctx)
     {
-        BLOG_D("TSubdomainManip(" << Tenant->Path << ") reply with " << resp->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") reply with " << resp->ToString());
 
         using TAuditFunc = decltype(AuditLogEndConfigureDatabase);
         auto audit = [&](TAuditFunc auditFunc) {
@@ -759,7 +748,7 @@ public:
         auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(TxId);
 
-        BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send notification request: " << request->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send notification request: " << request->ToString());
 
         NTabletPipe::SendData(ctx, Pipe, request.Release());
     }
@@ -775,7 +764,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        BLOG_D("TSubdomainManip(" << Tenant->Path << ")::Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ")::Bootstrap");
 
         if (Action == CREATE) {
             Become(&TThis::StateSubdomain);
@@ -794,12 +783,12 @@ public:
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) {
-        BLOG_D("TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionRegistered: "
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionRegistered: "
                     << ev->Get()->Record.ShortDebugString());
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) {
-        BLOG_D("TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionResult: "
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionResult: "
                     << ev->Get()->Record.ShortDebugString());
 
         if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) {
@@ -822,7 +811,7 @@ public:
 
     void HandleSubdomain(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx)
     {
-        BLOG_D("TSubdomainManip(" << Tenant->Path << ") got propose result: "
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got propose result: "
                     << ev->Get()->Record.ShortDebugString());
 
         auto &rec = ev->Get()->Record;
@@ -853,7 +842,7 @@ public:
                 // Check if removal finished or in-progress.
                 if (rec.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist
                     || rec.GetSchemeShardStatus() == NKikimrScheme::StatusMultipleModifications) {
-                    BLOG_D("TSubdomainManip(" << Tenant->Path << ") consider dubdomain is removed");
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") consider dubdomain is removed");
                     ActionFinished(ctx);
                     break;
                 }
@@ -871,7 +860,7 @@ public:
     {
         const auto &rec = ev->Get()->GetRecord();
 
-        BLOG_D("TSubdomainManip(" << Tenant->Path << ") got describe result: "
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got describe result: "
                     << rec.ShortDebugString());
 
         if (Action == REMOVE) {
@@ -891,7 +880,7 @@ public:
         }
 
         if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
-            BLOG_ERROR("TSubdomainManip(" << Tenant->Path << ") "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") "
                         << "Receive TEvDescribeSchemeResult with bad status "
                         << NKikimrScheme::EStatus_Name(rec.GetStatus()) <<
                         " reason is <" << rec.GetReason() << ">" <<
@@ -904,7 +893,7 @@ public:
         auto pathType = rec.GetPathDescription().GetSelf().GetPathType();
         auto expectedPathType = Tenant->IsExternalSubdomain ? NKikimrSchemeOp::EPathTypeExtSubDomain : NKikimrSchemeOp::EPathTypeSubDomain;
         if (pathType != expectedPathType) {
-            BLOG_ERROR("TSubdomainManip(" << Tenant->Path << ") "
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") "
                         << "Resolve subdomain fail, tenant path "
                         << Tenant->Path << " has invalid path type "
                         << NKikimrSchemeOp::EPathType_Name(pathType)
@@ -978,7 +967,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        BLOG_D("TScaleRecommenderManip(" << Tenant->Path << ")::Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TScaleRecommenderManip(" << Tenant->Path << ")::Bootstrap");
 
         Become(&TThis::StateResolveHive);
         ResolveHive(ctx);
@@ -1609,7 +1598,7 @@ void TTenantsManager::ClearState()
 
 void TTenantsManager::Bootstrap(const TActorContext &ctx)
 {
-    BLOG_D("TTenantsManager::Bootstrap");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TTenantsManager::Bootstrap");
     Become(&TThis::StateWork);
     TxProcessor = Self.GetTxProcessor()->GetSubProcessor("tenants",
                                                          ctx,
@@ -1831,7 +1820,7 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
 
     if (Config.TotalComputationalUnitsQuota
         && Config.TotalComputationalUnitsQuota < stats.Total.Allocated) {
-        BLOG_NOTICE("Cluster computational units quota is exceeded ("
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Cluster computational units quota is exceeded ("
                      << stats.Total.Allocated << "/"
                      << Config.TotalComputationalUnitsQuota << ")");
         Counters.Inc(COUNTER_COMPUTATIONAL_QUOTA_EXCEEDED);
@@ -1845,7 +1834,7 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
             ui64 cur = pr.second.Allocated * 100;
             ui64 quota = pr.second.Connected * Config.TotalComputationalUnitsLoadQuota;
             if (cur > quota) {
-                BLOG_NOTICE("Cluster computational units load quota ("
+                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Cluster computational units load quota ("
                              << Config.TotalComputationalUnitsLoadQuota
                              << "%) is exceeded for slots '"
                              << pr.first << "' (" << pr.second.Allocated
@@ -1860,7 +1849,7 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
         ui64 cur = stats.Total.Allocated * 100;
         ui64 quota = stats.Total.Connected * Config.TotalComputationalUnitsLoadQuota;
         if (cur > quota) {
-            BLOG_NOTICE("Cluster computational units load quota ("
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Cluster computational units load quota ("
                          << Config.TotalComputationalUnitsLoadQuota
                          << "%) is exceeded (" << stats.Total.Allocated
                          << "/" << stats.Total.Connected << ")");
@@ -2057,7 +2046,7 @@ void TTenantsManager::DeleteTenantPools(TTenant::TPtr tenant, const TActorContex
         }
 
         if (pr.second->Borrowed) {
-            BLOG_D("Mark borrowed pool as deleted"
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Mark borrowed pool as deleted"
                 << ": tenant# " << tenant->Path
                 << ", pool# " << pr.second->Config.GetName());
 

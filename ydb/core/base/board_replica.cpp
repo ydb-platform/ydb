@@ -9,14 +9,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_REPLICA, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOARD_REPLICA, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_REPLICA, stream)
-
 namespace NKikimr {
 
 class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
@@ -85,7 +77,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
         CheckConfigVersion(owner, ev->Get());
 
         if (!record.GetRegister()) {
-            BLOG_ERROR("free floating entries not implemented yet");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_REPLICA,"free floating entries not implemented yet");
             return;
         }
 
@@ -96,7 +88,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
             const ui32 entryIndex = ownerIt->second;
             TEntry &entry = Entries[entryIndex];
             if (entry.PathIt->first != path) {
-                BLOG_ERROR("unconsistent path for same owner");
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_REPLICA,"unconsistent path for same owner");
                 // reply nothing, request suspicious
                 return;
             }
@@ -245,7 +237,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         Y_ABORT_UNLESS(Info);
         if (Info->ClusterStateGeneration < msgGeneration || (Info->ClusterStateGeneration == msgGeneration && Info->ClusterStateGuid != msgGuid)) {
-            BLOG_D("BoardReplica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " msgGuid=" << msgGuid);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_REPLICA,"BoardReplica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " msgGuid=" << msgGuid);
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }

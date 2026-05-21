@@ -14,14 +14,6 @@
 #include <util/generic/xrange.h>
 #include <util/string/join.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP, stream)
-
 namespace NKikimr {
 
 class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
@@ -119,7 +111,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ui64 msgGeneration = msg->Record.GetClusterStateGeneration();
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
-            BLOG_D("LookupReplica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP,"LookupReplica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
             NotAvailable();
@@ -129,7 +121,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     }
 
     void PassAway() override {
-        BLOG_D("TBoardLookupActor::PassAway");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP,"TBoardLookupActor::PassAway");
         if (Subscriber) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
                 nullptr, 0));
@@ -227,7 +219,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         auto *msg = ev->Get();
 
         if (msg->ReplicaGroups.empty()) {
-            BLOG_ERROR("lookup on unconfigured statestorage board service");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP,"lookup on unconfigured statestorage board service");
             return NotAvailable();
         }
         ClusterStateGeneration = msg->ClusterStateGeneration;
@@ -268,7 +260,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             default:
                 Y_ABORT("unsupported mode");
             }
-            BLOG_D("Handle TEvResolveReplicasList: Mode: " << (ui32)Mode << " groupIdx: " << replicaGroupIdx << " Group: " << replicaGroups.ToString() << " Path: " << Path);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP,"Handle TEvResolveReplicasList: Mode: " << (ui32)Mode << " groupIdx: " << replicaGroupIdx << " Group: " << replicaGroups.ToString() << " Path: " << Path);
         }
         Become(&TThis::StateLookup);
     }
@@ -343,7 +335,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
-        BLOG_D("Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: "
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_LOOKUP,"Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: "
             << reconnectNumber << " replica.ReconnectNumber: " << replica.ReconnectNumber);
         if (reconnectNumber != replica.ReconnectNumber) {
             return;

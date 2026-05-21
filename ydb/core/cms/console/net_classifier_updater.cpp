@@ -14,16 +14,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
-#error log macro definition clash
-#endif
-
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_NOTICE(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-
-
 namespace NKikimr::NNetClassifierUpdater {
 
 using namespace NConsole;
@@ -95,7 +85,7 @@ private:
     }
 
     void RequestCurrentConfigViaCookie() {
-        BLOG_D("NetClassifierUpdater requested distributable config item via cookie");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater requested distributable config item via cookie");
 
         auto event = MakeHolder<TEvConsole::TEvGetConfigItemsRequest>();
 
@@ -124,10 +114,10 @@ private:
     void HandleWhileIniting(TEvConsole::TEvConfigureResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS) {
-            BLOG_D("NetClassifierUpdater created a new distributable config item");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater created a new distributable config item");
             CompleteInitialization();
         } else {
-            BLOG_ERROR("NetClassifierUpdater failed to add config item: " << record.ShortDebugString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater failed to add config item: " << record.ShortDebugString());
             InitializeAgain();
         }
     }
@@ -141,12 +131,12 @@ private:
             } else {
                 Y_ABORT_UNLESS(record.ConfigItemsSize() == 1); // only one config item should have the cookie
 
-                BLOG_D("NetClassifierUpdater found the distributable config via cookie");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater found the distributable config via cookie");
 
                 CompleteInitialization();
             }
         } else {
-            BLOG_ERROR("NetClassifierUpdater failed get current distributable config version: " << record.ShortDebugString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater failed get current distributable config version: " << record.ShortDebugString());
             InitializeAgain();
         }
     }
@@ -161,7 +151,7 @@ private:
     }
 
     void CompleteInitialization() {
-        BLOG_D("NetClassifierUpdater has been initialized");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater has been initialized");
 
         Become(&TThis::Working);
         Send(SelfId(), new TEvents::TEvWakeup);
@@ -271,13 +261,13 @@ private:
                     RequestCurrentConfigViaCookie();
                     return;
                 } else {
-                    BLOG_ERROR("NetClassifierUpdater failed to get subnets: got empty subnets list");
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater failed to get subnets: got empty subnets list");
                 }
             } else {
-                BLOG_ERROR("NetClassifierUpdater failed to get subnets: http_status=" <<ev->Get()->Response->Status);
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater failed to get subnets: http_status=" <<ev->Get()->Response->Status);
             }
         } else {
-            BLOG_ERROR("NetClassifierUpdater failed to get subnets: " << ev->Get()->Error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater failed to get subnets: " << ev->Get()->Error);
         }
         InitializeAgain();
     }
@@ -288,7 +278,7 @@ private:
             // hurray! the update is finished
             ScheduleNextUpdate();
         } else {
-            BLOG_ERROR("NetClassifierUpdater failed to update distributable config: " << record.ShortDebugString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater failed to update distributable config: " << record.ShortDebugString());
             InitializeAgain();
         }
     }
@@ -312,7 +302,7 @@ private:
 
             Send(LocalConsole, event.Release());
         } else {
-            BLOG_ERROR("NetClassifierUpdater failed to get current distributable config version: " << record.ShortDebugString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"NetClassifierUpdater failed to get current distributable config version: " << record.ShortDebugString());
             InitializeAgain();
         }
     }

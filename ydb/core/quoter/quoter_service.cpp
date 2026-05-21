@@ -10,16 +10,6 @@
 
 #include <cmath>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_WARN(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-
 LWTRACE_USING(QUOTER_SERVICE_PROVIDER);
 
 namespace NKikimr {
@@ -232,7 +222,7 @@ TDuration TResource::Charge(TRequest& request, TResourceLeaf& leaf, TInstant now
 }
 
 void TResource::ChargeUsedAmount(double amount, TInstant now) {
-    BLOG_T("ChargeUsedAmount \"" << Resource << "\" for " << amount
+    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"ChargeUsedAmount \"" << Resource << "\" for " << amount
            << ". Balance: " << Balance
            << ". FreeBalance: " << FreeBalance
            << ". Now: " << now);
@@ -265,7 +255,7 @@ TDuration TResource::Charge(double amount, TInstant now) {
     // TODO: calculate time for many requests (not for one). Now errors can be accumulated when big rates are used.
     const TInstant timeToFullfill = LastAllocated + TDuration::MicroSeconds(lround(durationToFullfillInUs));
 
-    BLOG_T("Charge \"" << Resource << "\" for " << amount
+    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Charge \"" << Resource << "\" for " << amount
            << ". Balance: " << Balance
            << ". FreeBalance: " << FreeBalance
            << ". TicksToFullfill: " << ticksToFullfill
@@ -343,7 +333,7 @@ void TQuoterService::ScheduleNextTick(TInstant requested, TResource &quores) {
     const TInstant selected = Max(next, last, LastProcessed);
     quores.NextTick = selected;
     quores.LastTick = selected;
-    BLOG_T("Schedule next tick for \"" << quores.Resource << "\". Tick size: " << quores.TickSize << ". Time: " << quores.NextTick);
+    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Schedule next tick for \"" << quores.Resource << "\". Tick size: " << quores.TickSize << ". Time: " << quores.NextTick);
     ScheduleFeed[quores.NextTick].emplace(&quores);
 }
 
@@ -553,12 +543,12 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         if (qIndxIt == QuotersIndex.end()) {
             TVector<TString> path = NKikimr::SplitPath(leaf.Quoter);
             if (path.empty()) {
-                BLOG_WARN("Empty path to quoter is provided: \"" << leaf.Quoter << "\"");
+                LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Empty path to quoter is provided: \"" << leaf.Quoter << "\"");
                 return EInitLeafStatus::GenericError;
             }
 
             if (CanonizePath(path) != leaf.Quoter) {
-                BLOG_WARN("Not canonized path to quoter is provided. Provided: \"" << leaf.Quoter << "\", but canonized is \"" << CanonizePath(path) << "\"");
+                LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Not canonized path to quoter is provided. Provided: \"" << leaf.Quoter << "\", but canonized is \"" << CanonizePath(path) << "\"");
                 return EInitLeafStatus::GenericError;
             }
 
@@ -576,7 +566,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             req->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req), IEventHandle::FlagTrackDelivery, 0);
 
-            BLOG_I("resolve new quoter " << leaf.Quoter);
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resolve new quoter " << leaf.Quoter);
         } else {
             // ok, got quoterId, proceed
             quoterId = qIndxIt->second;
@@ -634,7 +624,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             resLeaf.State = EResourceState::ResolveResource;
 
             if (rIndxIt.second) { // new resource, create resource session
-                BLOG_I("resolve resource " << resLeaf.ResourceName << " on quoter " << quoter->QuoterName);
+                LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resolve resource " << resLeaf.ResourceName << " on quoter " << quoter->QuoterName);
                 Send(quoter->ProxyId, new TEvQuota::TEvProxyRequest(resLeaf.ResourceName));
             }
 
@@ -917,7 +907,7 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
-    BLOG_T("Request(" << PrintEvent(ev) << ")");
+    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Request(" << PrintEvent(ev) << ")");
 
     Counters.RequestsInFly->Inc();
     Counters.Requests->Inc();
@@ -1004,7 +994,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const bool isError = msg->Result != msg->Success;
     if (isError) {
-        BLOG_I("resource sesson failed: " << quoter.QuoterName << ":" << resourceName);
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resource sesson failed: " << quoter.QuoterName << ":" << resourceName);
 
         for (TRequestId reqIdx : waitingRequests) {
             if (msg->Result == TEvQuota::TEvProxySession::UnknownResource) {
@@ -1019,7 +1009,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const ui64 resourceId = msg->ResourceId;
 
-    BLOG_I("resource session established: " << quoter.QuoterName << ":" << resourceName << " as " << resourceId);
+    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resource session established: " << quoter.QuoterName << ":" << resourceName << " as " << resourceId);
 
     // success, create resource
     auto resPairIt = quoter.Resources.emplace(resourceId, new TResource(quoterId, resourceId, quoter.QuoterName, resourceName, Config, quoter.Counters.QuoterCounters));
@@ -1093,11 +1083,11 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         return;
 
     if (msg->QuoterState == EUpdateState::Broken || (msg->QuoterState == EUpdateState::Evict && quoter.Empty())) {
-        BLOG_I("closing quoter on ProxyUpdate " << quoter.QuoterName);
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"closing quoter on ProxyUpdate " << quoter.QuoterName);
         return BreakQuoter(quoterIt);
     }
 
-    BLOG_D("ProxyUpdate for quoter " << quoter.QuoterName);
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"ProxyUpdate for quoter " << quoter.QuoterName);
 
     for (auto &resUpdate : msg->Resources) {
         auto resourceIt = quoter.Resources.find(resUpdate.ResourceId);
@@ -1203,7 +1193,7 @@ void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStrin
     }
 
     TResource &quores = *resourceIt->second;
-    BLOG_I("closing resource on " << reason << " " << quoter.QuoterName << ":" << quores.Resource);
+    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"closing resource on " << reason << " " << quoter.QuoterName << ":" << quores.Resource);
     Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
 
     ForbidResource(quores);
@@ -1216,7 +1206,7 @@ bool TQuoterService::CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TS
         return false;
     }
 
-    BLOG_I("closing quoter on " << reason << " as no activity left " << quoterIt->second.QuoterName);
+    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"closing quoter on " << reason << " as no activity left " << quoterIt->second.QuoterName);
     BreakQuoter(quoterIt);
     return true;
 }
@@ -1230,7 +1220,7 @@ void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {
         HandleCleanup();
         return;
     default:
-        BLOG_WARN("Unknown TEvWakeup tag: " << ev->Get()->Tag);
+        LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Unknown TEvWakeup tag: " << ev->Get()->Tag);
         return;
     }
 }
@@ -1253,10 +1243,10 @@ void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
 
     switch (navEntry.Kind) {
     case NSchemeCache::TSchemeCacheNavigate::KindKesus:
-        BLOG_I("path resolved as Kesus " << path);
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"path resolved as Kesus " << path);
         return CreateKesusQuoter(navEntry, quotersIndexIt, quoterIt);
     default:
-        BLOG_I("path not resolved as known entity " << path);
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"path not resolved as known entity " << path);
         return BreakQuoter(quotersIndexIt, quoterIt);
     }
 }
@@ -1285,7 +1275,7 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
                 itpair.first->second.emplace(reqIdx);
 
                 if (itpair.second) { // new resolve entry, request
-                    BLOG_I("resolve resource " << leaf.ResourceName << " on quoter " << quoter.QuoterName);
+                    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resolve resource " << leaf.ResourceName << " on quoter " << quoter.QuoterName);
                     Send(quoter.ProxyId, new TEvQuota::TEvProxyRequest(leaf.ResourceName));
                 }
 
@@ -1404,7 +1394,7 @@ void TQuoterService::FeedResource(TResource &quores) {
         }
     }
 
-    BLOG_T("Feed resource \"" << quores.Resource << "\". Balance: " << quores.Balance << ". FreeBalance: " << quores.FreeBalance);
+    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Feed resource \"" << quores.Resource << "\". Balance: " << quores.Balance << ". FreeBalance: " << quores.FreeBalance);
     LWPROBE(FeedResource,
             quores.Quoter,
             quores.Resource,
@@ -1439,7 +1429,7 @@ void TQuoterService::FeedResource(TResource &quores) {
 }
 
 void TQuoterService::AllocateResource(TResource &quores) {
-    BLOG_T("Allocate resource \"" << quores.Resource << "\"");
+    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Allocate resource \"" << quores.Resource << "\"");
     const TInstant now = TActivationContext::Now();
     ui64 requestsProcessed = 0;
     const double prevAmountConsumed = quores.AmountConsumed;

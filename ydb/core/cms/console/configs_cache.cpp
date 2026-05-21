@@ -11,14 +11,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <google/protobuf/text_format.h>
 
-#if defined BLOG_DEBUG || defined BLOG_ERROR || defined BLOG_WARN
-#error log macro definition clash
-#endif
-
-#define BLOG_DEBUG(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE, stream)
-#define BLOG_WARN(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE, stream)
-
 namespace NKikimr::NConsole {
 
 namespace {
@@ -51,7 +43,7 @@ namespace {
                 if (!NFs::Rename(cfgFilePath, PathToConfigCacheFile))
                     ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
             } catch (const yexception &ex) {
-                BLOG_WARN("An exception occurred while saving config: " << ex.what());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE,"An exception occurred while saving config: " << ex.what());
             }
         }
     };
@@ -72,7 +64,7 @@ namespace {
                 if (!google::protobuf::TextFormat::ParseFromString(configFile.ReadAll(), &config))
                     ythrow yexception() << "Failed to parse config protobuf from string";
             } catch (const yexception &ex) {
-                BLOG_WARN("An exception occurred while getting config from cache file: " << ex.what());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE,"An exception occurred while getting config from cache file: " << ex.what());
             }
         };
     };
@@ -84,7 +76,7 @@ void TConfigsCache::Bootstrap(const TActorContext &ctx) {
 
     Load(CurrentConfig);
 
-    BLOG_DEBUG("Restored configuration: " << CurrentConfig.ShortDebugString());
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE,"Restored configuration: " << CurrentConfig.ShortDebugString());
 
     const auto minKind = NKikimrConsole::TConfigItem::EKind_MIN;
     const auto maxKind = NKikimrConsole::TConfigItem::EKind_MAX;
@@ -111,7 +103,7 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
 
     CurrentConfig.Swap(rec.MutableConfig());
 
-    BLOG_DEBUG("Saving configuration: " << CurrentConfig.ShortDebugString());
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE,"Saving configuration: " << CurrentConfig.ShortDebugString());
 
     Save(CurrentConfig);
 
@@ -130,13 +122,13 @@ void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &
 void TConfigsCache::Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
     auto &rec = ev->Get()->Record;
 
-    BLOG_ERROR("Failed to create subscription " << rec.GetCode() << " " << rec.GetReason() << " will die");
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE,"Failed to create subscription " << rec.GetCode() << " " << rec.GetReason() << " will die");
 
     Die(ctx);
 }
 
 void TConfigsCache::Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx) {
-    BLOG_DEBUG("Received poison pill, will die");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_CACHE,"Received poison pill, will die");
 
     Die(ctx);
 }

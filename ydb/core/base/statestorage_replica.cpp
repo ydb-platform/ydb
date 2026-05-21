@@ -13,15 +13,6 @@
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::STATESTORAGE, stream)
-#define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::STATESTORAGE, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::STATESTORAGE, stream)
-
 namespace NKikimr {
 
 class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
@@ -232,7 +223,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
     void Handle(TEvStateStorage::TEvReplicaLookup::TPtr &ev) {
         TEvStateStorage::TEvReplicaLookup *msg = ev->Get();
-        BLOG_D("Replica::Handle ev: " << msg->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::Handle ev: " << msg->ToString());
 
         CheckConfigVersion(ev->Sender, msg);
 
@@ -262,7 +253,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
     void Handle(TEvStateStorage::TEvReplicaUpdate::TPtr &ev) {
         TEvStateStorage::TEvReplicaUpdate *msg = ev->Get();
-        BLOG_D("Replica::Handle ev: " << msg->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::Handle ev: " << msg->ToString());
 
         CheckConfigVersion(ev->Sender, msg);
 
@@ -309,7 +300,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
     void Handle(TEvStateStorage::TEvReplicaCleanup::TPtr &ev) {
         const auto &record = ev->Get()->Record;
-        BLOG_D("Replica::Handle ev: " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::Handle ev: " << ev->Get()->ToString());
         const ui64 tabletId = record.GetTabletID();
         const TActorId proposedLeader = ActorIdFromProto(record.GetProposedLeader());
 
@@ -320,7 +311,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
             return;
 
         if (tabletIt->second.Followers) {
-            BLOG_ERROR("trying to cleanup entry with attached followers. Suspicious! TabletId: " << tabletId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"trying to cleanup entry with attached followers. Suspicious! TabletId: " << tabletId);
             return;
         }
 
@@ -330,7 +321,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
     void Handle(TEvStateStorage::TEvReplicaDelete::TPtr &ev) {
         TEvStateStorage::TEvReplicaDelete *msg = ev->Get();
-        BLOG_D("Replica::Handle ev: " << msg->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
 
         CheckConfigVersion(ev->Sender, msg);
@@ -356,7 +347,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         Y_ABORT_UNLESS(Info);
         if (Info->ClusterStateGeneration < msgGeneration || (Info->ClusterStateGeneration == msgGeneration && Info->ClusterStateGuid != msgGuid)) {
-            BLOG_D("Replica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " msgGuid=" << msgGuid);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " msgGuid=" << msgGuid);
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }
@@ -364,7 +355,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
     void Handle(TEvStateStorage::TEvReplicaLock::TPtr &ev) {
         TEvStateStorage::TEvReplicaLock *msg = ev->Get();
-        BLOG_D("Replica::Handle ev: " << msg->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
         const TActorId &sender = ev->Sender;
 
@@ -401,7 +392,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaRegFollower::TPtr &ev) {
         const NKikimrStateStorage::TEvRegisterFollower &record = ev->Get()->Record;
 
-        BLOG_D("Replica::Handle received TEvReplicaRegFollower for tabletId " << record.GetTabletID()
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::Handle received TEvReplicaRegFollower for tabletId " << record.GetTabletID()
             << ", followerId " << ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")
             << ", followerActorId " << record.GetFollower()
             << ", followerTabletActorId " << record.GetFollowerTablet());
@@ -455,7 +446,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaUnregFollower::TPtr &ev) {
         const NKikimrStateStorage::TEvUnregisterFollower &record = ev->Get()->Record;
 
-        BLOG_D("Replica::Handle received TEvReplicaUnregFollower for tabletId " << record.GetTabletID()
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::Handle received TEvReplicaUnregFollower for tabletId " << record.GetTabletID()
             << ", followerId " << ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")
             << ", followerActorId " << record.GetFollower());
 
@@ -546,7 +537,7 @@ public:
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
 
             default:
-                BLOG_W("Replica::StateInit unexpected event type# " << ev->GetTypeRewrite()
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Replica::StateInit unexpected event type# " << ev->GetTypeRewrite()
                     << " event: " << ev->ToString());
                 break;
         }

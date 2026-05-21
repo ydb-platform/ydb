@@ -15,15 +15,6 @@
 
 #include <utility>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-
 namespace NKikimr::NConsole {
 
 class TConfigsSubscriber : public TActorBootstrapped<TConfigsSubscriber> {
@@ -152,7 +143,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionResponse");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Generation mismatch for TEvConfigSubscriptionResponse");
 
             return;
         }
@@ -202,7 +193,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionNotification");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Generation mismatch for TEvConfigSubscriptionNotification");
 
             return;
         }
@@ -210,7 +201,7 @@ public:
         Y_ABORT_UNLESS(Pipe);
 
         if (rec.GetOrder() != (LastOrder + 1)) {
-            BLOG_I("Order mismatch, will resubscribe");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Order mismatch, will resubscribe");
 
             Subscribe(ctx);
 
@@ -302,7 +293,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionCanceled");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Generation mismatch for TEvConfigSubscriptionCanceled");
 
             return;
         }

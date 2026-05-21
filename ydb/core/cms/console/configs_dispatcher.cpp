@@ -27,17 +27,6 @@
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-
 namespace NKikimr::NConsole {
 
 using namespace NConfig;
@@ -344,7 +333,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
 
 void TConfigsDispatcher::Bootstrap()
 {
-    BLOG_D("TConfigsDispatcher Bootstrap");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"TConfigsDispatcher Bootstrap");
 
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
@@ -386,7 +375,7 @@ void TConfigsDispatcher::Bootstrap()
 
 void TConfigsDispatcher::EnqueueEvent(TAutoPtr<IEventHandle> &ev)
 {
-    BLOG_D("Enqueue event type: " << ev->GetTypeRewrite());
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Enqueue event type: " << ev->GetTypeRewrite());
     EventsQueue.push_back(ev);
 }
 
@@ -394,7 +383,7 @@ void TConfigsDispatcher::ProcessEnqueuedEvents()
 {
     while (!EventsQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = EventsQueue.front();
-        BLOG_D("Dequeue event type: " << ev->GetTypeRewrite());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Dequeue event type: " << ev->GetTypeRewrite());
         TlsActivationContext->Send(ev.Release());
         EventsQueue.pop_front();
     }
@@ -409,7 +398,7 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
     auto notification = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
 
-    BLOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
                 << ": " << notification->Record.ShortDebugString());
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
@@ -453,7 +442,7 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             &ResolvedYamlConfig,
             &ResolvedJsonConfig);
     } catch (const yexception& ex) {
-        BLOG_ERROR("Got invalid config from console error# " << ex.what());
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Got invalid config from console error# " << ex.what());
     }
 
     return newYamlProtoConfig;
@@ -523,7 +512,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     const auto &rec = ev->Get()->Record;
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-    BLOG_TRACE("Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1199,7 +1188,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
             for (auto &[subscriber, updates] : subscription->Subscribers) {
                 auto k = kinds;
-                BLOG_TRACE("Sending for kinds: " << KindsToString(k));
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Sending for kinds: " << KindsToString(k));
                 SendUpdateToSubscriber(subscription, subscriber);
                 ++updates;
             }
@@ -1211,11 +1200,11 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     }
 
     if (CurrentStateFunc() == &TThis::StateInit) {
-        BLOG_D("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
     }
-    BLOG_D("Handle TEvConfigSubscriptionNotification: exit");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Handle TEvConfigSubscriptionNotification: exit");
 }
 
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const
@@ -1253,7 +1242,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     }
     resp->Config = trunc;
 
-    BLOG_TRACE("Send TEvConfigsDispatcher::TEvGetConfigResponse"
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Send TEvConfigsDispatcher::TEvGetConfigResponse"
         " to " << ev->Sender << ": " << resp->Config->ShortDebugString());
 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
@@ -1337,7 +1326,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
         }
-        BLOG_TRACE("Sending for kinds: " << KindsToString(kinds));
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Sending for kinds: " << KindsToString(kinds));
         SendUpdateToSubscriber(subscription, subscriber->Subscriber);
         ++(subscriberIt->second);
     }
@@ -1383,23 +1372,23 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
 
     // Probably subscription was cleared up due to tenant's change.
     if (!subscription) {
-        BLOG_ERROR("Got notification response for unknown subscription " << ev->Sender);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Got notification response for unknown subscription " << ev->Sender);
         return;
     }
 
     if (!subscription->UpdateInProcess) {
-        BLOG_D("Notification was ignored for subscription " << ev->Sender);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Notification was ignored for subscription " << ev->Sender);
         return;
     }
 
     if (ev->Cookie != subscription->UpdateInProcessCookie) {
-        BLOG_ERROR("Notification cookie mismatch for subscription " << ev->Sender << " " << ev->Cookie << " != " << subscription->UpdateInProcessCookie);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Notification cookie mismatch for subscription " << ev->Sender << " " << ev->Cookie << " != " << subscription->UpdateInProcessCookie);
         // TODO fix clients
         return;
     }
 
     if (!subscription->SubscribersToUpdate.contains(ev->Sender)) {
-        BLOG_ERROR("Notification from unexpected subscriber for subscription " << ev->Sender);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Notification from unexpected subscriber for subscription " << ev->Sender);
         return;
     }
 
@@ -1446,7 +1435,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeConfigurationVersionReques
         if (versionLabel == "v1" || versionLabel == "v2") {
             versionString = versionLabel;
         } else {
-             BLOG_W("Unexpected value for 'configuration_version' label: " << versionLabel << ". Reporting 'unknown'.");
+             LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Unexpected value for 'configuration_version' label: " << versionLabel << ". Reporting 'unknown'.");
         }
     }
 

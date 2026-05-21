@@ -19,11 +19,8 @@ struct TIteratorReadBackoffSettings : TAtomicRefCount<TIteratorReadBackoffSettin
     TMaybe<TDuration> ReadResponseTimeout;
     size_t MaxRowsProcessingStreamLookup = 65536;
     ui64 MaxTotalBytesQuotaStreamLookup = 5_MB * 512;
-<<<<<<< HEAD
-=======
     ui64 MaxInFlightReadsStreamLookup = 50;
     ui64 MaxBytesPerFetchStreamLookup = 256_MB;
->>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
 };
 
 struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
@@ -47,11 +44,8 @@ TMaybe<size_t> MaxTotalRetries();
 TMaybe<TDuration> ShardTimeout();
 size_t MaxRowsProcessingStreamLookup();
 ui64 MaxTotalBytesQuotaStreamLookup();
-<<<<<<< HEAD
-=======
 ui64 MaxInFlightReadsStreamLookup();
 ui64 MaxBytesPerFetchStreamLookup();
->>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
 
 void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes);
 THolder<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings();

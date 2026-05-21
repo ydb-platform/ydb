@@ -410,13 +410,53 @@ runs:
             GRAPH_OPTS=""
           fi
 
+          # Run ./ya make inside a systemd-run transient scope with a memory limit.
+          # When the scope exceeds MemoryMax, the kernel OOM-killer picks the single
+          # heaviest process in the cgroup and kills only that process. We DO NOT set
+          # memory.oom.group=1, so the whole cgroup (i.e. the entire ya make session)
+          # is not torn down -- only the offending process dies, ya make sees the
+          # failure and can mark just that test/build node as failed and continue.
+          #
+          # MemorySwapMax=0 disables swap for this scope so behavior is deterministic.
+          # OOMPolicy=continue keeps the scope unit alive after a single process is
+          # OOM-killed (the default 'stop' would terminate the scope on any OOM).
+          TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+          # Reserve ~2 GiB for the OS / monitoring / s3cmd etc. and clamp to >= 4 GiB.
+          YA_MAKE_MEM_MAX_KB=$(( TOTAL_MEM_KB - 2 * 1024 * 1024 ))
+          if [ "$YA_MAKE_MEM_MAX_KB" -lt $(( 4 * 1024 * 1024 )) ]; then
+            YA_MAKE_MEM_MAX_KB=$(( 4 * 1024 * 1024 ))
+          fi
+          YA_MAKE_MEM_MAX="${YA_MAKE_MEM_MAX_KB}K"
+          YA_MAKE_SCOPE_NAME="ya-make-${GITHUB_RUN_ID:-local}-${RETRY}-$$.scope"
+
+          echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
+
           set +e
-          (./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
-            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+          (sudo -E systemd-run --scope --quiet \
+             --unit="${YA_MAKE_SCOPE_NAME}" \
+             -p MemoryMax="${YA_MAKE_MEM_MAX}" \
+             -p MemorySwapMax=0 \
+             -p OOMPolicy=continue \
+             --uid=$(id -u) --gid=$(id -g) \
+             --setenv=HOME --setenv=PATH --setenv=TMP_DIR --setenv=PUBLIC_DIR \
+             --setenv=CURRENT_PUBLIC_DIR --setenv=TEST_META_INFO --setenv=TEST_ICRDMA \
+             --setenv=BAZEL_REMOTE_PASSWORD_FILE --setenv=MUTED_YA_FILE \
+             -- \
+             ./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
+             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
+             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`
+
+          # Dump recent OOM evidence from dmesg to a separate per-try file
+          # (uploaded to s3 together with the rest of $CURRENT_PUBLIC_DIR).
+          OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
+          OOM_DMESG_LOG_URL="$CURRENT_PUBLIC_DIR_URL/oom_dmesg.txt"
+          sudo dmesg -T 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true
+          if [ -s "$OOM_DMESG_LOG" ]; then
+            echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
+          fi
 
           kill $MONITOR_PID
 

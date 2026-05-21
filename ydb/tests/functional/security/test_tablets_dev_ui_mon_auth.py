@@ -2,9 +2,14 @@
 import time
 
 import pytest
+import requests
 
 from security_test_helpers import _test_endpoints
 from ydb.tests.oss.ydb_sdk_import import ydb
+
+
+def _is_valid_tablet_id(tablet_id):
+    return tablet_id not in (None, 0)
 
 
 def _tablet_id_from_partition_stats(pool, table_path):
@@ -15,7 +20,7 @@ def _tablet_id_from_partition_stats(pool, table_path):
         query = f"""
             SELECT TabletId
             FROM `{partition_stats_path}`
-            WHERE Path = "{table_path}"
+            WHERE Path = "{table_path}" AND TabletId > 0
             LIMIT 1;
         """
         result_sets = session.transaction().execute(query, commit_tx=True)
@@ -24,10 +29,38 @@ def _tablet_id_from_partition_stats(pool, table_path):
 
         row = result_sets[0].rows[0]
         if isinstance(row, dict):
-            return row.get('TabletId')
-        return getattr(row, 'TabletId', None)
+            tablet_id = row.get('TabletId')
+        else:
+            tablet_id = getattr(row, 'TabletId', None)
+        if _is_valid_tablet_id(tablet_id):
+            return tablet_id
+        return None
 
     return pool.retry_operation_sync(fetch_tablet_id)
+
+
+def _tablet_id_from_viewer_describe(cluster, table_path):
+    node = cluster.nodes[1]
+    database = table_path.rsplit('/', 1)[0]
+    response = requests.get(
+        f'https://{node.host}:{node.mon_port}/viewer/json/describe',
+        params={
+            'database': database,
+            'path': table_path,
+            'partition_stats': 'true',
+            'subs': '0',
+            'enums': 'true',
+        },
+        headers={'Authorization': 'root@builtin'},
+        verify=False,
+        timeout=1,
+    )
+    response.raise_for_status()
+    for partition in response.json()['PathDescription'].get('TablePartitions', []):
+        tablet_id = partition.get('DatashardId') or partition.get('TabletId')
+        if _is_valid_tablet_id(tablet_id):
+            return tablet_id
+    return None
 
 
 @pytest.fixture(scope='module')
@@ -87,7 +120,9 @@ def _prepare_datashard_tablet(cluster):
             poll_interval_seconds = 0.05
             while time.time() < poll_deadline:
                 tid = _tablet_id_from_partition_stats(pool, table_path)
-                if tid:
+                if not _is_valid_tablet_id(tid):
+                    tid = _tablet_id_from_viewer_describe(cluster, table_path)
+                if _is_valid_tablet_id(tid):
                     datashard_tablet_id = tid
                     break
                 time.sleep(poll_interval_seconds)

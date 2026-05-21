@@ -4,7 +4,7 @@
 
     Lexers for .net languages.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 import re
@@ -74,6 +74,7 @@ class CSharpLexer(RegexLexer):
     for levelname, cs_ident in levels.items():
         tokens[levelname] = {
             'root': [
+                include('numbers'),
                 # method names
                 (r'^([ \t]*)((?:' + cs_ident + r'(?:\[\])?\s+)+?)'  # return type
                  r'(' + cs_ident + ')'                            # method name
@@ -106,24 +107,50 @@ class CSharpLexer(RegexLexer):
                           Comment.Preproc, Whitespace)),
                 (r'\b(extern)(\s+)(alias)\b', bygroups(Keyword, Whitespace,
                  Keyword)),
-                (r'(abstract|as|async|await|base|break|by|case|catch|'
-                 r'checked|const|continue|default|delegate|'
-                 r'do|else|enum|event|explicit|extern|false|finally|'
-                 r'fixed|for|foreach|goto|if|implicit|in|interface|'
-                 r'internal|is|let|lock|new|null|on|operator|'
-                 r'out|override|params|private|protected|public|readonly|'
-                 r'ref|return|sealed|sizeof|stackalloc|static|'
-                 r'switch|this|throw|true|try|typeof|'
-                 r'unchecked|unsafe|virtual|void|while|'
-                 r'get|set|new|partial|yield|add|remove|value|alias|ascending|'
-                 r'descending|from|group|into|orderby|select|thenby|where|'
-                 r'join|equals)\b', Keyword),
+                (words((
+                    'abstract', 'as', 'async', 'await', 'base', 'break', 'by',
+                    'case', 'catch', 'checked', 'const', 'continue', 'default',
+                    'delegate', 'do', 'else', 'enum', 'event', 'explicit',
+                    'extern', 'false', 'finally', 'fixed', 'for', 'foreach',
+                    'goto', 'if', 'implicit', 'in', 'interface', 'internal',
+                    'is', 'let', 'lock', 'new', 'null', 'on', 'operator',
+                    'out', 'override', 'params', 'private', 'protected',
+                    'public', 'readonly', 'ref', 'return', 'sealed', 'sizeof',
+                    'stackalloc', 'static', 'switch', 'this', 'throw', 'true',
+                    'try', 'typeof', 'unchecked', 'unsafe', 'virtual', 'void',
+                    'while', 'get', 'set', 'new', 'partial', 'yield', 'add',
+                    'remove', 'value', 'alias', 'ascending', 'descending',
+                    'from', 'group', 'into', 'orderby', 'select', 'thenby',
+                    'where', 'join', 'equals', 'record', 'allows',
+                    'and', 'init', 'managed', 'nameof', 'nint', 'not',
+                    'notnull', 'nuint', 'or', 'scoped', 'unmanaged', 'when',
+                    'with'
+                ), suffix=r'\b'), Keyword),
+                # version 1: assumes that 'file' is the only contextual keyword
+                # that is a class modifier
+                (r'(file)(\s+)(record|class|abstract|enum|new|sealed|static)\b',
+                   bygroups(Keyword, Whitespace, Keyword)),
                 (r'(global)(::)', bygroups(Keyword, Punctuation)),
                 (r'(bool|byte|char|decimal|double|dynamic|float|int|long|object|'
                  r'sbyte|short|string|uint|ulong|ushort|var)\b\??', Keyword.Type),
                 (r'(class|struct)(\s+)', bygroups(Keyword, Whitespace), 'class'),
                 (r'(namespace|using)(\s+)', bygroups(Keyword, Whitespace), 'namespace'),
                 (cs_ident, Name),
+            ],
+            'numbers_int': [
+                (r"0[xX][0-9a-fA-F]+(([uU][lL]?)|[lL][uU]?)?", Number.Hex),
+                (r"0[bB][01]+(([uU][lL]?)|[lL][uU]?)?", Number.Bin),
+                (r"[0-9]+(([uU][lL]?)|[lL][uU]?)?", Number.Integer),
+            ],
+            'numbers_float': [
+                (r"([0-9]+\.[0-9]+([eE][+-]?[0-9]+)?[fFdDmM]?)|"
+                 r"(\.[0-9]+([eE][+-]?[0-9]+)?[fFdDmM]?)|"
+                 r"([0-9]+([eE][+-]?[0-9]+)[fFdDmM]?)|"
+                 r"([0-9]+[fFdDmM])", Number.Float),
+            ],
+            'numbers': [
+                include('numbers_float'),
+                include('numbers_int'),
             ],
             'class': [
                 (cs_ident, Name.Class, '#pop'),

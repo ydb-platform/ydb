@@ -1434,6 +1434,7 @@ keyword_window_uncompat:
 keyword_hint_uncompat:
     SCHEMA
   | COLUMNS
+  | WATERMARK
 ;
 
 keyword_as_compat:
@@ -1904,7 +1905,7 @@ keyword_compat: (
   | VALUES
   | VIEW
   | VIRTUAL
-  | WATERMARK
+//  | WATERMARK
   | WITH
   | WRAPPER
 //  | WRITE

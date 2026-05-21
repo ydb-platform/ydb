@@ -35,6 +35,13 @@ public:
         Counter_->Add(1, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
     }
 
+    void Add(std::uint64_t delta) override {
+        if (delta == 0) {
+            return;
+        }
+        Counter_->Add(delta, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
+    }
+
 private:
     nostd::shared_ptr<metrics::Counter<uint64_t>> Counter_;
     TLabels Labels_;
@@ -81,6 +88,17 @@ public:
 
     void Record(double value) override {
         Histogram_->Record(value, MakeAttributes(Labels_), context::RuntimeContext::GetCurrent());
+    }
+
+    void RecordMany(const std::vector<double>& values) override {
+        if (values.empty()) {
+            return;
+        }
+        auto attrs = MakeAttributes(Labels_);
+        auto ctx = context::RuntimeContext::GetCurrent();
+        for (double v : values) {
+            Histogram_->Record(v, attrs, ctx);
+        }
     }
 
 private:

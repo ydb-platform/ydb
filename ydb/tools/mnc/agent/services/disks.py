@@ -31,6 +31,8 @@ class DiskService:
     def _validate_partlabel(self, partlabel: str):
         if not PARTLABEL_RE.fullmatch(partlabel):
             raise ValueError(f"invalid partlabel: {partlabel}")
+        if not config.has_managed_partlabel_rules():
+            raise ValueError("no managed disk partlabels configured")
         if not config.is_managed_partlabel(partlabel):
             raise ValueError(f"partlabel is not managed by this agent: {partlabel}")
 

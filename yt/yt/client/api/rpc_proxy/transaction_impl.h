@@ -339,6 +339,8 @@ private:
     NApi::TTransactionStartOptions PatchTransactionId(const NApi::TTransactionStartOptions& options);
     template <class T>
     T PatchTransactionTimestamp(const T& options);
+
+    void SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req);
 };
 
 DEFINE_REFCOUNTED_TYPE(TTransaction)

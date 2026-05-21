@@ -39,6 +39,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
+    NKikimr::NKqp::TCBOOptimizerStats CBOStats;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {

@@ -2,17 +2,13 @@
 
 LIBRARY()
 
-LICENSE(
-    ISC AND
-    LicenseRef-scancode-openssl AND
-    LicenseRef-scancode-ssleay-windows
-)
+LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 SUBSCRIBER(g:balancer)
 
-VERSION(2024-04-29)
+VERSION(0.20260413.0)
 
 ADDINCL(
     contrib/restricted/google/boringssl/include
@@ -20,7 +16,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-NO_RUNTIME()
+NO_UTIL()
 
 CFLAGS(
     -DBORINGSSL_PREFIX=BSSL
@@ -28,23 +24,23 @@ CFLAGS(
 )
 
 SRCS(
-    bio/base64_bio.c
-    blowfish/blowfish.c
-    cast/cast.c
-    cast/cast_tables.c
-    cfb/cfb.c
-    des/cfb64ede.c
-    dh/dh_decrepit.c
-    dsa/dsa_decrepit.c
-    evp/dss1.c
-    evp/evp_do_all.c
-    obj/obj_decrepit.c
-    rc4/rc4_decrepit.c
-    ripemd/ripemd.c
-    rsa/rsa_decrepit.c
-    ssl/ssl_decrepit.c
-    x509/x509_decrepit.c
-    xts/xts.c
+    bio/base64_bio.cc
+    blowfish/blowfish.cc
+    cast/cast.cc
+    cast/cast_tables.cc
+    cfb/cfb.cc
+    des/cfb64ede.cc
+    dh/dh_decrepit.cc
+    dsa/dsa_decrepit.cc
+    evp/dss1.cc
+    evp/evp_do_all.cc
+    obj/obj_decrepit.cc
+    rc4/rc4_decrepit.cc
+    ripemd/ripemd.cc
+    rsa/rsa_decrepit.cc
+    ssl/ssl_decrepit.cc
+    x509/x509_decrepit.cc
+    xts/xts.cc
 )
 
 END()

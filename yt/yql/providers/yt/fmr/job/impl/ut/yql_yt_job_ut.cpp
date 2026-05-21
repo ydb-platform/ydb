@@ -113,6 +113,79 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         }
     }
 
+    Y_UNIT_TEST(PullTable) {
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
+
+        std::vector<TTableRange> ranges = {{"test_part_id"}};
+        TFmrTableInputRef fmrInput{.TableId = "test_table_id", .TableRanges = ranges};
+        TPullTaskParams params{.Input = TTaskTableInputRef{.Inputs = {TTaskTableRef{fmrInput}}}};
+
+        TString group = GetTableDataServiceGroup(fmrInput.TableId, "test_part_id");
+        tableDataServiceClient->Put(group, "0", GetBinaryYson(TableContent_1));
+
+        auto res = job->Pull(params, cancelFlag);
+
+        auto err = std::get_if<TFmrError>(&res);
+        UNIT_ASSERT_C(!err, err->ErrorMessage);
+
+        auto data = std::get_if<TString>(&res);
+        UNIT_ASSERT_C(data, "Expected TString YSON data in Pull result");
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*data), TableContent_1);
+    }
+
+    Y_UNIT_TEST(SortedMergeFromSingleYtTable) {
+        auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
+        TTempFileHandle ytInputFile;
+        TString sortedContent =
+            "{\"key\"=\"1\";\"value\"=\"a\"};\n"
+            "{\"key\"=\"2\";\"value\"=\"b\"};\n"
+            "{\"key\"=\"3\";\"value\"=\"c\"};\n";
+        {
+            TFileOutput out(ytInputFile.Name());
+            out.Write(sortedContent.data(), sortedContent.size());
+        }
+        TYtTableTaskRef ytInput{.RichPaths = {richPath}, .FilePaths = {ytInputFile.Name()}};
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+        auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        IFmrJob::TPtr job = MakeFmrJob(MakeFileTableDataServiceDiscovery({.Path = file.Name()}), {}, ytJobService, jobLauncher);
+
+        TFmrTableOutputRef output("test_sorted_table_id", "test_part_id");
+        output.SortingColumns = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}};
+
+        TSortedMergeTaskParams params{
+            .Input = TTaskTableInputRef{.Inputs = {TTaskTableRef{ytInput}}},
+            .Output = output
+        };
+
+        auto res = job->SortedMerge(params, {}, cancelFlag);
+        auto err = std::get_if<TFmrError>(&res);
+
+        UNIT_ASSERT_C(!err, err->ErrorMessage);
+        auto resultTableContentMaybe = tableDataServiceClient->Get(
+            GetTableDataServiceGroup(output.TableId, output.PartId), "0").GetValueSync();
+        UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*resultTableContentMaybe), sortedContent);
+    }
+
     Y_UNIT_TEST(MergeMixedTables) {
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1", .TableRanges = ranges};

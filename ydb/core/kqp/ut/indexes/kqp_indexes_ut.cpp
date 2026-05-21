@@ -7717,6 +7717,46 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
+    
+    Y_UNIT_TEST(TruncateTableWithAsyncIndexFails) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTruncateTable(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestAsyncIndexTable` (
+                    Key Uint32,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    INDEX AsyncIndex GLOBAL ASYNC ON (Value)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                UPSERT INTO `/Root/TestAsyncIndexTable` (Key, Value) VALUES
+                    (1, "one"),
+                    (2, "two"),
+                    (3, "three");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/TestAsyncIndexTable`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("Cannot truncate table with async indexes"),
+                "Unexpected error message: " << result.GetIssues().ToString());
+        }
+    }
+
 }
 }
 }

@@ -217,8 +217,8 @@ protected:
 // TODO(gritukan): It's not easy to find a proper return type for these functions
 // that is suitable both for vanilla and patched protobufs. In an ideal world,
 // it would be TYPathBuf, but for now it breaks the advantages for CoW of the
-// TString. Rethink it if and when YT will try to use std::string or non-CoW
-// TString everywhere.
+// std::string. Rethink it if and when YT will try to use std::string or non-CoW
+// std::string everywhere.
 using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPath>;
 
 TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);

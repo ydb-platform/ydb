@@ -16,6 +16,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TWriteWithDirectReplicationRequestExecutor::
     TWriteWithDirectReplicationRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TChildLogTitle logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,
@@ -25,6 +26,7 @@ TWriteWithDirectReplicationRequestExecutor::
         NWilson::TTraceId traceId)
     : TBaseWriteRequestExecutor(
           actorSystem,
+          std::move(logTitle),
           vChunkConfig,
           std::move(directBlockGroup),
           vChunkRange,

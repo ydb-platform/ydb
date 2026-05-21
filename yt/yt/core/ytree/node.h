@@ -95,13 +95,13 @@ struct IScalarNode
     XX(Uint64, ui64) \
     XX(Double, double) \
     XX(Boolean, bool) \
-    XX(String, TString)
+    XX(String, std::string)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! String node.
 struct IStringNode
-    : public IScalarNode<TString>
+    : public IScalarNode<std::string>
 { };
 
 DEFINE_REFCOUNTED_TYPE(IStringNode)

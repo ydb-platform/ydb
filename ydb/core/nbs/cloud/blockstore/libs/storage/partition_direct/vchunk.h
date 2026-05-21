@@ -12,6 +12,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
@@ -59,6 +60,10 @@ public:
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
+    // Persists newConfig to the partition's local DB. The in-memory config is
+    // unchanged; the new value applies after the next partition restart.
+    void UpdateConfig(const TVChunkConfig& newConfig);
+
 private:
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
@@ -80,15 +85,18 @@ private:
         std::shared_ptr<NWilson::TSpan> span);
     void OnWriteBlocksResponse(
         TTracedPromise<TWriteBlocksLocalResponse> promise,
-        TBlockRange64 range,
+        TBlockRange64 vchunkRange,
         const TBaseWriteRequestExecutor::TResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void DoFlush();
+    void DoFlush(bool force);
     void OnFlushResponse(const TFlushRequestExecutor::TResponse& response);
 
-    void DoErase();
+    void DoErase(bool force);
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
+
+    void ScheduleCleaningUp();
+    void CleaningUp();
 
     void UpdatePendingCounters();
 
@@ -101,9 +109,14 @@ private:
     const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
 
+    TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
+
+    size_t InflightWritesCount = 0;
+    size_t InflightFlushesCount = 0;
+    bool CleaningUpScheduled = false;
 
     TVChunkCounters Counters;
 };

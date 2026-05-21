@@ -4,7 +4,7 @@
 
     Lexers for Igor Pro.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -38,7 +38,7 @@ class IgorLexer(RegexLexer):
     types = (
         'variable', 'string', 'constant', 'strconstant', 'NVAR', 'SVAR', 'WAVE',
         'STRUCT', 'dfref', 'funcref', 'char', 'uchar', 'int16', 'uint16', 'int32',
-        'uint32', 'int64', 'uint64', 'float', 'double'
+        'uint32', 'int64', 'uint64', 'float', 'double', 'int'
     )
     keywords = (
         'override', 'ThreadSafe', 'MultiThread', 'static',  'Proc',

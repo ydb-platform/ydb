@@ -11,6 +11,7 @@ namespace NYql::NFmr {
 
 struct TVanillaTdsDiscoverySettings {
     ui16 TdsPort = 8002;
+    ui32 MinIndex = 0;
     TDuration RefreshInterval = TDuration::Seconds(5);
 };
 

@@ -2,11 +2,12 @@
 
 PY3_LIBRARY()
 
-VERSION(4.0.0)
+VERSION(5.3.0)
 
 LICENSE(MIT)
 
 PEERDIR(
+    contrib/python/Pygments
     contrib/python/markdown-it-py
     contrib/python/platformdirs
     contrib/python/rich
@@ -40,7 +41,6 @@ PY_SRCS(
     textual/_cells.py
     textual/_color_constants.py
     textual/_compat.py
-    textual/_compose.py
     textual/_compositor.py
     textual/_context.py
     textual/_debug.py
@@ -95,6 +95,7 @@ PY_SRCS(
     textual/clock.py
     textual/color.py
     textual/command.py
+    textual/compose.py
     textual/constants.py
     textual/containers.py
     textual/content.py
@@ -159,12 +160,14 @@ PY_SRCS(
     textual/fuzzy.py
     textual/geometry.py
     textual/getters.py
+    textual/highlight.py
     textual/keys.py
     textual/layout.py
     textual/layouts/__init__.py
     textual/layouts/factory.py
     textual/layouts/grid.py
     textual/layouts/horizontal.py
+    textual/layouts/stream.py
     textual/layouts/vertical.py
     textual/lazy.py
     textual/logging.py

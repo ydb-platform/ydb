@@ -22,8 +22,8 @@ public:
         }
         Result.reset(new TEvColumnShard::TEvNotifyTxCompletionResult(Self->TabletID(), txId));
         auto& opResult = *Result->Record.MutableOpResult();
-        if (Self->LastCompletedBackupTransaction.GetTxId() == txId) {
-            opResult = Self->LastCompletedBackupTransaction.GetOpResult();
+        if (const auto* backupTx = Self->LastCompletedBackupTransactionsByTxId.FindPtr(txId)) {
+            opResult = backupTx->GetOpResult();
             return true;
         }
 

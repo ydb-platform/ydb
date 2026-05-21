@@ -1,8 +1,6 @@
 items:
 - name: Файловая структура выгрузки
   href: file-structure.md
-- name: Ход серверных операций выгрузки и загрузки
-  href: server-export-import-workflow.md
 - name: Выгрузка в файловую систему
   href: tools-dump.md
 - name: Загрузка из файловой системы

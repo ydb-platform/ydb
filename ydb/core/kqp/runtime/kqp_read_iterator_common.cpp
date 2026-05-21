@@ -111,8 +111,6 @@ ui64 MaxTotalBytesQuotaStreamLookup() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxTotalBytesQuotaStreamLookup;
 }
 
-<<<<<<< HEAD
-=======
 ui64 MaxInFlightReadsStreamLookup() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxInFlightReadsStreamLookup;
 }
@@ -121,6 +119,5 @@ ui64 MaxBytesPerFetchStreamLookup() {
     return Singleton<TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxBytesPerFetchStreamLookup;
 }
 
->>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
 } // namespace NKqp
 } // namespace NKikimr

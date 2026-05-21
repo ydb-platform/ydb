@@ -12,7 +12,7 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/local_indexes/min_max/const.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -630,25 +630,25 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
             case TIndexDescription::EType::LocalMinMax: {
                 if (index.KeyColumns.size() != 1) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.KeyColumns);
+                    error = NKikimr::NLocalIndex::NMinMax::IncorrectIndexColumnsErrorMessage(index.KeyColumns);
                     return false;
                 }
                 if (!index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
+                    error = NKikimr::NLocalIndex::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
                     return false;
                 }
                 auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
                 if (columnIdIt == columnIdsByName.end()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    error = NKikimr::NLocalIndex::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
                     return false;
                 }
 
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
                 upsert->SetId(nextIndexId++);
                 upsert->SetName(index.Name);
-                upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                upsert->SetClassName(NKikimr::NLocalIndex::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
                 
@@ -1071,7 +1071,7 @@ public:
 
                         if (index.Type == TIndexDescription::EType::LocalMinMax) {
                             if (metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>(NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                tablePromise.SetValue(ResultFromError<TGenericResult>(NKikimr::NLocalIndex::NMinMax::DisabledForRowTablesErrorMessage));
                                 return;
                             }
                         }

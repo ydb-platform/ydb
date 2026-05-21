@@ -4,7 +4,8 @@
 #include <util/string/builder.h>
 #include <util/string/vector.h>
 
-namespace NKikimr::NOlap::NIndexes::NMinMax {
+namespace NKikimr::NLocalIndex::NMinMax {
+
 inline const TString kMinMaxClassName = "MIN_MAX";
 
 TString IncorrectDataColumnsErrorMessage(const auto& dataColumns) {
@@ -34,4 +35,5 @@ inline const TString SchemeObjectFeatureFlagDisabledErrorMessage =
 
 inline const TString ProtoDescrptionLacksColumnIdErrorMessage = "Local min_max index description lacks required ColumnId field";
 
-}   // namespace NKikimr::NOlap::NIndexes::NMinMax
+
+} // namespace NKikimr::NLocalIndex::NMinMax

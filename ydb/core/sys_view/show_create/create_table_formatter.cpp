@@ -6,7 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/local_indexes/min_max/const.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -2278,9 +2278,9 @@ void TCreateTableFormatter::FormatLocalMinMaxIndex(const TString& tablePath, con
     Stream << " LOCAL USING min_max ON (";
 
     if (!min_max.HasColumnId()) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS, NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS, NKikimr::NLocalIndex::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
-            NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+            NKikimr::NLocalIndex::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
     }
 
     const auto& columnName = columns.at(min_max.GetColumnId())->GetName();
@@ -2298,9 +2298,9 @@ void TCreateTableFormatter::FormatLocalMinMaxIndexInline(const NKikimrSchemeOp::
     Stream << " LOCAL USING bloom_ngram_filter ON (";
 
     if (!min_max.HasColumnId()) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS, NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS, NKikimr::NLocalIndex::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
-            NKikimr::NOlap::NIndexes::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
+            NKikimr::NLocalIndex::NMinMax::ProtoDescrptionLacksColumnIdErrorMessage);
     }
 
     const auto& columnName = columns.at(min_max.GetColumnId())->GetName();

@@ -51,7 +51,7 @@ PEERDIR(
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/expr
-    ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
+    ydb/core/local_indexes/min_max
     ydb/library/yql/providers/dq/expr_nodes
     yql/essentials/providers/pg/expr_nodes
     yql/essentials/providers/result/expr_nodes

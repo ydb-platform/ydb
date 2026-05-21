@@ -16,7 +16,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/services/metadata/optimization/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/local_indexes/min_max/const.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
 
@@ -1242,7 +1242,7 @@ private:
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
             } else if (type == "localMinMax") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), NKikimr::NLocalIndex::NMinMax::FeatureFlagDisabledErrorMessage));
                     return TStatus::Error;
                 }
 
@@ -1261,7 +1261,7 @@ private:
             if (indexType == TIndexDescription::EType::LocalMinMax &&
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                    NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                    NKikimr::NLocalIndex::NMinMax::DisabledForRowTablesErrorMessage));
                 return TStatus::Error;
             }
 
@@ -1426,12 +1426,12 @@ private:
                 case TIndexDescription::EType::LocalMinMax: {
                     if (!dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
+                            NKikimr::NLocalIndex::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
                     if (indexColums.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
+                            NKikimr::NLocalIndex::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
                         return IGraphTransformer::TStatus::Error;
                     }
                     

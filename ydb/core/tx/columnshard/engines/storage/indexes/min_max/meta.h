@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/local_indexes/min_max/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NIndexes::NMinMax {
 class TIndexMeta: public TSkipIndex {
 public:
     static TString GetClassNameStatic() {
-        return kMinMaxClassName;
+        return NLocalIndex::NMinMax::kMinMaxClassName;
     }
 
     static bool Skip(

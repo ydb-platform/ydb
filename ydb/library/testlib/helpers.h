@@ -47,7 +47,7 @@
         }                                                                                                          \
     };                                                                                                             \
     static const TTestRegistration##N testRegistration##N;                                                         \
-    template <bool OPT1, bool OPT2>                                                                                     \
+    template <bool OPT1, bool OPT2>                                                                                \
     void TTestCase##N<OPT1, OPT2>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2) Y_UNIT_TEST_QUAD_IMPL(N, OPT1, OPT2, TCurrentTestCase)

@@ -720,7 +720,7 @@ private:
     };
 
     bool ResetFields() {
-        if (CanSpill() && !HasMemoryForProcessing() && HasEnoughRowsToSpill()) {
+        if (CanSpill() && !HasMemoryForProcessing() || HasEnoughRowsToSpill()) {
             SwitchMode(EOperatingMode::Spilling);
             return false;
         }
@@ -866,8 +866,7 @@ private:
     }
 
     bool HasMemoryForProcessing() const {
-        return !TlsAllocState->IsMemoryYellowZoneEnabled()
-            && !TlsAllocState->GetMaximumLimitValueReached();
+        return !TlsAllocState->IsMemoryYellowZoneEnabled();
     }
 
     bool IsReadFromChannelFinished() const {
@@ -901,7 +900,7 @@ private:
     void SwitchMode(EOperatingMode mode) {
         {
             const size_t rowsInMemory = Indexes.size() > 0 ? Storage.size() / Indexes.size() : 0;
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
+            auto log = TStringBuilder()
                 << (const void*)this << "# SwitchMode "
                 << ModeName(Mode) << " -> " << ModeName(mode)
                 << " | memUsed=" << TlsAllocState->GetUsed()
@@ -910,7 +909,8 @@ private:
                 << " maxLimitReached=" << (TlsAllocState->GetMaximumLimitValueReached() ? "yes" : "no")
                 << " rowsInMemory=" << rowsInMemory
                 << " lastSpilledRows=" << LastSpilledRows
-                << " sealedStates=" << SealedStates.size());
+                << " sealedStates=" << SealedStates.size() << "\n";
+	    Cerr << log;
         }
         switch (mode) {
             case EOperatingMode::InMemory:
@@ -1124,7 +1124,7 @@ private:
     const NUdf::TLogComponentId LogComponent;
     static constexpr size_t PackSize = 5_MB;
     static constexpr size_t MaxSealedStates = 8;
-    static constexpr size_t MinSpillBatchRows = 2;
+    static constexpr size_t MinSpillBatchRows = 1024;
     std::vector<TSpilledData::TPtr> SealedStates;
     TSpilledData::TPtr ActiveSpill;
     EOperatingMode Mode = EOperatingMode::InMemory;

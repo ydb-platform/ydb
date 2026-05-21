@@ -41,6 +41,11 @@ public:
         const std::vector<TYtResourceInfo>& jobYtResources = {},
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
     ) = 0;
+
+    virtual std::variant<TFmrError, TString> Pull(
+        const TPullTaskParams& params,
+        std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr
+    ) = 0;
 };
 
 } // namespace NYql

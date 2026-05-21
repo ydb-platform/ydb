@@ -4,7 +4,7 @@
 
     Lexers for configuration file formats.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -44,14 +44,23 @@ class IniLexer(RegexLexer):
             (r'\s+', Whitespace),
             (r'[;#].*', Comment.Single),
             (r'(\[.*?\])([ \t]*)$', bygroups(Keyword, Whitespace)),
-            (r'(.*?)([  \t]*)([=:])([ \t]*)([^;#\n]*)(\\)(\s+)',
+            (r'''(.*?)([ \t]*)([=:])([ \t]*)(["'])''',
+             bygroups(Name.Attribute, Whitespace, Operator, Whitespace, String),
+             "quoted_value"),
+            (r'(.*?)([ \t]*)([=:])([ \t]*)([^;#\n]*)(\\)(\s+)',
              bygroups(Name.Attribute, Whitespace, Operator, Whitespace, String,
                       Text, Whitespace),
              "value"),
-            (r'(.*?)([ \t]*)([=:])([  \t]*)([^ ;#\n]*(?: +[^ ;#\n]+)*)',
+            (r'(.*?)([ \t]*)([=:])([ \t]*)([^ ;#\n]*(?: +[^ ;#\n]+)*)',
              bygroups(Name.Attribute, Whitespace, Operator, Whitespace, String)),
             # standalone option, supported by some INI parsers
             (r'(.+?)$', Name.Attribute),
+        ],
+        'quoted_value': [
+            (r'''([^"'\n]*)(["'])(\s*)''',
+             bygroups(String, String, Whitespace), "#pop"),
+            (r'[;#].*', Comment.Single),
+            (r'$', String, "#pop"),
         ],
         'value': [     # line continuation
             (r'\s+', Whitespace),

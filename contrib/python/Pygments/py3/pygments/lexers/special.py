@@ -4,7 +4,7 @@
 
     Special lexers.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -46,6 +46,7 @@ class OutputLexer(Lexer):
     aliases = ['output']
     url = ""
     version_added = '2.10'
+    _example = "output/output"
 
     def get_tokens_unprocessed(self, text):
         yield 0, Generic.Output, text

@@ -14,6 +14,8 @@ using namespace NYql::NDq;
 
 namespace {
 
+THashSet<TString> sqlSelect = {"YqlSelect", "PgSelect"};
+
 struct TAggregationTraits {
     TVector<TExprNode::TPtr> AggTraitsList;
     TVector<TInfoUnit> KeyColumns;
@@ -1112,16 +1114,75 @@ bool HasRollup(const TVector<TVector<TVector<TString>>>& groupBySets) {
     return hasRollup;
 }
 
+TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
+                              ui64& uniqueSourceIdCounter, bool pgSyntax) {
+
+    auto sublinks = FindNodes(node, [](const TExprNode::TPtr& node) {
+        if (node->IsCallable("YqlSubLink") || node->IsCallable("PgSubLink")) {
+            return true;
+        } else {
+            return false;
+        }
+    });
+
+    if (sublinks.empty()) {
+        return node;
+    }
+    
+    TNodeOnNodeOwnedMap nodeReplacementMap;
+    for (auto& sublink : sublinks) {
+        TExprNode::TPtr newSublink;
+
+        auto subquery = RewriteSelect(sublink->Child(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, pgSyntax, false);
+
+        if (sublink->Child(0)->Content() == "expr") {
+            // clang-format off
+            newSublink = Build<TKqpExprSublink>(ctx, node->Pos())
+                .Subquery(subquery)
+                .Done().Ptr();
+            // clang-format on
+        } else if (sublink->Child(0)->Content() == "any") {
+            // clang-format off
+            newSublink = Build<TKqpInSublink>(ctx, node->Pos())
+                .Subquery(subquery)
+                .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
+                .OuterType(sublink->Child(2))
+                .InLambda(sublink->Child(3))
+                .Done().Ptr();
+            // clang-format on
+        } else if (sublink->Child(0)->Content() == "exists") {
+            // clang-format off
+            newSublink = Build<TKqpExistsSublink>(ctx, node->Pos())
+                .Subquery(subquery)
+                .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
+                .Done().Ptr();
+            // clang-format on
+        }
+        else {
+            Y_ENSURE(false, "Uknown sublink type in query");
+        }
+
+        nodeReplacementMap[sublink.Get()] = newSublink;
+    }
+    return ctx.ReplaceNodes(std::move(node), nodeReplacementMap);
+}
+
 } // anonymous namespace
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, bool pgSyntax) {
-    Y_UNUSED(typeCtx);
+                              ui64& uniqueSourceIdCounter, bool pgSyntax, bool generateRoot) {
+
     TVector<TString> finalColumnOrder;
     // Start from beggining for each proccesed select;
     ui64 uniqueAggColumnId = 0;
 
-    auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
+    TExprNode::TPtr rewrittenNode = node;
+
+    if (generateRoot) {
+        rewrittenNode = RewriteSublinks(rewrittenNode, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, pgSyntax);
+    }
+
+    auto setItems = GetSetting(rewrittenNode->Head(), "set_items")->TailPtr();
     TVector<TExprNode::TPtr> setItemsResults;
     for (ui32 i = 0; i < setItems->ChildrenSize(); ++i) {
         auto setItem = setItems->ChildPtr(i);
@@ -1154,8 +1215,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                 fromAliases.push_back(TString(alias->Content()));
                 TExprNode::TPtr fromExpr;
 
-                if (TKqpOpRoot::Match(childExpr.Get())) {
-                    auto opRoot = TKqpOpRoot(childExpr);
+                if (childExpr->IsCallable(sqlSelect)) {
+                    auto subquery = RewriteSelect(childExpr, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, pgSyntax, false);
 
                     TVector<TExprNode::TPtr> subqueryElements;
 
@@ -1168,7 +1229,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
 
                         // clang-format off
                         subqueryElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
-                            .Input(opRoot.Input())
+                            .Input(subquery)
                             .Variable().Value(renamedUnit.GetFullName()).Build()
                             .From().Value(unit.GetFullName()).Build()
                         .Done().Ptr());
@@ -1177,7 +1238,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
 
                     // clang-format off
                     fromExpr = Build<TKqpOpMap>(ctx, node->Pos())
-                        .Input(opRoot.Input())
+                        .Input(subquery)
                         .MapElements().Add(subqueryElements).Build()
                         .Project().Value("true").Build()
                     .Done().Ptr();
@@ -1291,7 +1352,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                         if (rightSidePredicates.size()) {
                             rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
                         }
-                        for (const auto & joinFilter : joinFilterPredicates) {
+                        for (auto & joinFilter : joinFilterPredicates) {
                             auto joinF = BuildJoinFilter(leftInput, rightInput, lambdaArg, joinFilter, ctx, node->Pos());
                             joinFilters.push_back(joinF);
                         }
@@ -1383,7 +1444,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         auto where = GetSetting(setItem->Tail(), "where");
 
         if (where) {
-            TExprNode::TPtr lambdaPtr = ctx.DeepCopyLambda(*(where->Child(1)->Child(1)));
+            TExprNode::TPtr lambdaPtr = where->ChildPtr(1)->ChildPtr(1);
+            lambdaPtr = ctx.DeepCopyLambda(*lambdaPtr);
+
             if (pgSyntax) {
                 lambdaPtr = ReplacePgOps(lambdaPtr, ctx);
             }
@@ -1824,7 +1887,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         setItemsResults.push_back(setItemPtr);
     }
 
-    auto setOps = GetSetting(node->Head(), "set_ops");
+    auto setOps = GetSetting(rewrittenNode->Head(), "set_ops");
     Y_ENSURE(setOps && setItemsResults.size());
 
     auto setOpsList = setOps->TailPtr();
@@ -1860,7 +1923,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
         opsInputCount = 0;
     }
 
-    auto sort = GetSetting(node->Head(), "sort");
+    auto sort = GetSetting(rewrittenNode->Head(), "sort");
     if (sort) {
         opResult = BuildSort(opResult, sort, {}, ctx, pgSyntax);
     }
@@ -1871,10 +1934,14 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
     }
     auto columnOrder = Build<TCoAtomList>(ctx, node->Pos()).Add(columnAtomList).Done().Ptr();
 
-    auto limit = GetSetting(node->Head(), "limit");
+    auto limit = GetSetting(rewrittenNode->Head(), "limit");
     if (limit) {
-        auto offset = GetSetting(node->Head(), "offset");
+        auto offset = GetSetting(rewrittenNode->Head(), "offset");
         opResult = BuildLimit(opResult, limit, offset, ctx, pgSyntax, node->Pos());
+    }
+
+    if (!generateRoot) {
+        return NormalizeMemberNames(opResult, ctx, node->Pos());
     }
 
     // clang-format off

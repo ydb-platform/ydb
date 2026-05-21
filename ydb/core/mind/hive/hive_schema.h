@@ -282,10 +282,11 @@ struct Schema : NIceDb::Schema {
         struct ServerlessComputeResourcesMode : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSubDomains::EServerlessComputeResourcesMode; };
         struct ScaleRecommenderPolicies : Column<7, NScheme::NTypeIds::String> { using Type = NKikimrHive::TScaleRecommenderPolicies; };
         struct Stopped : Column<8, NScheme::NTypeIds::Bool> {};
+        struct ShrinkingStoragePools : Column<9, NScheme::NTypeIds::Utf8> {}; // ;-separated list
 
         using TKey = TableKey<SchemeshardId, PathId>;
         using TColumns = TableColumns<SchemeshardId, PathId, Path, Primary, HiveId, ServerlessComputeResourcesMode,
-            ScaleRecommenderPolicies, Stopped>;
+            ScaleRecommenderPolicies, Stopped, ShrinkingStoragePools>;
     };
 
     struct BlockedOwner : Table<18> {

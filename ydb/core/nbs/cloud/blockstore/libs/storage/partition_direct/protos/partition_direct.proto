@@ -19,6 +19,16 @@ message TDirectBlockGroupsConnections {
     repeated TDirectBlockGroupConnections DirectBlockGroupConnections = 1;
 }
 
+// One vchunk's host layout, persisted only when it deviates from the default
+// TVChunkConfig::Make() produces. PBufferHostRoles[i] / DDiskHostRoles[i] hold
+// the EHostRole value for host i; EnabledHosts lists the enabled host indices.
+message TVChunkConfig {
+    uint32 VChunkIndex = 1;
+    repeated uint32 PBufferHostRoles = 2;
+    repeated uint32 DDiskHostRoles = 3;
+    repeated uint32 EnabledHosts = 4;
+}
+
 message TTabletInfo {
     NYdb.NBS.NProto.TStorageServiceConfig StorageConfig = 1;
     NKikimrBlockStore.TVolumeConfig VolumeConfig = 2;

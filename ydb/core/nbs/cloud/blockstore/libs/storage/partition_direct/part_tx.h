@@ -1,10 +1,12 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/vector.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -15,7 +17,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(InitSchema, __VA_ARGS__)                    \
     xxx(LoadState, __VA_ARGS__)                     \
     xxx(StoreVolumeConfig, __VA_ARGS__)             \
-    xxx(StorePartitionIds, __VA_ARGS__)
+    xxx(StorePartitionIds, __VA_ARGS__)             \
+    xxx(UpdateVChunkConfig, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
 
@@ -47,6 +50,7 @@ struct TTxPartition
     {
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
+        TVector<TVChunkConfig> VChunkConfigs;
 
         explicit TLoadState()
         {}
@@ -55,6 +59,7 @@ struct TTxPartition
         {
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
+            VChunkConfigs.clear();
         }
     };
 
@@ -88,6 +93,23 @@ struct TTxPartition
             TDirectBlockGroupsConnections directBlockGroupsConnections)
             : DirectBlockGroupsConnections(
                   std::move(directBlockGroupsConnections))
+        {}
+
+        void Clear()
+        {
+            // nothing to do
+        }
+    };
+
+    //
+    // TUpdateVChunkConfig
+    //
+    struct TUpdateVChunkConfig
+    {
+        const TVChunkConfig VChunkConfig;
+
+        explicit TUpdateVChunkConfig(TVChunkConfig vChunkConfig)
+            : VChunkConfig(std::move(vChunkConfig))
         {}
 
         void Clear()

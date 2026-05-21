@@ -2,17 +2,11 @@
 
 LIBRARY()
 
-LICENSE(
-    ISC AND
-    LicenseRef-scancode-openssl AND
-    LicenseRef-scancode-openssl-nokia-psk-contribution AND
-    LicenseRef-scancode-ssleay-windows AND
-    OpenSSL
-)
+LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-04-29)
+VERSION(0.20260413.0)
 
 ADDINCL(
     contrib/restricted/google/boringssl/include

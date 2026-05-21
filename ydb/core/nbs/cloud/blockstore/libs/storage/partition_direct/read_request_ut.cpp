@@ -31,6 +31,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         auto readHint = DirtyMap.MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),
@@ -72,6 +73,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         auto readHint = DirtyMap.MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),
@@ -108,6 +110,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),
@@ -160,6 +163,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
 
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
+            LogTitle,
             VChunkConfig,
             DirectBlockGroup,
             std::move(readHint),

@@ -66,6 +66,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
     {
         CaFactory_->AccountDefaultPoolInScheduler.store(config.GetComputeSchedulerSettings().GetAccountDefaultPool());
+        EnableChannelMemoryTracking = config.GetEnableChannelMemoryTracking();
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
         }
@@ -150,7 +151,7 @@ private:
         const auto executerId = ev->Sender;
 
         if (!CachedQueryManagerId) {
-            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_));
+            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_, EnableChannelMemoryTracking));
         }
 
         TActorId queryManagerId;
@@ -300,6 +301,8 @@ private:
                 {"node_id", SelfId().NodeId()},
                 {"config", Config.DebugString()});
         }
+
+        EnableChannelMemoryTracking = event.GetConfig().GetTableServiceConfig().GetEnableChannelMemoryTracking();
 
         if (event.GetConfig().GetTableServiceConfig().HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadsRetrySettings());
@@ -488,6 +491,7 @@ private:
     std::shared_ptr<TNodeState> State_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState_;
     TActorId CachedQueryManagerId;
+    bool EnableChannelMemoryTracking = false;
 };
 
 

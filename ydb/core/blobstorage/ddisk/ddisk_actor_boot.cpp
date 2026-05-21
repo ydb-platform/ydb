@@ -67,6 +67,7 @@ namespace NKikimr::NDDisk {
             for (auto idx : chunkMap.GetChunkIdxs()) {
                 PersistentBufferChunks.emplace_back(idx);
             }
+            PersistentBufferUniqueId = chunkMap.GetUniqueId();
         }
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
     }
@@ -123,9 +124,12 @@ namespace NKikimr::NDDisk {
         auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;
         });
+        if (PersistentBufferUniqueId == 0) {
+            PersistentBufferUniqueId = RandomNumber<ui64>();
+        }
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
             Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
-            PersistentBufferChunks, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);

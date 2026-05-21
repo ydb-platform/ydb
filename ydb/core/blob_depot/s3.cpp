@@ -53,6 +53,7 @@ namespace NKikimr::NBlobDepot {
             fFunc(TEvPrivate::EvDeleteResult, HandleDeleter)
             fFunc(TEvPrivate::EvScanFound, HandleScanner)
             cFunc(TEvPrivate::EvDeleteThrottleWakeup, HandleDeleteThrottleWakeup)
+            cFunc(TEvPrivate::EvPutThrottleWakeup, HandlePutThrottleWakeup)
         )
     }
 

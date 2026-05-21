@@ -190,9 +190,9 @@ struct TStageGraph {
     }
 
     void Connect(ui32 from, ui32 to, TIntrusivePtr<TConnection> connection) {
-        auto &outputs = StageOutputs.at(from);
+        auto& outputs = StageOutputs.at(from);
         outputs.push_back(to);
-        auto &inputs = StageInputs.at(to);
+        auto& inputs = StageInputs.at(to);
         inputs.push_back(from);
         Connections[std::make_pair(from, to)].push_back(connection);
     }

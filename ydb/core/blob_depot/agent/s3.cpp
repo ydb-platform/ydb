@@ -10,6 +10,12 @@
 
 namespace NKikimr::NBlobDepot {
 
+    static bool IsSlowDown(const Aws::S3::S3Error& error) {
+        return error.GetErrorType() == Aws::S3::S3Errors::SLOW_DOWN
+            || error.GetExceptionName() == "SlowDown"
+            || error.GetExceptionName() == "TooManyRequests";
+    }
+
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
@@ -119,22 +125,25 @@ namespace NKikimr::NBlobDepot {
 
             void Handle(NWrappers::TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
                 auto& msg = *ev->Get();
-                Finish(msg.IsSuccess()
-                    ? std::nullopt
-                    : std::make_optional<TString>(msg.GetError().GetMessage()));
+                if (msg.IsSuccess()) {
+                    Finish(std::nullopt, false);
+                } else {
+                    const auto& error = msg.GetError();
+                    Finish(std::make_optional<TString>(error.GetMessage()), IsSlowDown(error));
+                }
             }
 
             void HandleUndelivered() {
-                Finish("event undelivered");
+                Finish("event undelivered", false);
             }
 
-            void Finish(std::optional<TString>&& error) {
+            void Finish(std::optional<TString>&& error, bool slowDown) {
                 if (!LifetimeToken.expired()) {
                     InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
                         auto& Agent = Query->Agent;
                         const auto& QueryId = Query->QueryId;
                         BDEV_QUERY(BDEV37, "written_to_S3", (BlobId, Id), (Locator, Locator));
-                        Query->OnPutS3ObjectResponse(std::move(error));
+                        Query->OnPutS3ObjectResponse(std::move(error), slowDown);
                     });
                 }
                 PassAway();

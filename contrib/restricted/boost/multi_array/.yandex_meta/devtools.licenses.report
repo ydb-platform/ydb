@@ -33,6 +33,20 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     BSL-1.0              05954ae47dedb48ccaf95b3af88bc2aa
+BELONGS ya.make
+    License text:
+        // Use, modification and distribution is subject to the Boost Software
+        // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+        // http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 96.88
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/multi_array/iterator.hpp [3:5]
+
 KEEP     Mit-Old-Style        4a0ba219f46e4fe5625b9889e52ace5c
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -77,7 +91,6 @@ BELONGS ya.make
         include/boost/multi_array/extent_range.hpp [3:5]
         include/boost/multi_array/index_gen.hpp [3:5]
         include/boost/multi_array/index_range.hpp [3:5]
-        include/boost/multi_array/iterator.hpp [3:5]
         include/boost/multi_array/multi_array_ref.hpp [3:5]
         include/boost/multi_array/range_list.hpp [3:5]
         include/boost/multi_array/storage_order.hpp [3:5]

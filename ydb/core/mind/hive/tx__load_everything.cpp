@@ -439,15 +439,7 @@ public:
                 Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
                 Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();
                 tablet.NodeFilter.AllowedNodes = tabletRowset.GetValue<Schema::Tablet::AllowedNodes>();
-                if (tabletRowset.HaveValue<Schema::Tablet::AllowedDataCenters>()) {
-                    // this is priority format due to migration issues; when migration is complete, this code will
-                    // be removed
-                    for (const ui32 dcId : tabletRowset.GetValue<Schema::Tablet::AllowedDataCenters>()) {
-                        tablet.NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dcId));
-                    }
-                } else {
-                    tablet.NodeFilter.AllowedDataCenters = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDataCenterIds>();
-                }
+                tablet.NodeFilter.AllowedDataCenters = tabletRowset.GetValueOrDefault<Schema::Tablet::NewAllowedDataCenterIds>();
                 tablet.DataCentersPreference = tabletRowset.GetValueOrDefault<Schema::Tablet::DataCentersPreference>();
                 TVector<TSubDomainKey> allowedDomains = tabletRowset.GetValueOrDefault<Schema::Tablet::AllowedDomains>();
                 TSubDomainKey objectDomain = TSubDomainKey(tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
@@ -629,16 +621,7 @@ public:
                     followerGroup.AllowLeaderPromotion = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowLeaderPromotion>();
                     followerGroup.AllowClientRead = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowClientRead>();
                     followerGroup.NodeFilter.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
-
-                    if (tabletFollowerGroupRowset.HaveValue<Schema::TabletFollowerGroup::AllowedDataCenters>()) {
-                        // this is priority format due to migration issues; when migration is complete, this code will
-                        // be removed
-                        for (const ui32 dcId : tabletFollowerGroupRowset.GetValue<Schema::TabletFollowerGroup::AllowedDataCenters>()) {
-                            followerGroup.NodeFilter.AllowedDataCenters.push_back(DataCenterToString(dcId));
-                        }
-                    } else {
-                        followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedDataCenterIds>();
-                    }
+                    followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::NewAllowedDataCenterIds>();
 
                     followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
@@ -679,7 +662,8 @@ public:
                     follower.Statistics = tabletFollowerRowset.GetValueOrDefault<Schema::TabletFollowerTablet::Statistics>();
                     if (tabletFollowerRowset.HaveValue<Schema::TabletFollowerTablet::DataCenter>()) {
                         auto dc = tabletFollowerRowset.GetValue<Schema::TabletFollowerTablet::DataCenter>();
-                        follower.NodeFilter.AllowedDataCenters = {dc};
+                        follower.NodeFilter.AllowedDataCenters.Clear();
+                        follower.NodeFilter.AllowedDataCenters.AddDataCenter(dc);
                         Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
                     }
                     if (nodeId == 0) {
@@ -720,9 +704,9 @@ public:
                 auto groupFollowersIters = std::views::iota(tablet.Followers.begin(), tablet.Followers.end()) | std::views::filter(filterGroup);
                 std::vector<TDataCenterInfo::TFollowerIter> followersWithoutDc;
                 for (auto followerIt : groupFollowersIters) {
-                    auto& allowedDc = followerIt->NodeFilter.AllowedDataCenters;
+                    auto& allowedDc = *followerIt->NodeFilter.AllowedDataCenters.MutableDataCenter();
                     if (allowedDc.size() == 1) {
-                        --dataCentersToCover[allowedDc.front()];
+                        --dataCentersToCover[allowedDc[0]];
                         continue;
                     }
                     bool ok = false;
@@ -731,9 +715,10 @@ public:
                         auto& cnt = dataCentersToCover[dc];
                         if (cnt > 0) {
                             --cnt;
-                            allowedDc = {dc};
                             Self->DataCenters[dc].Followers[{tabletId, groupId}].push_back(followerIt);
                             Self->PendingFollowerUpdates.Update({tabletId, followerIt->Id}, dc);
+                            allowedDc.Clear();
+                            allowedDc.Add(std::move(dc));
                             ok = true;
                         }
                     }
@@ -749,7 +734,8 @@ public:
                     if (dcIt == dataCentersToCover.end()) {
                         break;
                     }
-                    follower->NodeFilter.AllowedDataCenters = {dcIt->first};
+                    follower->NodeFilter.AllowedDataCenters.Clear();
+                    follower->NodeFilter.AllowedDataCenters.AddDataCenter(dcIt->first);
                     Self->DataCenters[dcIt->first].Followers[{tabletId, groupId}].push_back(follower);
                     Self->PendingFollowerUpdates.Update(follower->GetFullTabletId(), dcIt->first);
                     --dcIt->second;

@@ -644,7 +644,7 @@ private:
         if (!IsDatabaseAccessEndpoint(path)) {
             return EDatabaseScopedRequestValidationResult::Ok;
         }
-        if (!IsStrictDatabaseOnlyToken(serializedToken, AppData()->DomainsConfig.GetSecurityConfig())) {
+        if (!IsStrictDatabaseOnlyToken(AppData(), serializedToken)) {
             return EDatabaseScopedRequestValidationResult::Ok;
         }
         const auto itAccess = EndpointAccess.find(path);

@@ -1,32 +1,32 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
+
 #include "auth.h"
 
 using namespace NKikimr;
 
 namespace {
 
-struct TAllowedSidsConfig {
-    TVector<TString> DatabaseAllowedSIDs = {"database"};
-    TVector<TString> ViewerAllowedSIDs = {"viewer"};
-    TVector<TString> MonitoringAllowedSIDs = {"monitoring"};
-    TVector<TString> AdministrationAllowedSIDs = {"admin"};
-
-    const TVector<TString>& GetDatabaseAllowedSIDs() const {
-        return DatabaseAllowedSIDs;
+class TStrictDatabaseOnlyFixture {
+public:
+    TStrictDatabaseOnlyFixture()
+        : AppData(0, 0, 0, 0, TMap<TString, ui32>{}, nullptr, nullptr, nullptr, nullptr)
+    {
+        auto& securityConfig = *AppData.DomainsConfig.MutableSecurityConfig();
+        securityConfig.AddDatabaseAllowedSIDs("database");
+        securityConfig.AddViewerAllowedSIDs("viewer");
+        securityConfig.AddMonitoringAllowedSIDs("monitoring");
+        securityConfig.AddAdministrationAllowedSIDs("admin");
     }
 
-    const TVector<TString>& GetViewerAllowedSIDs() const {
-        return ViewerAllowedSIDs;
+    const TAppData* GetAppData() const {
+        return &AppData;
     }
 
-    const TVector<TString>& GetMonitoringAllowedSIDs() const {
-        return MonitoringAllowedSIDs;
-    }
-
-    const TVector<TString>& GetAdministrationAllowedSIDs() const {
-        return AdministrationAllowedSIDs;
-    }
+private:
+    TAppData AppData;
 };
 
 } // namespace
@@ -111,42 +111,36 @@ Y_UNIT_TEST_SUITE(AuthTokenAllowed) {
 
 Y_UNIT_TEST_SUITE(AuthStrictDatabaseOnly) {
 
-    const TAllowedSidsConfig Config;
+    const TStrictDatabaseOnlyFixture Fixture;
 
     Y_UNIT_TEST(PassOnDatabaseAllowedSidOnly) {
         NACLib::TUserToken token({ .UserSID = "database" });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), true);
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), true);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), true);
     }
 
     Y_UNIT_TEST(PassOnDatabaseAllowedGroupSidOnly) {
         NACLib::TUserToken token({ .UserSID = "user", .GroupSIDs = {"database"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), true);
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), true);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), true);
     }
 
     Y_UNIT_TEST(FailWithoutDatabaseAllowedSid) {
         NACLib::TUserToken token({ .UserSID = "user" });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
     Y_UNIT_TEST(FailOnViewerAllowedSid) {
         NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"viewer"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
     Y_UNIT_TEST(FailOnMonitoringAllowedSid) {
         NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"monitoring"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
     Y_UNIT_TEST(FailOnAdministrationAllowedSid) {
         NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"admin"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&token, Config), false);
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(token.SerializeAsString(), Config), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
 }

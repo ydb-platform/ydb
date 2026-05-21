@@ -370,6 +370,7 @@ void TVChunk::DoReadBlocksLocal(
 
     auto requestExecutor = CreateReadRequestExecutor(
         ActorSystem,
+        LogTitle,
         VChunkConfig,
         DirectBlockGroup,
         std::move(readHint),
@@ -421,9 +422,7 @@ void TVChunk::DoWriteBlocksLocal(
 
     auto writeExecutor = CreateWriteRequestExecutor(
         ActorSystem,
-        LogTitle.GetChildWithTags(
-            GetCycleCount(),
-            {{"r", vchunkRange.Print()}}),
+        LogTitle,
         VChunkConfig,
         DirectBlockGroup,
         vchunkRange,

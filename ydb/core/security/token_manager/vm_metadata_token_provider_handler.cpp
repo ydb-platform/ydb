@@ -22,7 +22,7 @@ TVmMetadataTokenProviderHandler::TVmMetadataTokenProviderHandler(const NActors::
 {}
 
 void TVmMetadataTokenProviderHandler::Bootstrap() {
-    BLOG_TRACE("Handle send request to vm metaservice");
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Handle send request to vm metaservice");
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(ProviderInfo.GetEndpoint());
     httpRequest->Set("Metadata-Flavor", "Google");
     std::unique_ptr<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest> outgoingRequest = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
@@ -53,30 +53,30 @@ void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomin
             if (NJson::ReadJsonTree(response->Body, &JsonConfig, &jsonValue)) {
                 auto jsonValueMap = jsonValue.GetMap();
                 if (auto it = jsonValueMap.find("access_token"); it == jsonValueMap.end()) {
-                    BLOG_ERROR("Result doesn't contain access_token. Request: " << requestInfo);
+                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Result doesn't contain access_token. Request: " << requestInfo);
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Result doesn't contain access_token"};
                 } else if (token = it->second.GetStringSafe(); token.empty()) {
-                    BLOG_ERROR("Got empty token. Request: " << requestInfo);
+                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Got empty token. Request: " << requestInfo);
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Got empty token"};
                 } else {
-                    BLOG_D("Updating vm metadata token");
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Updating vm metadata token");
                     refreshPeriod = Settings.SuccessRefreshPeriod;
                 }
                 if (auto it = jsonValueMap.find("expires_in"); it == jsonValueMap.end()) {
-                    BLOG_ERROR("Result doesn't contain expires_in. Request: " << requestInfo);
+                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Result doesn't contain expires_in. Request: " << requestInfo);
                 } else {
                     tokenExpiresIn = TDuration::Seconds(it->second.GetUInteger());
                 }
             } else {
-                BLOG_ERROR("Can not read json");
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Can not read json");
                 status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Can not read json"};
             }
         } else {
-            BLOG_ERROR("Error refreshing metadata token, status: " << response->Status << ", error: " << response->Message);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Error refreshing metadata token, status: " << response->Status << ", error: " << response->Message);
             status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = TString(response->Message)};
         }
     } else {
-        BLOG_ERROR("Error refreshing metadata token, error: " << ev->Get()->Error);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Error refreshing metadata token, error: " << ev->Get()->Error);
         status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = ev->Get()->Error};
     }
     refreshPeriod = Min(tokenExpiresIn, refreshPeriod);

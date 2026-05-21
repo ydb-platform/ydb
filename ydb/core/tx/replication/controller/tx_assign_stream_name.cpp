@@ -22,28 +22,28 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown target"
                 << ": rid# " << rid
                 << ", tid# " << tid);
             return true;
         }
 
         if (!target->GetStreamName().empty()) {
-            CLOG_W(ctx, "Stream name already assigned"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Stream name already assigned"
                 << ": rid# " << rid
                 << ", tid# " << tid);
             return true;
@@ -70,7 +70,7 @@ public:
             NIceDb::TUpdate<Schema::SrcStreams::ConsumerName>(target->GetStreamConsumerName())
         );
 
-        CLOG_N(ctx, "Stream name assigned"
+        LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Stream name assigned"
             << ": rid# " << rid
             << ", tid# " << tid
             << ", name# " << target->GetStreamName());
@@ -79,7 +79,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

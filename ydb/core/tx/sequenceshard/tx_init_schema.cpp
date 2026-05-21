@@ -11,7 +11,7 @@ namespace NSequenceShard {
         TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-            SLOG_T("TTxInitSchema.Execute");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxInitSchema.Execute");
             NIceDb::TNiceDb db(txc.DB);
             db.Materialize<Schema>();
             Self->RunTxInit(ctx);
@@ -19,7 +19,7 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext&) override {
-            SLOG_T("TTxInitSchema.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxInitSchema.Complete");
         }
     };
 

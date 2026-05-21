@@ -38,7 +38,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvAuth::TPtr& ev) {
-        BLOG_D("TEvAuth " << ev->Get()->InitialMessage->Dump() << " cookie " << ev->Cookie);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"TEvAuth " << ev->Get()->InitialMessage->Dump() << " cookie " << ev->Cookie);
         std::unordered_map<TString, TString> clientParams = ev->Get()->InitialMessage->GetClientParams();
         TPgWireAuthData pgWireAuthData;
         pgWireAuthData.UserName = clientParams["user"];
@@ -58,7 +58,7 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionOpened::TPtr& ev) {
-        BLOG_D("TEvConnectionOpened " << ev->Sender << " cookie " << ev->Cookie);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"TEvConnectionOpened " << ev->Sender << " cookie " << ev->Cookie);
         auto params = ev->Get()->Message->GetClientParams();
         auto itSecurityState = SecurityState.find(ev->Sender);
         if (itSecurityState != SecurityState.end()) {
@@ -74,15 +74,15 @@ public:
         IActor* actor = CreateConnection(std::move(params), std::move(ev), {.ConnectionNum = connectionState.ConnectionNum});
         TActorId actorId = Register(actor);
         connectionState.YdbConnection = actorId;
-        BLOG_D("Created ydb connection " << actorId << " num " << connectionState.ConnectionNum);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Created ydb connection " << actorId << " num " << connectionState.ConnectionNum);
     }
 
     void Handle(NPG::TEvPGEvents::TEvConnectionClosed::TPtr& ev) {
-        BLOG_D("TEvConnectionClosed " << ev->Sender << " cookie " << ev->Cookie);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"TEvConnectionClosed " << ev->Sender << " cookie " << ev->Cookie);
         auto itConnection = ConnectionState.find(ev->Sender);
         if (itConnection != ConnectionState.end()) {
             Send(itConnection->second.YdbConnection, new TEvents::TEvPoisonPill());
-            BLOG_D("Destroyed ydb connection " << itConnection->second.YdbConnection << " num " << itConnection->second.ConnectionNum);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Destroyed ydb connection " << itConnection->second.YdbConnection << " num " << itConnection->second.ConnectionNum);
         }
         SecurityState.erase(ev->Sender);
         ConnectionState.erase(itConnection);
@@ -136,14 +136,14 @@ public:
             uint32_t connectionNum = ev->Get()->Record.GetSecretKey();
             for (const auto& [pgConnectionId, connectionState] : ConnectionState) {
                 if (connectionState.ConnectionNum == connectionNum) {
-                    BLOG_D("Cancelling ConnectionNum " << connectionNum);
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Cancelling ConnectionNum " << connectionNum);
                     Forward(ev, connectionState.YdbConnection);
                     return;
                 }
             }
-            BLOG_W("Cancelling ConnectionNum " << connectionNum << " - connection not found");
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Cancelling ConnectionNum " << connectionNum << " - connection not found");
         } else {
-            BLOG_D("Forwarding TEvCancelRequest to Node " << nodeId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Forwarding TEvCancelRequest to Node " << nodeId);
             Forward(ev, CreateLocalPgWireProxyId(nodeId));
         }
     }

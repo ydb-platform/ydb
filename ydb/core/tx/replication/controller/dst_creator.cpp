@@ -53,21 +53,21 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString()
             << ": entry# " << entry.ToString());
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unexpected status"
                 << ": entry# " << entry.ToString());
             return Error(NKikimrScheme::StatusSchemeError, "Cannot resolve domain info");
         }
 
         if (!DomainKey) {
             if (!entry.DomainInfo) {
-                LOG_E("Empty domain info"
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Empty domain info"
                     << ": entry# " << entry.ToString());
                 return Error(NKikimrScheme::StatusSchemeError, "Empty domain info");
             }
@@ -89,7 +89,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void GetTableProfiles() {
-        LOG_T("Get table profiles");
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Get table profiles");
 
         using namespace NKikimrConsole;
         auto ev = MakeHolder<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
@@ -108,7 +108,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         TableProfiles.Load(ev->Get()->Config->GetTableProfilesConfig());
         DescribeSrcPath();
     }
@@ -160,7 +160,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         Y_ABORT_UNLESS(Kind == TReplication::ETargetKind::Table);
         const auto& result = ev->Get()->Result;
@@ -251,7 +251,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -281,7 +281,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
@@ -307,13 +307,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Subscribe tx"
             << ": txId# " << txId);
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         if (NeedToCheck) {
             DescribeDstPath();
@@ -337,7 +337,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         const auto& record = ev->Get()->GetRecord();
 
         switch (record.GetStatus()) {
@@ -541,7 +541,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -554,7 +554,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         const auto& desc = ev->Get()->DescribeSchemeResult;
         if (desc.GetStatus() != NKikimrScheme::StatusSuccess) {
@@ -571,7 +571,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         if (SchemeShardId != ev->Get()->TabletId) {
             return;
@@ -581,13 +581,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         Retry();
     }
 
     void Success() {
         Y_ABORT_UNLESS(DstPathId);
-        LOG_I("Success"
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Success"
             << ": dstPathId# " << DstPathId);
 
         Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId));
@@ -595,7 +595,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
-        LOG_E("Error"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error"
             << ": status# " << status
             << ", reason# " << error);
 
@@ -604,7 +604,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Retry() {
-        LOG_D("Retry");
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
     }
 

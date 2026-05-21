@@ -17,14 +17,14 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_CHANGE_BACKEND; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxChangeBackend::Execute (" << static_cast<ui64>(Backend) << ")");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxChangeBackend::Execute (" << static_cast<ui64>(Backend) << ")");
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::State>().Key(TString("backend")).Update<Schema::State::ValueUI64>(static_cast<ui64>(Backend));
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("TTxChangeBackend::Complete");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxChangeBackend::Complete");
     }
 };
 

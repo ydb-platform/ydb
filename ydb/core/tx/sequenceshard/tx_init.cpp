@@ -11,7 +11,7 @@ namespace NSequenceShard {
         TTxType GetTxType() const override { return TXTYPE_INIT; }
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-            SLOG_T("TTxInit.Execute");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxInit.Execute");
 
             Reset();
 
@@ -109,7 +109,7 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext&) override {
-            SLOG_T("TTxInit.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxInit.Complete");
         }
     };
 

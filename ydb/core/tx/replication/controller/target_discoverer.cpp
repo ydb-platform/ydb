@@ -26,11 +26,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribePathResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
-            LOG_W("Unknown describe path response"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown describe path response"
                 << ": cookie# " << ev->Cookie);
             return;
         }
@@ -40,7 +40,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe path succeeded"
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe path succeeded"
                 << ": path# " << path.first);
 
             const auto& entry = result.GetEntry();
@@ -66,7 +66,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 break;
             }
 
-            LOG_W("Unsupported entry type"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unsupported entry type"
                 << ": path# " << path.first
                 << ", type# " << entry.Type);
 
@@ -74,7 +74,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             issues.AddIssue(TStringBuilder() << "Unsupported entry type: " << entry.Type);
             Failed.emplace_back(path.first, NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)));
         } else {
-            LOG_E("Describe path failed"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe path failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString()
@@ -98,11 +98,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
-            LOG_W("Unknown describe table response"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown describe table response"
                 << ": cookie# " << ev->Cookie);
             return;
         }
@@ -112,12 +112,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe table succeeded"
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe table succeeded"
                 << ": path# " << path.first);
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
-            LOG_I("Add target"
+            LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Add target"
                 << ": srcPath# " << target.Config->GetSrcPath()
                 << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
@@ -137,13 +137,13 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                         CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
                         CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
                     ));
-                LOG_I("Add target"
+                LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Add target"
                     << ": srcPath# " << target.Config->GetSrcPath()
                     << ", dstPath# " << target.Config->GetDstPath()
                     << ", kind# " << target.Kind);
             }
         } else {
-            LOG_E("Describe table failed"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe table failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
@@ -166,11 +166,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
-            LOG_W("Unknown describe topic response"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown describe topic response"
                 << ": cookie# " << ev->Cookie);
             return;
         }
@@ -180,17 +180,17 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe topic succeeded"
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe topic succeeded"
                 << ": path# " << path.first);
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
                 std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, Config));
-            LOG_I("Add target"
+            LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Add target"
                 << ": srcPath# " << target.Config->GetSrcPath()
                 << ", dstPath# " << target.Config->GetDstPath()
                 << ", kind# " << target.Kind);
         } else {
-            LOG_E("Describe topic failed"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe topic failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
@@ -245,11 +245,11 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         auto it = Listings.find(ev->Cookie);
         if (it == Listings.end()) {
-            LOG_W("Unknown listing response"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown listing response"
                 << ": cookie# " << ev->Cookie);
             return;
         }
@@ -257,7 +257,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         const auto& path = it->second;
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Listing succeeded"
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Listing succeeded"
                 << ": path# " << path.first);
 
             for (const auto& child : result.GetChildren()) {
@@ -281,7 +281,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 }
             }
         } else {
-            LOG_E("Listing failed"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Listing failed"
                 << ": path# " << path.first
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());

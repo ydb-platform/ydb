@@ -25,7 +25,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     }
 
     void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         DropStream();
     }
 
@@ -53,20 +53,20 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry");
+                LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Retry");
                 return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error"
                 << ": status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
         } else {
-            LOG_I("Success"
+            LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Success"
                 << ": issues# " << result.GetIssues().ToOneLineString());
         }
 

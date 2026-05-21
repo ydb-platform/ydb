@@ -18,28 +18,28 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown target"
                 << ": rid# " << rid
                 << ", tid# " << tid);
             return true;
         }
 
         if (target->GetDstState() != TReplication::EDstState::Creating && target->GetDstState() != TReplication::EDstState::Alter) {
-            CLOG_W(ctx, "Dst state mismatch"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Dst state mismatch"
                 << ": rid# " << rid
                 << ", tid# " << tid
                 << ", state# " << target->GetDstState());
@@ -50,7 +50,7 @@ public:
             target->SetDstPathId(Ev->Get()->DstPathId);
             target->SetDstState(TReplication::EDstState::Ready);
 
-            CLOG_N(ctx, "Target dst created"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Target dst created"
                 << ": rid# " << rid
                 << ", tid# " << tid
                 << ", pathId# " << Ev->Get()->DstPathId);
@@ -63,7 +63,7 @@ public:
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
                 << ": " << target->GetIssue());
 
-            CLOG_E(ctx, "Create dst error"
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Create dst error"
                 << ": rid# " << rid
                 << ", tid# " << tid
                 << ", " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
@@ -86,7 +86,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

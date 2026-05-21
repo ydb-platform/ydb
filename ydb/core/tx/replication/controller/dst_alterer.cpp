@@ -28,7 +28,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -67,7 +67,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
@@ -82,18 +82,18 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Subscribe tx"
             << ": txId# " << txId);
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         Success();
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         if (SchemeShardId == ev->Get()->TabletId) {
             return;
@@ -103,19 +103,19 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         Retry();
     }
 
     void Success() {
-        LOG_I("Success");
+        LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Success");
 
         Send(Parent, new TEvPrivate::TEvAlterDstResult(ReplicationId, TargetId));
         PassAway();
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
-        LOG_E("Error"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error"
             << ": status# " << status
             << ", reason# " << error);
 
@@ -124,7 +124,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Retry() {
-        LOG_D("Retry");
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Retry");
         Schedule(RetryInterval, new TEvents::TEvWakeup);
     }
 

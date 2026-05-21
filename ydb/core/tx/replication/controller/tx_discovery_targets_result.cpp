@@ -21,19 +21,19 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         const auto rid = Ev->Get()->ReplicationId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Ready) {
-            CLOG_W(ctx, "Replication state mismatch"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Replication state mismatch"
                 << ": rid# " << rid
                 << ", state# " << Replication->GetState());
             return true;
@@ -63,7 +63,7 @@ public:
                     NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
 
-                CLOG_N(ctx, "Add target"
+                LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Add target"
                     << ": rid# " << rid
                     << ", tid# " << tid
                     << ", kind# " << target.Kind
@@ -74,7 +74,7 @@ public:
             const auto error = JoinSeq(", ", Ev->Get()->Failed);
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Discovery error: " << error);
 
-            CLOG_E(ctx, "Discovery error"
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Discovery error"
                 << ": rid# " << rid
                 << ", error# " << error);
         }
@@ -89,7 +89,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

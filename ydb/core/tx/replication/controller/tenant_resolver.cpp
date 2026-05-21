@@ -29,21 +29,21 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString()
             << ": entry# " << entry.ToString());
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unexpected status"
                 << ": entry# " << entry.ToString());
             return Reply(false);
         }
 
         if (!DomainKey) {
             if (!entry.DomainInfo) {
-                LOG_E("Empty domain info"
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Empty domain info"
                     << ": entry# " << entry.ToString());
                 return Reply(false);
             }

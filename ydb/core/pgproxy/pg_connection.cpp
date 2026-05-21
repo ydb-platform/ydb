@@ -58,7 +58,7 @@ public:
     void Bootstrap() {
         Become(&TPGConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        BLOG_D("incoming connection opened");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"incoming connection opened");
         OnAccept();
     }
 
@@ -238,7 +238,7 @@ protected:
                 prefix << "<- [" << OutgoingSequenceNumber << "] ";
                 break;
         }
-        BLOG_D(prefix << "'" << message.Message << "' \"" << GetMessageName(direction, message) << "\" Size(" << message.GetDataSize() << ") " << GetMessageDump(direction, message));
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<prefix << "'" << message.Message << "' \"" << GetMessageName(direction, message) << "\" Size(" << message.GetDataSize() << ") " << GetMessageDump(direction, message));
     }
 
     template<typename TMessage>
@@ -342,7 +342,7 @@ protected:
                 }
                 RequestPoller();
             } else {
-                BLOG_D("<- 'N' \"Decline SSL\"");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"<- 'N' \"Decline SSL\"");
                 BufferOutput.Append('N');
                 if (!FlushOutput()) {
                     return;
@@ -353,7 +353,7 @@ protected:
             return;
         }
         if (protocol == 0x2e16d204) { // 80877102 cancellation message
-            BLOG_D("cancellation message");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"cancellation message");
             TPGInitial::TPGBackendData backendData = message->GetBackendData();
             if (IsValidBackendData(backendData)) {
                 Send(DatabaseProxy, new TEvPGEvents::TEvCancelRequest(backendData.Pid ^ BACKEND_DATA_MASK, backendData.Key ^ BACKEND_DATA_MASK));
@@ -362,7 +362,7 @@ protected:
             return;
         }
         if (protocol != 0x300) {
-            BLOG_W("invalid protocol version (" << Hex(protocol) << ")");
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"invalid protocol version (" << Hex(protocol) << ")");
             CloseConnection = true;
             return;
         }
@@ -501,7 +501,7 @@ protected:
 
     template<typename TEvent>
     void PostponeEvent(TAutoPtr<TEvent>& ev) {
-        BLOG_D("Postpone event " << ev->Cookie);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"Postpone event " << ev->Cookie);
         TAutoPtr<IEventHandle> evb(ev.Release());
         auto it = std::upper_bound(PostponedEvents.begin(), PostponedEvents.end(), evb, TEventsComparator());
         PostponedEvents.insert(it, evb);
@@ -567,7 +567,7 @@ protected:
                 BecomeReadyForQuery();
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
-                BLOG_ERROR("unable to create connection");
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"unable to create connection");
                 CloseConnection = true;
                 FlushAndPoll();
             }
@@ -779,7 +779,7 @@ protected:
                 if (need == 0) {
                     size_t capacity = BufferInput.Capacity() * 2;
                     if (capacity > MAX_BUFFER_SIZE) {
-                        BLOG_ERROR("connection closed - not enough buffer size (" << capacity << " > " << MAX_BUFFER_SIZE << ")");
+                        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"connection closed - not enough buffer size (" << capacity << " > " << MAX_BUFFER_SIZE << ")");
                         return PassAway();
                     }
                     BufferInput.Reserve(capacity);
@@ -827,7 +827,7 @@ protected:
                                 HandleMessage(static_cast<const TPGFlush*>(message));
                                 break;
                             default:
-                                BLOG_ERROR("invalid message (" << message->Message << ")");
+                                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"invalid message (" << message->Message << ")");
                                 CloseConnection = true;
                                 break;
                         }
@@ -842,17 +842,17 @@ protected:
                     continue;
                 } else if (res == 0) {
                     // connection closed
-                    BLOG_ERROR("connection was gracefully closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
+                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"connection was gracefully closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
                     return PassAway();
                 } else {
-                    BLOG_ERROR("connection closed - error in recv: " << strerror(-res));
+                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"connection closed - error in recv: " << strerror(-res));
                     return PassAway();
                 }
             }
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
                 if (passed >= InactivityTimeout) {
-                    BLOG_ERROR("connection closed by inactivity timeout");
+                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"connection closed by inactivity timeout");
                     return PassAway(); // timeout
                 } else {
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -882,13 +882,13 @@ protected:
             } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
                 break;
             } else {
-                BLOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res));
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"connection closed - error in FlushOutput: " << strerror(-res));
                 PassAway();
                 return false;
             }
         }
         if (CloseConnection && BufferOutput.Empty()) {
-            BLOG_D("connection closed");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"connection closed");
             PassAway();
             return false;
         }
@@ -898,7 +898,7 @@ protected:
     bool UpgradeToSecure() {
         int res = Socket->TryUpgradeToSecure(NKikimrServices::PGYDB);
         if (res < 0) {
-            BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PGWIRE, LogPrefix() <<"connection closed - error in UpgradeToSecure: " << strerror(-res));
             PassAway();
             return false;
         }

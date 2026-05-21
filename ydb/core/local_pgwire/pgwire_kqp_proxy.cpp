@@ -173,7 +173,7 @@ protected:
 
     void SendToKQP(THolder<NKqp::TEvKqp::TEvQueryRequest>&& event) {
         ActorIdToProto(TBase::SelfId(), event->Record.MutableRequestActorId());
-        BLOG_D("Sent event to kqpProxy " << event->Record.ShortDebugString());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Sent event to kqpProxy " << event->Record.ShortDebugString());
         TBase::Send(NKqp::MakeKqpProxyID(TBase::SelfId().NodeId()), event.Release());
     }
 
@@ -252,7 +252,7 @@ protected:
     void ReplyWithResponseAndPassAway() {
         Response_->TransactionStatus = Connection_.Transaction.Status;
         TBase::Send(Owner_, new TEvEvents::TEvProxyCompleted(Connection_));
-        BLOG_D("Finally replying to " << EventRequest_->Sender << " cookie " << EventRequest_->Cookie);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Finally replying to " << EventRequest_->Sender << " cookie " << EventRequest_->Cookie);
         TBase::Send(EventRequest_->Sender, Response_.release(), 0, EventRequest_->Cookie);
         TBase::PassAway();
     }
@@ -270,17 +270,17 @@ protected:
 
         RowsSelected_ += response->DataRows.size();
 
-        BLOG_D(this->SelfId() << " Send rowset " << ev->Get()->Record.GetQueryResultIndex() << " data " << ev->Get()->Record.GetSeqNo() << " to " << EventRequest_->Sender);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,this->SelfId() << " Send rowset " << ev->Get()->Record.GetQueryResultIndex() << " data " << ev->Get()->Record.GetSeqNo() << " to " << EventRequest_->Sender);
         TBase::Send(EventRequest_->Sender, response.release(), 0, EventRequest_->Cookie);
 
-        BLOG_D(this->SelfId() << " Send stream data ack to " << ev->Sender);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,this->SelfId() << " Send stream data ack to " << ev->Sender);
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(std::numeric_limits<i64>::max());
         TBase::Send(ev->Sender, resp.Release());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         if (record.GetResponse().HasExtraInfo()) {
             const auto& extraInfo = record.GetResponse().GetExtraInfo();
@@ -318,7 +318,7 @@ protected:
         if (Connection_.SessionId) {
             ev->Record.MutableRequest()->SetSessionId(Connection_.SessionId);
         }
-        BLOG_D("Sent CancelQueryRequest to kqpProxy " << ev->Record.ShortDebugString());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Sent CancelQueryRequest to kqpProxy " << ev->Record.ShortDebugString());
         TBase::Send(NKqp::MakeKqpProxyID(TBase::SelfId().NodeId()), ev.Release());
 
         Response_->ErrorFields.push_back({'S', "ERROR"});
@@ -384,7 +384,7 @@ public:
                 request.SetAction(QueryAction_ = NKikimrKqp::QUERY_ACTION_EXPLAIN);
                 SendToKQP(std::move(event));
             } else { // for DDL and TCL
-                BLOG_D("Skipping parse of DDL/TCL");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Skipping parse of DDL/TCL");
                 TParsedStatement statement;
                 statement.QueryData = std::move(QueryData_);
                 Send(Owner_, new TEvEvents::TEvUpdateStatement(statement));
@@ -398,7 +398,7 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record;
         try {
             if (record.HasYdbStatus()) {

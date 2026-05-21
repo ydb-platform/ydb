@@ -20,10 +20,10 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         if (!Targets.contains(ev->Cookie)) {
-            LOG_W("Unknown describe response"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown describe response"
                 << ": cookie# " << ev->Cookie);
             return;
         }
@@ -32,7 +32,7 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
         const auto& path = Targets.at(id);
 
         if (Result.contains(id)) {
-            LOG_W("Duplicate describe response"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Duplicate describe response"
                 << ": id# " << id
                 << ", path# " << path);
             return;
@@ -40,12 +40,12 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
 
         auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe succeeded"
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe succeeded"
                 << ": id# " << id
                 << ", path# " << path);
             Result.emplace(id, std::move(result));
         } else {
-            LOG_E("Describe failed"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe failed"
                 << ": id# " << id
                 << ", path# " << path
                 << ", status# " << result.GetStatus()
@@ -144,7 +144,7 @@ public:
     }
 
     bool ExecutePub(TTransactionContext&, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << PubEv->Get()->ToString());
 
         const auto& record = PubEv->Get()->Record;
         const auto pathId = TPathId::FromProto(record.GetPathId());
@@ -175,7 +175,7 @@ public:
     }
 
     bool ExecutePriv(TTransactionContext&, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PrivEv->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << PrivEv->Get()->ToString());
 
         const auto rid = PrivEv->Get()->ReplicationId;
 
@@ -301,7 +301,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Result) {
             ctx.Send(Sender, Result.Release());

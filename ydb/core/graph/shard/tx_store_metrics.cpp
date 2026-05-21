@@ -17,12 +17,12 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_STORE_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxStoreMetrics::Execute");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxStoreMetrics::Execute");
         return Self->LocalBackend.StoreMetrics(txc, std::move(Data));
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("TTxStoreMetrics::Complete");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxStoreMetrics::Complete");
     }
 };
 

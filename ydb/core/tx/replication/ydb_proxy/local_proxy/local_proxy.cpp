@@ -65,7 +65,7 @@ auto CreateCallback(std::shared_ptr<T>&& ctx) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     auto [path, settings] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
@@ -97,7 +97,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     auto [path, _] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
@@ -133,7 +133,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     auto [path, _] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
@@ -169,7 +169,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
-    LOG_E("Handle " << ev->Get()->ToString());
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     auto [path, settings] = std::move(ev->Get()->GetArgs());
 

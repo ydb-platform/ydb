@@ -35,7 +35,7 @@ namespace NSequenceShard {
     }
 
     void TSequenceShard::OnActivateExecutor(const TActorContext& ctx) {
-        SLOG_T("OnActivateExecutor");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"OnActivateExecutor");
 
         Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
         RunTxInitSchema(ctx);

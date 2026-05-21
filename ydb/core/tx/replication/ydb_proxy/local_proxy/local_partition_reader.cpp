@@ -79,12 +79,12 @@ private:
     }
 
     void HandleInit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        LOG_T("Handle on init " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle on init " << ev->Get()->ToString());
         RequestsQueue.emplace_back(ev->Sender, ev->Cookie, GetSkipCommit(ev));
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
     }
 
 private:
@@ -94,7 +94,7 @@ private:
     }
 
     void HandleOnInitOffset(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
@@ -158,7 +158,7 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         HandleInit(ev);
         Handle(RequestsQueue.front());
@@ -226,7 +226,7 @@ private:
     }
 
     void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
 
@@ -339,7 +339,7 @@ private:
 }; // TLocalTopicPartitionReaderActor
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     auto args = std::move(ev->Get()->GetArgs());
     auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);

@@ -14,7 +14,7 @@ namespace NSequenceShard {
         TTxType GetTxType() const override { return TXTYPE_MARK_SCHEMESHARD_PIPE; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            SLOG_T("TTxMarkSchemeShardPipe.Execute"
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxMarkSchemeShardPipe.Execute"
                 << " SchemeShardId# " << SchemeShardId
                 << " Generation# " << Generation
                 << " Round# " << Round);
@@ -32,7 +32,7 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext&) override {
-            SLOG_T("TTxMarkSchemeShardPipe.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxMarkSchemeShardPipe.Complete");
         }
 
         const ui64 SchemeShardId;

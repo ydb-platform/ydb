@@ -27,14 +27,14 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString()
             << ": entry# " << entry.ToString());
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
+            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unexpected status"
                 << ": entry# " << entry.ToString());
             return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }

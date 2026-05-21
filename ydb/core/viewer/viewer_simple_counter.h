@@ -33,7 +33,7 @@ public:
         MaxCounter = std::clamp<ui32>(FromStringWithDefault(params.Get("max_counter"), MaxCounter), 1, 100000);
         Period = std::clamp<ui32>(FromStringWithDefault(params.Get("period"), Period), 1, 100000);
         FailChance = std::clamp<ui32>(FromStringWithDefault(params.Get("fail_chance"), FailChance), 0, 100);
-        BLOG_D("Started MaxCounter: " << MaxCounter << ", Period: " << Period << ", FailChance: " << FailChance);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Started MaxCounter: " << MaxCounter << ", Period: " << Period << ", FailChance: " << FailChance);
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "text/plain"));
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
@@ -43,11 +43,11 @@ public:
     void HandleTimer() {
         ++Counter;
         if (FailChance > 0 && ((ui32)NPrivate::TRandom() % 100) < FailChance) {
-            BLOG_D("Simulate fail");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Simulate fail");
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("failed"));
             return ReplyAndPassAway();
         }
-        BLOG_D("Counter: " << Counter);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Counter: " << Counter);
         auto dataChunk = HttpResponse->CreateDataChunk(TStringBuilder() << Counter << "\n");
         if (Counter >= MaxCounter) {
             dataChunk->SetEndOfData();
@@ -61,7 +61,7 @@ public:
     }
 
     void Cancelled() {
-        BLOG_D("Cancelled");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Cancelled");
         ReplyAndPassAway();
     }
 
@@ -72,7 +72,7 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        BLOG_D("Done");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Done");
         HttpEvent.Reset(); // to avoid double reply
         TBase::ReplyAndPassAway("ok");
     }

@@ -259,7 +259,7 @@ public:
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
-        BLOG_TRACE("ProcessNodeIds()");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"ProcessNodeIds()");
 
         auto nodeStats = ev->Get()->Record.GetNodeStats();
         if (NeedNodesSorting() && Sort == ESort::NodeId && !IsNodeFilter()) {

@@ -16,20 +16,20 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            SLOG_T("TTxCreateSequence.Execute"
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxCreateSequence.Execute"
                 << " PathId# " << pathId
                 << " Record# " << msg->Record.ShortDebugString());
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvCreateSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxCreateSequence.Execute PIPE_OUTDATED"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxCreateSequence.Execute PIPE_OUTDATED"
                     << " PathId# " << pathId);
                 return true;
             }
 
             if (Self->Sequences.contains(pathId)) {
                 SetResult(NKikimrTxSequenceShard::TEvCreateSequenceResult::SEQUENCE_ALREADY_EXISTS);
-                SLOG_T("TTxCreateSequence.Execute SEQUENCE_ALREADY_EXISTS"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxCreateSequence.Execute SEQUENCE_ALREADY_EXISTS"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -102,7 +102,7 @@ namespace NSequenceShard {
                 NIceDb::TUpdate<Schema::Sequences::Cycle>(sequence.Cycle),
                 NIceDb::TUpdate<Schema::Sequences::State>(sequence.State));
             SetResult(NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
-            SLOG_N("TTxCreateSequence.Execute SUCCESS"
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxCreateSequence.Execute SUCCESS"
                 << " PathId# " << pathId
                 << " MinValue# " << sequence.MinValue
                 << " MaxValue# " << sequence.MaxValue
@@ -115,7 +115,7 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxCreateSequence.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxCreateSequence.Complete");
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

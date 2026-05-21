@@ -16,11 +16,11 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe succeeded"
+            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe succeeded"
                 << ": path# " << Database);
 
             for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
@@ -31,7 +31,7 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
 
             Reply(false, "Cannot resolve RESOURCE_ID");
         } else {
-            LOG_E("Describe failed"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe failed"
                 << ": path# " << Database
                 << ", status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString()

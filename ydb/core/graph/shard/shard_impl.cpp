@@ -19,17 +19,17 @@ TString TGraphShard::GetLogPrefix() const {
 }
 
 void TGraphShard::OnActivateExecutor(const TActorContext&) {
-    BLOG_D("OnActivateExecutor");
+    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"OnActivateExecutor");
     ExecuteTxInitSchema();
 }
 
 void TGraphShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) {
-    BLOG_D("OnTabletDead");
+    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"OnTabletDead");
     PassAway();
 }
 
 void TGraphShard::OnDetach(const TActorContext&) {
-    BLOG_D("OnDetach");
+    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"OnDetach");
     PassAway();
 }
 
@@ -50,9 +50,9 @@ void TGraphShard::OnReadyToWork() {
 }
 
 void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
-    BLOG_D("Updated Config to " << config.ShortDebugString());
+    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"Updated Config to " << config.ShortDebugString());
     if (config.HasBackendType()) {
-        BLOG_D("Updated BackendType");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"Updated BackendType");
         if (config.GetBackendType() == "Memory") {
             BackendType = EBackendType::Memory;
         }
@@ -64,11 +64,11 @@ void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
         }
     }
     if (config.HasAggregateCheckPeriodSeconds()) {
-        BLOG_D("Updated AggregateCheckPeriod");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"Updated AggregateCheckPeriod");
         AggregateCheckPeriod = TDuration::Seconds(config.GetAggregateCheckPeriodSeconds());
     }
     if (config.AggregationSettingsSize() != 0) {
-        BLOG_D("Updated AggregationSettings");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"Updated AggregationSettings");
         AggregateSettings.clear();
         for (const auto& protoSettings : config.GetAggregationSettings()) {
             TAggregateSettings& settings = AggregateSettings.emplace_back();
@@ -84,7 +84,7 @@ void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
         }
 
         if (AggregateSettings.empty()) {
-            BLOG_W("Settings are empty - fail-safe settings applied");
+            ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() <<"Settings are empty - fail-safe settings applied");
             AggregateSettings.emplace_back().PeriodToStart = TDuration::Days(7);
         }
     }
@@ -169,43 +169,43 @@ STFUNC(TGraphShard::StateWork) {
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
-            BLOG_W("StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+            ALOG_WARN(NKikimrServices::GRAPH, GetLogPrefix() <<"StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
         break;
     }
 }
 
 void TGraphShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
-    BLOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
+    ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Handle TEvTabletPipe::TEvServerConnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
 }
 
 void TGraphShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
-    BLOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
+    ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
 }
 
 void TGraphShard::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
-    BLOG_D("Handle TEvSubDomain::TEvConfigure(" << ev->Get()->Record.ShortDebugString() << ")");
+    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"Handle TEvSubDomain::TEvConfigure(" << ev->Get()->Record.ShortDebugString() << ")");
     Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
 }
 
 void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
-    BLOG_TRACE(ev->Get()->Record.ShortDebugString());
+    ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<ev->Get()->Record.ShortDebugString());
     if (ev->Get()->Record.HasTime()) { // direct insertion
         TMetricsData data;
         data.Timestamp = TInstant::Seconds(ev->Get()->Record.GetTime());
         MergeMetrics(data, ev->Get()->Record);
-        BLOG_TRACE("Executing direct TxStoreMetrics");
+        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Executing direct TxStoreMetrics");
         ExecuteTxStoreMetrics(std::move(data));
         return;
     }
     TInstant now = TInstant::Seconds(TActivationContext::Now().Seconds()); // 1 second resolution
-    BLOG_TRACE("Handle TEvGraph::TEvSendMetrics from " << ev->Sender << " now is " << now << " md.timestamp is " << MetricsData.Timestamp);
+    ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Handle TEvGraph::TEvSendMetrics from " << ev->Sender << " now is " << now << " md.timestamp is " << MetricsData.Timestamp);
     if (now != MetricsData.Timestamp) {
         if (MetricsData.Timestamp != TInstant()) {
-            BLOG_TRACE("Executing TxStoreMetrics");
+            ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Executing TxStoreMetrics");
             ExecuteTxStoreMetrics(std::move(MetricsData));
         }
-        BLOG_TRACE("Updating md.timestamp to " << now);
+        ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Updating md.timestamp to " << now);
         MetricsData.Timestamp = now;
         MetricsData.Values.clear();
     }
@@ -213,7 +213,7 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
         AggregateTimestamp = now;
         for (const auto& settings : AggregateSettings) {
             if (settings.IsItTimeToAggregate(now)) {
-                BLOG_TRACE("Executing TxAggregateData for " << settings.ToString());
+                ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Executing TxAggregateData for " << settings.ToString());
                 ExecuteTxAggregateData(settings);
             }
         }
@@ -223,13 +223,13 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
 }
 
 void TGraphShard::Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
-    BLOG_TRACE("Handle TEvGraph::TEvGetMetrics from " << ev->Sender);
+    ALOG_TRACE(NKikimrServices::GRAPH, GetLogPrefix() <<"Handle TEvGraph::TEvGetMetrics from " << ev->Sender);
     ExecuteTxGetMetrics(ev);
 }
 
 void TGraphShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
-    BLOG_D("Received TEvConsole::TEvConfigNotificationRequest with update of config: " << record.GetConfig().GetGraphConfig().ShortDebugString());
+    ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"Received TEvConsole::TEvConfigNotificationRequest with update of config: " << record.GetConfig().GetGraphConfig().ShortDebugString());
     ApplyConfig(record.GetConfig().GetGraphConfig());
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }

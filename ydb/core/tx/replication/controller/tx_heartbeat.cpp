@@ -33,17 +33,17 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute"
             << ": pending# " << Self->PendingHeartbeats.size());
 
         if (Self->Workers.empty()) {
-            CLOG_W(ctx, "There are no workers");
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"There are no workers");
             return true;
         }
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            CLOG_E(ctx, "Ambiguous replication instance");
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Ambiguous replication instance");
             return true;
         }
 
@@ -113,14 +113,14 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete"
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete"
             << ": pending# " << Self->PendingHeartbeats.size());
 
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
 
         if (auto& ev = CommitProposal) {
-            CLOG_N(ctx, "Propose commit"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Propose commit"
                 << ": writeTxId# " << Self->CommittingTxId);
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
@@ -157,12 +157,12 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute"
             << ": writeTxId# " << Self->CommittingTxId);
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            CLOG_E(ctx, "Ambiguous replication instance");
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Ambiguous replication instance");
             return true;
         }
 
@@ -173,7 +173,7 @@ public:
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
         if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            CLOG_W(ctx, "Error committing changes"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error committing changes"
                 << ": writeTxId# " << Self->CommittingTxId
                 << ", issues# " << NYql::IssuesFromMessageAsString(record.GetIssues()));
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
@@ -203,12 +203,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
         if (auto& ev = CommitProposal) {
-            CLOG_N(ctx, "Propose commit"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Propose commit"
                 << ": writeTxId# " << Self->CommittingTxId);
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
@@ -217,10 +217,10 @@ public:
 }; // TTxCommitChanges
 
 void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    LOG_TRACE_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     if (ev->Cookie != CommittingTxId) {
-        CLOG_E(ctx, "Cookie mismatch"
+        LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Cookie mismatch"
             << ": expected# " << CommittingTxId
             << ", got# " << ev->Cookie);
         return;

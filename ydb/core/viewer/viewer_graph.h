@@ -22,7 +22,7 @@ public:
     {}
 
     void Bootstrap() override {
-        BLOG_TRACE("Graph received request for " << Event->Get()->Request.GetUri());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Graph received request for " << Event->Get()->Request.GetUri());
         const auto& params(Event->Get()->Request.GetParams());
         NKikimrGraph::TEvGetMetrics getRequest;
         if (params.Has("target")) {

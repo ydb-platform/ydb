@@ -18,14 +18,14 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto& tenant = Ev->Get()->Tenant;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Cannot resolve database of unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Cannot resolve database of unknown replication"
                 << ": rid# " << rid);
             return true;
         }
@@ -33,13 +33,13 @@ public:
         Replication->SetDatabase(tenant);
 
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Database resolved"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Database resolved"
                 << ": rid# " << rid
                 << ", database# " << tenant);
 
             Self->UnresolvedDatabaseReplications.erase(Replication->GetId());
         } else {
-            CLOG_E(ctx, "Resolve database error"
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Resolve database error"
                 << ": rid# " << rid);
             Y_ABORT_UNLESS(!tenant);
 
@@ -63,7 +63,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Self->UnresolvedDatabaseReplications.empty()) {
             Self->SwitchToWork(ctx);

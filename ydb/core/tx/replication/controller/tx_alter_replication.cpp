@@ -19,7 +19,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvController::TEvAlterReplicationResult>();
@@ -30,7 +30,7 @@ public:
         Replication = Self->Find(pathId);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot alter unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Cannot alter unknown replication"
                 << ": pathId# " << pathId);
 
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::UNKNOWN);
@@ -127,7 +127,7 @@ public:
         }
 
         if (alter) {
-            CLOG_N(ctx, "Alter replication"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Alter replication"
                 << ": rid# " << Replication->GetId()
                 << ", pathId# " << pathId);
         } else {
@@ -138,7 +138,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

@@ -19,32 +19,32 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute"
             << ": workerId# " << WorkerId
             << ", error# " << Error);
 
         auto replication = Self->Find(WorkerId.ReplicationId());
         if (!replication) {
-            CLOG_W(ctx, "Unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
                 << ": rid# " << WorkerId.ReplicationId());
             return true;
         }
 
         if (replication->GetState() == TReplication::EState::Removing) {
-            CLOG_W(ctx, "Replication is being removed"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Replication is being removed"
                 << ": rid# " << WorkerId.ReplicationId());
             return true;
         }
 
         auto* target = replication->FindTarget(WorkerId.TargetId());
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown target"
                 << ": rid# " << WorkerId.ReplicationId()
                 << ", tid# " << WorkerId.TargetId());
             return true;
         }
 
-        CLOG_E(ctx, "Worker error"
+        LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Worker error"
             << ": rid# " << WorkerId.ReplicationId()
             << ", tid# " << WorkerId.TargetId()
             << ", error# " << Error);
@@ -69,7 +69,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
     }
 
 }; // TTxWorkerError

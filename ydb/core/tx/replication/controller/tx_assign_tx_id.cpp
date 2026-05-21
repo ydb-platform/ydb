@@ -70,7 +70,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute"
             << ": pending# " << Self->PendingTxId.size()
             << ", assigned# " << Self->AssignedTxIds.size()
             << ", allocated# " << Self->AllocatedTxIds.size());
@@ -135,7 +135,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete"
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete"
             << ": pending# " << Self->PendingTxId.size()
             << ", assigned# " << Self->AssignedTxIds.size()
             << ", allocated# " << Self->AllocatedTxIds.size()
@@ -171,7 +171,7 @@ void TController::RunTxAssignTxId(const TActorContext& ctx) {
 }
 
 void TController::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    LOG_TRACE_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     std::copy(ev->Get()->TxIds.begin(), ev->Get()->TxIds.end(), std::back_inserter(AllocatedTxIds));
     AllocateTxIdInFlight = false;

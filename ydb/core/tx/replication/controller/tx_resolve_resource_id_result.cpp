@@ -18,20 +18,20 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         const auto rid = Ev->Get()->ReplicationId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Resource id resolved"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Resource id resolved"
                 << ": rid# " << rid);
             Replication->UpdateResourceId(Ev->Get()->Value);
 
@@ -39,7 +39,7 @@ public:
                 NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString())
             );
         } else {
-            CLOG_E(ctx, "Resolve resource id error"
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Resolve resource id error"
                 << ": rid# " << rid
                 << ", error# " << Ev->Get()->Error);
             Replication->SetState(TReplication::EState::Error, Ev->Get()->Error);
@@ -54,7 +54,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

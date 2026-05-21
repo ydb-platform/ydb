@@ -16,12 +16,12 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            SLOG_T("TTxDropSequence.Execute"
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute"
                 << " PathId# " << pathId);
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxDropSequence.Execute PIPE_OUTDATED"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute PIPE_OUTDATED"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -29,7 +29,7 @@ namespace NSequenceShard {
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::SEQUENCE_NOT_FOUND);
-                SLOG_T("TTxDropSequence.Execute SEQUENCE_NOT_FOUND"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute SEQUENCE_NOT_FOUND"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -39,13 +39,13 @@ namespace NSequenceShard {
             Self->Sequences.erase(it);
 
             SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::SUCCESS);
-            SLOG_N("TTxDropSequence.Execute SUCCESS"
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute SUCCESS"
                 << " PathId# " << pathId);
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxDropSequence.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Complete");
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

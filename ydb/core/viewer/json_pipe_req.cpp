@@ -1158,7 +1158,7 @@ void TViewerPipeClient::RequestDone(i32 requests) {
         return;
     }
     if (requests > DataRequests) {
-        BLOG_ERROR("Requests count mismatch: " << requests << " > " << DataRequests);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Requests count mismatch: " << requests << " > " << DataRequests);
         if (Span) {
             Span.Event("Requests count mismatch");
         }
@@ -1196,7 +1196,7 @@ void TViewerPipeClient::Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TViewerPipeClient::Cancelled() {
-    BLOG_D("Request cancelled");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Request cancelled");
     AddEvent("Cancelled");
     PassAway();
 }

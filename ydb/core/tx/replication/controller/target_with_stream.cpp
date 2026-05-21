@@ -24,16 +24,16 @@ namespace {
 
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_W("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
+                LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
                 return Retry();
             }
 
-            LOG_E("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Stop.");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Stop.");
             return; // TODO: hard error
         }
 
@@ -53,7 +53,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     }
 
     void Retry() {
-        LOG_D("Retry");
+        LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 

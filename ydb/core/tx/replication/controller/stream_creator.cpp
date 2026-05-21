@@ -56,7 +56,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvPrivate::TEvAllowCreateStream::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         CreateStream();
     }
 
@@ -84,21 +84,21 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry CreateStream");
+                LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Retry CreateStream");
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error"
                 << ": status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
             return Reply(std::move(result));
         } else {
-            LOG_I("Success"
+            LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Success"
                 << ": issues# " << result.GetIssues().ToOneLineString());
             return CreateConsumer();
         }
@@ -136,7 +136,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
         auto& result = ev->Get()->Result;
 
         if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
@@ -145,15 +145,15 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry CreateConsumer");
+                LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Retry CreateConsumer");
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error"
                 << ": status# " << result.GetStatus()
                 << ", issues# " << result.GetIssues().ToOneLineString());
         } else {
-            LOG_I("Success"
+            LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Success"
                 << ": issues# " << result.GetIssues().ToOneLineString());
         }
 
@@ -176,16 +176,16 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_W("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Retry.");
+                LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Retry.");
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Stop.");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Stop.");
             NYdb::NIssue::TIssues issues = result.GetIssues();
             return Reply(NYdb::TStatus(result.GetStatus(), std::move(issues)));
         }

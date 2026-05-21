@@ -18,28 +18,28 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown target"
                 << ": rid# " << rid
                 << ", tid# " << tid);
             return true;
         }
 
         if (target->GetStreamState() != TReplication::EStreamState::Creating) {
-            CLOG_W(ctx, "Stream state mismatch"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Stream state mismatch"
                 << ": rid# " << rid
                 << ", tid# " << tid
                 << ", state# " << target->GetStreamState());
@@ -49,7 +49,7 @@ public:
         if (Ev->Get()->IsSuccess()) {
             target->SetStreamState(TReplication::EStreamState::Ready);
 
-            CLOG_N(ctx, "Stream created"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Stream created"
                 << ": rid# " << rid
                 << ", tid# " << tid);
         } else {
@@ -63,7 +63,7 @@ public:
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
                 << ": " << target->GetIssue());
 
-            CLOG_E(ctx, "Create stream error"
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Create stream error"
                 << ": rid# " << rid
                 << ", tid# " << tid
                 << ", status# " << status.GetStatus()
@@ -82,7 +82,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

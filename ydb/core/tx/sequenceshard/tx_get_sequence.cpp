@@ -18,12 +18,12 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            SLOG_T("TTxGetSequence.Execute"
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxGetSequence.Execute"
                 << " PathId# " << pathId);
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvGetSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxGetSequence.Execute PIPE_OUTDATED"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxGetSequence.Execute PIPE_OUTDATED"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -31,7 +31,7 @@ namespace NSequenceShard {
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvGetSequenceResult::SEQUENCE_NOT_FOUND);
-                SLOG_T("TTxGetSequence.Execute SEQUENCE_NOT_FOUND"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxGetSequence.Execute SEQUENCE_NOT_FOUND"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -45,7 +45,7 @@ namespace NSequenceShard {
                 case Schema::ESequenceState::Moved: {
                     SetResult(NKikimrTxSequenceShard::TEvGetSequenceResult::SEQUENCE_MOVED);
                     Result->Record.SetMovedTo(sequence.MovedTo);
-                    SLOG_T("TTxGetSequence.Execute SEQUENCE_MOVED"
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxGetSequence.Execute SEQUENCE_MOVED"
                         << " PathId# " << pathId
                         << " MovedTo# " << sequence.MovedTo);
                     return true;
@@ -61,13 +61,13 @@ namespace NSequenceShard {
             Result->Record.SetCache(sequence.Cache);
             Result->Record.SetIncrement(sequence.Increment);
             Result->Record.SetCycle(sequence.Cycle);
-            SLOG_N("TTxGetSequence.Execute SUCCESS"
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxGetSequence.Execute SUCCESS"
                 << " PathId# " << pathId);
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxGetSequence.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxGetSequence.Complete");
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

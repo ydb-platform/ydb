@@ -17,13 +17,13 @@ namespace NSequenceShard {
             auto pathId = msg->GetPathId();
             auto cache = msg->Record.GetCache();
 
-            SLOG_T("TTxAllocateSequence.Execute"
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute"
                 << " PathId# " << pathId
                 << " Cache# " << cache);
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxAllocateSequence.Execute PIPE_OUTDATED"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute PIPE_OUTDATED"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -31,7 +31,7 @@ namespace NSequenceShard {
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_NOT_FOUND);
-                SLOG_T("TTxAllocateSequence.Execute SEQUENCE_NOT_FOUND"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_NOT_FOUND"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -42,14 +42,14 @@ namespace NSequenceShard {
                     break;
                 case Schema::ESequenceState::Frozen: {
                     SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_FROZEN);
-                    SLOG_T("TTxAllocateSequence.Execute SEQUENCE_FROZEN"
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_FROZEN"
                         << " PathId# " << pathId);
                     return true;
                 }
                 case Schema::ESequenceState::Moved: {
                     SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_MOVED);
                     Result->Record.SetMovedTo(sequence.MovedTo);
-                    SLOG_T("TTxAllocateSequence.Execute SEQUENCE_MOVED"
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_MOVED"
                         << " PathId# " << pathId
                         << " MovedTo# " << sequence.MovedTo);
                     return true;
@@ -68,7 +68,7 @@ namespace NSequenceShard {
             if (res.second == 0) {
                 // Cannot allocate even a single value
                 SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_OVERFLOW);
-                SLOG_T("TTxAllocateSequence.Execute SEQUENCE_OVERFLOW"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_OVERFLOW"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -82,7 +82,7 @@ namespace NSequenceShard {
             Result->Record.SetAllocationStart(res.first);
             Result->Record.SetAllocationCount(res.second);
             Result->Record.SetAllocationIncrement(sequence.Increment);
-            SLOG_T("TTxAllocateSequence.Execute SUCCESS"
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SUCCESS"
                 << " PathId# " << pathId
                 << " AllocationStart# " << Result->Record.GetAllocationStart()
                 << " AllocationCount# " << Result->Record.GetAllocationCount()
@@ -171,7 +171,7 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxAllocateSequence.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Complete");
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

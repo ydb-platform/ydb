@@ -643,7 +643,7 @@ private:
         if (actor) {
             Register(actor);
         } else {
-            BLOG_ERROR("Unable to process EvViewerRequest");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Unable to process EvViewerRequest");
             Send(ev->Sender, new TEvViewer::TEvViewerResponse(), 0, ev->Cookie);
         }
     }

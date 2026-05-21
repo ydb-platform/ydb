@@ -142,7 +142,7 @@ NPG::TEvPGEvents::TRowValueField ColumnValueToRowValueField(NYdb::TValueParser& 
                         auto end(begin + result.Str.size());
                         return {.Value = std::vector<uint8_t>(begin, end)};
                     } else {
-                        BLOG_ERROR("Error converting value to binary format: " << result.Error.GetRef());
+                        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::LOCAL_PGWIRE,"Error converting value to binary format: " << result.Error.GetRef());
                     }
                     return {};
                 }

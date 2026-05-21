@@ -17,13 +17,13 @@ namespace NSequenceShard {
             auto pathId = msg->GetPathId();
             auto redirectTo = msg->Record.GetRedirectTo();
 
-            SLOG_T("TTxRedirectSequence.Execute"
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRedirectSequence.Execute"
                 << " PathId# " << pathId
                 << " RedirectTo# " << redirectTo);
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvRedirectSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxRedirectSequence.Execute PIPE_OUTDATED"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRedirectSequence.Execute PIPE_OUTDATED"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -31,7 +31,7 @@ namespace NSequenceShard {
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvRedirectSequenceResult::SEQUENCE_NOT_FOUND);
-                SLOG_T("TTxRedirectSequence.Execute SEQUENCE_NOT_FOUND"
+                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRedirectSequence.Execute SEQUENCE_NOT_FOUND"
                     << " PathId# " << pathId);
                 return true;
             }
@@ -54,14 +54,14 @@ namespace NSequenceShard {
                 NIceDb::TUpdate<Schema::Sequences::MovedTo>(sequence.MovedTo));
 
             SetResult(NKikimrTxSequenceShard::TEvRedirectSequenceResult::SUCCESS);
-            SLOG_N("TTxRedirectSequence.Execute SUCCESS"
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRedirectSequence.Execute SUCCESS"
                 << " PathId# " << pathId
                 << " RedirectTo# " << redirectTo);
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxRedirectSequence.Complete");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRedirectSequence.Complete");
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

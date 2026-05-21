@@ -34,7 +34,7 @@ TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
 
 void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
     auto path = MakeAbsolutePath(topicPath);
-    LOG_D("Describe topic '" << path << "'");
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Describe topic '" << path << "'");
 
     auto request = MakeHolder<TNavigate>();
     request->DatabaseName = Database;
@@ -45,7 +45,7 @@ void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvNavigateResult::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     auto& result = ev->Get()->Request;
     static const TString errorMarker = "LocalYdbProxy";
@@ -119,7 +119,7 @@ STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
 }
 
 void TBaseLocalTopicPartitionActor::DoCreatePipe() {
-    LOG_T("Create pipe to " << PartitionTabletId);
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Create pipe to " << PartitionTabletId);
 
     Attempt = 0;
     CreatePipe();
@@ -133,7 +133,7 @@ void TBaseLocalTopicPartitionActor::CreatePipe() {
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
 
     auto& msg = *ev->Get();
     if (msg.Status != NKikimrProto::OK) {
@@ -143,13 +143,13 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TP
         return CreatePipe();
     }
 
-    LOG_T("Pipe has been connected");
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Pipe has been connected");
 
     OnDescribeFinished();
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
     OnError("Pipe destroyed");
 }
 

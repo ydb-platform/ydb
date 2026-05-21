@@ -18,29 +18,29 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
 
         const auto rid = Ev->Get()->ReplicationId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
         if (Ev->Cookie != Replication->GetExpectedSecretResolverCookie()) {
-            CLOG_E(ctx, "Unexpected cookie"
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unexpected cookie"
                 << ": cookie# " << Ev->Cookie);
             return true;
         }
 
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Secret resolved"
+            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Secret resolved"
                 << ": rid# " << rid);
             Replication->UpdateSecret(Ev->Get()->Value);
         } else {
-            CLOG_E(ctx, "Resolve secret error"
+            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Resolve secret error"
                 << ": rid# " << rid
                 << ", error# " << Ev->Get()->Error);
             Replication->SetState(TReplication::EState::Error, Ev->Get()->Error);
@@ -56,7 +56,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

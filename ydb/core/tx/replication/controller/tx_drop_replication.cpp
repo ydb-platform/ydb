@@ -36,7 +36,7 @@ public:
     }
 
     bool ExecutePub(TTransactionContext& txc, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << PubEv->Get()->ToString());
 
         const auto& record = PubEv->Get()->Record;
         const auto pathId = TPathId::FromProto(record.GetPathId());
@@ -44,7 +44,7 @@ public:
         Replication = Self->Find(pathId);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot drop unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Cannot drop unknown replication"
                 << ": pathId# " << pathId);
 
             auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
@@ -89,7 +89,7 @@ public:
             }
         }
 
-        CLOG_N(ctx, "Drop replication"
+        LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Drop replication"
             << ": rid# " << Replication->GetId()
             << ", pathId# " << pathId);
 
@@ -98,19 +98,19 @@ public:
     }
 
     bool ExecutePriv(TTransactionContext& txc, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PrivEv->Get()->ToString());
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << PrivEv->Get()->ToString());
 
         const auto rid = PrivEv->Get()->ReplicationId;
         Replication = Self->Find(rid);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot drop unknown replication"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Cannot drop unknown replication"
                 << ": rid# " << rid);
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Removing) {
-            CLOG_W(ctx, "Replication state mismatch"
+            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Replication state mismatch"
                 << ": rid# " << rid
                 << ", state# " << Replication->GetState());
             return true;
@@ -135,7 +135,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
 
         if (Result) {
             ctx.Send(Result.Release());

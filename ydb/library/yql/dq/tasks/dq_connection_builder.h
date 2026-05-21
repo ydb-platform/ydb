@@ -50,6 +50,10 @@ void CommonBuildTasks(double aggrTasksRatio, ui32 maxHashShuffleTasks, TDqTasksG
             auto cnMap = maybeCnMap.Cast();
             const auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
             maxHashShuffleTasks = partitionsCount = originStageInfo.Tasks.size();
+        } else if (auto maybeCnStreamLookup = input.Maybe<NNodes::TDqCnStreamLookup>()) {
+            auto cnStreamLookup = maybeCnStreamLookup.Cast();
+            const auto& originStageInfo = graph.GetStageInfo(cnStreamLookup.Output().Stage());
+            maxHashShuffleTasks = partitionsCount = originStageInfo.Tasks.size();
         }
     }
 
@@ -218,7 +222,7 @@ void BuildStreamLookupChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, 
     auto& originStageInfo = graph.GetStageInfo(cnStreamLookup.Output().Stage());
     auto outputIndex = FromString<ui32>(cnStreamLookup.Output().Index().Value());
 
-    BuildUnionAllChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
+    BuildMapChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
 }
 
 template <typename TGraph>

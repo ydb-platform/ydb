@@ -1057,7 +1057,7 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         break;
     case WRITE_TX_COOKIE:
         PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
-        // The CmdWrite operation has been completed. We can send deferred TEvReadSetAck
+        // The CmdWrite result has been processed. We can now send deferred TEvReadSetAck.
         SendDeferredReadSetAcks(ctx);
         EndWriteTxs(resp, ctx);
         break;

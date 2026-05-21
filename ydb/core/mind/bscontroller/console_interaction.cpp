@@ -367,12 +367,11 @@ namespace NKikimr::NBsController {
             }
         }
 
+        AllowUnknownFields = record.GetAllowUnknownFields();
+        IsDryRun = record.GetDryRun();
+
         if (record.HasClusterYaml()) {
             PendingYamlConfig.emplace(record.GetClusterYaml());
-
-            // don't need to reset them explicitly
-            // every time we get new request we just replace them
-            AllowUnknownFields = record.GetAllowUnknownFields();
 
             if (Self.YamlConfig && PendingYamlConfig == std::get<0>(*Self.YamlConfig)) {
                 PendingYamlConfig.reset(); // no cluster yaml config changed
@@ -509,7 +508,11 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::ProcessDryRunResponse(bool success, TString errorReason) {
         if (success) {
-            CommitConfig();
+            if (IsDryRun) {
+                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
+            } else {
+                CommitConfig();
+            }
         } else {
             IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, std::move(errorReason));
         }

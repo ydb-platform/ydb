@@ -1,11 +1,11 @@
 Metadata-Version: 2.3
 Name: textual
-Version: 5.3.0
+Version: 6.12.0
 Summary: Modern Text User Interface framework
 License: MIT
 Author: Will McGugan
 Author-email: will@textualize.io
-Requires-Python: >=3.8.1,<4.0.0
+Requires-Python: >=3.9,<4.0
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Environment :: Console
 Classifier: Intended Audience :: Developers
@@ -20,13 +20,14 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
-Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Typing :: Typed
 Provides-Extra: syntax
-Requires-Dist: markdown-it-py[linkify,plugins] (>=2.1.0)
+Requires-Dist: markdown-it-py[linkify] (>=2.1.0)
+Requires-Dist: mdit-py-plugins
 Requires-Dist: platformdirs (>=3.6.0,<5)
 Requires-Dist: pygments (>=2.19.2,<3.0.0)
-Requires-Dist: rich (>=13.3.3)
+Requires-Dist: rich (>=14.2.0)
 Requires-Dist: tree-sitter (>=0.25.0) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: tree-sitter-bash (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: tree-sitter-css (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
@@ -38,8 +39,8 @@ Requires-Dist: tree-sitter-json (>=0.24.0) ; (python_version >= "3.10") and (ext
 Requires-Dist: tree-sitter-markdown (>=0.3.0) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: tree-sitter-python (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: tree-sitter-regex (>=0.24.0) ; (python_version >= "3.10") and (extra == "syntax")
-Requires-Dist: tree-sitter-rust (>=0.23.0,<=0.23.2) ; (python_version >= "3.10") and (extra == "syntax")
-Requires-Dist: tree-sitter-sql (>=0.3.0,<0.3.8) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-rust (>=0.23.0) ; (python_version >= "3.10") and (extra == "syntax")
+Requires-Dist: tree-sitter-sql (>=0.3.11) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: tree-sitter-toml (>=0.6.0) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: tree-sitter-xml (>=0.7.0) ; (python_version >= "3.10") and (extra == "syntax")
 Requires-Dist: tree-sitter-yaml (>=0.6.0) ; (python_version >= "3.10") and (extra == "syntax")
@@ -53,7 +54,7 @@ Description-Content-Type: text/markdown
 
 
 [![Discord](https://img.shields.io/discord/1026214085173461072)](https://discord.gg/Enf6Z3qhVr)
-[![Supported Python Versions](https://img.shields.io/pypi/pyversions/textual/1.0.0)](https://pypi.org/project/textual/)
+[![Supported Python Versions](https://img.shields.io/pypi/pyversions/textual)](https://pypi.org/project/textual/)
 [![PyPI version](https://badge.fury.io/py/textual.svg?)](https://badge.fury.io/py/textual)
 ![OS support](https://img.shields.io/badge/OS-macOS%20Linux%20Windows-red)
 

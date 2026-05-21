@@ -2,13 +2,14 @@
 
 PY3_LIBRARY()
 
-VERSION(5.3.0)
+VERSION(6.12.0)
 
 LICENSE(MIT)
 
 PEERDIR(
     contrib/python/Pygments
     contrib/python/markdown-it-py
+    contrib/python/mdit-py-plugins
     contrib/python/platformdirs
     contrib/python/rich
     contrib/python/typing-extensions
@@ -66,6 +67,7 @@ PY_SRCS(
     textual/_partition.py
     textual/_path.py
     textual/_profile.py
+    textual/_queue.py
     textual/_resolve.py
     textual/_segment_tools.py
     textual/_sleep.py
@@ -121,6 +123,9 @@ PY_SRCS(
     textual/css/transition.py
     textual/css/types.py
     textual/demo/__main__.py
+    textual/demo/_project_data.py
+    textual/demo/_project_stargazer_updater.py
+    textual/demo/_project_stars.py
     textual/demo/data.py
     textual/demo/demo_app.py
     textual/demo/game.py

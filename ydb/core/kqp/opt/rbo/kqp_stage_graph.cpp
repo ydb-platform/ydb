@@ -2,6 +2,8 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <util/generic/guid.h>
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -160,6 +162,15 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     Y_UNUSED(pos);
     Y_UNUSED(ctx);
     return inputStage;
+}
+
+ui32 TStageGraph::AddStage() {
+    ui32 newStageId = StageIds.size();
+    StageIds.push_back(newStageId);
+    StageInputs[newStageId] = TVector<ui32>();
+    StageOutputs[newStageId] = TVector<ui32>();
+    StageGUIDs[newStageId] = CreateGuidAsString();
+    return newStageId;
 }
 
 std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(ui32& stageInputCounter, TPositionHandle pos, TExprContext& ctx) const {

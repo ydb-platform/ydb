@@ -57,4 +57,4 @@ void TPropagateHashFuncStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     PropagateHashFuncs(root.PlanProps.StageGraph, ctx.KqpCtx.Config);
 }
 
-} // namespace NKikim::NKqp
+} // namespace NKikimr::NKqp

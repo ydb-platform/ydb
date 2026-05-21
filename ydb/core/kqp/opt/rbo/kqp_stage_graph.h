@@ -148,14 +148,7 @@ struct TStageGraph {
     THashMap<ui32, ui32> StageOutputIndices;
     THashMap<ui32, TString> StageGUIDs;
 
-    ui32 AddStage() {
-        ui32 newStageId = StageIds.size();
-        StageIds.push_back(newStageId);
-        StageInputs[newStageId] = TVector<ui32>();
-        StageOutputs[newStageId] = TVector<ui32>();
-        StageGUIDs[newStageId] = CreateGuidAsString();
-        return newStageId;
-    }
+    ui32 AddStage();
 
     ui32 AddSourceStage(const NYql::EStorageType& storageType) {
         ui32 res = AddStage();

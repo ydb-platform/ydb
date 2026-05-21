@@ -2507,6 +2507,119 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestCompactionSplitGranule(NTypeIds::Utf8);
     }
 
+    TString MakeTilingPlusPlusSchemaTxBody(ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
+        const std::vector<NArrow::NTest::TTestColumn>& ydbPk, const TString& featuresJson) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        UNIT_ASSERT(tx.ParseFromString(TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk)));
+        auto* planner = tx.MutableInitShard()
+                            ->MutableTables(0)
+                            ->MutableSchemaPreset()
+                            ->MutableSchema()
+                            ->MutableOptions()
+                            ->MutableCompactionPlannerConstructor();
+        planner->SetClassName("tiling++");
+        planner->MutableTiling()->SetJson(featuresJson);
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
+    void WriteCommittedPortion(TTestBasicRuntime & runtime, TActorId & sender, ui64 & writeId, ui64 tableId, ui64 & txId,
+        const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::pair<ui64, ui64> range, TPlanStep& planStep) {
+        const TString data = MakeTestBlob(range, ydbSchema);
+        UNIT_ASSERT(data.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+        UNIT_ASSERT(data.size() < NColumnShard::TLimits::GetMaxBlobSize());
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, ydbSchema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId++);
+    }
+
+    void WaitForCapturedCompactions(
+        TTestBasicRuntime & runtime, const TVector<THolder<IEventHandle>>& delayedCompactions, const ui32 expectedCount) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return delayedCompactions.size() >= expectedCount;
+        };
+        runtime.DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(delayedCompactions.size(), expectedCount);
+    }
+
+    Y_UNIT_TEST(TilingPlusPlusParallelCompactionScheduling) {
+        TTestBasicRuntime runtime;
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        const ui64 tableId = 1;
+        ui64 txId = 100;
+        TPlanStep planStep;
+        const auto ydbSchema = TTestSchema::YdbSchema();
+        const auto ydbPk = TTestSchema::YdbPkSchema();
+        Y_UNUSED(SetupSchema(runtime, sender, MakeTilingPlusPlusSchemaTxBody(tableId, ydbSchema, ydbPk, R"({
+            "accumulator_portion_size_limit":0,
+            "last_level_candidate_portions_overload":1,
+            "last_level_compaction_portions":1000000,
+            "last_level_compaction_bytes":1099511627776,
+            "compaction_threads":2
+        })"), 10));
+
+        TVector<THolder<IEventHandle>> delayedCompactions;
+        runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) {
+                if (msg->IndexChanges->TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
+                    delayedCompactions.emplace_back(ev.Release());
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        constexpr ui32 independentCandidates = 3;
+        for (ui32 i = 0; i < independentCandidates; ++i) {
+            const ui64 begin = i * 100000;
+            WriteCommittedPortion(runtime, sender, writeId, tableId, txId, ydbSchema, { begin, begin + 75000 }, planStep);
+            WriteCommittedPortion(runtime, sender, writeId, tableId, txId, ydbSchema, { begin, begin + 75000 }, planStep);
+        }
+
+        csDefaultControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+        WaitForCapturedCompactions(runtime, delayedCompactions, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(csDefaultControllerGuard->GetCompactionStartedCounter().Val(), 2,
+            "CompactionThreads=2 must allow two in-flight compactions in one BackgroundController session");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            csDefaultControllerGuard->GetCompactionFinishedCounter().Val(), 0, "delayed TEvWriteIndex events keep both compactions in-flight");
+
+        runtime.Send(delayedCompactions.front().Release(), 0, true);
+        delayedCompactions.erase(delayedCompactions.begin());
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        WaitForCapturedCompactions(runtime, delayedCompactions, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(csDefaultControllerGuard->GetCompactionStartedCounter().Val(), 3,
+            "finishing one compaction must feed TryScheduleCompaction -> StartCompactionTasksUpToLimit and start the next task");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            delayedCompactions.size(), 2, "MaxInflightCompactions must keep no more than two delayed/in-flight compactions");
+
+        runtime.SetEventFilter({});
+        for (auto& ev : delayedCompactions) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        delayedCompactions.clear();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(csDefaultControllerGuard->GetCompactionStartedCounter().Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(csDefaultControllerGuard->GetCompactionFinishedCounter().Val(), 3);
+    }
+
     Y_UNIT_TEST(ReadStale) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);

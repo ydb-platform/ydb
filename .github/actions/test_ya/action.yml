@@ -412,14 +412,13 @@ runs:
 
           # Run ./ya make inside a systemd-run transient scope with a memory limit.
           # When the scope exceeds MemoryMax, the kernel OOM-killer picks the single
-          # heaviest process in the cgroup and kills only that process. We DO NOT set
-          # memory.oom.group=1, so the whole cgroup (i.e. the entire ya make session)
-          # is not torn down -- only the offending process dies, ya make sees the
-          # failure and can mark just that test/build node as failed and continue.
-          #
+          # heaviest process in the cgroup and kills only that process. memory.oom.group
+          # defaults to 0 in cgroup v2, so the whole cgroup is NOT torn down -- only the
+          # offending process dies, ya make sees the failure and can mark just that
+          # test/build node as failed and continue. Scope units also don't auto-stop on
+          # OOM of a child process, so OOMPolicy is not needed (and not supported for
+          # scope units in older systemd anyway).
           # MemorySwapMax=0 disables swap for this scope so behavior is deterministic.
-          # OOMPolicy=continue keeps the scope unit alive after a single process is
-          # OOM-killed (the default 'stop' would terminate the scope on any OOM).
           TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
           # Reserve ~2 GiB for the OS / monitoring / s3cmd etc. and clamp to >= 4 GiB.
           YA_MAKE_MEM_MAX_KB=$(( TOTAL_MEM_KB - 2 * 1024 * 1024 ))
@@ -436,17 +435,24 @@ runs:
           # caller's process context and inherits its environment (via sudo -E),
           # so we do NOT pass --setenv -- referencing an unset variable there
           # would make systemd-run fail immediately and skip ya make entirely.
-          (sudo -E systemd-run --scope \
+          #
+          # `sudo -n </dev/null` and explicit `>> $YA_MAKE_OUTPUT 2>&1`:
+          # on Ubuntu sudo defaults to `use_pty`, which allocates a pty when its
+          # stdin is a tty. That pty bypasses our redirection and ya make output
+          # leaks straight to the terminal/stdout. Detaching stdin from a tty
+          # (</dev/null) forces sudo to use plain pipes and keeps the output
+          # captured in $YA_MAKE_OUTPUT only.
+          (sudo -n -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
-             -p OOMPolicy=continue \
              --uid=$(id -u) --gid=$(id -g) \
              -- \
              ./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
              $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
              --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
+           echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
 

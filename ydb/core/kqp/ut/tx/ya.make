@@ -21,6 +21,7 @@ SRCS(
     kqp_snapshot_isolation_ut.cpp
     kqp_tx_ut.cpp
     kqp_rollback.cpp
+    kqp_online_ro_ut.cpp
 )
 
 PEERDIR(

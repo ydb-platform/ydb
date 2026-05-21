@@ -1350,6 +1350,14 @@ public:
             return false;
         }
 
+        if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->IsSnapshotROConvertedFromOnlineRO) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder()
+                                << "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
+                                << "Use Serializable or Snapshot Read-Only mode instead.");
+            return false;
+        }
+
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
                 && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,

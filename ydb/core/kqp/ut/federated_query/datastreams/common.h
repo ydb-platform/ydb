@@ -125,7 +125,13 @@ public:
 
     void ReadTopicMessage(const std::string& topicName, const std::string& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false);
 
-    void ReadTopicMessages(const std::string& topicName, std::vector<std::string> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false, bool local = false);
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const std::string& topicName,
+        std::vector<std::string> expectedMessages,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
+        bool local = false,
+        bool checkResult = true);
 
     void TestReadTopicBasic(const std::string& testSuffix);
 

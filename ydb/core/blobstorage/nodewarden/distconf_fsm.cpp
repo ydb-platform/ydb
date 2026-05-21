@@ -182,7 +182,7 @@ namespace NKikimr::NStorage {
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
-            TEvGather::TCollectConfigs *res, std::optional<TStringBuf> selfAssemblyUUID, bool dryRun) {
+            TEvGather::TCollectConfigs *res, std::optional<TString> selfAssemblyUUID, bool dryRun) {
         TStringStream err;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -420,8 +420,7 @@ namespace NKikimr::NStorage {
                         selfAssemblyUUID.emplace(CurrentSelfAssemblyUUID.value());
                     } else {
                         // in dry run mode, use a temporary UUID without modifying state
-                        const TString tempUUID = CreateGuidAsString();
-                        selfAssemblyUUID.emplace(tempUUID);
+                        selfAssemblyUUID.emplace(CreateGuidAsString());
                     }
                 }
                 propositionBase.emplace(*baseConfig);

@@ -1,5 +1,5 @@
-#include "audit_log_service.h"
-#include "audit_log.h"
+#include <ydb/core/audit/audit_log_service.h>
+#include <ydb/core/audit/audit_log.h>
 
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
@@ -145,7 +145,9 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"fe", "\xfe\xfe"},
         };
 
-        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), "name=value, fe=FEFE"); // non utf-8 is in hex
+        const TString result = test.SendAuditLog(std::move(parts));
+        UNIT_ASSERT_STRING_CONTAINS(result, "fe=FEFE"); // non utf-8 is in hex
+        UNIT_ASSERT_STRING_CONTAINS(result, "name=value");
     }
 
     Y_UNIT_TEST(LoggingJson) {
@@ -156,7 +158,9 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"fe", "\xfe\xfe"},
         };
 
-        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), R"({"name":"value","fe":"FEFE"})");
+        const TString result = test.SendAuditLog(std::move(parts));
+        UNIT_ASSERT_STRING_CONTAINS(result, R"("name":"value")");
+        UNIT_ASSERT_STRING_CONTAINS(result, R"("fe":"FEFE")"); // non utf-8 is in hex
     }
 
     Y_UNIT_TEST(LoggingJsonLog) {
@@ -167,7 +171,45 @@ Y_UNIT_TEST_SUITE(AuditLogWriterServiceTest) {
             {"fe", "\xfe\xfe"},
         };
 
-        UNIT_ASSERT_STRING_CONTAINS(test.SendAuditLog(std::move(parts)), R"("@log_type":"audit","name":"value","fe":"FEFE"})");
+        const TString result = test.SendAuditLog(std::move(parts));
+        UNIT_ASSERT_STRING_CONTAINS(result, R"("@timestamp":)");
+        UNIT_ASSERT_STRING_CONTAINS(result, R"("@log_type":"audit")");
+        UNIT_ASSERT_STRING_CONTAINS(result, R"("fe":"FEFE")"); // non utf-8 is in hex
+        UNIT_ASSERT_STRING_CONTAINS(result, R"("name":"value")");
+    }
+
+    Y_UNIT_TEST(SortParts) {
+        TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
+
+        // Parts are intentionally given in random priority order to verify sorting
+        TAuditLogParts parts = {
+            {"remote_address",  "192.168.1.1"},
+            {"status",          "ERROR"},
+            {"operation",       "DESCRIBE TABLE"},
+            {"subject",         "user@domain"},
+            {"component",       "schemeshard"},
+            {"tx_id",           "281474976710656"},
+            {"resource_id",     "resource-abc"},
+            {"folder_id",       "folder-abc"},
+            {"cloud_id",        "cloud-abc"},
+            {"reason",          "Access denied"},
+            {"detailed_status", "UNAUTHORIZED"},
+            {"paths",           "/my/db/table1, /my/db/table2"},
+            {"database",        "/my/db"},
+            {"masked_token",    "user***"},
+            {"sanitized_token", "user@domain"},
+        };
+
+        // Verify the full sorted output in one assertion:
+        // known fields ordered by priority (0..12), then unknown fields lexicographically (paths < tx_id)
+        UNIT_ASSERT_STRING_CONTAINS(
+            test.SendAuditLog(std::move(parts)),
+            "component=schemeshard, subject=user@domain, remote_address=192.168.1.1, "
+            "sanitized_token=user@domain, masked_token=user***, operation=DESCRIBE TABLE, "
+            "status=ERROR, detailed_status=UNAUTHORIZED, reason=Access denied, "
+            "cloud_id=cloud-abc, folder_id=folder-abc, resource_id=resource-abc, "
+            "database=/my/db, paths=/my/db/table1, /my/db/table2, tx_id=281474976710656"
+        );
     }
 }
 
@@ -184,7 +226,12 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
 
         auto waitAndCheckLog = [&]() {
             const TString log = test.WaitAuditLog();
-            UNIT_ASSERT_STRING_CONTAINS(log, "component=audit-service, subject=metadata@system, sanitized_token={none}, operation=HEARTBEAT, status=SUCCESS, node_id=1");
+            UNIT_ASSERT_STRING_CONTAINS(log, "component=audit-service");
+            UNIT_ASSERT_STRING_CONTAINS(log, "subject=metadata@system");
+            UNIT_ASSERT_STRING_CONTAINS(log, "sanitized_token={none}");
+            UNIT_ASSERT_STRING_CONTAINS(log, "operation=HEARTBEAT");
+            UNIT_ASSERT_STRING_CONTAINS(log, "status=SUCCESS");
+            UNIT_ASSERT_STRING_CONTAINS(log, "node_id=1");
         };
 
         waitAndCheckLog();

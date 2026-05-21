@@ -406,6 +406,12 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1024)
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
+        config.Opts->AddLongOption("partition-write-speed-mps", "Partition write speed in messages per second")
+            .Optional()
+            .StoreResult(&PartitionWriteSpeedMessagesPerSecond_);
+        config.Opts->AddLongOption("partition-write-burst-messages", "Partition write burst in messages")
+            .Optional()
+            .StoreResult(&PartitionWriteBurstMessages_);
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
             .DefaultValue(0)
             .Optional()
@@ -457,6 +463,12 @@ namespace NYdb::NConsoleClient {
         settings.PartitioningSettings(MinActivePartitions_, finalMaxActivePartitions, autoscaleSettings);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
+        if (PartitionWriteSpeedMessagesPerSecond_.Defined()) {
+            settings.PartitionWriteSpeedMessagesPerSecond(*PartitionWriteSpeedMessagesPerSecond_);
+        }
+        if (PartitionWriteBurstMessages_.Defined()) {
+            settings.PartitionWriteBurstMessages(*PartitionWriteBurstMessages_);
+        }
 
         auto codecs = GetCodecs();
         if (!codecs.empty()) {
@@ -503,6 +515,12 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
+        config.Opts->AddLongOption("partition-write-speed-mps", "Partition write speed in messages per second")
+            .Optional()
+            .StoreResult(&PartitionWriteSpeedMessagesPerSecond_);
+        config.Opts->AddLongOption("partition-write-burst-messages", "Partition write burst in messages")
+            .Optional()
+            .StoreResult(&PartitionWriteBurstMessages_);
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
             .Optional()
             .StoreResult(&RetentionStorageMb_);
@@ -582,6 +600,16 @@ namespace NYdb::NConsoleClient {
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {
             settings.SetPartitionWriteSpeedBytesPerSecond(*PartitionWriteSpeedKbps_ * 1_KB);
             settings.SetPartitionWriteBurstBytes(*PartitionWriteSpeedKbps_ * 1_KB);
+        }
+
+        const auto& topicDescription = describeResult.GetTopicDescription();
+        if (PartitionWriteSpeedMessagesPerSecond_.Defined()
+            && topicDescription.GetPartitionWriteSpeedMessagesPerSecond() != *PartitionWriteSpeedMessagesPerSecond_) {
+            settings.SetPartitionWriteSpeedMessagesPerSecond(*PartitionWriteSpeedMessagesPerSecond_);
+        }
+        if (PartitionWriteBurstMessages_.Defined()
+            && topicDescription.GetPartitionWriteBurstMessages() != *PartitionWriteBurstMessages_) {
+            settings.SetPartitionWriteBurstMessages(*PartitionWriteBurstMessages_);
         }
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified && GetMeteringMode() != describeResult.GetTopicDescription().GetMeteringMode()) {

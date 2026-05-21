@@ -3842,6 +3842,7 @@ private:
                 bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4015,6 +4016,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4207,6 +4209,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4462,6 +4465,7 @@ private:
                 const bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -4807,6 +4811,7 @@ private:
                 bool cacheHit = f.GetValue();
                 outYPaths = PrepareDestinations(execCtx->OutTables_, execCtx, entry, !cacheHit);
                 if (cacheHit) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }
@@ -5656,6 +5661,7 @@ private:
         return future
             .Apply([execCtx, entry, mapOpSpec = std::move(mapOpSpec), job, tmpTable, lambda, extraUsage, tmpFiles] (const TFuture<bool>& f) {
                 if (f.GetValue()) {
+                    execCtx->ReportFullCaptureCacheHit();
                     execCtx->QueryCacheItem.Destroy();
                     return MakeFuture();
                 }

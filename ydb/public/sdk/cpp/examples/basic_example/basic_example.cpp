@@ -424,7 +424,7 @@ void StreamQuerySelect(TQueryClient client) {
                                 .Build();
 
         for (auto& parser : TResultSetRange(
-                session.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync())) {
+                session.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).ExtractValueSync())) {
             std::cout << "Season" << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
                     << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
                     << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())

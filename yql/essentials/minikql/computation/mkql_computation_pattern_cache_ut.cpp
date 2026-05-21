@@ -19,6 +19,39 @@
 namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
+namespace {
+class TMockComputationPattern final: public IComputationPattern {
+public:
+    explicit TMockComputationPattern(size_t codeSize)
+        : Size_(codeSize)
+    {
+    }
+
+    void Compile(TString, IStatsRegistry*) override {
+        Compiled_ = true;
+    }
+    bool IsCompiled() const override {
+        return Compiled_;
+    }
+    size_t CompiledCodeSize() const override {
+        return Size_;
+    }
+    void RemoveCompiledCode() override {
+        Compiled_ = false;
+    }
+    THolder<IComputationGraph> Clone(const TComputationOptsFull&) override {
+        return {};
+    }
+    bool GetSuitableForCache() const override {
+        return true;
+    }
+
+private:
+    const size_t Size_;
+    bool Compiled_ = false;
+};
+
+} // namespace
 
 TComputationNodeFactory GetListTestFactory() {
     return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
@@ -593,37 +626,6 @@ Y_UNIT_TEST(Smoke) {
 }
 
 Y_UNIT_TEST(DoubleNotifyPatternCompiled) {
-    class TMockComputationPattern final: public IComputationPattern {
-    public:
-        explicit TMockComputationPattern(size_t codeSize)
-            : Size_(codeSize)
-        {
-        }
-
-        void Compile(TString, IStatsRegistry*) override {
-            Compiled_ = true;
-        }
-        bool IsCompiled() const override {
-            return Compiled_;
-        }
-        size_t CompiledCodeSize() const override {
-            return Size_;
-        }
-        void RemoveCompiledCode() override {
-            Compiled_ = false;
-        }
-        THolder<IComputationGraph> Clone(const TComputationOptsFull&) override {
-            return {};
-        }
-        bool GetSuitableForCache() const override {
-            return true;
-        }
-
-    private:
-        const size_t Size_;
-        bool Compiled_ = false;
-    };
-
     const TString key = "program";
     const ui32 cacheSize = 2;
     TComputationPatternLRUCache cache({cacheSize, cacheSize});
@@ -854,6 +856,65 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
         Cerr << "lambda: " << Sprintf("%.3f", total.SecondsFloat()) << "s" << Endl;
     }
 }
+
+Y_UNIT_TEST(UpdateConfigurationResize) {
+    constexpr size_t patternSize = 100;
+    constexpr size_t patternCount = 4;
+    constexpr size_t initialMaxBytes = patternSize * patternCount;
+
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto maxSizeBytes = counters->GetCounter("PatternCache/MaxSizeBytes", false);
+    auto maxCompiledSizeBytes = counters->GetCounter("PatternCache/MaxCompiledSizeBytes", false);
+    auto sizeCompiledBytes = counters->GetCounter("PatternCache/SizeCompiledBytes", false);
+
+    TComputationPatternLRUCache cache({initialMaxBytes, initialMaxBytes, 0}, counters);
+
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxSizeBytes), initialMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxCompiledSizeBytes), initialMaxBytes);
+
+    TVector<TString> keys;
+    for (size_t i = 0; i < patternCount; ++i) {
+        TString key = "p" + ToString(i);
+        keys.push_back(key);
+        auto entry = std::make_shared<TPatternCacheEntry>();
+        entry->Pattern = MakeIntrusive<TMockComputationPattern>(patternSize);
+        entry->Pattern->Compile("", nullptr);
+        cache.EmplacePattern(key, entry);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledBytes), patternSize * patternCount);
+
+    // Resize up: entries preserved, sensors reflect new limit.
+    constexpr size_t expandedMaxBytes = initialMaxBytes * 2;
+    cache.UpdateConfiguration({expandedMaxBytes, expandedMaxBytes, 0});
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxSizeBytes), expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxCompiledSizeBytes), expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(cache.GetConfiguration().MaxSizeBytes, expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledBytes), patternSize * patternCount);
+    for (const auto& key : keys) {
+        auto entry = cache.Find(key);
+        UNIT_ASSERT(entry);
+        UNIT_ASSERT(entry->Pattern->IsCompiled());
+    }
+
+    // Resize down past current compiled usage: oldest compiled code evicted.
+    constexpr size_t shrunkMaxBytes = patternSize * 2;
+    cache.UpdateConfiguration({expandedMaxBytes, shrunkMaxBytes, 0});
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxSizeBytes), expandedMaxBytes);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxCompiledSizeBytes), shrunkMaxBytes);
+    UNIT_ASSERT_LE(static_cast<size_t>(*sizeCompiledBytes), shrunkMaxBytes);
+    // Entries themselves still resolvable; only the compiled code of the LRU
+    // entries was dropped.
+    size_t stillCompiled = 0;
+    for (const auto& key : keys) {
+        auto entry = cache.Find(key);
+        UNIT_ASSERT(entry);
+        if (entry->Pattern->IsCompiled()) {
+            ++stillCompiled;
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(stillCompiled, shrunkMaxBytes / patternSize);
+}
+
 } // Y_UNIT_TEST_SUITE(ComputationPatternCache)
 
 } // namespace NKikimr::NMiniKQL

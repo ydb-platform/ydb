@@ -9593,4 +9593,46 @@ namespace {
         input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputRowType));
         return IGraphTransformer::TStatus::Ok;
     }
+
+    IGraphTransformer::TStatus WatermarkGeneratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto source = input->Child(TCoWatermarkGenerator::idx_Input);
+        auto& watermarkExtractor = input->ChildRef(TCoWatermarkGenerator::idx_WatermarkExtractor);
+
+        if (source->GetTypeAnn() && source->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(source->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+        if (!EnsureListType(*source, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto itemType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
+        bool isUniversal = false;
+        if (auto status = ConvertToLambda(watermarkExtractor, ctx.Expr, isUniversal, /* argumentsCount = */ 1);
+            status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(watermarkExtractor, {itemType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (!watermarkExtractor->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        if (!EnsureSpecificDataType(*watermarkExtractor, EDataSlot::Timestamp, ctx.Expr, /* allowOptional = */ true)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(source->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
 } // namespace NYql::NTypeAnnImpl

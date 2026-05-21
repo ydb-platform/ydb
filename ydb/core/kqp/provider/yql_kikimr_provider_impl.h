@@ -26,7 +26,7 @@ private:
 
 class TKiSinkVisitorTransformer : public TSyncTransformerBase {
 public:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
     void Rewind() override {
     }

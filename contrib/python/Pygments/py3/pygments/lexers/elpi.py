@@ -4,16 +4,17 @@
 
     Lexer for the `Elpi <http://github.com/LPCIC/elpi>`_ programming language.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
-from pygments.lexer import RegexLexer, bygroups, include
+from pygments.lexer import RegexLexer, bygroups, include, using
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
     Number, Punctuation
 
 __all__ = ['ElpiLexer']
 
+from pygments.lexers.theorem import CoqLexer
 
 class ElpiLexer(RegexLexer):
     """
@@ -51,7 +52,7 @@ class ElpiLexer(RegexLexer):
             (r"(:before|:after|:if|:name)(\s*)(\")",
              bygroups(Keyword.Mode, Text.Whitespace, String.Double),
              'elpi-string'),
-            (r"(:index)(\s*\()", bygroups(Keyword.Mode, Text.Whitespace),
+            (r"(:index)(\s*)(\()", bygroups(Keyword.Mode, Text.Whitespace, Punctuation),
              'elpi-indexing-expr'),
             (rf"\b(external pred|pred)(\s+)({const_sym_re})",
              bygroups(Keyword.Declaration, Text.Whitespace, Name.Function),
@@ -63,6 +64,9 @@ class ElpiLexer(RegexLexer):
              bygroups(Keyword.Declaration, Text.Whitespace, Name.Function),
              'elpi-type'),
             (rf"\b(typeabbrev)(\s+)({const_sym_re})",
+             bygroups(Keyword.Declaration, Text.Whitespace, Name.Function),
+             'elpi-type'),
+            (r"\b(typeabbrev)(\s+)(\([^)]+\))",
              bygroups(Keyword.Declaration, Text.Whitespace, Name.Function),
              'elpi-type'),
             (r"\b(accumulate)(\s+)(\")",
@@ -79,7 +83,7 @@ class ElpiLexer(RegexLexer):
              'elpi-chr-rule-start'),
 
             (rf"(?=[A-Z_]){constant_re}", Name.Variable),
-            (rf"(?=[a-z_]){constant_re}\\", Name.Variable),
+            (rf"(?=[a-z_])({constant_re}|_)\\", Name.Variable),
             (r"_", Name.Variable),
             (rf"({symbol_re}|!|=>|;)", Keyword.Declaration),
             (constant_re, Text),
@@ -89,23 +93,19 @@ class ElpiLexer(RegexLexer):
             (r'\'', String.Double, 'elpi-tick'),
             (r'\{\{', Punctuation, 'elpi-quote'),
             (r'\{[^\{]', Text, 'elpi-spill'),
-            (r"\(", Text, 'elpi-in-parens'),
+            (r"\(", Punctuation, 'elpi-in-parens'),
             (r'\d[\d_]*', Number.Integer),
             (r'-?\d[\d_]*(.[\d_]*)?([eE][+\-]?\d[\d_]*)', Number.Float),
             (r"[\+\*\-/\^\.]", Operator),
         ],
         '_elpi-comment': [
             (r'%[^\n]*\n', Comment),
-            (r'/\*', Comment, 'elpi-multiline-comment'),
+            (r'/(?:\\\n)?[*](?:[^*]|[*](?!(?:\\\n)?/))*[*](?:\\\n)?/', Comment),
             (r"\s+", Text.Whitespace),
-        ],
-        'elpi-multiline-comment': [
-            (r'\*/', Comment, '#pop'),
-            (r'.', Comment)
         ],
         'elpi-indexing-expr':[
             (r'[0-9 _]+', Number.Integer),
-            (r'\)', Text, '#pop'),
+            (r'\)', Punctuation, '#pop'),
         ],
         'elpi-type': [
             (r"(ctype\s+)(\")", bygroups(Keyword.Type, String.Double), 'elpi-string'),
@@ -116,13 +116,13 @@ class ElpiLexer(RegexLexer):
             include('_elpi-comment'),
         ],
         'elpi-chr-rule-start': [
-            (r"\{", Text, 'elpi-chr-rule'),
+            (r"\{", Punctuation, 'elpi-chr-rule'),
             include('_elpi-comment'),
         ],
         'elpi-chr-rule': [
            (r"\brule\b", Keyword.Declaration),
            (r"\\", Keyword.Declaration),
-           (r"\}", Text, '#pop:2'),
+           (r"\}", Punctuation, '#pop:2'),
            include('elpi'),
         ],
         'elpi-pred-item': [
@@ -152,11 +152,15 @@ class ElpiLexer(RegexLexer):
             (r'"', String.Double, '#pop'),
         ],
         'elpi-quote': [
-            (r'\{\{', Punctuation, '#push'),
             (r'\}\}', Punctuation, '#pop'),
-            (rf"(lp:)((?=[A-Z_]){constant_re})", bygroups(Keyword, Name.Variable)),
-            (r"[^l\}]+", Text),
-            (r"l|\}", Text),
+            (r"\s+", Text.Whitespace),
+            (r"(lp:)(\{\{)", bygroups(Number, Punctuation), 'elpi-quote-exit'),
+            (rf"(lp:)((?=[A-Z_]){constant_re})", bygroups(Number, Name.Variable)),
+            (r"((?!lp:|\}\}).)+", using(CoqLexer)),
+        ],
+        'elpi-quote-exit': [
+            include('elpi'),
+            (r'\}\}', Punctuation, '#pop'),
         ],
         'elpi-spill': [
             (r'\{[^\{]', Text, '#push'),
@@ -164,9 +168,8 @@ class ElpiLexer(RegexLexer):
             include('elpi'),
         ],
         'elpi-in-parens': [
-            (r"\(", Operator, '#push'),
-            (r"\)", Operator, '#pop'),
+            (r"\(", Punctuation, '#push'),
             include('elpi'),
+            (r"\)", Punctuation, '#pop'),
         ],
-
     }

@@ -123,7 +123,7 @@ TComputationPatternOpts::TComputationPatternOpts(TAllocState& allocState, const 
 
 TComputationOptsFull::TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, const TTypeEnvironment& typeEnv, IRandomProvider& randomProvider,
                                            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider,
-                                           NUdf::ICountersProvider* countersProvider, const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver, const NYql::TRuntimeSettings& runtimeSettings)
+                                           NUdf::ICountersProvider* countersProvider, const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver, NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : TComputationOpts(stats)
     , AllocState(allocState)
     , TypeEnv(typeEnv)
@@ -134,7 +134,7 @@ TComputationOptsFull::TComputationOptsFull(IStatsRegistry* stats, TAllocState& a
     , CountersProvider(countersProvider)
     , LogProvider(logProvider)
     , LangVer(langver)
-    , RuntimeSettings(runtimeSettings)
+    , RuntimeSettings(std::move(runtimeSettings))
 {
 }
 
@@ -201,7 +201,7 @@ TComputationOptsFull TComputationPatternOpts::ToComputationOptions(IRandomProvid
     return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState,
                                 Env, randomProvider, timeProvider,
                                 ValidatePolicy, SecureParamsProvider,
-                                CountersProvider, LogProvider, LangVer, *RuntimeSettings.Get());
+                                CountersProvider, LogProvider, LangVer, RuntimeSettings);
 }
 
 TComputationPatternOpts::~TComputationPatternOpts() = default;
@@ -223,7 +223,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
                                          const TComputationMutables& mutables,
                                          arrow::MemoryPool& arrowMemoryPool,
                                          TMaybe<NUdf::TSourcePosition>& notConsumedLinear,
-                                         const NYql::TRuntimeSettings& runtimeSettings)
+                                         NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     : TComputationContextLLVM{.HolderFactory = holderFactory, .Stats = opts.Stats, .MutableValues = std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), .Builder = builder}
     , RandomProvider(opts.RandomProvider)
@@ -238,7 +238,8 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , LogProvider(opts.LogProvider)
     , LangVer(opts.LangVer)
     , NotConsumedLinear(notConsumedLinear)
-    , RuntimeSettings(runtimeSettings)
+    , RuntimeSettings(*runtimeSettings)
+    , RuntimeSettingsPtr_(std::move(runtimeSettings))
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 
@@ -267,6 +268,10 @@ TComputationContext::~TComputationContext() {
 
 NUdf::TLoggerPtr TComputationContext::MakeLogger() const {
     return LogProvider ? LogProvider->MakeLogger() : NUdf::MakeNullLogger();
+}
+
+NYql::TRuntimeSettings::TConstPtr TComputationContext::GetRuntimeSettingsSharedPtr() const {
+    return RuntimeSettingsPtr_;
 }
 
 void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {

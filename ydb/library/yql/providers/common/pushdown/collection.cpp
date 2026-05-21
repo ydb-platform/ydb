@@ -222,7 +222,7 @@ private:
     bool IsMemberColumn(const TCoMember& member) {
         // Allow member access for top level predicate argument
         if (member.Struct().Raw() == LambdaArg.Raw()) {
-            return true;
+            return Settings.IsMemberEnabled(TString(member.Name().Value()));
         }
         if (Settings.IsEnabled(EFlag::StructOperators)) {
             return CheckExpressionNodeForPushdown(member.Struct());
@@ -335,6 +335,12 @@ private:
 
 public:
     bool CheckExpressionNodeForPushdown(const TExprBase& node) {
+        if (auto maybeMember = node.Maybe<TCoMember>()) {
+            return IsMemberColumn(maybeMember.Cast());
+        }
+        if (Settings.IsEnabled(EFlag::AnyExpressionExceptMember)) {
+            return true;
+        }
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
             return IsSupportedSafeCast(maybeSafeCast.Cast());
         }
@@ -346,9 +352,6 @@ public:
         }
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {
             return IsSupportedDataType(maybeData.Cast());
-        }
-        if (auto maybeMember = node.Maybe<TCoMember>()) {
-            return IsMemberColumn(maybeMember.Cast());
         }
         if (auto maybeNth = node.Maybe<TCoNth>()) {
             return IsSupportedNth(maybeNth.Cast());

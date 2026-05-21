@@ -482,7 +482,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 }
                 if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
                     for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                        renames.emplace_back(index, EJoinSide::kRight);       
+                        renames.emplace_back(index, EJoinSide::kRight);
                     }
                 }
                 return TGraceJoinRenames::FromDq(renames);
@@ -530,6 +530,31 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
         } else {
             return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
         }
+    });
+
+    compiler->AddCallable(TDqPhyWatermarkGenerator::CallableName(), [kqpCtx = std::ref(ctx)](const TExprNode& node, TMkqlBuildContext& ctx) {
+        TDqPhyWatermarkGenerator wg(&node);
+
+        const auto input = MkqlBuildExpr(*wg.Input().Raw(), ctx);
+
+        const auto watermarkExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.WatermarkExtractor().Raw(), ctx, {item});
+        };
+
+        const auto partitionIdExtractor = [&](TRuntimeNode item) {
+            return MkqlBuildLambda(*wg.PartitionIdExtractor().Raw(), ctx, {item});
+        };
+
+        std::vector<std::string_view> watermarkSettings;
+        watermarkSettings.reserve(2 * wg.WatermarkSettings().Size());
+        for (const auto& nameValue : wg.WatermarkSettings()) {
+            const auto name = nameValue.Name().Value();
+            watermarkSettings.push_back(name);
+            const auto value = nameValue.Value().Cast<TCoAtom>().Value();
+            watermarkSettings.push_back(value);
+        }
+
+        return kqpCtx.get().PgmBuilder().DqWatermarkGenerator(input, watermarkExtractor, partitionIdExtractor, watermarkSettings);
     });
 
     compiler->AddCallable("FulltextAnalyze",

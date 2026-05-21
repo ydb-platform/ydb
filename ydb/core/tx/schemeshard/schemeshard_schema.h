@@ -2215,12 +2215,31 @@ struct Schema : NIceDb::Schema {
         struct State : Column<2, NScheme::NTypeIds::Uint32> {};
         struct CurrentIncrementalIdx : Column<3, NScheme::NTypeIds::Uint32> {};
         struct SerializedData : Column<4, NScheme::NTypeIds::String> {};
+        struct FinalStatus : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct FinalIssues : Column<6, NScheme::NTypeIds::String> {};
+        struct RestoreStartedAt : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct CurrentStageStartedAt : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct RetryScheduled : Column<9, NScheme::NTypeIds::Bool> {};
+        struct NextRetryAttemptAt : Column<10, NScheme::NTypeIds::Uint64> {};
+        // Persisted so post-reboot entry routes to HandleRetryPath.
+        struct RetryNeeded : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OperationId>;
-        using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx, SerializedData>;
+        using TColumns = TableColumns<
+            OperationId,
+            State,
+            CurrentIncrementalIdx,
+            SerializedData,
+            FinalStatus,
+            FinalIssues,
+            RestoreStartedAt,
+            CurrentStageStartedAt,
+            RetryScheduled,
+            NextRetryAttemptAt,
+            RetryNeeded>;
     };
 
-    // Incremental restore shard progress tracking
+    // Deprecated: kept for compatibility
     struct IncrementalRestoreShardProgress : Table<123> {
         struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -2358,6 +2377,21 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
     };
 
+    // Per-sub-op tracking for incremental restore. Each row is created when a
+    // sub-op is enqueued and walked on reboot to rebuild in-flight state.
+    struct IncrementalRestoreItem : Table<133> {
+        struct OriginalOpId   : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ItemSeq        : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct ItemKind       : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct TablePathId    : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct WaitTxId       : Column<5, NScheme::NTypeIds::Uint64> {};
+        // Src backup table PathId (LocalPathId only); 0 for Finalize items.
+        struct SrcTablePathId : Column<6, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<OriginalOpId, ItemSeq>;
+        using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId, SrcTablePathId>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2488,7 +2522,8 @@ struct Schema : NIceDb::Schema {
         StreamingQueryState,
         ForcedCompactions,
         WaitingForcedCompactionShards,
-        SharedShards
+        SharedShards,
+        IncrementalRestoreItem
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

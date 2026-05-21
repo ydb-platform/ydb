@@ -4,7 +4,7 @@
 
     Lexers for computer algebra systems.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -97,6 +97,7 @@ class GAPConsoleLexer(Lexer):
     filenames = ['*.tst']
     url = 'https://www.gap-system.org'
     version_added = '2.14'
+    _example = "gap-repl/euclidean.tst"
 
     def get_tokens_unprocessed(self, text):
         gaplexer = GAPLexer(**self.options)

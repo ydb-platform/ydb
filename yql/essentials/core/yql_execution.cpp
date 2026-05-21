@@ -980,7 +980,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
 
             return true;
         };
-        static const THashSet<TStringBuf> NoExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile"};
+        static const THashSet<TStringBuf> NoExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile", "WatermarkGenerator"};
         static const THashSet<TStringBuf> NoExecutionListForCalcOverWindow = {"InstanceOf"};
         VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) {
             bool collectCalcOverWindow = true;

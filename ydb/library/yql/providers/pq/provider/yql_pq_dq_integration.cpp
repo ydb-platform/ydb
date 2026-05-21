@@ -41,7 +41,12 @@ public:
         : State_(state.Get())
     {}
 
-    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
+    ui64 PartitionTopicRead(
+        const TPqTopic& topic,
+        size_t maxPartitions,
+        TVector<TString>& partitions,
+        bool streamingTopicRead,
+        const std::unordered_set<ui64>& predicatePartitions) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -57,26 +62,65 @@ public:
             maxPartitions = DefaultMaxPartitions;
         }
 
-        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
-        partitions.reserve(tasks);
-        for (size_t i = 0; i < tasks; ++i) {
-            NPq::NProto::TDqReadTaskParams params;
-            auto* partitioningParams = params.MutablePartitioningParams();
-            partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
-            partitioningParams->SetEachTopicPartitionGroupId(i);
-            partitioningParams->SetDqPartitionsCount(tasks);
-            YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+        if (predicatePartitions.empty()) {      // read all partitions
+            const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+            partitions.reserve(tasks);
+            for (size_t i = 0; i < tasks; ++i) {
+                NPq::NProto::TDqReadTaskParams params;
+                auto* partitioningParams = params.AddPartitioningParams();
+                partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                partitioningParams->SetEachTopicPartitionGroupId(i);
+                partitioningParams->SetDqPartitionsCount(tasks);
+                YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
 
-            TString serializedParams;
-            YQL_ENSURE(params.SerializeToString(&serializedParams));
-            partitions.emplace_back(std::move(serializedParams));
+                TString serializedParams;
+                YQL_ENSURE(params.SerializeToString(&serializedParams));
+                partitions.emplace_back(std::move(serializedParams));
+            }
+        } else {    // read only predicate partitions
+            const size_t tasks = Min(maxPartitions, predicatePartitions.size());
+            auto predicatePartitionIt = predicatePartitions.begin();
+            partitions.reserve(tasks);
+            size_t allocatedPartitions = 0;
+
+            for (size_t i = 0; i < tasks; ++i) {
+                NPq::NProto::TDqReadTaskParams params;
+                size_t partitionsPerTask = (predicatePartitions.size() - allocatedPartitions) / (tasks - i);
+                for (size_t k = 0; k < partitionsPerTask; ++k) {
+                    auto* partitioningParams = params.AddPartitioningParams();
+                    partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+                    auto partition = *predicatePartitionIt;
+                    partitioningParams->SetEachTopicPartitionGroupId(partition);
+                    partitioningParams->SetDqPartitionsCount(topicPartitionsCount);
+                    YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+                    predicatePartitionIt++;
+                }
+                allocatedPartitions += partitionsPerTask;
+                TString serializedParams;
+                YQL_ENSURE(params.SerializeToString(&serializedParams));
+                partitions.emplace_back(std::move(serializedParams));
+            }
         }
         return 0;
     }
 
+    bool GetPartitions(const TExprNode& node, std::unordered_set<ui64>& partitions) {
+        partitions.clear();
+        if (!node.IsCallable("AsList")) {
+            return false;
+        }
+        for (ui32 j = 0; j < node.ChildrenSize(); ++j) {
+            if (!node.Child(j)->IsCallable("Uint64")) {
+                return false;
+            }
+            partitions.insert(FromString<ui64>(node.Child(j)->Child(0)->Content()));
+        }
+        return true;
+    }
+
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true);
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true, {});
         }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto srcSettings = maybeDqSource.Cast().Settings();
@@ -93,7 +137,12 @@ public:
                     streamingTopicRead = FromString<bool>(Value(setting));
                     break;
                 }
-                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead);
+                std::unordered_set<ui64> predicatePartitions;
+                bool success = GetPartitions(*topicSource.Partitions().Ptr(), predicatePartitions);
+                if (!success) {
+                    YQL_CLOG(WARN, ProviderPq) << "Failed to get predicate partitions";
+                }
+                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead, predicatePartitions);
             }
         }
         return 0;
@@ -121,10 +170,11 @@ public:
                 });
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
-            auto settings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
-            if (!settings) {
+            const auto maybeSettings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
+            if (!maybeSettings) {
                 return {};
             }
+            const auto settings = maybeSettings.Cast();
 
             const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
@@ -150,24 +200,59 @@ public:
 
             const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
 
-            return Build<TDqSourceWrap>(ctx, pos)
+            TExprBase result = Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
-                    .Settings(std::move(settings))
+                    .Settings(settings)
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(expandedRowType)
+                    .Partitions<TCoVoid>().Build()
+                    .OffsetPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
+                    .WriteTimePredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
                 .RowType(expandedRowType)
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
-                .Done().Ptr();
+                .Done();
+
+            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable")) {
+                const auto watermark = maybeWatermark.Cast();
+
+                auto watermarkSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
+                for (const auto& nameValue : settings) {
+                    if (const auto name = nameValue.Name().Value();
+                        WatermarksLateArrivalDelayUsSetting == name) {
+                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
+                    } else if (WatermarksGranularityUsSetting == name) {
+                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
+                    } else if (WatermarksIdleTimeoutUsSetting == name) {
+                        watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
+                    }
+                }
+                const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
+
+                result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
+                    .Input(result)
+                    .WatermarkExtractor(watermark)
+                    .PartitionIdExtractor<TCoLambda>()
+                        .Args({"arg"})
+                        .Body<TCoMember>()
+                            .Struct("arg")
+                            .Name().Build("_yql_sys_partition_id")
+                            .Build()
+                        .Build()
+                    .WatermarkSettings(watermarkSettings.Ptr())
+                    .Done();
+            }
+
+            return result.Ptr();
         }
         return read;
     }
@@ -309,7 +394,7 @@ public:
                     } else if (name == AddBearerToTokenSetting) {
                         srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
                     } else if (name == WatermarksEnableSetting) {
-                        srcDesc.MutableWatermarks()->SetEnabled(true);
+                        srcDesc.MutableWatermarks()->SetEnabled(FromString<bool>(Value(setting)));
                     } else if (name == WatermarksGranularityUsSetting) {
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
@@ -381,10 +466,22 @@ public:
                 NYql::NConnector::NApi::TPredicate predicateProto;
                 auto serializedProto = topicSource.FilterPredicate().Ref().Content();
                 YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
+                TString filterPredicateSql = NYql::FormatPredicate(predicateProto);
 
-                TString predicateSql = NYql::FormatPredicate(predicateProto);
+                NPq::NProto::TOffsetPredicate offsetPredicates;
+                auto offsetSerialized = topicSource.OffsetPredicate().Ref().Content();
+                YQL_ENSURE(offsetPredicates.ParseFromString(offsetSerialized));
+
+                NPq::NProto::TWriteTimePredicate writeTimePredicate;
+                auto writeTimeSerialized = topicSource.WriteTimePredicate().Ref().Content();
+                YQL_ENSURE(writeTimePredicate.ParseFromString(writeTimeSerialized));
+
+                if (!streamingTopicRead) {
+                    *srcDesc.MutableOffsetPredicate() = offsetPredicates;
+                    *srcDesc.MutableWriteTimePredicate() = writeTimePredicate;
+                }
                 if (sharedReading) {
-                    srcDesc.SetPredicate(predicateSql);
+                    srcDesc.SetPredicate(filterPredicateSql);
                     srcDesc.SetSharedReading(true);
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
@@ -422,8 +519,8 @@ public:
                     protoSettings.PackFrom(srcDesc);
                 }
 
-                if (sharedReading && !predicateSql.empty()) {
-                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
+                if (sharedReading && !filterPredicateSql.empty()) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + filterPredicateSql));
                 }
                 if (sharedReading && !watermarkExprSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
@@ -503,8 +600,21 @@ private:
     //   WATERMARK = SystemMetadata('write_time') - Interval('PT5S')
     // Only used (and useful) for non-shared-reading pq source
     // (in this case, flexible watermark expression is not implemented)
-    static TMaybe<ui64> ExtractWatermarkDelay(const TCoLambda& watermark) {
+    static TMaybe<ui64> ExtractWatermarkDelay(
+        const TPosition pos,
+        TExprContext& ctx,
+        const TCoLambda& watermark,
+        const IDqIntegration::TWrapReadSettings& wrSettings
+    ) {
+        const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
+        if ("disable" == watermarksMode) {
+            ctx.AddError(TIssue(pos, "Watermarks are disabled"));
+            return Nothing();
+        }
+
+        static constexpr std::string_view message = "Incorrect watermark expression";
         if (watermark.Args().Size() != 1) {
+            ctx.AddError(TIssue(pos, message));
             return Nothing();
         }
         const auto arg = watermark.Args().Arg(0);
@@ -514,24 +624,29 @@ private:
             return Nothing();
         }
         const auto sub = maybeSub.Cast();
-        {
+        if ("default" == watermarksMode) {
+            static constexpr std::string_view defaultMessage = "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
             const auto maybeMember = sub.Left().Maybe<TCoMember>();
             if (!maybeMember) {
+                ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
             const auto member = maybeMember.Cast();
             if (const auto& maybeArg = member.Struct().Maybe<TCoArgument>()) {
                 if (maybeArg.Cast().Name() != arg.Name()) {
+                    ctx.AddError(TIssue(pos, defaultMessage));
                     return Nothing();
                 }
             }
             if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time"}, member.Name())) {
+                ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
         }
         {
             auto maybeInterval = sub.Right().Maybe<TCoInterval>();
             if (!maybeInterval) {
+                ctx.AddError(TIssue(pos, message));
                 return Nothing();
             }
             auto interval = maybeInterval.Cast();
@@ -544,7 +659,7 @@ private:
     }
 
 public:
-    TExprNode::TPtr BuildTopicReadSettings(
+    TMaybeNode<TCoNameValueTupleList> BuildTopicReadSettings(
         const TPqReadTopic& pqReadTopic,
         TExprContext& ctx,
         const IDqIntegration::TWrapReadSettings& wrSettings
@@ -584,9 +699,8 @@ public:
         TMaybe<ui64> watermarksIdleTimeoutUs;
         TMaybe<ui64> watermarksLateArrivalDelayUs;
         if (!useSharedReading && maybeWatermark) {
-            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
+            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(ctx.GetPosition(pqReadTopic.Pos()), ctx, maybeWatermark.Cast(), wrSettings);
             if (!watermarksLateArrivalDelayUs) {
-                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')"));
                 return {};
             }
         }
@@ -734,8 +848,9 @@ public:
             Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
-        if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {
-            Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
+        if (const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
+            watermarksMode != "disable" && maybeWatermark) {
+            Add(props, WatermarksEnableSetting, ToString("default" == watermarksMode), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
                 ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);
             Add(props, WatermarksLateArrivalDelayUsSetting,
@@ -785,7 +900,7 @@ public:
 
         return Build<TCoNameValueTupleList>(ctx, pos)
             .Add(props)
-            .Done().Ptr();
+            .Done();
     }
 
     NNodes::TCoNameValueTupleList BuildDqSourceWrapSettings(const TPqReadTopic& pqReadTopic, TPositionHandle pos, TExprContext& ctx) const {
@@ -796,7 +911,10 @@ public:
             .Done());
 
         TExprNode::TListType metadataFieldsList;
-        for (const auto& sysColumn : AllowedPqMetaSysColumns(State_->AllowTransparentSystemColumns)) {
+        for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
+                 State_->AddTransparentPrefixToTransparentSystemColumns,
+                 State_->EnableUserAttributesInTopicQuery))
+        {
             metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
         }
 

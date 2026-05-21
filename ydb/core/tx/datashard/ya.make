@@ -39,7 +39,6 @@ SRCS(
     conflicts_cache.cpp
     create_cdc_stream_unit.cpp
     create_persistent_snapshot_unit.cpp
-    create_incremental_restore_src_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
     block_fail_point_unit.cpp
@@ -159,6 +158,7 @@ SRCS(
     follower_edge.cpp
     incr_restore_helpers.cpp
     incr_restore_scan.cpp
+    incremental_restore_src_actor.cpp
     initiate_build_index_unit.cpp
     key_conflicts.cpp
     key_conflicts.h

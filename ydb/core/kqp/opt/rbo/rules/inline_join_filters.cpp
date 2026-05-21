@@ -53,6 +53,16 @@ TIntrusivePtr<TOpMap> MakeMapFromRenames(TIntrusivePtr<IOperator> input,
     return MakeIntrusive<TOpMap>(input, pos, mapElements, true);
 }
 
+bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {
+    auto itemType = input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto & column : columns) {
+        auto columnType = itemType->FindItemType(column.GetFullName());
+        if (columnType->IsOptionalOrNull()) {
+            return false;
+        }
+    }
+    return true;
+}
 
 }
 
@@ -119,7 +129,20 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
 
     auto renameMap = MakeRenameMap(topCommonIUs, props.InternalVarIdx);
     auto map = MakeMapFromRenames(newFilter, renameMap, join->Pos, &ctx.ExprCtx, &props);
-    auto newJoinKeys = RemapJoinKeysRightSide(join->JoinKeys, renameMap);
+
+    // The join will be on the keys of lhs, we just need to check that all the keys are non-null
+    // We don't support nullable keys at this stage
+    auto keyColumns = join->GetLeftInput()->Props.Metadata->KeyColumns;
+    Y_ENSURE(!keyColumns.empty(), "Cannot inline a join filter because key columns are missing");
+
+    Y_ENSURE(CheckNonNullKeys(join->GetLeftInput(), keyColumns), "Key columns cannot be optional when inlining join filter");
+
+    TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
+    for (const auto & column : keyColumns) {
+        newJoinKeys.push_back(std::make_pair(column, column));
+    }
+
+    newJoinKeys = RemapJoinKeysRightSide(newJoinKeys, renameMap);
     auto result = MakeIntrusive<TOpJoin>(join->GetLeftInput(), map, join->Pos, join->JoinKind, newJoinKeys);
     
     return result;

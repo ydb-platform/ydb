@@ -1,68 +1,35 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.] */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_CAST_H
 #define OPENSSL_HEADER_CAST_H
 
-#include <contrib/restricted/google/boringssl/include/openssl/base.h>
+#include <contrib/restricted/google/boringssl/include/openssl/base.h>   // IWYU pragma: export
 
 #ifdef  __cplusplus
 extern "C" {
 #endif
 
+
+// CAST-128.
+//
+// CAST-128 (RFC 2144), also known as CAST5, is a legacy block cipher with
+// 64-bit blocks. It is deprecated and retained for backwards compatibility
+// only. The implementation is not hardened against side channels and may leak
+// secrets via timing or cache side channels.
+//
+// Use a modern cipher, such as AES-GCM or ChaCha20-Poly1305, instead.
 
 #define CAST_ENCRYPT 1
 #define CAST_DECRYPT 0
@@ -75,22 +42,48 @@ typedef struct cast_key_st {
   int short_key;  // Use reduced rounds for short key
 } CAST_KEY;
 
+// CAST_set_key initializes |key| from |len| bytes of key material starting from
+// |data|. CAST-128 keys are between 5 and 16 bytes long. If |len| is greater
+// than 16, |data| is truncated and only the first 16 bytes are processed. If
+// |len| is less than 5, it is internally zero-padded.
 OPENSSL_EXPORT void CAST_set_key(CAST_KEY *key, size_t len,
                                  const uint8_t *data);
-OPENSSL_EXPORT void CAST_ecb_encrypt(const uint8_t *in, uint8_t *out,
+
+// CAST_ecb_encrypt encrypts (or decrypts, if |enc| is |CAST_DECRYPT|) a single
+// 8-byte block from |in| to |out|, using |key|.
+OPENSSL_EXPORT void CAST_ecb_encrypt(const uint8_t in[CAST_BLOCK],
+                                     uint8_t out[CAST_BLOCK],
                                      const CAST_KEY *key, int enc);
-OPENSSL_EXPORT void CAST_encrypt(uint32_t *data, const CAST_KEY *key);
-OPENSSL_EXPORT void CAST_decrypt(uint32_t *data, const CAST_KEY *key);
+
+// CAST_encrypt encrypts an 8-byte block from |data| in-place with |key|. An
+// 8-byte block is represented in this function as two 32-bit integers,
+// containing the first and second four bytes in big-endian order.
+OPENSSL_EXPORT void CAST_encrypt(uint32_t data[2], const CAST_KEY *key);
+
+// CAST_decrypt decrypts an 8-byte block from |data| in-place with |key|. An
+// 8-byte block is represented in this function as two 32-bit integers,
+// containing the first and second four bytes in big-endian order.
+OPENSSL_EXPORT void CAST_decrypt(uint32_t data[2], const CAST_KEY *key);
+
+// CAST_cbc_encrypt encrypts (or decrypts, if |enc| is |CAST_DECRYPT|) |length|
+// bytes from |in| to |out| with CAST-128 in CBC mode. |length| must be a
+// multiple of 8. The IV is taken from |iv|. When the function completes, the IV
+// for the next block is written to |iv|.
 OPENSSL_EXPORT void CAST_cbc_encrypt(const uint8_t *in, uint8_t *out,
                                      size_t length, const CAST_KEY *ks,
-                                     uint8_t *iv, int enc);
+                                     uint8_t iv[8], int enc);
 
+// CAST_cfb64_encrypt encrypts (or decrypts, if |enc| is |CAST_DECRYPT|)
+// |length| bytes from |in| to |out| with CAST-128 in CFB-64 mode. |length| must
+// be a multiple of 8. On the first call, |*num| should be zero and |ivec| the
+// IV. On exit, this function will write state to |ivec| and |*num| to resume an
+// encryption or decryption operation if the buffers are not contiguous.
 OPENSSL_EXPORT void CAST_cfb64_encrypt(const uint8_t *in, uint8_t *out,
                                        size_t length, const CAST_KEY *schedule,
-                                       uint8_t *ivec, int *num, int enc);
+                                       uint8_t ivec[8], int *num, int enc);
 
-#ifdef  __cplusplus
-}
+#ifdef __cplusplus
+}  // extern C
 #endif
 
 #endif  // OPENSSL_HEADER_CAST_H

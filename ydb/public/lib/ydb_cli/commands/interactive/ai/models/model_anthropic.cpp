@@ -80,6 +80,18 @@ protected:
             parser = std::move(*child);
         }
 
+        if (auto usage = parser.MaybeKey("usage")) {
+            if (auto inputTokens = usage->MaybeKey("input_tokens")) {
+                result.Usage.InputTokens = inputTokens->GetValue().GetUIntegerSafe();
+            }
+            if (auto outputTokens = usage->MaybeKey("output_tokens")) {
+                result.Usage.OutputTokens = outputTokens->GetValue().GetUIntegerSafe();
+            }
+            if (auto cachedTokens = usage->MaybeKey("cache_read_input_tokens")) {
+                result.Usage.CachedInputTokens = cachedTokens->GetValue().GetUIntegerSafe();
+            }
+        }
+
         parser = parser.GetKey("content");
         NJson::TJsonValue conversationPart;
         auto& conversationPartArray = conversationPart.SetType(NJson::JSON_ARRAY).GetArraySafe();

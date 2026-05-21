@@ -64,6 +64,7 @@ public:
     using TWriteBlocksToManyPBuffersHandler = std::function<
         NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>(
             ui32 vChunkIndex,
+            THostIndex coordinatorHostIndex,
             TVector<THostIndex> hostIndexes,
             ui64 lsn,
             TBlockRange64 range,
@@ -108,6 +109,8 @@ public:
     TDBGDumpHandler DumpHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
+
+    TDirectBlockGroupMock();
 
     void Register(TVChunkWeakPtr vChunk) override;
 
@@ -155,6 +158,7 @@ public:
     NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
     WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
+        THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,

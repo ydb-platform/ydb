@@ -1,7 +1,9 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -11,12 +13,9 @@ Y_UNIT_TEST_LLVM(TestGuessTuple) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui32>(1);
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
-    const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)});
-    const auto varType = pb.NewVariantType(tupleType);
-    const auto var1 = pb.NewVariant(data1, 0, varType);
-    const auto var2 = pb.NewVariant(data2, 1, varType);
+    using TVar = std::variant<ui32, TStringBuf>;
+    const auto var1 = NTest::ConvertValueToLiteralNode(pb, TVar{ui32(1)});
+    const auto var2 = NTest::ConvertValueToLiteralNode(pb, TVar{TStringBuf("abc")});
     std::vector<TRuntimeNode> tupleItems;
     tupleItems.push_back(pb.Guess(var1, 0));
     tupleItems.push_back(pb.Guess(var1, 1));
@@ -25,28 +24,20 @@ Y_UNIT_TEST_LLVM(TestGuessTuple) {
     const auto pgmReturn = pb.NewTuple(tupleItems);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    UNIT_ASSERT(res.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
-    UNIT_ASSERT(!res.GetElement(1));
-    UNIT_ASSERT(!res.GetElement(2));
-    UNIT_ASSERT(res.GetElement(3));
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               std::make_tuple(TMaybe<ui32>{1}, TMaybe<TString>{}, TMaybe<ui32>{}, TMaybe<TString>{"abc"}));
 }
 
 Y_UNIT_TEST_LLVM(TestGuessTupleOpt) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui32>(1);
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
-    const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)});
-    const auto varType = pb.NewVariantType(tupleType);
-    const auto var1 = pb.NewVariant(data1, 0, varType);
-    const auto var2 = pb.NewVariant(data2, 1, varType);
+    using TVar = std::variant<ui32, TStringBuf>;
+    const auto var1 = NTest::ConvertValueToLiteralNode(pb, TVar{ui32(1)});
+    const auto var2 = NTest::ConvertValueToLiteralNode(pb, TVar{TStringBuf("abc")});
     const auto jvar1 = pb.NewOptional(var1);
     const auto jvar2 = pb.NewOptional(var2);
-    const auto nothing = pb.NewEmptyOptional(pb.NewOptionalType(varType));
+    const auto nothing = NTest::ConvertValueToLiteralNode(pb, TMaybe<TVar>{});
 
     std::vector<TRuntimeNode> tupleItems;
     tupleItems.push_back(pb.Guess(jvar1, 0));
@@ -58,15 +49,9 @@ Y_UNIT_TEST_LLVM(TestGuessTupleOpt) {
     const auto pgmReturn = pb.NewTuple(tupleItems);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    UNIT_ASSERT(res.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
-    UNIT_ASSERT(!res.GetElement(1));
-    UNIT_ASSERT(!res.GetElement(2));
-    UNIT_ASSERT(res.GetElement(3));
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
-    UNIT_ASSERT(!res.GetElement(4));
-    UNIT_ASSERT(!res.GetElement(5));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               std::make_tuple(TMaybe<ui32>{1}, TMaybe<TString>{}, TMaybe<ui32>{}, TMaybe<TString>{"abc"},
+                                                               TMaybe<ui32>{}, TMaybe<TString>{}));
 }
 
 Y_UNIT_TEST_LLVM(TestGuessStruct) {
@@ -87,13 +72,8 @@ Y_UNIT_TEST_LLVM(TestGuessStruct) {
     const auto pgmReturn = pb.NewTuple(tupleItems);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    UNIT_ASSERT(res.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
-    UNIT_ASSERT(!res.GetElement(1));
-    UNIT_ASSERT(!res.GetElement(2));
-    UNIT_ASSERT(res.GetElement(3));
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               std::make_tuple(TMaybe<ui32>{1}, TMaybe<TString>{}, TMaybe<ui32>{}, TMaybe<TString>{"abc"}));
 }
 
 Y_UNIT_TEST_LLVM(TestGuessStructOpt) {
@@ -120,29 +100,21 @@ Y_UNIT_TEST_LLVM(TestGuessStructOpt) {
     const auto pgmReturn = pb.NewTuple(tupleItems);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    UNIT_ASSERT(res.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
-    UNIT_ASSERT(!res.GetElement(1));
-    UNIT_ASSERT(!res.GetElement(2));
-    UNIT_ASSERT(res.GetElement(3));
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
-    UNIT_ASSERT(!res.GetElement(4));
-    UNIT_ASSERT(!res.GetElement(5));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               std::make_tuple(TMaybe<ui32>{1}, TMaybe<TString>{}, TMaybe<ui32>{}, TMaybe<TString>{"abc"},
+                                                               TMaybe<ui32>{}, TMaybe<TString>{}));
 }
 
 Y_UNIT_TEST_LLVM(TestVisitAllTuple) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui32>(1);
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
-    const auto at = pb.NewDataLiteral<NUdf::EDataSlot::String>("@");
-    const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)});
-    const auto varType = pb.NewVariantType(tupleType);
-    const auto var1 = pb.NewVariant(data1, 0, varType);
-    const auto var2 = pb.NewVariant(data2, 1, varType);
-    const auto list = pb.NewList(varType, {var1, var2});
+    const auto at = NTest::ConvertValueToLiteralNode(pb, TStringBuf("@"));
+    using TItem = std::variant<ui32, TStringBuf>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                               TItem{ui32(1)},
+                                                               TItem{TStringBuf("abc")},
+                                                           });
     const auto pgmReturn = pb.Map(list, [&](TRuntimeNode item) {
         return pb.VisitAll(item, [&](ui32 index, TRuntimeNode item) {
             if (!index) {
@@ -154,9 +126,7 @@ Y_UNIT_TEST_LLVM(TestVisitAllTuple) {
     });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(0), "@1");
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(1), "@abc");
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TString>{"@1", "@abc"});
 }
 
 Y_UNIT_TEST_LLVM(TestVisitAllStruct) {
@@ -184,9 +154,7 @@ Y_UNIT_TEST_LLVM(TestVisitAllStruct) {
     });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(0), "@1");
-    UNBOXED_VALUE_STR_EQUAL(res.GetElement(1), "@abc");
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TString>{"@1", "@abc"});
 }
 
 Y_UNIT_TEST_LLVM(TestVisitAllTupleFlow) {
@@ -212,18 +180,8 @@ Y_UNIT_TEST_LLVM(TestVisitAllTupleFlow) {
     }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "@");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "@");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "@");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "abc");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Finish);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Finish);
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TString>(TVector<TString>{"@", "@", "@", "abc"}));
 }
 
 Y_UNIT_TEST_LLVM(TestVisitAllStructFlow) {
@@ -251,22 +209,8 @@ Y_UNIT_TEST_LLVM(TestVisitAllStructFlow) {
     }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "abc");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "@");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "@");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "@");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "@");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item, "abc");
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Finish);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Finish);
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TString>(TVector<TString>{"abc", "@", "@", "@", "@", "abc"}));
 }
 
 Y_UNIT_TEST_LLVM(TestVisitAllStructWideFlow) {
@@ -294,87 +238,52 @@ Y_UNIT_TEST_LLVM(TestVisitAllStructWideFlow) {
     }),
                                                     [&](TRuntimeNode::TList items) { return pb.NewTuple(items); }));
 
+    using TRow = std::tuple<TString, i32>;
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "abc");
-    UNIT_ASSERT_EQUAL(item.GetElement(1).Get<i32>(), -1);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "@");
-    UNIT_ASSERT_EQUAL(item.GetElement(1).Get<i32>(), 0);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "@");
-    UNIT_ASSERT_EQUAL(item.GetElement(1).Get<i32>(), 0);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "@");
-    UNIT_ASSERT_EQUAL(item.GetElement(1).Get<i32>(), 0);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "@");
-    UNIT_ASSERT_EQUAL(item.GetElement(1).Get<i32>(), 0);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Ok);
-    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "abc");
-    UNIT_ASSERT_EQUAL(item.GetElement(1).Get<i32>(), -1);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Finish);
-    UNIT_ASSERT_EQUAL(res.Fetch(item), NUdf::EFetchStatus::Finish);
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(TVector<TRow>{
+                                                   {"abc", i32(-1)},
+                                                   {"@", i32(0)},
+                                                   {"@", i32(0)},
+                                                   {"@", i32(0)},
+                                                   {"@", i32(0)},
+                                                   {"abc", i32(-1)},
+                                               }));
 }
 
 Y_UNIT_TEST_LLVM(TestWayTuple) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui32>(1);
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
-    const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)});
-    const auto varType = pb.NewVariantType(tupleType);
-    const auto var1 = pb.NewVariant(data1, 0, varType);
-    const auto var2 = pb.NewVariant(data2, 1, varType);
-    const auto list = pb.NewList(varType, {var2, var1});
+    using TItem = std::variant<ui32, TStringBuf>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                               TItem{TStringBuf("abc")},
+                                                               TItem{ui32(1)},
+                                                           });
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) { return pb.Way(item); });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1U);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{1U, 0U});
 }
 
 Y_UNIT_TEST_LLVM(TestWayTupleOpt) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDataLiteral<ui32>(1);
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
-    const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)});
-    const auto varType = pb.NewVariantType(tupleType);
-    const auto var1 = pb.NewVariant(data1, 0, varType);
-    const auto var2 = pb.NewVariant(data2, 1, varType);
+    using TItem = std::variant<ui32, TStringBuf>;
+    const auto var1 = NTest::ConvertValueToLiteralNode(pb, TItem{ui32(1)});
+    const auto var2 = NTest::ConvertValueToLiteralNode(pb, TItem{TStringBuf("abc")});
     const auto jvar1 = pb.NewOptional(var1);
     const auto jvar2 = pb.NewOptional(var2);
-    const auto optType = pb.NewOptionalType(varType);
-    const auto nothing = pb.NewEmptyOptional(optType);
-    const auto list = pb.NewList(optType, {jvar2, nothing, jvar1});
+    const auto nothing = NTest::ConvertValueToLiteralNode(pb, TMaybe<TItem>{});
+    const auto list = pb.NewList(nothing.GetStaticType(), {jvar2, nothing, jvar1});
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) { return pb.Way(item); });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1U);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               TVector<TMaybe<ui32>>{TMaybe<ui32>{1U}, TMaybe<ui32>{}, TMaybe<ui32>{0U}});
 }
 
 Y_UNIT_TEST_LLVM(TestWayStruct) {
@@ -392,15 +301,7 @@ Y_UNIT_TEST_LLVM(TestWayStruct) {
                                   [&](TRuntimeNode item) { return pb.Way(item); });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "y");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "x");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TString>{"y", "x"});
 }
 
 Y_UNIT_TEST_LLVM(TestWayStructOpt) {
@@ -422,32 +323,23 @@ Y_UNIT_TEST_LLVM(TestWayStructOpt) {
                                   [&](TRuntimeNode item) { return pb.Way(item); });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "y");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "x");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               TVector<TMaybe<TString>>{TMaybe<TString>{"y"}, TMaybe<TString>{}, TMaybe<TString>{"x"}});
 }
 
 Y_UNIT_TEST_LLVM(TestItemInMap) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto varType = pb.NewVariantType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id), pb.NewDataType(NUdf::TDataType<bool>::Id)}));
-
-    const auto data0 = pb.NewVariant(pb.NewDataLiteral<i32>(77), 0, varType);
-    const auto data1 = pb.NewVariant(pb.NewDataLiteral<NUdf::EDataSlot::String>("abc"), 1, varType);
-    const auto data2 = pb.NewVariant(pb.NewDataLiteral<bool>(false), 2, varType);
-    const auto data3 = pb.NewVariant(pb.NewDataLiteral<bool>(true), 2, varType);
-    const auto data4 = pb.NewVariant(pb.NewDataLiteral<NUdf::EDataSlot::String>("DEF"), 1, varType);
-    const auto data5 = pb.NewVariant(pb.NewDataLiteral<i32>(-1267), 0, varType);
-    const auto list = pb.NewList(varType, {data0, data1, data2, data3, data4, data5});
+    using TItem = std::variant<i32, TStringBuf, bool>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                               TItem{i32(77)},
+                                                               TItem{TStringBuf("abc")},
+                                                               TItem{false},
+                                                               TItem{true},
+                                                               TItem{TStringBuf("DEF")},
+                                                               TItem{i32(-1267)},
+                                                           });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -477,44 +369,31 @@ Y_UNIT_TEST_LLVM(TestGuessInMap) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto varType = pb.NewVariantType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<i32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id), pb.NewDataType(NUdf::TDataType<bool>::Id)}));
-
-    const auto data0 = pb.NewVariant(pb.NewDataLiteral<i32>(77), 0, varType);
-    const auto data1 = pb.NewVariant(pb.NewDataLiteral<NUdf::EDataSlot::String>("abc"), 1, varType);
-    const auto data2 = pb.NewVariant(pb.NewDataLiteral<bool>(false), 2, varType);
-    const auto data3 = pb.NewVariant(pb.NewDataLiteral<bool>(true), 2, varType);
-    const auto data4 = pb.NewVariant(pb.NewDataLiteral<NUdf::EDataSlot::String>("DEF"), 1, varType);
-    const auto data5 = pb.NewVariant(pb.NewDataLiteral<i32>(-1267), 0, varType);
-    const auto list = pb.NewList(varType, {data0, data1, data2, data3, data4, data5});
+    using TItem = std::variant<i32, TStringBuf, bool>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TItem>{
+                                                               TItem{i32(77)},
+                                                               TItem{TStringBuf("abc")},
+                                                               TItem{false},
+                                                               TItem{true},
+                                                               TItem{TStringBuf("DEF")},
+                                                               TItem{i32(-1267)},
+                                                           });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.NewTuple({pb.Guess(item, 0), pb.Guess(item, 2)});
                                   });
 
+    using TRow = std::tuple<TMaybe<i32>, TMaybe<bool>>;
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 77);
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<bool>(), false);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -1267);
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                                      {TMaybe<i32>{77}, TMaybe<bool>{}},
+                                                                      {TMaybe<i32>{}, TMaybe<bool>{}},
+                                                                      {TMaybe<i32>{}, TMaybe<bool>{false}},
+                                                                      {TMaybe<i32>{}, TMaybe<bool>{true}},
+                                                                      {TMaybe<i32>{}, TMaybe<bool>{}},
+                                                                      {TMaybe<i32>{-1267}, TMaybe<bool>{}},
+                                                                  });
 }
 
 Y_UNIT_TEST(TestDynamicVariantTuple) {
@@ -535,26 +414,13 @@ Y_UNIT_TEST(TestDynamicVariantTuple) {
     const auto list = pb.AsList({var1, var2, var3});
     const auto pgmReturn = list;
 
+    using TItem = TMaybe<std::variant<TString, TString>>;
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetVariantIndex(), 0);
-    auto itemVar1 = item.GetVariantItem();
-    UNIT_ASSERT(itemVar1.IsString());
-    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(itemVar1.AsStringRef()), str1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetVariantIndex(), 1);
-    auto itemVar2 = item.GetVariantItem();
-    UNIT_ASSERT(itemVar2.IsEmbedded());
-    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(itemVar2.AsStringRef()), str2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TItem>{
+                                                                      TItem{std::variant<TString, TString>{std::in_place_index<0>, TString(str1)}},
+                                                                      TItem{std::variant<TString, TString>{std::in_place_index<1>, TString(str2)}},
+                                                                      TItem{},
+                                                                  });
 }
 
 Y_UNIT_TEST(TestDynamicVariantStruct) {
@@ -571,18 +437,12 @@ Y_UNIT_TEST(TestDynamicVariantStruct) {
     const auto list = pb.AsList({var1, var2});
     const auto pgmReturn = list;
 
+    using TItem = TMaybe<std::variant<ui32, ui32>>;
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetVariantIndex(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetVariantItem().template Get<ui32>(), 10U);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TItem>{
+                                                                      TItem{std::variant<ui32, ui32>{std::in_place_index<0>, ui32(10)}},
+                                                                      TItem{},
+                                                                  });
 }
 
 Y_UNIT_TEST(TestDynamicVariantStructWithNullIndex) {
@@ -598,13 +458,8 @@ Y_UNIT_TEST(TestDynamicVariantStructWithNullIndex) {
     const auto pgmReturn = list;
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
+                                               TVector<TMaybe<std::variant<ui32, ui32>>>{TMaybe<std::variant<ui32, ui32>>{}});
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLVariantTest)
 

@@ -34,9 +34,11 @@ namespace {
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
-            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd)
+            ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
+            TFileHandle&& diskFd)
         : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true)
     {
+        PersistentBufferUniqueId = persistentBufferUniqueId;
         PDiskParams = pDiskParams;
         DiskFormat = std::move(diskFormat);
         DiskFd = std::move(diskFd);
@@ -97,6 +99,8 @@ namespace {
         auto cDirectIOWrite = cDirectIO->GetSubgroup("operation", "Write");
         auto cDirectIORead = cDirectIO->GetSubgroup("operation", "Read");
 
+        auto cPersistentBuffer = counters->GetSubgroup("subsystem", "persistent_buffer");
+
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
 #define HISTOGRAM(GROUP, NAME, BUCKETS) .NAME = c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS)),
 #define COUNTER_VALUE(GROUP, NAME, DERIV) c##GROUP->GetCounter(#NAME, DERIV)
@@ -108,6 +112,7 @@ namespace {
                 .OP = [&] { \
                     TInterfaceOpCounters c; \
                     c.Requests = COUNTER_VALUE(Interface##OP, Requests, true); \
+                    c.RequestsInFlight = COUNTER_VALUE(Interface##OP, RequestsInFlight, false); \
                     c.ReplyOk = COUNTER_VALUE(Interface##OP, ReplyOk, true); \
                     c.ReplyErr = COUNTER_VALUE(Interface##OP, ReplyErr, true); \
                     c.Bytes = COUNTER_VALUE(Interface##OP, Bytes, true); \
@@ -135,6 +140,7 @@ namespace {
 #define XX(OP) \
                 .OP = { \
                     COUNTER(DirectIO##OP, Requests, true) \
+                    COUNTER(DirectIO##OP, RequestsInFlight, false) \
                     COUNTER(DirectIO##OP, Bytes, true) \
                     COUNTER(DirectIO##OP, BytesInFlight, false) \
                     HISTOGRAM(DirectIO##OP, RequestSizeKiB, RequestSizeBoundsKiB) \
@@ -154,6 +160,12 @@ namespace {
                 COUNTER(DirectIO, QueueSize, false)
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
+            },
+            .PersistentBuffer = {
+                COUNTER(PersistentBuffer, AllocatedChunks, false)
+                COUNTER(PersistentBuffer, TotalBytes, false)
+                COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
+                COUNTER(PersistentBuffer, InMemoryCacheSize, false)
             },
         };
 

@@ -131,7 +131,8 @@ Y_UNIT_TEST(TokensAsTableAlias) { // id_table
 Y_UNIT_TEST(TokensAsHints) { // id_hint
     auto failed = ValidateTokens({"AUTOMAP", "CALLABLE", "COLUMNS", "DICT", "ENUM", "FALSE", "FLOW",
                                   "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
-                                  "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"},
+                                  "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT",
+                                  "WATERMARK"},
                                  [](const TString& token) {
                                      TStringBuilder req;
                                      req << "SELECT * FROM Plato.Input WITH " << token;
@@ -7114,6 +7115,38 @@ Y_UNIT_TEST(WarnOnRankExprWithUnorderedWindow) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: Rank(<expression>) is used with unordered window - the result is likely to be undefined, code: 4521\n");
 }
 
+Y_UNIT_TEST(AnsiCurrentRow) {
+    const auto check = [](TString spec, TString expected, TMaybe<TString> flag) {
+        TString query = R"sql(
+            $events = (SELECT * FROM (VALUES
+                (1, 10,  5),
+                (2, 10,  5),
+                (3, 20, 10)
+            ) AS events (event_id, ts, val));
+            SELECT ts, val, SUM(val) OVER (SPEC) AS run_sum FROM $events ORDER BY ts, event_id;
+        )sql";
+        SubstGlobal(query, "SPEC", spec);
+
+        NSQLTranslation::TTranslationSettings settings;
+        if (flag) {
+            settings.Flags.emplace(*flag);
+        }
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat({"WinOnRows", "WinOnRange"});
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["WinOnRows"], expected == "WinOnRows" ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(stat["WinOnRange"], expected == "WinOnRange" ? 1 : 0);
+    };
+
+    check("ORDER BY ts", "WinOnRows", Nothing());
+    check("", "WinOnRows", Nothing());
+    check("ORDER BY ts", "WinOnRange", "AnsiCurrentRow");
+    check("", "WinOnRows", "AnsiCurrentRow");
+}
+
 Y_UNIT_TEST(AnyAsTableName) {
     NYql::TAstParseResult res = SqlToYql("use plato; select * from any;");
     UNIT_ASSERT(!res.IsOk());
@@ -11661,76 +11694,186 @@ Y_UNIT_TEST(SingleArg) {
 
 Y_UNIT_TEST_SUITE(Watermarks) {
 Y_UNIT_TEST(InsertAs) {
-    const auto stmt = R"sql(
-USE plato;
+    auto res = SqlToYql(R"sql(
+        USE plato;
 
-INSERT INTO Output
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK AS (CAST(ts AS TImestamp))
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
+        INSERT INTO Output
+        SELECT * FROM Input
+        WITH WATERMARK AS (ts - Interval("PT1S"));
+    )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
 }
 
 Y_UNIT_TEST(SelectAs) {
-    const auto stmt = R"sql(
-USE plato;
+    auto res = SqlToYql(R"sql(
+        USE plato;
 
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK AS (CAST(ts AS TImestamp))
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
+        SELECT * FROM Input
+        WITH WATERMARK AS (ts - Interval("PT1S"));
+    )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
 }
-Y_UNIT_TEST(InsertEquals) {
-    const auto stmt = R"sql(
-USE plato;
 
-INSERT INTO Output
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK = CAST(ts AS TImestamp)
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
+Y_UNIT_TEST(InsertEquals) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        INSERT INTO Output
+        SELECT * FROM Input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
 }
 
 Y_UNIT_TEST(SelectEquals) {
-    const auto stmt = R"sql(
-USE plato;
+    auto res = SqlToYql(R"sql(
+        USE plato;
 
-SELECT
-    *
-FROM Input
-WITH(
-    SCHEMA(
-        ts Timestamp,
-    ),
-    WATERMARK = CAST(ts AS TImestamp)
-);
-)sql";
-    const auto& res = SqlToYql(stmt);
+        SELECT * FROM Input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
+}
+
+Y_UNIT_TEST(TopLevel) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input;
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(Multiple) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input
+        WITH WATERMARK = ts - Interval("PT1S");
+
+        $input = SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT2S");
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT3S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 2);
+}
+
+Y_UNIT_TEST(NoSuchColumn) {
+    ExpectFailWithError(
+        R"sql(
+            USE plato;
+
+            $input = SELECT xxx FROM Input;
+
+            SELECT * FROM $input
+            WITH WATERMARK = ts - Interval("PT1S");
+        )sql",
+        "<main>:7:30: Error: Column ts is not in source column set\n");
+}
+
+Y_UNIT_TEST(GroupBy) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input
+        GROUP BY key, HoppingWindow(ts, "PT1S", "PT2S");
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(Join) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input AS lhs JOIN Input AS rhs ON lhs.ts == rhs.ts;
+
+        SELECT * FROM $input
+        WITH WATERMARK = ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(ParseProtoseq) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT Protobuf::Parse(records) AS event FROM Input
+        FLATTEN LIST BY (ChunksSplitters::Protoseq(Data).SplitRecords AS records);
+
+        SELECT * FROM $input
+        WITH WATERMARK = event.ts - Interval("PT1S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+}
+
+Y_UNIT_TEST(ExprList) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT * FROM Input;
+
+        SELECT * FROM $input
+        WITH WATERMARK = ("yin", "yang");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
 }
 } // Y_UNIT_TEST_SUITE(Watermarks)
 
@@ -12469,6 +12612,7 @@ Y_UNIT_TEST(TestTokenMissing) {
 } // Y_UNIT_TEST_SUITE(TestGetQueryPosition)
 
 Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery) {
+
 Y_UNIT_TEST(EmptyTuple) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
             SELECT ();
@@ -12773,6 +12917,123 @@ Y_UNIT_TEST(InsideLambda) {
         SELECT $f('1');
     )sql", s);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(ReadsFromJoinSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT * FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a;
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionJoinSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionJoinInSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT 1 IN (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionJoinExistsSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT EXISTS (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsNamedNodeJoinExistsSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $x = (SELECT a FROM plato.x JOIN (SELECT * FROM plato.y) AS y ON x.a = y.a);
+        SELECT $x;
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
+}
+
+Y_UNIT_TEST(ReadsProjectionExpresionSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT 1 + (SELECT a FROM plato.x);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+}
+
+Y_UNIT_TEST(ReadsNamedNodeExpresionSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $x = 1 + (SELECT a FROM plato.x);
+        $y = (SELECT a FROM plato.x) + 1;
+        $z = (SELECT a FROM plato.x);
+        $h = ((SELECT a FROM plato.x));
+        SELECT $x, $y, $z, $h;
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 4);
+}
+
+Y_UNIT_TEST(ReadsProjectionFromSubquery) {
+    NSQLTranslation::TTranslationSettings s;
+    s.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT a FROM plato.x) FROM (SELECT * FROM plato.y);
+    )sql", s);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"Read!"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 2);
 }
 
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)

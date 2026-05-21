@@ -40,12 +40,6 @@ const NYson::ETokenType RangeSeparatorToken = NYson::ETokenType::Comma;
 
 namespace {
 
-void ThrowUnexpectedToken(const TToken& token)
-{
-    THROW_ERROR_EXCEPTION("Unexpected token %Qv",
-        token);
-}
-
 TStringBuf ParseAttributes(TStringBuf str, const IAttributeDictionaryPtr& attributes)
 {
     {
@@ -60,9 +54,7 @@ TStringBuf ParseAttributes(TStringBuf str, const IAttributeDictionaryPtr& attrib
 
     NYson::TTokenizer tokenizer(str);
     tokenizer.ParseNext();
-    if (tokenizer.CurrentToken().GetType() != NYson::ETokenType::LeftAngle) {
-        ThrowUnexpectedToken(tokenizer.CurrentToken());
-    }
+    tokenizer.CurrentToken().ExpectType(NYson::ETokenType::LeftAngle);
 
     int depth = 0;
     int attrStartPosition = tokenizer.GetPosition();
@@ -176,8 +168,7 @@ void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes
                 tokenizer.ParseNext();
                 break;
             default:
-                ThrowUnexpectedToken(tokenizer.CurrentToken());
-                YT_ABORT();
+                tokenizer.CurrentToken().ThrowUnexpected();
         }
 
         columns.push_back(begin);
@@ -189,8 +180,7 @@ void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes
             case EndColumnSelectorToken:
                 break;
             default:
-                ThrowUnexpectedToken(tokenizer.CurrentToken());
-                YT_ABORT();
+                tokenizer.CurrentToken().ThrowUnexpected();
         }
     }
     tokenizer.ParseNext();
@@ -239,8 +229,7 @@ void ParseKeyPart(
         }
 
         default:
-            ThrowUnexpectedToken(tokenizer.CurrentToken());
-            break;
+            tokenizer.CurrentToken().ThrowUnexpected();
     }
     rowBuilder->AddValue(value);
     tokenizer.ParseNext();
@@ -323,8 +312,7 @@ void ParseRowLimit(
                     case EndTupleToken:
                         break;
                     default:
-                        ThrowUnexpectedToken(tokenizer.CurrentToken());
-                        YT_ABORT();
+                        tokenizer.CurrentToken().ThrowUnexpected();
                 }
             }
             tokenizer.ParseNext();

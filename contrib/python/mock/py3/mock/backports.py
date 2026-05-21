@@ -1,12 +1,15 @@
 import sys
 
 
-if sys.version_info[:2] < (3, 8):
+if sys.version_info[:2] > (3, 9):
+    from inspect import iscoroutinefunction
+elif sys.version_info[:2] >= (3, 8):
+    from asyncio import iscoroutinefunction
+else:
 
-    import asyncio, functools
+    import functools
     from asyncio.coroutines import _is_coroutine
     from inspect import ismethod, isfunction, CO_COROUTINE
-    from unittest import TestCase
 
     def _unwrap_partial(func):
         while isinstance(func, functools.partial):
@@ -33,6 +36,13 @@ if sys.version_info[:2] < (3, 8):
             _has_code_flag(obj, CO_COROUTINE) or
             getattr(obj, '_is_coroutine', None) is _is_coroutine
         )
+
+
+try:
+    from unittest import IsolatedAsyncioTestCase
+except ImportError:
+    import asyncio
+    from unittest import TestCase
 
 
     class IsolatedAsyncioTestCase(TestCase):
@@ -82,8 +92,7 @@ if sys.version_info[:2] < (3, 8):
                 self._tearDownAsyncioLoop()
 
 
-else:
-
-    from asyncio import iscoroutinefunction
-    from unittest import IsolatedAsyncioTestCase
-
+try:
+    from asyncio import _set_event_loop_policy as set_event_loop_policy
+except ImportError:
+    from asyncio import set_event_loop_policy

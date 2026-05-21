@@ -167,12 +167,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
             childAliases.push_back("#fake_alias" + std::to_string(fakeAliasId++));
         }
 
-        TVector<TInfoUnit> mappedKeyColumns;
-        for (const auto& col : child->Props.Metadata->KeyColumns) {
-            mappedKeyColumns.push_back(cboTree->TreeRoot->Props.Metadata->MapColumn(col));
-        }
-
-        auto stats = BuildOptimizerStatistics(child->Props, true, mappedKeyColumns);
+        auto stats = BuildOptimizerStatistics(child->Props, true);
         auto relNode = std::make_shared<TRBORelOptimizerNode>(childAliases, stats, child);
         rels.push_back(relNode);
         nodeMap.insert({child.get(), relNode});
@@ -321,6 +316,9 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
+    auto cboTree = CastOperator<TOpCBOTree>(input);
+    auto& cboStats = ctx.KqpCtx.CBOStats;
+
     auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
     auto useBlockHashJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
@@ -329,7 +327,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
-    auto cboTree = CastOperator<TOpCBOTree>(input);
+    ++cboStats.TreesTotal;
 
     // Check that all inputs have statistics
     for (auto c : cboTree->Children) {
@@ -391,7 +389,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints());
+        joinTree = opt->JoinSearch(joinTree, ctx.KqpCtx.GetOptimizerHints(), &cboStats);
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

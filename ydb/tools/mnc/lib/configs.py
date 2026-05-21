@@ -84,23 +84,17 @@ class NodeCountByKind:
     def __init__(self, config, hosts: list[str]):
         self.static_node_count = 0
         self.dynamic_node_count = 0
-        self.nbs_node_count = 0
-        self.freehost = config.get('freehost', None)
         self.nodes_per_host = config['nodes_per_host']
         self.hosts = []
         self.databases = config['domain']['databases'] if config.get('domain') is not None else []
-        self.with_nbs = config['with_nbs']
-        self.next_dynamic_nodes = itertools.cycle([host for host in hosts if host != self.freehost])
+        self.next_dynamic_nodes = itertools.cycle(hosts)
         self.count(hosts)
 
     def count(self, hosts: list[str]):
         self.hosts = hosts
-        self.static_node_count = common.calculate_node_count(hosts, self.nodes_per_host, self.freehost)
+        self.static_node_count = common.calculate_node_count(hosts, self.nodes_per_host)
         for db in self.databases:
-            if db['name'] == 'NBS' and self.with_nbs:
-                self.nbs_node_count = db.get('compute_unit_count', 0)
-            else:
-                self.dynamic_node_count += db.get('compute_unit_count', 0)
+            self.dynamic_node_count += db.get('compute_unit_count', 0)
 
     def count_node_count_by_host(self, node_count: int):
         result = collections.defaultdict(list)
@@ -111,9 +105,6 @@ class NodeCountByKind:
 
     def dynamic_node_count_by_host(self):
         return self.count_node_count_by_host(self.dynamic_node_count)
-
-    def nbs_node_count_by_host(self):
-        return self.count_node_count_by_host(self.nbs_node_count)
 
 
 def _device_to_json(device: common.Device):
@@ -172,6 +163,60 @@ def add_tenants_configs(builder: ydb_config.YdbConfigBuilder, config: dict):
             builder.add_tenant_selector(f"/{config['domain']['name']}/{db['name']}", db['overridden_configs'])
 
 
+def is_nbs_enabled(config: dict):
+    return bool((config.get('nbs') or {}).get('enabled'))
+
+
+def validate_nbs_config(config: dict):
+    if not is_nbs_enabled(config):
+        return
+
+    domain = config.get('domain')
+    if not domain:
+        raise CliError('nbs.enabled requires domain configuration')
+
+    nbs_config = config['nbs']
+    database = nbs_config['database']
+    databases = domain.get('databases') or []
+    if database not in {db.get('name') for db in databases}:
+        raise CliError(f"nbs.enabled requires domain.databases to contain '{database}'")
+
+    overridden_configs = config.get('overridden_configs') or {}
+    for field_name in ('nbs_config', 'grpc_config'):
+        if field_name in overridden_configs:
+            raise CliError(f"nbs.enabled conflicts with overridden_configs.{field_name}")
+
+
+def add_nbs_config(builder: ydb_config.YdbConfigBuilder, config: dict):
+    validate_nbs_config(config)
+
+    if not is_nbs_enabled(config):
+        return
+
+    nbs_config = config['nbs']
+    domain = config['domain']
+    storage_pool_kind = nbs_config['storage_pool_kind']
+
+    builder.add_manual_config_field('grpc_config', {
+        'services_enabled': [
+            'legacy',
+        ],
+    })
+    builder.add_manual_config_field('nbs_config', {
+        'enabled': True,
+        'nbs_storage_config': {
+            'scheme_shard_dir': f"/{domain['name']}/{nbs_config['database']}",
+            'folder_id': nbs_config['folder_id'],
+            'ssd_system_channel_pool_kind': storage_pool_kind,
+            'ssd_log_channel_pool_kind': storage_pool_kind,
+            'ssd_index_channel_pool_kind': storage_pool_kind,
+            'pipe_client_retry_count': nbs_config['pipe_client_retry_count'],
+            'pipe_client_min_retry_time': nbs_config['pipe_client_min_retry_time'],
+            'pipe_client_max_retry_time': nbs_config['pipe_client_max_retry_time'],
+        },
+    })
+
+
 async def gen_yaml(
     filename: str,
     hosts: dict[str, list[common.Device]],
@@ -184,7 +229,6 @@ async def gen_yaml(
     npm = config['nodes_per_host']
     disk_size = config['disk_size']
     sector_map = config['sector_map']
-    freehost = config.get('freehost', None)
     logger.debug('start to generate yaml')
 
     base_config = ydb_config.YdbBaseConfig(
@@ -249,8 +293,6 @@ async def gen_yaml(
 
     added_nodes = 0
     for fqdn, devices in hosts.items():
-        if fqdn == freehost:
-            continue
         part_paths = await get_parts(fqdn, devices, npm, sector_map['use'], disk_size, sector_map['profile'])
         drives_per_node = len(part_paths) // npm
 
@@ -271,24 +313,14 @@ async def gen_yaml(
 
             added_nodes += 1
 
-    if freehost:
-        devices = hosts.get(freehost, [])
-        part_paths = await get_parts(freehost, devices, 1, sector_map['use'], disk_size, sector_map['profile'])
-        rack = dc.add_rack()
-        ic_ports = get_port_factory(config, 'ic')()
-        ic_port = next(ic_ports)
-        host = rack.add_host(fqdn=freehost, port=ic_port)
-        for path in part_paths:
-            host.add_device(path)
-        builder.system_tablets_node_ids = [node_count]
-    else:
-        if node_count > 20:
-            builder.system_tablets_node_ids = [1 + nodes_per_rack * idx for idx in range(min(8, len(rack_list)))]
+    if node_count > 20:
+        builder.system_tablets_node_ids = [1 + nodes_per_rack * idx for idx in range(min(8, len(rack_list)))]
 
     if config.get('overridden_configs'):
         for field_name, config_value in config.get('overridden_configs').items():
             builder.add_manual_config_field(field_name, config_value)
 
+    add_nbs_config(builder, config)
     add_tenants_configs(builder, config)
 
     with open(deploy_ctx.work_directory + '/' + filename, 'w') as file:
@@ -429,13 +461,6 @@ def clear_configs():
 
 
 def verify_config(config: dict):
-    if config['with_nbs']:
-        has_nbs_database = False
-        if config.get('domain') is not None and 'databases' in config['domain']:
-            has_nbs_database = any((db['name'] == 'NBS' for db in config['domain']['databases']))
-        if not has_nbs_database:
-            print("expected database with name 'NBS'")
-            return False
     return True
 
 
@@ -498,8 +523,7 @@ async def act_generate(
     ]
 
     tenants_tasks = []
-    dynamic_hosts = [host for host in hosts if host != config.get('freehost')]
-    next_host_for_dynnodes = itertools.cycle(dynamic_hosts)
+    next_host_for_dynnodes = itertools.cycle(hosts)
     pile_count = config['pile_count']
     if config['domain'] is not None:
         tenants = []

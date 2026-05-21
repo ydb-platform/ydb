@@ -4,7 +4,7 @@
 
     Lexers for the Julia language.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -251,6 +251,7 @@ class JuliaConsoleLexer(Lexer):
     aliases = ['jlcon', 'julia-repl']
     url = 'https://julialang.org/'
     version_added = '1.6'
+    _example = "jlcon/console"
 
     def get_tokens_unprocessed(self, text):
         jllexer = JuliaLexer(**self.options)

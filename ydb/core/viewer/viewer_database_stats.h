@@ -405,7 +405,8 @@ public:
                     incompleteStorageStats = true;
                 } else {
                     for (const auto& record : response->Record.GetVDiskStateInfo()) {
-                        if (StorageGroups.count(record.GetVDiskId().GetGroupID()) == 0) {
+                        auto itGroup = StorageGroups.find(record.GetVDiskId().GetGroupID());
+                        if (itGroup == StorageGroups.end()) {
                             continue;
                         }
                         diskReadBytes += record.GetReadThroughput();
@@ -423,7 +424,7 @@ public:
                                 }
                                 slotSize = itPDisk->second.GetTotalSize() / slotCount;
                             }
-                            storageTotal += slotSize;
+                            storageTotal += slotSize * TPDiskConfig::GetOwnerWeight(itGroup->second.GetInfo().GetGroupSizeInUnits(), itPDisk->second.GetSlotSizeInUnits());
                         } else {
                             unknownPDisk = true;
                         }

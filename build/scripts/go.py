@@ -25,6 +25,8 @@ class _Go:
     def cmd(cmd: list[str], cwd: str = None, env: dict[str, str] = None) -> int:
         try:
             r = subprocess.run(cmd, capture_output=True, cwd=cwd, env=env, check=True, timeout=1800, text=True)
+            if r.returncode != 0:
+                sys.stderr.write(f'\nFail command with returncode={r.returncode}:\n{' '.join(cmd)}\n')
             if r.stderr:
                 sys.stderr.write(f'{r.stderr}\n')
             return r.returncode
@@ -100,7 +102,7 @@ class _GoTool:
                 if line.startswith('package '):
                     return line.split()[1].strip()
                 line = f.readline()
-        return ''
+        return 'package_not_found'
 
 
 class _GoToolCover(_GoTool):
@@ -189,7 +191,7 @@ class _GoToolCover(_GoTool):
 
     def _make_empty_cover_go(self, go_file: str, go_pkg: str) -> None:
         with open(self.bindir / Path(go_file).name.replace('.go', self.args.cover_ext), 'wt', encoding="utf-8") as f:
-            f.write(f'package {go_pkg}')
+            f.write(f'package {go_pkg}\n')
 
     def _do_package_coverage(
         self, go_package: str, covervars_file: str, outfileslist_file: str, pkgcfg_file: str, go_files: list[str]
@@ -254,10 +256,12 @@ class _GoToolCovdata(_GoTool):
         )
         covdata_merge.add_argument(
             '+i',
+            required=True,
             help='comma separated list of input directory with binary coverage data',
         )
         covdata_merge.add_argument(
             '+o',
+            required=True,
             help='output directory for binary coverage data',
         )
         covdata_merge.add_argument(
@@ -271,10 +275,12 @@ class _GoToolCovdata(_GoTool):
         )
         covdata_textfmt.add_argument(
             '+i',
+            required=True,
             help='input directory with binary coverage data',
         )
         covdata_textfmt.add_argument(
             '+o',
+            required=True,
             help='output coverage profile',
         )
 
@@ -290,7 +296,10 @@ class _GoToolCovdata(_GoTool):
                 return self._merge()
 
     def _merge(self) -> int:
-        cmd = [self.tool('covdata'), 'merge', '-i', self.args.i, '-o', self.args.o, '-modpaths', self.args.modpaths]
+        cmd = [self.tool('covdata'), 'merge', '-i', self.args.i, '-o', self.args.o]
+        if self.args.modpaths:
+            cmd.append('-modpaths')
+            cmd.append(self.args.modpaths)
         return _Go.cmd(cmd, self.bindir)
 
     def _textfmt(self) -> int:

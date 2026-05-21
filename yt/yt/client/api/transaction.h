@@ -67,8 +67,9 @@ struct TTransactionCommitOptions
     //! that has been specified when starting transaction.
     bool AllowAlienCoordinator = false;
 
-    //! All strongly ordered transactions are ordered by commit timestamp.
-    bool StronglyOrdered = false;
+    //! Transactions that have intersecting ordering tags are committed in the order of
+    //! their commit timestamps.
+    TStrongOrderingTagsMap StrongOrderingTags = {};
 };
 
 struct TTransactionCommitResult

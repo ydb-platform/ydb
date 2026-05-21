@@ -204,7 +204,7 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
     NColumnShard::TConcreteScanCounters scanCounters(NColumnShard::TScanCounters(), nullptr);
 
     return std::make_shared<TReadContext>(TTestStoragesManager::GetInstance(), dataAccessorsManager, columnDataManager, scanCounters,
-        readMetadata, scanActorId, scanActorId, scanActorId, TComputeShardingPolicy(), 0, NConveyorComposite::TCPULimitsConfig());
+        readMetadata, scanActorId, scanActorId, scanActorId, TComputeShardingPolicy(), 0, NConveyorComposite::TCPULimitsConfig(), nullptr);
 }
 
 struct TManagerSetupResult {
@@ -463,13 +463,13 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady, "P2 filter should be ready; failure=" << sub2->FailureReason);
         UNIT_ASSERT_C(!sub2->Failed, "P2 should not fail: " << sub2->FailureReason);
 
-        auto p1Filter = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto p1Filter = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(p1Filter.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(p1Filter[0], true);
         UNIT_ASSERT_VALUES_EQUAL(p1Filter[1], false);
         UNIT_ASSERT_VALUES_EQUAL(p1Filter[2], false);
 
-        auto p2Filter = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto p2Filter = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(p2Filter.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(p2Filter[0], true);
         UNIT_ASSERT_VALUES_EQUAL(p2Filter[1], true);
@@ -522,14 +522,14 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: key 1 kept, key 3 kept, key 5 deduped by newer P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
         // P2: all keys kept (key 5 is newer, keys 7,9 unique)
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -584,14 +584,14 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: key 1 unique, keys 2,3 deduped by newer P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
         UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
         // P2: all keys kept
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: keys 1,10 unique (kept); keys 3,5,7 deduped by newer P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
@@ -654,7 +654,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f1[4], true);
 
         // P2: all keys kept (newer)
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -708,14 +708,14 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: all deduped by newer P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], false);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
         UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
         // P2: all kept (newer)
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -781,7 +781,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
         // P1: keys 1,2 unique; keys 3,4 deduped by P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f1[3], false);
 
         // P2: keys 3,4 kept (newer than P1); keys 5,6 deduped by P3
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
         // P3: all keys kept (newest or unique)
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -863,21 +863,21 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
         // Results must be the same regardless of request order
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
         UNIT_ASSERT_VALUES_EQUAL(f1[3], false);
 
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[2], false);
         UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -932,14 +932,14 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: key 1 unique; keys 2,3 deduped by P2 (higher txId)
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
         UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
         // P2: all kept (higher txId wins on overlap, key 4 unique)
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -1002,12 +1002,12 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: single key 5 deduped by newer P2 (version 20 > 10)
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], false);
 
         // P2: key 5 kept (newer), keys 7,10 unique
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -1077,7 +1077,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
         // P2: keys 5,6 unique; keys 7,8 deduped by P3
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
         // P3: all kept
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -1139,19 +1139,19 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u, "P1 filter must cover all 10 records but got " << f1.size());
         for (ui32 i = 0; i < f1.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, "P1 row " << i << " must be deduped (newer P3 exists)");
         }
 
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 10u, "P2 filter must cover all 10 records but got " << f2.size());
         for (ui32 i = 0; i < f2.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f2[i], false, "P2 row " << i << " must be deduped (newer P3 exists)");
         }
 
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u, "P3 filter must cover all 10 records but got " << f3.size());
         for (ui32 i = 0; i < f3.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true, "P3 row " << i << " must be kept (newest version)");
@@ -1217,19 +1217,19 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u, "P1 filter must cover all 10 records but got " << f1.size());
         for (ui32 i = 0; i < f1.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, "P1 row " << i << " must be deduped");
         }
 
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 10u, "P2 filter must cover all 10 records but got " << f2.size());
         for (ui32 i = 0; i < f2.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f2[i], false, "P2 row " << i << " must be deduped");
         }
 
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u, "P3 filter must cover all 10 records but got " << f3.size());
         for (ui32 i = 0; i < f3.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true, "P3 row " << i << " must be kept (newest)");
@@ -1300,7 +1300,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         runtime.DispatchEvents(opts, TDuration::Seconds(15));
 
         UNIT_ASSERT_C(subWide->FilterReady && !subWide->Failed, subWide->FailureReason);
-        auto fWide = subWide->ReceivedFilter.BuildTrivialFilter();
+        auto fWide = subWide->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(fWide.size(), N, "Wide filter must cover " << N << " records but got " << fWide.size());
         for (ui32 i = 0; i < fWide.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(fWide[i], false, "Wide row " << i << " must be deduped by narrow portion v=50");
@@ -1309,7 +1309,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         for (ui64 k = 0; k < N; ++k) {
             UNIT_ASSERT_C(
                 narrowSubs[k]->FilterReady && !narrowSubs[k]->Failed, "Narrow P" << (k + 1) << " failed: " << narrowSubs[k]->FailureReason);
-            auto f = narrowSubs[k]->ReceivedFilter.BuildTrivialFilter();
+            auto f = narrowSubs[k]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), 1u, "Narrow P" << (k + 1) << " filter must be 1 entry but got " << f.size());
             UNIT_ASSERT_VALUES_EQUAL_C(f[0], true, "Narrow P" << (k + 1) << " must be kept (v=50 > v=10)");
         }
@@ -1392,7 +1392,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 expected = portions[idx]->GetRecordsCount();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
                 "Portion " << portions[idx]->GetPortionId() << " filter must cover " << expected << " records but got " << f.size());
@@ -1455,17 +1455,17 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u, "P1 filter must cover all 10 records but got " << f1.size());
         for (ui32 i = 0; i < f1.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, "P1 row " << i << " (pk=" << (i + 1) << ") must be deduped");
         }
 
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 1u, "P2 filter must cover 1 record but got " << f2.size());
         UNIT_ASSERT_VALUES_EQUAL(f2[0], false);
 
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u, "P3 filter must cover all 10 records but got " << f3.size());
         for (ui32 i = 0; i < f3.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true, "P3 row " << i << " must be kept (newest)");
@@ -1528,25 +1528,25 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub4->FilterReady && !sub4->Failed, sub4->FailureReason);
         UNIT_ASSERT_C(sub5->FilterReady && !sub5->Failed, sub5->FailureReason);
 
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u, "P1 filter must cover all 10 records but got " << f1.size());
         for (ui32 i = 0; i < f1.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, "P1 row " << i << " (pk=" << (i + 1) << ") must be deduped");
         }
 
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 1u, "P2 filter must cover 1 record but got " << f2.size());
         UNIT_ASSERT_VALUES_EQUAL(f2[0], false);
 
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 1u, "P3 filter must cover 1 record but got " << f3.size());
         UNIT_ASSERT_VALUES_EQUAL(f3[0], false);
 
-        auto f4 = sub4->ReceivedFilter.BuildTrivialFilter();
+        auto f4 = sub4->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f4.size(), 1u, "P4 filter must cover 1 record but got " << f4.size());
         UNIT_ASSERT_VALUES_EQUAL(f4[0], false);
 
-        auto f5 = sub5->ReceivedFilter.BuildTrivialFilter();
+        auto f5 = sub5->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f5.size(), 10u, "P5 filter must cover all 10 records but got " << f5.size());
         for (ui32 i = 0; i < f5.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f5[i], true, "P5 row " << i << " must be kept (newest version)");
@@ -1606,7 +1606,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
 
         for (ui32 p = 0; p < portionCount; ++p) {
             UNIT_ASSERT_C(subs[p]->FilterReady && !subs[p]->Failed, "P" << (p + 1) << " failed: " << subs[p]->FailureReason);
-            auto f = subs[p]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[p]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), N, "P" << (p + 1) << " filter must cover " << N << " records but got " << f.size());
 
             bool isNewest = (p + 1 == portionCount);
@@ -1674,20 +1674,20 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub4->FilterReady && !sub4->Failed, sub4->FailureReason);
         UNIT_ASSERT_C(sub5->FilterReady && !sub5->Failed, sub5->FailureReason);
 
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u, "P1 filter must cover 10 records but got " << f1.size());
         for (ui32 i = 0; i < f1.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, "P1 row " << i << " must be deduped");
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildTrivialFilter().size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildTrivialFilter().size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildTrivialFilter().size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildTrivialFilter()[0], false);
-        UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildTrivialFilter()[0], false);
-        UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildTrivialFilter()[0], false);
+        UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildSimpleFilter().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildSimpleFilter().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildSimpleFilter().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(sub2->ReceivedFilter.BuildSimpleFilter()[0], false);
+        UNIT_ASSERT_VALUES_EQUAL(sub3->ReceivedFilter.BuildSimpleFilter()[0], false);
+        UNIT_ASSERT_VALUES_EQUAL(sub4->ReceivedFilter.BuildSimpleFilter()[0], false);
 
-        auto f5 = sub5->ReceivedFilter.BuildTrivialFilter();
+        auto f5 = sub5->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f5.size(), 10u, "P5 filter must cover 10 records but got " << f5.size());
         for (ui32 i = 0; i < f5.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f5[i], true, "P5 row " << i << " must be kept");
@@ -1768,19 +1768,19 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 20u, "P1 filter must cover 20 records but got " << f1.size());
         for (ui32 i = 0; i < f1.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, "P1 row " << i << " must be deduped by P3");
         }
 
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 11u, "P2 filter must cover 11 records but got " << f2.size());
         for (ui32 i = 0; i < f2.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f2[i], false, "P2 row " << i << " must be deduped by P3");
         }
 
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 20u, "P3 filter must cover 20 records but got " << f3.size());
         for (ui32 i = 0; i < f3.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true, "P3 row " << i << " must be kept (newest)");
@@ -1864,7 +1864,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 expected = portions[idx]->GetRecordsCount();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
                 "Portion " << portions[idx]->GetPortionId() << " filter must cover " << expected << " records but got " << f.size());
@@ -1958,7 +1958,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 expected = portions[idx]->GetRecordsCount();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
                 "Portion " << portions[idx]->GetPortionId() << " filter must cover " << expected << " records but got " << f.size());
@@ -1966,7 +1966,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
 
         THashMap<ui64, ui32> trueCountPerKey;
         for (ui32 idx = 0; idx < subs.size(); ++idx) {
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             const auto& p = portions[idx];
             ui64 startKey = p->IndexKeyStart().GetValue<ui64>(0).value();
             for (ui32 i = 0; i < f.size(); ++i) {
@@ -1985,7 +1985,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
 
         for (ui32 idx = 0; idx < subs.size(); ++idx) {
             if (portions[idx]->GetPortionId() == newestBulkPid) {
-                auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+                auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
                 for (ui32 i = 0; i < f.size(); ++i) {
                     UNIT_ASSERT_VALUES_EQUAL_C(f[i], true, "Newest bulk portion row " << i << " must be kept");
                 }
@@ -2082,7 +2082,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 expected = portions[idx]->GetRecordsCount();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
                 "Portion " << portions[idx]->GetPortionId() << " filter must cover " << expected << " records but got " << f.size());
@@ -2090,7 +2090,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
 
         THashMap<ui64, ui32> trueCountPerKey;
         for (ui32 idx = 0; idx < subs.size(); ++idx) {
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             const auto& p = portions[idx];
             ui64 startKey = p->IndexKeyStart().GetValue<ui64>(0).value();
             for (ui32 i = 0; i < f.size(); ++i) {
@@ -2110,7 +2110,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         {
             ui32 delIdx = subs.size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(portions[delIdx]->GetPortionId(), deletePid);
-            auto f = subs[delIdx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[delIdx]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), numKeys, "Delete portion filter size " << f.size());
             for (ui32 i = 0; i < f.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL_C(f[i], true, "Delete portion row " << i << " must be kept (newest)");
@@ -2181,7 +2181,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(
                 subs[idx]->FilterReady && !subs[idx]->Failed, "P" << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 expected = portions[idx]->GetRecordsCount();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 f.size(), expected, "P" << portions[idx]->GetPortionId() << " filter size " << f.size() << " != " << expected);
@@ -2301,14 +2301,14 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 f.size(), portions[idx]->GetRecordsCount(), "Portion " << portions[idx]->GetPortionId() << " filter size mismatch");
         }
 
         THashMap<ui64, ui32> trueCountPerKey;
         for (ui32 idx = 0; idx < subs.size(); ++idx) {
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 startKey = portions[idx]->IndexKeyStart().GetValue<ui64>(0).value();
             for (ui32 i = 0; i < f.size(); ++i) {
                 if (f[i]) {
@@ -2430,7 +2430,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 f.size(), portions[idx]->GetRecordsCount(), "Portion " << portions[idx]->GetPortionId() << " filter size mismatch");
 
@@ -2537,7 +2537,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 expected = portions[idx]->GetRecordsCount();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), expected,
                 "Portion " << portions[idx]->GetPortionId() << " filter must cover " << expected << " records but got " << f.size());
@@ -2639,7 +2639,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 expected = portions[idx]->GetRecordsCount();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 f.size(), expected, "Portion " << portions[idx]->GetPortionId() << " filter size " << f.size() << " != " << expected);
@@ -2727,7 +2727,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 f.size(), portions[idx]->GetRecordsCount(), "Portion " << portions[idx]->GetPortionId() << " filter size mismatch");
 
@@ -2745,7 +2745,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(trueCountPerKey.size(), numKeys);
 
         {
-            auto wideF = subs.back()->ReceivedFilter.BuildTrivialFilter();
+            auto wideF = subs.back()->ReceivedFilter.BuildSimpleFilter();
             for (ui32 i = 0; i < wideF.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL_C(wideF[i], true, "Wide portion (newest) row " << i << " must be kept");
             }
@@ -2828,7 +2828,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 f.size(), portions[idx]->GetRecordsCount(), "Portion " << portions[idx]->GetPortionId() << " filter size mismatch");
 
@@ -2922,13 +2922,13 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady, "P2 filter should be ready; failure=" << sub2->FailureReason);
         UNIT_ASSERT_C(!sub2->Failed, "P2 should not fail: " << sub2->FailureReason);
 
-        auto p1Filter = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto p1Filter = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(p1Filter.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(p1Filter[0], true);   // key 1 unique
         UNIT_ASSERT_VALUES_EQUAL(p1Filter[1], false);   // key 2 deduped by P2
         UNIT_ASSERT_VALUES_EQUAL(p1Filter[2], false);   // key 3 deduped by P2
 
-        auto p2Filter = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto p2Filter = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(p2Filter.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(p2Filter[0], true);   // key 2 kept (newer)
         UNIT_ASSERT_VALUES_EQUAL(p2Filter[1], true);   // key 3 kept (newer)
@@ -2992,7 +2992,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
         // P1: keys 1,2 unique; keys 3,4 deduped by P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], true);
@@ -3000,7 +3000,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f1[3], false);
 
         // P2: keys 3,4 kept (newer than P1); keys 5,6 deduped by P3
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -3008,7 +3008,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
         // P3: all keys kept (newest or unique)
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -3062,19 +3062,19 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f1.size(), 10u, "P1 filter must cover all 10 records but got " << f1.size());
         for (ui32 i = 0; i < f1.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], false, "P1 row " << i << " must be deduped (newer P3 exists)");
         }
 
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f2.size(), 10u, "P2 filter must cover all 10 records but got " << f2.size());
         for (ui32 i = 0; i < f2.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f2[i], false, "P2 row " << i << " must be deduped (newer P3 exists)");
         }
 
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL_C(f3.size(), 10u, "P3 filter must cover all 10 records but got " << f3.size());
         for (ui32 i = 0; i < f3.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true, "P3 row " << i << " must be kept (newest version)");
@@ -3144,7 +3144,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
         // P2: keys 5,6 unique; keys 7,8 deduped by P3
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -3152,7 +3152,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f2[3], false);
 
         // P3: all kept
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f3.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(f3[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f3[1], true);
@@ -3208,14 +3208,14 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: key 1 unique, keys 2,3 deduped by newer P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
         UNIT_ASSERT_VALUES_EQUAL(f1[2], false);
 
         // P2: all keys kept
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -3269,7 +3269,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub2->FilterReady && !sub2->Failed, sub2->FailureReason);
 
         // P1: keys 1,10 unique (kept); keys 3,5,7 deduped by newer P2
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(f1[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f1[1], false);
@@ -3278,7 +3278,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_VALUES_EQUAL(f1[4], true);
 
         // P2: all keys kept (newer)
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(f2[0], true);
         UNIT_ASSERT_VALUES_EQUAL(f2[1], true);
@@ -3338,7 +3338,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
 
         for (ui32 p = 0; p < portionCount; ++p) {
             UNIT_ASSERT_C(subs[p]->FilterReady && !subs[p]->Failed, "P" << (p + 1) << " failed: " << subs[p]->FailureReason);
-            auto f = subs[p]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[p]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(f.size(), N, "P" << (p + 1) << " filter must cover " << N << " records but got " << f.size());
 
             bool isNewest = (p + 1 == portionCount);
@@ -3399,7 +3399,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         UNIT_ASSERT_C(sub3->FilterReady && !sub3->Failed, sub3->FailureReason);
 
         // P1: keys 1-4 unique, keys 5-10 deduped by P2 or P3
-        auto f1 = sub1->ReceivedFilter.BuildTrivialFilter();
+        auto f1 = sub1->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f1.size(), 10u);
         for (ui32 i = 0; i < 4; ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f1[i], true, i);
@@ -3409,7 +3409,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         }
 
         // P2: keys 5-9 deduped by P3, keys 10-15 deduped by P3
-        auto f2 = sub2->ReceivedFilter.BuildTrivialFilter();
+        auto f2 = sub2->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f2.size(), 11u);
         for (ui32 i = 0; i < 5; ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f2[i], true, i);
@@ -3419,7 +3419,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         }
 
         // P3: all kept (newest)
-        auto f3 = sub3->ReceivedFilter.BuildTrivialFilter();
+        auto f3 = sub3->ReceivedFilter.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(f3.size(), 11u);
         for (ui32 i = 0; i < 11; ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(f3[i], true, i);
@@ -3526,14 +3526,14 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
             UNIT_ASSERT_C(subs[idx]->FilterReady && !subs[idx]->Failed,
                 "Portion " << portions[idx]->GetPortionId() << " failed: " << subs[idx]->FailureReason);
 
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             UNIT_ASSERT_VALUES_EQUAL_C(
                 f.size(), portions[idx]->GetRecordsCount(), "Portion " << portions[idx]->GetPortionId() << " filter size mismatch");
         }
 
         THashMap<ui64, ui32> trueCountPerKey;
         for (ui32 idx = 0; idx < subs.size(); ++idx) {
-            auto f = subs[idx]->ReceivedFilter.BuildTrivialFilter();
+            auto f = subs[idx]->ReceivedFilter.BuildSimpleFilter();
             ui64 startKey = portions[idx]->IndexKeyStart().GetValue<ui64>(0).value();
             for (ui32 i = 0; i < f.size(); ++i) {
                 if (f[i]) {

@@ -1941,6 +1941,94 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             {TToken{"\4key", "$p"}}, {}, {{"v1", "$p"}, {"v2", "$p"}});
     }
 
+    // Method calls on literal values (string, number, bool, null) and on variables
+    Y_UNIT_TEST(CollectPath_MethodsOnLiteralsAndVariables) {
+        // Standalone: method on a literal/variable produces no indexable path
+        ValidateError("\"hello\".type()", emptyError);
+        ValidateError("\"hello\".size()", emptyError);
+        ValidateError("42.0.abs()", emptyError);
+        ValidateError("3.14.floor()", emptyError);
+        ValidateError("3.14.ceiling()", emptyError);
+        ValidateError("true.type()", emptyError);
+        ValidateError("null.type()", emptyError);
+        ValidateError("(-1).abs()", emptyError);
+        ValidateError("(+1.5).ceiling()", emptyError);
+
+        // Chained method on literal
+        ValidateError("\"hello\".type().size()", emptyError);
+
+        // Standalone: method on a variable
+        ValidateError("$var.type()", emptyError, {{"var", strSuffix("hello")}});
+        ValidateError("$var.abs()", emptyError, {{"var", numSuffix(1)}});
+        ValidateError("$var.floor()", emptyError, {{"var", numSuffix(3.14)}});
+        ValidateError("$var.size()", emptyError, {{"var", strSuffix("hello")}});
+
+        // Standalone: method on a param variable
+        ValidateError("$var.type()", emptyError, {}, {{"var", "$p"}});
+        ValidateError("$var.abs()", emptyError, {}, {{"var", "$p"}});
+
+        // Comparison: path == literal.method()
+        ValidateJsonValue("$.key == \"hello\".type()", {"\4key"});
+        ValidateJsonValue("\"hello\".type() == $.key", {"\4key"});
+        ValidateJsonValue("$.key == 42.0.abs()", {"\4key"});
+        ValidateJsonValue("$.a == true.type()", {"\2a"});
+        ValidateJsonValue("$.a == null.type()", {"\2a"});
+        ValidateJsonValue("$.a.b == (-1).abs()", {"\2a\2b"});
+
+        // Comparison: path.method() == literal.method()
+        ValidateJsonValue("$.key.abs() == \"hello\".type()", {"\4key"});
+        ValidateJsonValue("$.a.b.floor() == 42.0.abs()", {"\2a\2b"});
+
+        // Comparison: path == variable.method()
+        ValidateTokens("$.key == $var.type()", {"\4key"}, {{"var", strSuffix("number")}});
+        ValidateTokens("$var.type() == $.key", {"\4key"}, {{"var", strSuffix("number")}});
+        ValidateTokens("$.key == $var.abs()", {"\4key"}, {{"var", numSuffix(5)}});
+        ValidateTokens("$.a.b == $var.floor()", {"\2a\2b"}, {{"var", numSuffix(0)}});
+
+        // Comparison: path == param-variable.method()
+        ValidateTokens("$.key == $var.type()", {"\4key"}, {}, {{"var", "$p"}});
+        ValidateTokens("$var.type() == $.key", {"\4key"}, {}, {{"var", "$p"}});
+
+        // Both sides non-path (literal.method() == literal)
+        ValidateError(R"("hello".type() == "string")", emptyError);
+        ValidateError("42.0.abs() == 42", emptyError);
+
+        // Filter: @.b == literal.method()
+        ValidateJsonExists("$.a ? (@.b == \"hello\".type())", {"\2a\2b"});
+        ValidateJsonExists("$.a ? (@.b == 42.0.abs())", {"\2a\2b"});
+        ValidateTokens("$.a ? (@.b == $var.type())", {"\2a\2b"}, {{"var", strSuffix("x")}}, {}, ECallableType::JsonExists);
+    }
+
+    Y_UNIT_TEST(CollectPath_MultiTokenSuffix) {
+        // MemberAccess
+        ValidateJsonValue("($.a + $.b).c == 1", {"\2a", "\2b"});
+        ValidateJsonValue("exists(($.a + $.b).c)", {"\2a", "\2b"});
+
+        // WildcardMemberAccess
+        ValidateJsonValue("exists(($.a + $.b).*)", {"\2a", "\2b"});
+        ValidateJsonValue("($.a + $.b).* starts with \"x\"", {"\2a", "\2b"});
+
+        // ArrayAccess
+        ValidateJsonValue("exists(($.a + $.b)[0])", {"\2a", "\2b"});
+        ValidateJsonValue("exists(($.a + $.b)[0].key)", {"\2a", "\2b"});
+        ValidateJsonValue("exists(($.a + $.b)[*])", {"\2a", "\2b"});
+
+        // Binary operations
+        ValidateJsonValue("($.a + $.b) == 3", {"\2a", "\2b"});
+        ValidateJsonValue("($.a - $.b) == true", {"\2a", "\2b"});
+
+        // Filter
+        ValidateJsonValue("($ ? (@.a > 0) ? (@.b < 10)).c", {"\2a"});
+        ValidateJsonValue("($ ? (@.a > 0) ? (@.b < 10)) == 1", {"\2a"});
+        ValidateJsonValue("$ ? (@.a > 0 && @.b < 10).c", {"\2a", "\2b"});
+        ValidateJsonValue("$ ? (@.a > 0 && @.b < 10) == 1", {"\2a", "\2b"});
+
+        // Methods
+        ValidateJsonValue("($.k1 > $.k2).abs()", {"\3k1", "\3k2"});
+        ValidateJsonValue("$ ? (@.a > 0 && @.b < 10).type()", {"\2a", "\2b"});
+        ValidateJsonValue("$ ? (@.a > 0 && @.b < 10).type() == \"object\"", {"\2a", "\2b"});
+    }
+
     // Tokens with no ancestor–descendant relation survive both AND and OR merge intact.
     Y_UNIT_TEST(MergeAndOr_DisjointPaths) {
         CheckMerge(
@@ -2508,65 +2596,65 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         };
 
         // path only
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}), ""), R"({"path": "k1.k2"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}), ""), R"({"path":"k1.k2"})");
 
         // path + bool true literal
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}) + boolTrueSuffix, ""), R"({"path": "k1.k2", "literal": true})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}) + boolTrueSuffix, ""), R"({"path":"k1.k2","literal":true})");
 
         // path + param
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}), "$var"), R"({"path": "k1.k2", "param": "$var"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"k1", "k2"}), "$var"), R"({"path":"k1.k2","param":"$var"})");
 
         // bool false literal only
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(boolFalseSuffix, ""), R"({"literal": false})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(boolFalseSuffix, ""), R"({"literal":false})");
 
         // param only
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken("", "$var"), R"({"param": "$var"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken("", "$var"), R"({"param":"$var"})");
 
         // empty
         UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken("", ""), "{}");
 
         // bool true literal only
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(boolTrueSuffix, ""), R"({"literal": true})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(boolTrueSuffix, ""), R"({"literal":true})");
 
         // null literal only
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(nullSuffix, ""), R"({"literal": null})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(nullSuffix, ""), R"({"literal":null})");
 
         // string literal only
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(strSuffix("hello"), ""), R"({"literal": "hello"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(strSuffix("hello"), ""), R"({"literal":"hello"})");
 
         // numeric literal only
         {
             double v = 42.0;
-            UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(numSuffix(v), ""), TStringBuilder() << R"({"literal": )" << v << "}");
+            UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(numSuffix(v), ""), TStringBuilder() << R"({"literal":)" << v << "}");
         }
 
         // path + string literal
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a"}) + strSuffix("x"), ""), R"({"path": "a", "literal": "x"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a"}) + strSuffix("x"), ""), R"({"path":"a","literal":"x"})");
 
         // path + numeric literal
         {
             double v = 3.14;
-            UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"x"}) + numSuffix(v), ""), TStringBuilder() << R"({"path": "x", "literal": )" << v << "}");
+            UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"x"}) + numSuffix(v), ""), TStringBuilder() << R"({"path":"x","literal":)" << v << "}");
         }
 
         // path + null literal
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a"}) + nullSuffix, ""), R"({"path": "a", "literal": null})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a"}) + nullSuffix, ""), R"({"path":"a","literal":null})");
 
         // single-segment path
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"key"}), ""), R"({"path": "key"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"key"}), ""), R"({"path":"key"})");
 
         // three-segment path
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a", "b", "c"}), ""), R"({"path": "a.b.c"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"a", "b", "c"}), ""), R"({"path":"a.b.c"})");
 
         // empty key segment in path
-        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"", "b"}), ""), R"({"path": ".b"})");
+        UNIT_ASSERT_VALUES_EQUAL(FormatJsonIndexToken(encodePath({"", "b"}), ""), R"({"path":".b"})");
 
         // long key (forces multi-byte LEB128)
         {
             TString longKey(200, 'x');
             UNIT_ASSERT_VALUES_EQUAL(
                 FormatJsonIndexToken(encodePath({longKey}), ""),
-                TStringBuilder() << R"({"path": ")" << longKey << R"("})");
+                TStringBuilder() << R"({"path":")" << longKey << R"("})");
         }
     }
 }

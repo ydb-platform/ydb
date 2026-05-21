@@ -2,7 +2,8 @@
 #include "dq_compute_actor_async_io.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_actor_metrics.h"
-#include "dq_compute_actor_watermarks.h"
+
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
 

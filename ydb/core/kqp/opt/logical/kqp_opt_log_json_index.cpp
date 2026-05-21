@@ -320,14 +320,16 @@ std::expected<TJsonNodeParams, TString> VisitJsonNode(const TCoJsonQueryBase& js
             return std::unexpected("DEFAULT ON ERROR in JSON_VALUE must be NULL");
         }
 
-        if (jsonValue.ReturningType()) {
-            const auto* returningTypeAnn = jsonValue.ReturningType().Ref()
-                .GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            returningType = returningTypeAnn->Cast<TDataExprType>()->GetSlot();
+        if (!jsonValue.ReturningType()) {
+            return std::unexpected("RETURNING clause is required for JSON_VALUE in JSON index predicates");
+        }
 
-            if (IsJsonValueReturningNonIndexable(returningType)) {
-                return std::unexpected("Date/time types in RETURNING clause are not supported");
-            }
+        const auto* returningTypeAnn = jsonValue.ReturningType().Ref()
+            .GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        returningType = returningTypeAnn->Cast<TDataExprType>()->GetSlot();
+
+        if (IsJsonValueReturningNonIndexable(returningType)) {
+            return std::unexpected("Date/time types in RETURNING clause are not supported");
         }
     }
 
@@ -518,10 +520,6 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         return std::nullopt;
     }
 
-    if (!collection.Maybe<TExprList>()) {
-        return std::nullopt;
-    }
-
     const auto jsonLookup = lookup.Cast<TCoJsonValue>();
     const auto jsonParams = VisitJsonNode(jsonLookup);
     if (!jsonParams.has_value()) {
@@ -530,6 +528,45 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
 
     if (jsonParams->ReturningType.has_value() && *jsonParams->ReturningType == EDataSlot::Bool) {
         return MakeCollectError(ctx, jsonLookup.Pos(), "SQL IN with JSON_VALUE with RETURNING Bool is not supported");
+    }
+
+    if (collection.Maybe<TCoParameter>()) {
+        const auto& param = collection.Cast<TCoParameter>();
+        const auto* paramTypeAnn = RemoveAllOptionals(param.Ref().GetTypeAnn());
+
+        if (!paramTypeAnn || paramTypeAnn->GetKind() != ETypeAnnotationKind::List) {
+            return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
+        }
+
+        const auto* listItemType = paramTypeAnn->Cast<TListExprType>()->GetItemType();
+        if (!IsSupportedJsonParamType(listItemType)) {
+            return MakeCollectError(ctx, param.Pos(), "List parameter item type is not supported for JSON index");
+        }
+
+        auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue,
+            std::nullopt, ctx, jsonLookup.Pos());
+        if (baseResult.Collect.IsError()) {
+            return baseResult;
+        }
+
+        const auto paramName = TString(param.Name().Value());
+        if (baseResult.Collect.CanCollect()) {
+            auto& tokens = baseResult.Collect.GetTokens();
+            YQL_ENSURE(tokens.size() == 1);
+
+            auto nodeHandle = tokens.extract(tokens.begin());
+            nodeHandle.value().ParamName = std::move(paramName);
+            tokens.insert(std::move(nodeHandle));
+
+            baseResult.Collect.StopCollecting();
+            baseResult.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
+        }
+
+        return baseResult;
+    }
+
+    if (!collection.Maybe<TExprList>()) {
+        return std::nullopt;
     }
 
     auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, std::nullopt, ctx, jsonLookup.Pos());

@@ -760,6 +760,47 @@ TLocalSortTaskParams LocalSortTaskParamsFromProto(const NProto::TLocalSortTaskPa
     return localSortTaskParams;
 }
 
+NProto::TPullOperationParams PullOperationParamsToProto(const TPullOperationParams& pullOperationParams) {
+    NProto::TPullOperationParams protoPullOperationParams;
+    for (const auto& inputTable : pullOperationParams.Input) {
+        auto protoInput = OperationTableRefToProto(inputTable);
+        auto* curInput = protoPullOperationParams.AddInput();
+        curInput->Swap(&protoInput);
+    }
+    return protoPullOperationParams;
+}
+
+TPullOperationParams PullOperationParamsFromProto(const NProto::TPullOperationParams& protoPullOperationParams) {
+    TPullOperationParams pullOperationParams;
+    for (size_t i = 0; i < protoPullOperationParams.InputSize(); ++i) {
+        pullOperationParams.Input.emplace_back(OperationTableRefFromProto(protoPullOperationParams.GetInput(i)));
+    }
+    return pullOperationParams;
+}
+
+NProto::TPullTaskParams PullTaskParamsToProto(const TPullTaskParams& pullTaskParams) {
+    NProto::TPullTaskParams protoPullTaskParams;
+    auto inputTables = TaskTableInputRefToProto(pullTaskParams.Input);
+    protoPullTaskParams.MutableInput()->Swap(&inputTables);
+    return protoPullTaskParams;
+}
+
+TPullTaskParams PullTaskParamsFromProto(const NProto::TPullTaskParams& protoPullTaskParams) {
+    TPullTaskParams pullTaskParams;
+    pullTaskParams.Input = TaskTableInputRefFromProto(protoPullTaskParams.GetInput());
+    return pullTaskParams;
+}
+
+NProto::TTaskPullResult TaskPullResultToProto(const TTaskPullResult& taskPullResult) {
+    NProto::TTaskPullResult protoTaskPullResult;
+    protoTaskPullResult.SetData(taskPullResult.Data);
+    return protoTaskPullResult;
+}
+
+TTaskPullResult TaskPullResultFromProto(const NProto::TTaskPullResult& protoTaskPullResult) {
+    return TTaskPullResult{.Data = protoTaskPullResult.GetData()};
+}
+
 NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams) {
     NProto::TOperationParams protoOperationParams;
     if (auto* uploadOperationParamsPtr = std::get_if<TUploadOperationParams>(&operationParams)) {
@@ -786,6 +827,9 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (auto* ReduceOperationParamsPtr = std::get_if<TReduceOperationParams>(&operationParams)) {
         NProto::TReduceOperationParams protoReduceOperationParams = ReduceOperationParamsToProto(*ReduceOperationParamsPtr);
         protoOperationParams.MutableReduceOperationParams()->Swap(&protoReduceOperationParams);
+    } else if (const auto* pullOperationParamsPtr = std::get_if<TPullOperationParams>(&operationParams)) {
+        NProto::TPullOperationParams protoPullOperationParams = PullOperationParamsToProto(*pullOperationParamsPtr);
+        protoOperationParams.MutablePullOperationParams()->Swap(&protoPullOperationParams);
     }
     return protoOperationParams;
 }
@@ -807,6 +851,8 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return SortOperationParamsFromProto(protoOperationParams.GetSortOperationParams());
     } else if (protoOperationParams.HasReduceOperationParams()) {
         return ReduceOperationParamsFromProto(protoOperationParams.GetReduceOperationParams());
+    } else if (protoOperationParams.HasPullOperationParams()) {
+        return PullOperationParamsFromProto(protoOperationParams.GetPullOperationParams());
     }
     return TOperationParams();
 }
@@ -863,6 +909,9 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
     } else if (auto* reduceTaskParamsPtr = std::get_if<TReduceTaskParams>(&taskParams)) {
         NProto::TReduceTaskParams protoReduceTaskParams = ReduceTaskParamsToProto(*reduceTaskParamsPtr);
         protoTaskParams.MutableReduceTaskParams()->Swap(&protoReduceTaskParams);
+    } else if (auto* pullTaskParamsPtr = std::get_if<TPullTaskParams>(&taskParams)) {
+        NProto::TPullTaskParams protoPullTaskParams = PullTaskParamsToProto(*pullTaskParamsPtr);
+        protoTaskParams.MutablePullTaskParams()->Swap(&protoPullTaskParams);
     }
     return protoTaskParams;
 }
@@ -885,6 +934,8 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
         taskParams = LocalSortTaskParamsFromProto(protoTaskParams.GetLocalSortTaskParams());
     } else if (protoTaskParams.HasReduceTaskParams()) {
         taskParams = ReduceTaskParamsFromProto(protoTaskParams.GetReduceTaskParams());
+    } else if (protoTaskParams.HasPullTaskParams()) {
+        taskParams = PullTaskParamsFromProto(protoTaskParams.GetPullTaskParams());
     }
     return taskParams;
 }
@@ -1111,6 +1162,8 @@ TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult) {
         return TaskMapResultFromProto(protoTaskResult.GetTaskMapResult());
     } else if (protoTaskResult.HasTaskSortedUploadResult()) {
         return TaskSortedUploadResultFromProto(protoTaskResult.GetTaskSortedUploadResult());
+    } else if (protoTaskResult.HasTaskPullResult()) {
+        return TaskPullResultFromProto(protoTaskResult.GetTaskPullResult());
     }
     return TTaskUploadResult();
 }
@@ -1132,6 +1185,9 @@ NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult) {
     } else if (auto* taskSortedUploadResultPtr = std::get_if<TTaskSortedUploadResult>(&taskResult)) {
         auto SortedUploadTask = TaskSortedUploadResultToProto(*taskSortedUploadResultPtr);
         protoTaskResult.MutableTaskSortedUploadResult()->Swap(&SortedUploadTask);
+    } else if (auto* taskPullResultPtr = std::get_if<TTaskPullResult>(&taskResult)) {
+        auto pullTask = TaskPullResultToProto(*taskPullResultPtr);
+        protoTaskResult.MutableTaskPullResult()->Swap(&pullTask);
     }
     return protoTaskResult;
 }

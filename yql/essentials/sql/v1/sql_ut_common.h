@@ -12716,6 +12716,18 @@ Y_UNIT_TEST(AtExpression) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(AtUnarySubexpr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT 1)[0];
+        SELECT (SELECT 1)[(SELECT 1)];
+        SELECT (SELECT <| x: 1 |>).x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(UnionParenthesis) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 4);

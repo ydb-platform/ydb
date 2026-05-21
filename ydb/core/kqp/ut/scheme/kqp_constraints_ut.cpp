@@ -3042,6 +3042,178 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
+    Y_UNIT_TEST(AlterTableSetDropDefaultWithChangefeed) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/TestSetDropDefaultCdc` (
+                    Key Int32,
+                    Value String,
+                    DefaultCol Int32,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestSetDropDefaultCdc` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES', FORMAT = 'JSON'
+                );
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TOPIC `/Root/TestSetDropDefaultCdc/feed` ADD CONSUMER `test_consumer`;
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestSetDropDefaultCdc`
+                ALTER COLUMN DefaultCol SET DEFAULT 42;
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (1, "One");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (2, "Two");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const std::string query = R"(
+                ALTER TABLE `/Root/TestSetDropDefaultCdc`
+                ALTER COLUMN DefaultCol DROP DEFAULT;
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const std::string query = R"(
+                UPSERT INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (3, "Three");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const std::string query = R"(
+                REPLACE INTO `/Root/TestSetDropDefaultCdc` (Key, Value)
+                VALUES (4, "Four");
+            )";
+
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TTopicClient topicClient(kikimr.GetDriver());
+
+        TReadSessionSettings readSettings;
+        readSettings.ConsumerName("test_consumer");
+        TTopicReadSettings topicReadSettings;
+        topicReadSettings.Path("/Root/TestSetDropDefaultCdc/feed");
+        readSettings.AppendTopics(topicReadSettings);
+
+        auto readSession = topicClient.CreateReadSession(readSettings);
+
+        {
+            auto event = readSession->GetEvent(/* block = */ true, /* maxEventsCount = */ 1);
+            UNIT_ASSERT(event);
+            auto* startEvent = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event);
+            UNIT_ASSERT(startEvent);
+            startEvent->Confirm();
+        }
+
+        const size_t expectedMessages = 4;
+
+        std::vector<TString> messages;
+        while (messages.size() < expectedMessages) {
+            TInstant deadline = TInstant::Now() + TDuration::Seconds(2);
+            TDuration remain = TDuration::Seconds(2);
+
+            while (TInstant::Now() < deadline) {
+                if (!readSession->WaitEvent().Wait(remain)) {
+                    break;
+                }
+
+                for (auto& ev : readSession->GetEvents(false)) {
+                    if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&ev)) {
+                        for (auto& m : e->GetMessages()) {
+                            messages.emplace_back(m.GetData());
+                        }
+                        e->Commit();
+                    }
+                }
+
+                remain = deadline - TInstant::Now();
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), expectedMessages);
+
+        for (size_t i = 0; i < messages.size(); ++i) {
+            NJson::TJsonValue json;
+            const bool parsed = NJson::ReadJsonTree(messages[i], &json);
+            UNIT_ASSERT_C(parsed, TStringBuilder() << "Failed to parse changefeed message as JSON: " << messages[i]);
+
+            auto key = json["key"][0].GetInteger();
+            if (key == 1) {
+                UNIT_ASSERT_C(json["update"].Has("DefaultCol"),
+                    TStringBuilder() << "DefaultCol should be present after SET DEFAULT, key=" << key);
+                UNIT_ASSERT_VALUES_EQUAL(json["update"]["DefaultCol"].GetInteger(), 42);
+            } else if (key == 2) {
+                UNIT_ASSERT_C(json["reset"].Has("DefaultCol"),
+                    TStringBuilder() << "DefaultCol should be present after SET DEFAULT, key=" << key);
+                UNIT_ASSERT_VALUES_EQUAL(json["reset"]["DefaultCol"].GetInteger(), 42);
+            } else if (key == 3) {
+                UNIT_ASSERT_C(!json["update"].Has("DefaultCol"),
+                    "DefaultCol should not be present after DROP DEFAULT with UPSERT");
+            } else if (key == 4) {
+                UNIT_ASSERT_C(json["reset"].Has("DefaultCol"),
+                    "DefaultCol should be present after DROP DEFAULT with REPLACE");
+                UNIT_ASSERT_C(json["reset"]["DefaultCol"].IsNull(),
+                    "DefaultCol should be null after DROP DEFAULT with REPLACE");
+            }
+        }
+    }
+
     Y_UNIT_TEST(AlterTableSetDefaultDisabled) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(false);

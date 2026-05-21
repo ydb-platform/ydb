@@ -638,6 +638,16 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def normalize_result_viewer_config(cls, result):
+        """Normalize dynamic local cluster settings returned by /viewer/config."""
+        return cls.replace_values_by_key(result, {'BackendFileName',
+                                                  'MonitoringPort',
+                                                  'NetDataFilePath',
+                                                  'Port',
+                                                  'StartupConfigYaml',
+                                                  })
+
+    @classmethod
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
         cls.delete_keys_recursively(result, {'issue_log'})
@@ -1664,15 +1674,15 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
-        result['viewer_config_root'] = cls.get_viewer("/viewer/config", headers={
+        result['viewer_config_root'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
-        result['viewer_config_monitoring'] = cls.get_viewer("/viewer/config", headers={
+        }))
+        result['viewer_config_monitoring'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['viewer_config_viewer'] = cls.get_viewer("/viewer/config", headers={
+        }))
+        result['viewer_config_viewer'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
             'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }))
         result['viewer_config_database'] = cls.get_viewer("/viewer/config", headers={
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })

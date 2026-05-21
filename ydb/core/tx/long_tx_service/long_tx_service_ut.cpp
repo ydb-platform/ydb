@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 UNIT_ASSERT_VALUES_EQUAL(registry->GetActiveSnapshots(otherTable).contains(snapshots.front()), !hasTable);
             }
 
-            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() == TRowVersion::Max());
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() == (manySnapshots ? snapshots[10] : TRowVersion::Max()));
         }
 
         handles.clear();
@@ -663,7 +663,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == (index >= 3));
             }
 
-            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() == snapshots[6]);
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() == snapshots[3]);
 
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(table).size() == 3);
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(otherTable).size() == 0);

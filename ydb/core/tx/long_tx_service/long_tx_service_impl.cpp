@@ -33,18 +33,6 @@ void TLongTxServiceActor::Bootstrap() {
     LogPrefix = TStringBuilder() << "TLongTxService [Node " << SelfId().NodeId() << "] ";
     RegisterLongTxServiceProbes();
 
-    TSnapshotExchangeCounters snapshotExchangeCounters;
-    if (Settings.Counters) {
-        snapshotExchangeCounters.SnapshotsCollectionTimeMs = Settings.Counters->SnapshotsCollectionTimeMs;
-        snapshotExchangeCounters.SnapshotsPropagationTimeMs = Settings.Counters->SnapshotsPropagationTimeMs;
-        snapshotExchangeCounters.TimeSinceLastRemoteSnapshotsUpdateMs = Settings.Counters->TimeSinceLastRemoteSnapshotsUpdateMs;
-    }
-
-    auto* snapshotExchangeActor = CreateSnapshotExchangeActor(
-        LocalSnapshotsStorage,
-        RemoteSnapshotsStorage,
-        snapshotExchangeCounters);
-    SnapshotsExchangeActorId = RegisterWithSameMailbox(snapshotExchangeActor);
     Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
 
     TXLOG_NOTICE("Started, SelfId: " << SelfId());
@@ -1747,7 +1735,26 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
         LocalSnapshotsStorage->Clear();
         RemoteSnapshotsStorage->Clear();
         AppData()->SnapshotRegistryHolder->Set(nullptr);
+        if (SnapshotsExchangeActorId) {
+            Send(SnapshotsExchangeActorId, new TEvents::TEvPoison());
+            SnapshotsExchangeActorId = {};
+        }
         return;
+    } else {
+        if (!SnapshotsExchangeActorId) {
+            TSnapshotExchangeCounters snapshotExchangeCounters;
+            if (Settings.Counters) {
+                snapshotExchangeCounters.SnapshotsCollectionTimeMs = Settings.Counters->SnapshotsCollectionTimeMs;
+                snapshotExchangeCounters.SnapshotsPropagationTimeMs = Settings.Counters->SnapshotsPropagationTimeMs;
+                snapshotExchangeCounters.TimeSinceLastRemoteSnapshotsUpdateMs = Settings.Counters->TimeSinceLastRemoteSnapshotsUpdateMs;
+            }
+
+            auto* snapshotExchangeActor = CreateSnapshotExchangeActor(
+                LocalSnapshotsStorage,
+                RemoteSnapshotsStorage,
+                snapshotExchangeCounters);
+            SnapshotsExchangeActorId = RegisterWithSameMailbox(snapshotExchangeActor);
+        }
     }
 
     LocalSnapshotsStorage->CleanExpired();

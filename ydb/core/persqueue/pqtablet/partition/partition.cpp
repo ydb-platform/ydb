@@ -680,7 +680,9 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         UsersInfoStorage->Clear(ctx);
     }
 
-    Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    if (ReadQuotaTrackerActor) {
+        Send(ReadQuotaTrackerActor, new TEvents::TEvPoisonPill());
+    }
     if (!IsSupportive()) {
         Send(WriteQuotaTrackerActor, new TEvents::TEvPoisonPill());
     }
@@ -3442,8 +3444,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         AutopartitioningManager->UpdateConfig(Config);
     }
 
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    if (ReadQuotaTrackerActor) {
+        Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    }
+    if (!IsSupportive()) {
+        Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    }
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     CreateCompacter();

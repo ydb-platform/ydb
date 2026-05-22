@@ -65,3 +65,5 @@ items:
     href: debug-prometheus.md
   - name: Трассировка с OpenTelemetry
     href: debug-otel.md
+  - name: Подключить трассировку в Jaeger
+    href: debug-jaeger.md

@@ -13,6 +13,8 @@
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/struct_log/create_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr {
@@ -72,7 +74,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
             const int batchSize = 10;
             bool first = true;
             for (size_t offset = 0; offset < keys.Keys.size(); offset += batchSize) {
-                TStringStream ss;
+                NActors::NStructuredLog::TStructuredMessage ss;
 
                 LogKeyValue("Component", "DataShard", ss);
                 LogKeyValue("Type", "Keys", ss);
@@ -113,15 +115,16 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 
                     LogKeyValue("Op", rowOp, ss);
 
-                    ss << "Key: ";
-                    WriteTableRange(range, keyDef->KeyColumnTypes, ss);
-
+                    TStringStream keyValue;
+                    WriteTableRange(range, keyDef->KeyColumnTypes, keyValue);
                     if (i + 1 < keys.Keys.size() && j + 1 < batchSize) {
-                        ss << ",";
+                        keyValue << ",";
                     }
+
+                    ss.AppendValue({"Key"}, keyValue.Str());
                 }
 
-                LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+                YDB_LOG_CTX_COMP_TRACE(ctx, DATA_INTEGRITY, "Integrity trails kets", ss);
             }
         }
     }
@@ -133,23 +136,24 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
     }
 
     auto logFn = [&]() {
-        TStringStream ss;
+        NActors::NStructuredLog::TStructuredMessage ss;
 
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
 
-        ss << "BrokenLocks: [";
+        TStringStream lockStr;
         for (const auto& lock : locks) {
-            ss << lock << " ";
+            lockStr << lock << " ";
         }
-        ss << "]";
 
-        return ss.Str();
+        ss.AppendValue({"BrokenLocks"}, lockStr.Str());
+
+        return ss;
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    YDB_LOG_CTX_COMP_TRACE(ctx, DATA_INTEGRITY, "Integrity trails kets", logFn());
 }
 
 template <typename TxResult>
@@ -157,18 +161,19 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
     auto logFn = [&]() {
         TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
 
-        TStringStream ss;
+        NActors::NStructuredLog::TStructuredMessage ss;
 
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Finished", ss);
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
-        LogKeyValue("Status", statusString, ss, true);
+        LogKeyValue("Status", statusString, ss);
 
-        return ss.Str();
+        return ss;
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+
+    YDB_LOG_CTX_COMP_TRACE(ctx, DATA_INTEGRITY, "Integrity trails kets", logFn());
 }
 
 }

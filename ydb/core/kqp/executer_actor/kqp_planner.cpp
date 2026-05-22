@@ -4,6 +4,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 
 #include <util/generic/set.h>
 

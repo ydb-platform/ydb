@@ -3,6 +3,8 @@
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr {
@@ -30,46 +32,49 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
     }
 
     // Build message body once (everything except Component and Type)
-    TStringStream bodySs;
+    NActors::NStructuredLog::TStructuredMessage bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
-    LogKeyValue("Message", message, bodySs, true);
-    TString messageBody = bodySs.Str();
+    LogKeyValue("Message", message, bodySs);
 
     // Log to TLI service (only if we have victim query trace IDs)
     if (canLogTli) {
-        TStringStream ss;
+        NActors::NStructuredLog::TStructuredMessage ss;
         LogKeyValue("Component", "DataShard", ss);
         if (breakerQuerySpanId && *breakerQuerySpanId != 0) {
             LogKeyValue("BreakerQuerySpanId", ToString(*breakerQuerySpanId), ss);
         }
-        ss << "VictimQuerySpanIds: [";
+
+        TStringStream victimQuerySpanIdsStr;
         for (size_t i = 0; i < victimQuerySpanIds.size(); ++i) {
-            ss << victimQuerySpanIds[i];
+            victimQuerySpanIdsStr << victimQuerySpanIds[i];
             if (i + 1 < victimQuerySpanIds.size()) {
-                ss << " ";
+                victimQuerySpanIdsStr << " ";
             }
         }
-        ss << "], ";
+        ss.AppendValue({"VictimQuerySpanIds"}, victimQuerySpanIdsStr.Str());
+        ss.AppendSubMessage({"MessageBody"}, bodySs);
 
-        ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+        YDB_LOG_CTX_COMP_TRACE(ctx, TLI, "Transaction locks broken", ss);
     }
 
     // Log to DATA_INTEGRITY service (only if we have broken locks)
     if (canLogIntegrity) {
-        TStringStream ss;
+        NActors::NStructuredLog::TStructuredMessage ss;
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
-        ss << "BrokenLocks: [";
+
+        TStringStream brokenLocksStr;
         for (size_t i = 0; i < brokenLocks.size(); ++i) {
-            ss << brokenLocks[i];
+            brokenLocksStr << brokenLocks[i];
             if (i + 1 < brokenLocks.size()) {
-                ss << " ";
+                brokenLocksStr << " ";
             }
         }
-        ss << "], ";
-        ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+        ss.AppendValue({"BrokenLocks"}, brokenLocksStr.Str());
+
+        ss.AppendSubMessage({"MessageBody"}, bodySs);
+
+        YDB_LOG_CTX_COMP_TRACE(ctx, DATA_INTEGRITY, "Transaction locks broken", ss);
     }
 
 }
@@ -86,7 +91,7 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
     }
 
     // Build message body once (everything except Component and Type)
-    TStringStream bodySs;
+    NActors::NStructuredLog::TStructuredMessage bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
     if (victimQuerySpanId && *victimQuerySpanId != 0) {
         LogKeyValue("VictimQuerySpanId", ToString(*victimQuerySpanId), bodySs);
@@ -94,24 +99,26 @@ inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabl
     if (currentQuerySpanId && *currentQuerySpanId != 0) {
         LogKeyValue("CurrentQuerySpanId", ToString(*currentQuerySpanId), bodySs);
     }
-    LogKeyValue("Message", message, bodySs, /*last*/ true);
-    TString messageBody = bodySs.Str();
+    LogKeyValue("Message", message, bodySs);
 
     // Log to TLI service
     if (tliEnabled) {
-        TStringStream ss;
+        NActors::NStructuredLog::TStructuredMessage ss;
         LogKeyValue("Component", "DataShard", ss);
-        ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+        ss.AppendSubMessage({"message_body"}, bodySs);
+
+        YDB_LOG_CTX_COMP_TRACE(ctx, TLI, "Transaction victim detected", ss);
     }
 
     // Log to DATA_INTEGRITY service
     if (integrityEnabled) {
-        TStringStream ss;
+        NActors::NStructuredLog::TStructuredMessage ss;
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
-        ss << messageBody;
-        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+
+        ss.AppendSubMessage({"message_body"}, bodySs);
+
+        YDB_LOG_CTX_COMP_TRACE(ctx, DATA_INTEGRITY, "Transaction victim detected", ss);
     }
 }
 

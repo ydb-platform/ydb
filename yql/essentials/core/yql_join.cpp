@@ -267,6 +267,14 @@ namespace {
                             }
                             continue;
                         }
+                        if (name.IsAtom("ShuffleMode")) {
+                            if (!value.IsAtom({"Off", "Map", "Hash"})) {
+                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
+                                            "streamlookup(" << name.Content() << "...): Unsupported value: " << value.Content()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            continue;
+                        }
                         if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows", "FullscanLimit"})) {
                             ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
                                         "streamlookup(): Unsupported option: " << name.Content()));

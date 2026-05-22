@@ -19,6 +19,7 @@ namespace NKikimr::NEvWrite {
         , Counters(counters)
     {
         Y_ABORT_UNLESS(writesCount);
+        Y_ABORT_UNLESS(counters);
         WriteIds.resize(WritesCount.Val());
     }
 

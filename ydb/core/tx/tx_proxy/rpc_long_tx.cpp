@@ -65,7 +65,8 @@ public:
         , DedupId(dedupId)
         , LongTxId(longTxId)
         , ActorSpan(0, NWilson::TTraceId::NewTraceId(0, Max<ui32>()), "TLongTxWriteBase")
-        , UserCtx(userCtx) {
+        , UserCtx(userCtx)
+        , Counters(std::make_shared<NEvWrite::TCSUploadCounters>())  {
         if (token) {
             UserToken.emplace(token);
         }
@@ -73,6 +74,7 @@ public:
 
     virtual ~TLongTxWriteBase() {
         AFL_VERIFY(MemoryInFlight.Sub(InFlightSize) >= 0);
+        Counters->OnMemoryInflight(MemoryInFlight.Val(), GetMemoryInFlightLimit());
     }
 
 protected:
@@ -100,8 +102,7 @@ protected:
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
 
-        auto counters = std::make_shared<NEvWrite::TCSUploadCounters>();
-        counters->OnMemoryInflight(sizeInFlight, GetMemoryInFlightLimit());
+        Counters->OnMemoryInflight(sizeInFlight, GetMemoryInFlightLimit());
         if (GetMemoryInFlightLimit() < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
@@ -126,15 +127,15 @@ protected:
 
         const auto& splittedData = shardsSplitter->GetSplitData();
         const auto& shardsInRequest = splittedData.GetShardRequestsCount();
-        InternalController = std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId, counters);
+        InternalController = std::make_shared<NEvWrite::TWritersController>(shardsInRequest, this->SelfId(), LongTxId, Counters);
 
-        InternalController->GetCounters()->OnSplitByShards(shardsInRequest);
+        Counters->OnSplitByShards(shardsInRequest);
         ui32 sumBytes = 0;
         ui32 rowsCount = 0;
         ui32 writeIdx = 0;
         for (auto& [shard, infos] : splittedData.GetShardsInfo()) {
             for (auto&& shardInfo : infos) {
-                InternalController->GetCounters()->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
+                Counters->OnRequest(shardInfo->GetRowsCount(), shardInfo->GetBytes());
                 sumBytes += shardInfo->GetBytes();
                 rowsCount += shardInfo->GetRowsCount();
                 this->Register(new NEvWrite::TShardWriter(shard, shardsSplitter->GetTableId(), shardsSplitter->GetSchemaVersion(), DedupId,
@@ -231,6 +232,7 @@ private:
     bool ColumnShardReady = false;
     bool IndexReady = false;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    std::shared_ptr<NEvWrite::TCSUploadCounters> Counters;
 };
 
 // LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)

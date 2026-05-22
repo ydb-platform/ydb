@@ -69,7 +69,7 @@ namespace NKikimr::NKqp::NScheduler {
     };
 
     struct TOptions {
-        bool Enabled = false;
+        bool Enabled = true;
         TDelayParams DelayParams;
         NHdrf::NSnapshot::ELeafFairShare FairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT;
     };

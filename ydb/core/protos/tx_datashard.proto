@@ -1907,6 +1907,7 @@ message TEvPrefixKMeansRequest {
 
     optional bool Adaptive = 25;
     optional uint32 Levels = 26;
+    optional uint32 Shards = 27;
 }
 
 message TEvPrefixKMeansResponse {

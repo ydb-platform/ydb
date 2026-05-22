@@ -86,6 +86,7 @@ protected:
     const ui32 MaxClusters = 0;
     const bool Adaptive = false;
     const ui32 AdaptiveLevels = 0;
+    const ui32 AdaptiveShards = 1;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
     const ui32 OverlapClusters = 0;
@@ -143,6 +144,7 @@ public:
         , MaxClusters(request.GetK())
         , Adaptive(request.GetAdaptive())
         , AdaptiveLevels(request.GetLevels() ? request.GetLevels() : 1)
+        , AdaptiveShards(request.GetShards() ? request.GetShards() : 1)
         , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
         , OverlapRatio(request.GetOverlapRatio())
         , ScanSettings(request.GetScanSettings())
@@ -486,7 +488,7 @@ protected:
                 return true;
             }
             if (Adaptive && prefixRowCount > 0) {
-                K = ::NKikimr::NKMeans::ComputeAdaptiveK(prefixRowCount, AdaptiveLevels, OverlapClusters, MaxClusters);
+                K = ::NKikimr::NKMeans::ComputeAdaptiveK(prefixRowCount * AdaptiveShards, AdaptiveLevels, OverlapClusters, MaxClusters);
             }
             if (rows.size() > K) {
                 rows.resize(K);

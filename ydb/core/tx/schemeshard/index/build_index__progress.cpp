@@ -918,9 +918,8 @@ private:
         ev->Record.SetK(buildInfo.KMeans.K);
         if (buildInfo.KMeans.Adaptive) {
             ev->Record.SetAdaptive(true);
-            const auto& kmSettings = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
-                buildInfo.SpecializedIndexDescription).GetSettings();
-            ev->Record.SetLevels(kmSettings.levels());
+            ev->Record.SetLevels(buildInfo.KMeans.Levels);
+            ev->Record.SetShards(buildInfo.Shards.size());
         }
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 

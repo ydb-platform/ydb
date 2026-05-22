@@ -7,8 +7,6 @@
 
 namespace NActors::NStructuredLog {
 
-class TStructuredMessage;
-
 class TTextWriter {
     friend class TBaseMessageWriter<TTextWriter>;
 

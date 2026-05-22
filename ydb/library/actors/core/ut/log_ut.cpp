@@ -679,10 +679,14 @@ Y_UNIT_TEST_SUITE(TWriteTextLogTest) {
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1}, {"value2", 2});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text"});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "text\nnew line"}, {"value2", 2});
 
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:679: Test message ");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:680: Test message with data value=1");
         env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:681: Test message with data value=1 value2=2");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:682: Test message with data value=text");
+        env.FetchMessage("1970-01-01T23:59:50.000000Z :FAKE DEBUG: log_ut.cpp:683: Test message with data value=text new line value2=2");
     }
 }
 

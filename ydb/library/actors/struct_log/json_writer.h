@@ -11,8 +11,6 @@
 
 namespace NActors::NStructuredLog {
 
-class TStructuredMessage;
-
 class TJsonKeyValueWriter {
 public:
     using TNameSet = std::unordered_set<TString>;

@@ -1091,16 +1091,18 @@ void TPartition::Initialize(const TActorContext& ctx) {
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
 
-    ReadQuotaTrackerActor = RegisterWithSameMailbox(CreateReadQuoter(
-        AppData(ctx)->PQConfig,
-        TopicConverter,
-        Config,
-        Partition,
-        TabletActorId,
-        SelfId(),
-        TabletId,
-        Counters
-    ));
+    if (!IsSupportive()) {
+        ReadQuotaTrackerActor = RegisterWithSameMailbox(CreateReadQuoter(
+            AppData(ctx)->PQConfig,
+            TopicConverter,
+            Config,
+            Partition,
+            TabletActorId,
+            SelfId(),
+            TabletId,
+            Counters
+        ));
+    }
 
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
     WriteTimestamp = ctx.Now();
@@ -1407,7 +1409,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
 void TPartition::CreateCompacter() {
     if (!IsKeyCompactionEnabled()) {
-        if (!IsSupportive()) {
+        if (ReadQuotaTrackerActor) {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();

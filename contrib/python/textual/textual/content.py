@@ -106,6 +106,27 @@ class Span(NamedTuple):
             return Span(start, end + cells, style)
         return self
 
+    def _shift(self, distance: int) -> "Span":
+        """Shift a span a given distance.
+
+        Note that the start offset is clamped to 0.
+        The end offset is not clamped, as it is assumed this has already been checked by the caller.
+
+        Args:
+            distance: Number of characters to move.
+
+        Returns:
+            New Span.
+        """
+        if distance < 0:
+            start, end, style = self
+            return Span(
+                offset if (offset := start + distance) > 0 else 0, end + distance, style
+            )
+        else:
+            start, end, style = self
+            return Span(start + distance, end + distance, style)
+
 
 @rich.repr.auto
 @total_ordering
@@ -126,6 +147,7 @@ class Content(Visual):
         text: str = "",
         spans: list[Span] | None = None,
         cell_length: int | None = None,
+        strip_control_codes: bool = True,
     ) -> None:
         """
         Initialize a Content object.
@@ -134,8 +156,12 @@ class Content(Visual):
             text: text content.
             spans: Optional list of spans.
             cell_length: Cell length of text if known, otherwise `None`.
+            strip_control_codes: Strip control codes that may break output?
         """
-        self._text: str = _strip_control_codes(text)
+
+        self._text: str = (
+            _strip_control_codes(text) if strip_control_codes and text else text
+        )
         self._spans: list[Span] = [] if spans is None else spans
         self._cell_length = cell_length
         self._optimal_width_cache: int | None = None
@@ -147,9 +173,25 @@ class Content(Visual):
         self._split_cache: FIFOCache[tuple[str, bool, bool], list[Content]] | None = (
             None
         )
+        # If there are 1 or 0 spans, it can't be simplified further
+        self._simplified = len(self._spans) <= 1
 
     def __str__(self) -> str:
         return self._text
+
+    @property
+    def _is_regular(self) -> bool:
+        """Check if the line is regular (spans.end > span.start for all spans).
+
+        This is a debugging aid, and unlikely to be useful in your app.
+
+        Returns:
+            `True` if the content is regular, `False` if it is not (and broken).
+        """
+        for span in self.spans:
+            if span.end <= span.start:
+                return False
+        return True
 
     @cached_property
     def markup(self) -> str:
@@ -248,6 +290,8 @@ class Content(Visual):
                 raise ValueError("A literal string is require to substitute variables.")
             return markup
         markup = _strip_control_codes(markup)
+        if "[" not in markup and not variables:
+            return Content(markup)
         from textual.markup import to_content
 
         content = to_content(markup, template_variables=variables or None)
@@ -321,6 +365,7 @@ class Content(Visual):
         text: str,
         style: Style | str = "",
         cell_length: int | None = None,
+        strip_control_codes: bool = True,
     ) -> Content:
         """Create a Content instance from text and an optional style.
 
@@ -328,21 +373,47 @@ class Content(Visual):
             text: String content.
             style: Desired style.
             cell_length: Cell length of text if known, otherwise `None`.
+            strip_control_codes: Strip control codes that may break output.
 
         Returns:
             New Content instance.
         """
         if not text:
-            return Content("")
-        span_length = cell_len(text) if cell_length is None else cell_length
+            return EMPTY_CONTENT
         new_content = cls(
-            text, [Span(0, span_length, style)] if style else None, span_length
+            text,
+            [Span(0, len(text), style)] if style else None,
+            cell_length,
+            strip_control_codes=strip_control_codes,
         )
         return new_content
 
     @classmethod
+    def blank(cls, width: int, style: Style | str | None = None) -> Content:
+        """Get a Content instance consisting of spaces.
+
+        Args:
+            width: Width of blank content (number of spaces).
+            style: Style of blank.
+
+        Returns:
+            Content instance.
+        """
+        if not width:
+            return EMPTY_CONTENT
+        blank = cls(
+            " " * width,
+            [Span(0, width, style)] if style else None,
+            cell_length=width,
+        )
+        return blank
+
+    @classmethod
     def assemble(
-        cls, *parts: str | Content | tuple[str, str | Style], end: str = ""
+        cls,
+        *parts: str | Content | tuple[str, str | Style],
+        end: str = "",
+        strip_control_codes: bool = True,
     ) -> Content:
         """Construct new content from string, content, or tuples of (TEXT, STYLE).
 
@@ -362,6 +433,7 @@ class Content(Visual):
             *parts: Parts to join to gether. A *part* may be a simple string, another Content
             instance, or tuple containing text and a style.
             end: Optional end to the Content.
+            strip_control_codes: Strip control codes that may break output.
         """
         text: list[str] = []
         spans: list[Span] = []
@@ -393,13 +465,16 @@ class Content(Visual):
                 position += len(part.plain)
         if end:
             text_append(end)
-        return cls("".join(text), spans)
+        assembled_content = cls(
+            "".join(text), spans, strip_control_codes=strip_control_codes
+        )
+        return assembled_content
 
     def simplify(self) -> Content:
         """Simplify spans by joining contiguous spans together.
 
-        This can produce faster renders but typically only worth it if you have appended a
-        large number of Content instances together.
+        This may produce faster renders if you have concatenated a large number of small pieces
+        of content with repeating styles.
 
         Note that this modifies the Content instance in-place, which might appear
         to violate the immutability constraints, but it will not change the rendered output,
@@ -408,13 +483,12 @@ class Content(Visual):
         Returns:
             Self.
         """
-        spans = self.spans
-        if not spans:
+        if not (spans := self._spans) or self._simplified:
             return self
-        last_span = Span(0, 0, Style())
+        last_span = Span(-1, -1, "")
         new_spans: list[Span] = []
         changed: bool = False
-        for span in self._spans:
+        for span in spans:
             if span.start == last_span.end and span.style == last_span.style:
                 last_span = new_spans[-1] = Span(last_span.start, span.end, span.style)
                 changed = True
@@ -423,6 +497,25 @@ class Content(Visual):
                 last_span = span
         if changed:
             self._spans[:] = new_spans
+        self._simplified = True
+        return self
+
+    def add_spans(self, spans: Sequence[Span]) -> Content:
+        """Adds spans to this Content instance.
+
+        Args:
+            spans: A sequence of spans.
+
+        Returns:
+            A Content instance.
+        """
+        if spans:
+            return Content(
+                self.plain,
+                [*self._spans, *spans],
+                self._cell_length,
+                strip_control_codes=False,
+            )
         return self
 
     def __eq__(self, other: object) -> bool:
@@ -696,7 +789,9 @@ class Content(Visual):
     @property
     def without_spans(self) -> Content:
         """The content with no spans"""
-        return Content(self.plain, [], self._cell_length)
+        if self._spans:
+            return Content(self.plain, [], self._cell_length, strip_control_codes=False)
+        return self
 
     @property
     def first_line(self) -> Content:
@@ -715,6 +810,7 @@ class Content(Visual):
                     for start, end, style in self._spans
                     if end > offset >= start
                 ],
+                strip_control_codes=False,
             )
             return content
 
@@ -723,8 +819,27 @@ class Content(Visual):
         else:
             start, stop, step = slice.indices(len(self.plain))
             if step == 1:
-                lines = self.divide([start, stop])
-                return lines[1]
+                if start == 0:
+                    if stop >= len(self.plain):
+                        return self
+                    text = self.plain[:stop]
+                    sliced_content = Content(
+                        text,
+                        self._trim_spans(text, self._spans),
+                        strip_control_codes=False,
+                    )
+                else:
+                    text = self.plain[start:stop]
+                    spans = [
+                        span._shift(-start)
+                        for span in self._spans
+                        if span.end - start > 0
+                    ]
+                    sliced_content = Content(
+                        text, self._trim_spans(text, spans), strip_control_codes=False
+                    )
+                return sliced_content
+
             else:
                 # This would be a bit of work to implement efficiently
                 # For now, its not required
@@ -732,31 +847,31 @@ class Content(Visual):
 
     def __add__(self, other: Content | str) -> Content:
         if isinstance(other, str):
-            return Content(self._text + other, self._spans)
+            return Content(self._text + other, self._spans, strip_control_codes=False)
         if isinstance(other, Content):
             offset = len(self.plain)
             content = Content(
                 self.plain + other.plain,
-                [
-                    *self._spans,
-                    *[
+                (
+                    self._spans
+                    + [
                         Span(start + offset, end + offset, style)
                         for start, end, style in other._spans
-                    ],
-                ],
+                    ]
+                ),
                 (
-                    self.cell_length + other._cell_length
-                    if other._cell_length is not None
-                    else None
+                    None
+                    if self._cell_length is not None
+                    else (self.cell_length + other.cell_length)
                 ),
             )
             return content
         return NotImplemented
 
-    def __radd__(self, other: Content | str) -> Content:
-        if not isinstance(other, (Content, str)):
+    def __radd__(self, other: str) -> Content:
+        if not isinstance(other, str):
             return NotImplemented
-        return self + other
+        return Content(other) + self
 
     @classmethod
     def _trim_spans(cls, text: str, spans: list[Span]) -> list[Span]:
@@ -794,8 +909,9 @@ class Content(Visual):
                     if self._cell_length is None
                     else self._cell_length + cell_len(content)
                 ),
+                strip_control_codes=False,
             )
-        return Content("").join([self, content])
+        return EMPTY_CONTENT.join([self, content])
 
     def append_text(self, text: str, style: Style | str = "") -> Content:
         """Append text give as a string, with an optional style.
@@ -829,12 +945,20 @@ class Content(Visual):
             """Iterate the lines, optionally inserting the separator."""
             if self.plain:
                 for last, line in loop_last(lines):
-                    yield line if isinstance(line, Content) else Content(line)
+                    yield (
+                        line
+                        if isinstance(line, Content)
+                        else Content(line, strip_control_codes=False)
+                    )
                     if not last:
                         yield self
             else:
                 for line in lines:
-                    yield line if isinstance(line, Content) else Content(line)
+                    yield (
+                        line
+                        if isinstance(line, Content)
+                        else Content(line, strip_control_codes=False)
+                    )
 
         extend_text = text.extend
         extend_spans = spans.extend
@@ -844,6 +968,8 @@ class Content(Visual):
         total_cell_length: int | None = self._cell_length
 
         for content in iter_content():
+            if not content:
+                continue
             extend_text(content._text)
             extend_spans(
                 _Span(offset + start, offset + end, style)
@@ -859,6 +985,73 @@ class Content(Visual):
                 )
 
         return Content("".join(text), spans, total_cell_length)
+
+    def wrap(
+        self, width: int, *, align: TextAlign = "left", overflow: TextOverflow = "fold"
+    ) -> list[Content]:
+        """Wrap text so that it fits within the given dimensions.
+
+        Note that Textual will automatically wrap Content in widgets.
+        This method is only required if you need some additional processing to lines.
+
+        Args:
+            width: Maximum width of the line (in cells).
+            align: Alignment of lines.
+            overflow: Overflow of lines (what happens when the text doesn't fit).
+
+        Returns:
+            A list of Content objects, one per line.
+        """
+        lines = self._wrap_and_format(width, align, overflow)
+        content_lines = [line.content for line in lines]
+        return content_lines
+
+    def fold(self, width: int) -> list[Content]:
+        """Fold this line into a list of lines which have a cell length no less than 2 and no greater than `width`.
+
+        Folded lines may be 1 less than the width if it contains double width characters (which may
+        not be subdivided).
+
+        Note that this method will not do any word wrapping. For that, see [wrap()][textual.content.Content.wrap].
+
+        Args:
+            width: Desired maximum width (in cells)
+
+        Returns:
+            List of content instances.
+        """
+        if not self:
+            return [self]
+        text = self.plain
+        lines: list[Content] = []
+        position = 0
+        width = max(width, 2)
+        while True:
+            snip = text[position : position + width]
+            if not snip:
+                break
+            snip_cell_length = cell_len(snip)
+            if snip_cell_length < width:
+                # last snip
+                lines.append(self[position : position + width])
+                break
+            if snip_cell_length == width:
+                # Cell length is exactly width
+                lines.append(self[position : position + width])
+                position += len(snip)
+                continue
+            # TODO: Can this be more efficient?
+            extra_cells = snip_cell_length - width
+            if start_snip := extra_cells // 2:
+                snip_cell_length -= cell_len(snip[-start_snip:])
+                snip = snip[: len(snip) - start_snip]
+            while snip_cell_length > width:
+                snip_cell_length -= cell_len(snip[-1])
+                snip = snip[:-1]
+            lines.append(self[position : position + len(snip)])
+            position += len(snip)
+
+        return lines
 
     def get_style_at_offset(self, offset: int) -> Style:
         """Get the style of a character at give offset.
@@ -906,13 +1099,16 @@ class Content(Visual):
         if pad and length < max_width:
             spaces = max_width - length
             text = f"{self.plain}{' ' * spaces}"
+            return Content(text, spans, max_width, strip_control_codes=False)
         elif length > max_width:
             if ellipsis and max_width:
                 text = set_cell_size(self.plain, max_width - 1) + "…"
             else:
                 text = set_cell_size(self.plain, max_width)
             spans = self._trim_spans(text, self._spans)
-        return Content(text, spans)
+            return Content(text, spans, max_width, strip_control_codes=False)
+        else:
+            return self
 
     def pad_left(self, count: int, character: str = " ") -> Content:
         """Pad the left with a given character.
@@ -933,6 +1129,7 @@ class Content(Visual):
                 text,
                 spans,
                 None if self._cell_length is None else self._cell_length + count,
+                strip_control_codes=False,
             )
             return content
 
@@ -958,6 +1155,7 @@ class Content(Visual):
                     for span in self._spans
                 ],
                 None if self._cell_length is None else self._cell_length + count,
+                strip_control_codes=False,
             )
         return self
 
@@ -974,6 +1172,7 @@ class Content(Visual):
                 f"{self.plain}{character * count}",
                 self._spans,
                 None if self._cell_length is None else self._cell_length + count,
+                strip_control_codes=False,
             )
         return self
 
@@ -1000,6 +1199,7 @@ class Content(Visual):
                 text,
                 spans,
                 None if self._cell_length is None else self._cell_length + left + right,
+                strip_control_codes=False,
             )
             return content
 
@@ -1058,7 +1258,7 @@ class Content(Visual):
         ]
         text = self.plain[:-amount]
         length = None if self._cell_length is None else self._cell_length - amount
-        return Content(text, spans, length)
+        return Content(text, spans, length, strip_control_codes=False)
 
     def stylize(
         self, style: Style | str, start: int = 0, end: int | None = None
@@ -1084,7 +1284,9 @@ class Content(Visual):
             return self
         return Content(
             self.plain,
-            [*self._spans, Span(start, length if length < end else end, style)],
+            self._spans + [Span(start, length if length < end else end, style)],
+            self._cell_length,
+            strip_control_codes=False,
         )
 
     def stylize_before(
@@ -1117,6 +1319,8 @@ class Content(Visual):
         return Content(
             self.plain,
             [Span(start, length if length < end else end, style), *self._spans],
+            self._cell_length,
+            strip_control_codes=False,
         )
 
     def render(
@@ -1139,7 +1343,6 @@ class Content(Visual):
             An iterable of string and styles, which make up the content.
 
         """
-
         if not self._spans:
             yield (self._text, base_style)
             if end:
@@ -1437,6 +1640,9 @@ class Content(Visual):
         if "\t" not in self.plain:
             return self
 
+        if not self._spans:
+            return Content(self.plain.expandtabs(tab_size))
+
         new_text: list[Content] = []
         append = new_text.append
 
@@ -1449,7 +1655,7 @@ class Content(Visual):
                 for part in parts:
                     if part.plain.endswith("\t"):
                         part = Content(
-                            part._text[-1][:-1] + " ", part._spans, part._cell_length
+                            part._text[:-1] + " ", part._spans, part._cell_length
                         )
                         cell_position += part.cell_length
                         tab_remainder = cell_position % tab_size
@@ -1461,14 +1667,14 @@ class Content(Visual):
                         cell_position += part.cell_length
                     append(part)
 
-        content = Content("").join(new_text)
+        content = EMPTY_CONTENT.join(new_text)
         return content
 
     def highlight_regex(
         self,
         highlight_regex: re.Pattern[str] | str,
         *,
-        style: Style,
+        style: Style | str,
         maximum_highlights: int | None = None,
     ) -> Content:
         """Apply a style to text that matches a regular expression.
@@ -1487,6 +1693,8 @@ class Content(Visual):
         plain = self.plain
         if isinstance(highlight_regex, str):
             re_highlight = re.compile(highlight_regex)
+        else:
+            re_highlight = highlight_regex
         count = 0
         for match in re_highlight.finditer(plain):
             start, end = match.span()
@@ -1497,7 +1705,7 @@ class Content(Visual):
                 and (count := count + 1) >= maximum_highlights
             ):
                 break
-        return Content(self._text, spans)
+        return Content(self._text, spans, cell_length=self._cell_length)
 
 
 class _FormattedLine:

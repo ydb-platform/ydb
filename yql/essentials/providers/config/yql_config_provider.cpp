@@ -167,13 +167,8 @@ public:
         };
         if (CoreConfig_) {
             TPosition pos;
-            TVector<TCoreAttr> flags;
-            if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TCoreAttr>(YqlCoreActivationLabel, Types_.QContext)) {
-                flags = std::move(*loadedFlags);
-            } else {
-                const auto& configFlags = CoreConfig_->GetFlags();
-                CopyIf(configFlags.begin(), configFlags.end(), std::back_inserter(flags), filter);
-            }
+            const auto flags = NCommon::SelectAndSaveActivatedFlags<TCoreAttr>(
+                YqlCoreActivationLabel, Types_.QContext, CoreConfig_->GetFlags(), filter, /*hasProviderName=*/true);
             for (const auto& flag : flags) {
                 const auto& flagArgs = flag.GetArgs();
                 TVector<TStringBuf> args(flagArgs.begin(), flagArgs.end());
@@ -181,7 +176,6 @@ public:
                     return false;
                 }
             }
-            NCommon::SaveActivatedFlagsToQContext<TCoreAttr>(flags, YqlCoreActivationLabel, Types_.QContext);
         }
         return true;
     }

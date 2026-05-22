@@ -1,6 +1,6 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: Pygments
-Version: 2.18.0
+Version: 2.19.2
 Summary: Pygments is a syntax highlighting package written in Python.
 Project-URL: Homepage, https://pygments.org
 Project-URL: Documentation, https://pygments.org/docs
@@ -27,6 +27,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Text Processing :: Filters
@@ -53,5 +54,5 @@ are:
   formats that PIL supports and ANSI sequences
 * it is usable as a command-line tool and as a library
 
-Copyright 2006-2024 by the Pygments team, see ``AUTHORS``.
+Copyright 2006-2025 by the Pygments team, see ``AUTHORS``.
 Licensed under the BSD, see ``LICENSE`` for details.

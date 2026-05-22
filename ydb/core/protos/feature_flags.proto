@@ -218,7 +218,7 @@ message TFeatureFlags {
     optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
-    optional bool EnableArrowResultSetFormat = 194 [default = false];
+    optional bool EnableArrowResultSetFormat = 194 [default = true];
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];
     optional bool EnableTopicCompactificationByKey = 196 [default = true];
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
@@ -258,7 +258,7 @@ message TFeatureFlags {
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
-    optional bool EnableSetDropDefaultValue = 234 [ default = false];
+    optional bool EnableSetDropDefaultValue = 234 [default = true];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
@@ -303,5 +303,6 @@ message TFeatureFlags {
     optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
-    optional bool EnableTabletDevUiSecurePath = 267 [default = false];
+    optional bool EnableJsonIndexAutoSelect = 267 [default = false];
+    optional bool EnableTabletDevUiSecurePath = 268 [default = false];
 }

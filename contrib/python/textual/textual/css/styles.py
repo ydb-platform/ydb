@@ -48,6 +48,7 @@ from textual.css.constants import (
     VALID_OVERLAY,
     VALID_POSITION,
     VALID_SCROLLBAR_GUTTER,
+    VALID_SCROLLBAR_VISIBILITY,
     VALID_TEXT_ALIGN,
     VALID_TEXT_OVERFLOW,
     VALID_TEXT_WRAP,
@@ -153,11 +154,10 @@ class RulesMap(TypedDict, total=False):
     scrollbar_background: Color
     scrollbar_background_hover: Color
     scrollbar_background_active: Color
-
     scrollbar_gutter: ScrollbarGutter
-
     scrollbar_size_vertical: int
     scrollbar_size_horizontal: int
+    scrollbar_visibility: ScrollbarVisibility
 
     align_horizontal: AlignHorizontal
     align_vertical: AlignVertical
@@ -242,6 +242,7 @@ class StylesBase:
         "scrollbar_background",
         "scrollbar_background_hover",
         "scrollbar_background_active",
+        "scrollbar_visibility",
         "link_color",
         "link_background",
         "link_color_hover",
@@ -282,7 +283,7 @@ class StylesBase:
     """
 
     layout = LayoutProperty()
-    """Set the layout of the widget, defining how it's children are laid out.
+    """Set the layout of the widget, defining how its children are laid out.
     
     Valid values are "grid", "stream", "horizontal", or "vertical" or None to clear any layout
     that was set at runtime.
@@ -394,7 +395,7 @@ class StylesBase:
     transitions = TransitionsProperty()
 
     tint = ColorProperty("transparent")
-    """Set the tint of the widget. This allows you apply a opaque color above the widget.
+    """Set the tint of the widget. This allows you apply an opaque color above the widget.
 
     You can specify an opacity after a color e.g. "blue 10%"
     """
@@ -424,6 +425,10 @@ class StylesBase:
     """Set the width of the vertical scrollbar (measured in cells)."""
     scrollbar_size_horizontal = IntegerProperty(default=1, layout=True)
     """Set the height of the horizontal scrollbar (measured in cells)."""
+    scrollbar_visibility = StringEnumProperty(
+        VALID_SCROLLBAR_VISIBILITY, "visible", layout=True
+    )
+    """Sets the visibility of the scrollbar."""
 
     align_horizontal = StringEnumProperty(
         VALID_ALIGN_HORIZONTAL, "left", layout=True, refresh_children=True
@@ -1153,6 +1158,8 @@ class Styles(StylesBase):
                 append_declaration(
                     "scrollbar-size-vertical", str(self.scrollbar_size_vertical)
                 )
+        if "scrollbar_visibility" in rules:
+            append_declaration("scrollbar-visibility", self.scrollbar_visibility)
 
         if "box_sizing" in rules:
             append_declaration("box-sizing", self.box_sizing)
@@ -1463,7 +1470,6 @@ class RenderStyles(StylesBase):
         return any(inline_has_rule(name) or base_has_rule(name) for name in rule_names)
 
     def set_rule(self, rule_name: str, value: object | None) -> bool:
-        self._updates += 1
         return self._inline_styles.set_rule(rule_name, value)
 
     def get_rule(self, rule_name: str, default: object = None) -> object:
@@ -1473,7 +1479,6 @@ class RenderStyles(StylesBase):
 
     def clear_rule(self, rule_name: str) -> bool:
         """Clear a rule (from inline)."""
-        self._updates += 1
         return self._inline_styles.clear_rule(rule_name)
 
     def get_rules(self) -> RulesMap:

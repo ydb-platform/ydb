@@ -1433,6 +1433,192 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     }
 
 
+    void MoveTableWithIndex(
+        const TString& indexDescription,
+        NKikimrSchemeOp::EIndexType expectedIndexType,
+        const TVector<TString>& indexKeyColumns)
+    {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            %s
+        )", indexDescription.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::IsTable, NLs::IndexesCount(1)});
+
+        auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        const ui64 expectedDomainPaths =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+        const ui64 expectedDomainShards =
+            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
+                           {NLs::IsTable, NLs::IndexesCount(1)});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableMove/index", true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(expectedIndexType),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+                            NLs::IndexKeys(indexKeyColumns)});
+
+        for (const auto& implTable : NTableIndex::GetImplTables(expectedIndexType, indexKeyColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime,
+                    TString::Join("/MyRoot/TableMove/index/", implTable), true, true),
+                {NLs::PathExist, NLs::IsTable});
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
+                            NLs::ShardsInsideDomain(expectedDomainShards)});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalSyncIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobal
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobal,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalAsyncIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalAsync,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalUniqueIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalUnique
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalUnique,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalVectorKmeansTreeIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"embedding"});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalVectorKmeansTreePrefixIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["prefix", "embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"prefix", "embedding"});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalFulltextPlainIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextPlain
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(MoveTableWithGlobalFulltextRelevanceIndex) {
+        MoveTableWithIndex(R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextRelevance
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance,
+        {"value"});
+    }
+
     Y_UNIT_TEST(AsyncIndexWithSyncInFly) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

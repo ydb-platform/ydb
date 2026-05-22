@@ -4,7 +4,7 @@
 
     Lexer for BQN.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -25,6 +25,10 @@ class BQNLexer(RegexLexer):
     filenames = ['*.bqn']
     mimetypes = []
     version_added = '2.16'
+
+    # An inter_word_char. Necessary because \w matches all alphanumeric
+    # Unicode characters, including ones (e.g., 𝕊) that BQN treats special.
+    _iwc = r'((?=[^𝕎𝕏𝔽𝔾𝕊𝕨𝕩𝕗𝕘𝕤𝕣])\w)'
 
     tokens = {
         'root': [
@@ -57,34 +61,35 @@ class BQNLexer(RegexLexer):
             # ===================
             # Since this token type is important in BQN, it is not included in
             # the punctuation token type but rather in the following one
-            (r'[\(\)]', String.Regex), 
+            (r'[\(\)]', String.Regex),
             #
             # Numbers
             # =======
             # Includes the numeric literals and the Nothing character
-            (r'¯?([0-9]+\.?[0-9]+|[0-9]+)([Ee][¯]?[0-9]+)?|¯|∞|π|·', Number),
+            (r'¯?[0-9](([0-9]|_)*\.?([0-9]|_)+|([0-9]|_)*)([Ee][¯]?([0-9]|_)+)?|¯|∞|π|·', Number),
             #
             # Variables
             # =========
-            (r'\b[a-z]\w*\b', Name.Variable),
+            (r'[a-z]' + _iwc + r'*', Name.Variable),
+            #
+            # 2-Modifiers
+            # ===========
+            # Needs to come before the 1-modifiers due to _𝕣 and _𝕣_
+            (r'[∘○⊸⟜⌾⊘◶⎉⚇⍟⎊]', Name.Property),
+            (r'_(𝕣|[a-zA-Z0-9]+)_', Name.Property),
             #
             # 1-Modifiers
             # ===========
             (r'[˙˜˘¨⌜⁼´˝`𝕣]', Name.Attribute),
-            (r'\b_[a-zA-Z0-9]+\b', Name.Attribute),
-            #
-            # 2-Modifiers
-            # ===========
-            (r'[∘○⊸⟜⌾⊘◶⎉⚇⍟⎊]', Name.Property),
-            (r'\b_[a-zA-Z0-9]+_\b', Name.Property),
+            (r'_(𝕣|[a-zA-Z0-9]+)', Name.Attribute),
             #
             # Functions
             # =========
             # The monadic or dyadic function primitives and function
             # operands and arguments, along with function self-reference
-            (r'[+\-×÷\*√⌊⌈∧∨¬|≤<>≥=≠≡≢⊣⊢⥊∾≍⋈↑↓↕«»⌽⍉/⍋⍒⊏⊑⊐⊒∊⍷⊔!𝕎𝕏𝔽𝔾𝕊]',
+            (r'[+\-×÷\⋆√⌊⌈∧∨¬|≤<>≥=≠≡≢⊣⊢⥊∾≍⋈↑↓↕«»⌽⍉/⍋⍒⊏⊑⊐⊒∊⍷⊔!𝕎𝕏𝔽𝔾𝕊]',
              Operator),
-            (r'[A-Z]\w*|•\w+\b', Operator),
+            (r'[A-Z]' + _iwc + r'*|•' + _iwc + r'+', Operator),
             #
             # Constant
             # ========
@@ -102,8 +107,6 @@ class BQNLexer(RegexLexer):
             # ================
             (r'[;:?𝕨𝕩𝕗𝕘𝕤]', Name.Entity),
             #
-            
+
         ],
     }
-
-    

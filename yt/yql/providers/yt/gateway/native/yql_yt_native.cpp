@@ -4804,7 +4804,7 @@ private:
                 (execCtx->Config_->HasExecuteUdfLocallyIfPossible()
                     ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false);
             bool hasLayerPaths = false;
-            if constexpr (NPrivate::THasLayersPaths<TRunOptions>::value) {
+            if constexpr (::NYql::NPrivate::THasLayersPaths<TRunOptions>::value) {
                 hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
                 localRun &= execCtx->Options_.LayersPaths().empty();
             }
@@ -5516,7 +5516,7 @@ private:
         auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
         bool hasLayerPaths = false;
-        if constexpr (NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
+        if constexpr (::NYql::NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
             hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
             localRun &= execCtx->Options_.LayersPaths().empty();
         }

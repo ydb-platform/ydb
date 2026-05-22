@@ -89,6 +89,7 @@ namespace NKikimr::NBlobDepot {
         S3GetBytesOk = s3->GetCounter("GetBytesOk", true);
         S3GetsOk = s3->GetCounter("GetsOk", true);
         S3GetsError = s3->GetCounter("GetsError", true);
+        S3GetsSlowDown = s3->GetCounter("GetsSlowDown", true);
 
         S3PutBytesOk = s3->GetCounter("PutBytesOk", true);
         S3PutsOk = s3->GetCounter("PutsOk", true);

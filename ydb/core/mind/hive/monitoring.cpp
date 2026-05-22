@@ -3146,6 +3146,14 @@ public:
 
     };
 
+    struct TMonitoringReassignCallback : IReassignCallback {
+        virtual IEventBase* MakeEvent(ui64 tabletsDone) override {
+            NJson::TJsonValue response;
+            response["total"] = tabletsDone;
+            return new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(response, false));
+        }
+    };
+
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TTabletFilter TabletFilter;
@@ -3282,7 +3290,7 @@ public:
         jsonOperation["Reassign"] = description;
         WriteOperation(db, jsonOperation);
 
-        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description);
+        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
         return true;
     }
 

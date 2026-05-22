@@ -23,6 +23,16 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const std::vector<TErrorCode> TableMountCacheRetryableCodes = {
+    NTabletClient::EErrorCode::NoSuchTablet,
+    NTabletClient::EErrorCode::TabletNotMounted,
+    NTabletClient::EErrorCode::InvalidMountRevision,
+    NTabletClient::EErrorCode::TabletServantIsNotActive,
+    NTabletClient::EErrorCode::TabletResharded,
+    NTabletClient::EErrorCode::TestingFailureBeforeWrite,
+    NYTree::EErrorCode::ResolveError,
+};
+
 static constexpr auto TabletCacheSweepPeriod = TDuration::Seconds(60);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,9 +261,11 @@ void TTableMountCacheBase::SetTableInfos(std::vector<TTableMountInfoPtr> clonedT
 auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
     -> std::optional<TInvalidationResult>
 {
-    auto expectedError = error.FindMatching({
-        NTabletClient::EErrorCode::TabletServantIsNotActive,
-        NTabletClient::EErrorCode::TabletResharded,
+    auto expectedError = error.FindMatching([&] (const TError& error) {
+        auto code = error.GetCode();
+        return (code == NTabletClient::EErrorCode::TabletServantIsNotActive ||
+            code == NTabletClient::EErrorCode::TabletResharded) &&
+            !error.Attributes().Get<bool>("mount_cache_invalidation_exhausted", false);
     });
 
     if (!expectedError) {
@@ -502,16 +514,6 @@ auto TTableMountCacheBase::TryHandleTabletReshardedError(
 auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetry)
     -> TInvalidationResult
 {
-    static const std::vector<TErrorCode> retryableCodes = {
-        NTabletClient::EErrorCode::NoSuchTablet,
-        NTabletClient::EErrorCode::TabletNotMounted,
-        NTabletClient::EErrorCode::InvalidMountRevision,
-        NTabletClient::EErrorCode::TabletServantIsNotActive,
-        NTabletClient::EErrorCode::TabletResharded,
-        NTabletClient::EErrorCode::TestingFailureBeforeWrite,
-        NYTree::EErrorCode::ResolveError
-    };
-
     if (error.IsOK()) {
         return {};
     }
@@ -520,49 +522,55 @@ auto TTableMountCacheBase::InvalidateOnError(const TError& error, bool forceRetr
         return *result;
     }
 
-    for (auto code : retryableCodes) {
-        if (auto retryableError = error.FindMatching(code)) {
-            auto tabletId = retryableError->Attributes().Find<TTabletId>("tablet_id");
-            if (!tabletId) {
-                continue;
-            }
+    auto errorFilter = [&] (const TError& error) {
+        auto it = std::find(TableMountCacheRetryableCodes.begin(), TableMountCacheRetryableCodes.end(), error.GetCode());
+        bool retryableCode = it != TableMountCacheRetryableCodes.end();
+        return retryableCode && !error.Attributes().Get<bool>("mount_cache_invalidation_exhausted", false);
+    };
 
-            auto isTabletUnmounted = retryableError->Attributes().Get<bool>("is_tablet_unmounted", false);
-            auto tabletInfo = FindTabletInfo(*tabletId);
-            if (tabletInfo) {
-                YT_LOG_DEBUG(error,
-                    "Invalidating tablet in table mount cache "
-                    "(TabletId: %v, CellId: %v, MountRevision: %x, LogicalMountRevision: %x, IsTabletUnmounted: %v, Owners: %v)",
-                    tabletInfo->TabletId,
-                    tabletInfo->CellId,
-                    tabletInfo->MountRevision,
-                    tabletInfo->LogicalMountRevision,
-                    isTabletUnmounted,
-                    MakeFormattableView(TabletInfoOwnerCache_.GetOwners(*tabletId), [] (auto* builder, const auto& weakOwner) {
-                        if (auto owner = weakOwner.Lock()) {
-                            FormatValue(builder, owner->Path, TStringBuf());
-                        } else {
-                            builder->AppendString(TStringBuf("<expired>"));
-                        }
-                    }));
+    if (auto retryableError = error.FindMatching(errorFilter)) {
+        auto code = retryableError->GetCode();
 
-                InvalidateTablet(*tabletId);
-            }
-
-            if (code == NTabletClient::EErrorCode::TabletNotMounted &&
-                isTabletUnmounted &&
-                !forceRetry)
-            {
-                return {};
-            }
-
-            return {
-                .Retryable = true,
-                .ErrorCode = code,
-                .TabletInfo = tabletInfo,
-                .TableInfoUpdatedFromError = false,
-            };
+        auto tabletId = retryableError->Attributes().Find<TTabletId>("tablet_id");
+        if (!tabletId) {
+            return {};
         }
+
+        auto isTabletUnmounted = retryableError->Attributes().Get<bool>("is_tablet_unmounted", false);
+        auto tabletInfo = FindTabletInfo(*tabletId);
+        if (tabletInfo) {
+            YT_LOG_DEBUG(error,
+                "Invalidating tablet in table mount cache "
+                "(TabletId: %v, CellId: %v, MountRevision: %x, LogicalMountRevision: %x, IsTabletUnmounted: %v, Owners: %v)",
+                tabletInfo->TabletId,
+                tabletInfo->CellId,
+                tabletInfo->MountRevision,
+                tabletInfo->LogicalMountRevision,
+                isTabletUnmounted,
+                MakeFormattableView(TabletInfoOwnerCache_.GetOwners(*tabletId), [] (auto* builder, const auto& weakOwner) {
+                    if (auto owner = weakOwner.Lock()) {
+                        FormatValue(builder, owner->Path, TStringBuf());
+                    } else {
+                        builder->AppendString(TStringBuf("<expired>"));
+                    }
+                }));
+
+            InvalidateTablet(*tabletId);
+        }
+
+        if (code == NTabletClient::EErrorCode::TabletNotMounted &&
+            isTabletUnmounted &&
+            !forceRetry)
+        {
+            return {};
+        }
+
+        return {
+            .Retryable = true,
+            .ErrorCode = code,
+            .TabletInfo = tabletInfo,
+            .TableInfoUpdatedFromError = false,
+        };
     }
 
     return {};

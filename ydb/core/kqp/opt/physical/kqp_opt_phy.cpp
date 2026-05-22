@@ -22,17 +22,18 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
 using TStatus = IGraphTransformer::TStatus;
 
-auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSortBase::Match(node); };
+const auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSortBase::Match(node); };
 
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
-    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer)
+    TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
         : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
-        , TypeAnnTransformer(std::move(typeAnnTransformer))
     {
 #define HNDL(name) "KqpPhysical-"#name, Hndl(&TKqpPhysicalOptTransformer::name)
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
@@ -310,7 +311,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> PushOlapFilter(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx, *TypeAnnTransformer.Get());
+        TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapFilter", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -829,14 +830,12 @@ protected:
 private:
     TTypeAnnotationContext& TypesCtx;
     const TKqpOptimizeContext& KqpCtx;
-    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    NYql::TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<NYql::IGraphTransformer> &&typeAnnTransformer)
-{
-    Y_UNUSED(config);
-    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx, std::move(typeAnnTransformer)));
+} // anonymous namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpPhyOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typesCtx) {
+    return THolder<IGraphTransformer>(new TKqpPhysicalOptTransformer(typesCtx, kqpCtx));
 }
 
 } // namespace NKikimr::NKqp::NOpt

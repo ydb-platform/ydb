@@ -4,7 +4,7 @@
 
     Lexers for assembly languages.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -390,7 +390,7 @@ class LlvmLexer(RegexLexer):
             (r'!\d+', Name.Variable.Anonymous),
             (r'c?' + string, String),
 
-            (r'0[xX][a-fA-F0-9]+', Number),
+            (r'0[xX][KLMHR]?[a-fA-F0-9]+', Number),
             (r'-?\d+(?:[.]\d+)?(?:[eE][-+]?\d+(?:[.]\d+)?)?', Number),
 
             (r'[=<>{}\[\]()*.,!]|x\b', Punctuation)
@@ -465,24 +465,25 @@ class LlvmLexer(RegexLexer):
                 'singleImpl', 'singleImplName', 'sitofp', 'sizeM1',
                 'sizeM1BitWidth', 'sle', 'slt', 'source_filename',
                 'speculatable', 'speculative_load_hardening', 'spir_func',
-                'spir_kernel', 'srem', 'sret', 'ssp', 'sspreq', 'sspstrong',
-                'store', 'strictfp', 'sub', 'summaries', 'summary', 'swiftcc',
-                'swifterror', 'swiftself', 'switch', 'syncscope', 'tail',
-                'tailcc', 'target', 'thread_local', 'to', 'token', 'triple',
-                'true', 'trunc', 'type', 'typeCheckedLoadConstVCalls',
-                'typeCheckedLoadVCalls', 'typeid', 'typeidCompatibleVTable',
-                'typeIdInfo', 'typeTestAssumeConstVCalls',
-                'typeTestAssumeVCalls', 'typeTestRes', 'typeTests', 'udiv',
-                'ueq', 'uge', 'ugt', 'uitofp', 'ule', 'ult', 'umax', 'umin',
-                'undef', 'une', 'uniformRetVal', 'uniqueRetVal', 'unknown',
-                'unnamed_addr', 'uno', 'unordered', 'unreachable', 'unsat',
-                'unwind', 'urem', 'uselistorder', 'uselistorder_bb', 'uwtable',
-                'va_arg', 'varFlags', 'variable', 'vcall_visibility',
-                'vFuncId', 'virtFunc', 'virtualConstProp', 'void', 'volatile',
-                'vscale', 'vTableFuncs', 'weak', 'weak_odr', 'webkit_jscc',
-                'win64cc', 'within', 'wpdRes', 'wpdResolutions', 'writeonly',
-                'x', 'x86_64_sysvcc', 'x86_fastcallcc', 'x86_intrcc',
-                'x86_mmx', 'x86_regcallcc', 'x86_stdcallcc', 'x86_thiscallcc',
+                'spir_kernel', 'splat', 'srem', 'sret', 'ssp', 'sspreq',
+                'sspstrong', 'store', 'strictfp', 'sub', 'summaries',
+                'summary', 'swiftcc', 'swifterror', 'swiftself', 'switch',
+                'syncscope', 'tail', 'tailcc', 'target', 'thread_local', 'to',
+                'token', 'triple', 'true', 'trunc', 'type',
+                'typeCheckedLoadConstVCalls', 'typeCheckedLoadVCalls',
+                'typeid', 'typeidCompatibleVTable', 'typeIdInfo',
+                'typeTestAssumeConstVCalls', 'typeTestAssumeVCalls',
+                'typeTestRes', 'typeTests', 'udiv', 'ueq', 'uge', 'ugt',
+                'uitofp', 'ule', 'ult', 'umax', 'umin', 'undef', 'une',
+                'uniformRetVal', 'uniqueRetVal', 'unknown', 'unnamed_addr',
+                'uno', 'unordered', 'unreachable', 'unsat', 'unwind', 'urem',
+                'uselistorder', 'uselistorder_bb', 'uwtable', 'va_arg',
+                'varFlags', 'variable', 'vcall_visibility', 'vFuncId',
+                'virtFunc', 'virtualConstProp', 'void', 'volatile', 'vscale',
+                'vTableFuncs', 'weak', 'weak_odr', 'webkit_jscc', 'win64cc',
+                'within', 'wpdRes', 'wpdResolutions', 'writeonly', 'x',
+                'x86_64_sysvcc', 'x86_fastcallcc', 'x86_intrcc', 'x86_mmx',
+                'x86_regcallcc', 'x86_stdcallcc', 'x86_thiscallcc',
                 'x86_vectorcallcc', 'xchg', 'xor', 'zeroext',
                 'zeroinitializer', 'zext', 'immarg', 'willreturn'),
                 suffix=r'\b'), Keyword),

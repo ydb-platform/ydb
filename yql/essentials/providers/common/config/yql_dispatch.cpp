@@ -9,7 +9,7 @@
 #include <util/random/random.h>
 #include <util/datetime/base.h>
 
-namespace NYql {
+namespace NYql::NCommon {
 
 namespace NPrivate {
 
@@ -143,8 +143,6 @@ YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DEFINE_CONTAINER_SETTING_SERIALIZER)
 
 } // namespace NPrivate
 
-namespace NCommon {
-
 bool TSettingDispatcher::IsRuntime(const TString& name) {
     auto normalizedName = NormalizeName(name);
     if (auto handler = Handlers_.Value(normalizedName, TSettingHandler::TPtr())) {
@@ -264,5 +262,4 @@ TSettingDispatcher::TErrorCallback TSettingDispatcher::GetErrorCallback(TPositio
     };
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

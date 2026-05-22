@@ -36,16 +36,18 @@ namespace NLongTxService {
             EvSubscribeLock,
             EvLockStatus,
             EvUnsubscribeLock,
-            EvWaitingLockAdd,
-            EvWaitingLockRemove,
-            EvWaitingLockDeadlock,
             EvCollectSnapshots,
             EvCollectSnapshotsResult,
             EvPropagateSnapshots,
             EvPropagateSnapshotsResult,
+            EvWaitingLockAdd,
+            EvWaitingLockRemove,
+            EvWaitingLockDeadlock,
             EvUpdateLockWaitEdges,
             EvGetLockWaitGraph,
             EvGetLockWaitGraphResult,
+            EvRemoteSnapshotsPrefill,
+            EvRemoteSnapshotsPrefillResult,
             EvEnd,
         };
 
@@ -335,6 +337,18 @@ namespace NLongTxService {
             : TEventPB<TEvPropagateSnapshotsResult, NKikimrLongTxService::TEvPropagateSnapshotsResult, EvPropagateSnapshotsResult>
         {
             TEvPropagateSnapshotsResult() = default;
+        };
+
+        struct TEvRemoteSnapshotsPrefill
+            : TEventPB<TEvRemoteSnapshotsPrefill, NKikimrLongTxService::TEvRemoteSnapshotsPrefill, EvRemoteSnapshotsPrefill>
+        {
+            TEvRemoteSnapshotsPrefill() = default;
+        };
+
+        struct TEvRemoteSnapshotsPrefillResult
+            : TEventPB<TEvRemoteSnapshotsPrefillResult, NKikimrLongTxService::TEvRemoteSnapshotsPrefillResult, EvRemoteSnapshotsPrefillResult>
+        {
+            TEvRemoteSnapshotsPrefillResult() = default;
         };
 
         struct TEvWaitingLockAdd

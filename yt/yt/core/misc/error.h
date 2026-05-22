@@ -127,7 +127,7 @@ public:
     static TErrorCodicils& GetOrCreate();
 
     // Gets the instance for this fiber if one was created previously.
-    static TErrorCodicils* TryGet();
+    static const TErrorCodicils* TryGet();
 
     // Evaluates the codicil for the key if one was set.
     static std::optional<std::string> MaybeEvaluate(const std::string& key);

@@ -715,4 +715,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table", "scheme.pb")));
         UNIT_ASSERT(FileExists(MakeExportPath(basePath, "backup/Table/index/indexImplTable", "scheme.pb")));
     }
+
+    Y_UNIT_TEST(ShouldFailOnColumnTableExportToFs) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString basePath = tempDir.Path();
+        TString requestStr = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "/MyRoot/ColumnTable"
+                destination_path: "backup/ColumnTable"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", requestStr);
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+    }
 }

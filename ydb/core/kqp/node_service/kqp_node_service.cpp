@@ -572,6 +572,7 @@ private:
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
         ptr->MaxRowsProcessingStreamLookup = settings.GetMaxRowsProcessingStreamLookup();
         ptr->MaxTotalBytesQuotaStreamLookup = settings.GetMaxTotalBytesQuotaStreamLookup();
+        ptr->MaxInFlightReadsStreamLookup = settings.GetMaxInFlightReadsStreamLookup();
         SetReadIteratorBackoffSettings(ptr);
     }
 

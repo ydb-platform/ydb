@@ -13369,21 +13369,6 @@ Y_UNIT_TEST(Join2) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
-Y_UNIT_TEST(AsteriskJoin) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
-
-    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
-        PRAGMA YqlSelect = 'force';
-        USE plato;
-        SELECT * FROM xx JOIN yy ON xx.id = yy.id;
-    )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(
-        Err2Str(res),
-        "YqlSelect unsupported: JOIN with an asterisk projection");
-}
-
 Y_UNIT_TEST(QualifiedAsteriskJoin) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();

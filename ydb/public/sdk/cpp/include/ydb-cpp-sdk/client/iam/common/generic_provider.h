@@ -189,19 +189,30 @@ private:
         }
 
         void FillContext(std::unique_lock<std::mutex>& guard) {
+            std::optional<std::string> authToken;
+            if (AuthTokenProvider_) {
+                guard.unlock();
+                try {
+                    authToken = AuthTokenProvider_->GetAuthInfo();
+                } catch (...) {
+                    guard.lock();
+                    throw;
+                }
+                guard.lock();
+                if (NeedStop_) {
+                    return;
+                }
+            }
+
             auto& context = Context_.emplace();
-            auto deadline = gpr_time_add(
+            const auto deadline = gpr_time_add(
                 gpr_now(GPR_CLOCK_MONOTONIC),
                 gpr_time_from_micros(IamEndpoint_.RequestTimeout.MicroSeconds(), GPR_TIMESPAN));
 
             context.set_deadline(deadline);
 
-            if (AuthTokenProvider_) {
-                guard.unlock();
-                auto token = AuthTokenProvider_->GetAuthInfo();
-                guard.lock();
-
-                context.AddMetadata("authorization", "Bearer " + token);
+            if (authToken) {
+                context.AddMetadata("authorization", "Bearer " + *authToken);
             }
         }
 
@@ -228,6 +239,7 @@ private:
                 }
                 FillContext(guard);
                 if (NeedStop_) {
+                    ResetContextImpl();
                     return false;
                 }
             }
@@ -318,6 +330,33 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
+// Adapter that keeps a self-owned ICoreFacility alive for the lifetime of an inner credentials
+// provider. Used by deprecated no-arg ICredentialsProviderFactory::CreateProvider() paths where
+// the caller hasn't supplied a facility.
+class TOwningFacilityCredentialsProvider : public ICredentialsProvider {
+public:
+    TOwningFacilityCredentialsProvider(std::shared_ptr<ICoreFacility> facility,
+                                       TCredentialsProviderPtr inner)
+        : Facility_(std::move(facility))
+        , Inner_(std::move(inner))
+    {}
+
+    std::string GetAuthInfo() const override {
+        return Inner_->GetAuthInfo();
+    }
+
+    bool IsValid() const override {
+        return Inner_->IsValid();
+    }
+
+private:
+    // Field declaration order matters: Inner_ is destroyed first so that its Stop() can still
+    // drive the facility's queue (cancel the in-flight gRPC context, drain the response callback),
+    // and only then is Facility_ destroyed.
+    std::shared_ptr<ICoreFacility> Facility_;
+    TCredentialsProviderPtr Inner_;
+};
+
 template<typename TRequest, typename TResponse, typename TService>
 class TIamJwtCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
 public:
@@ -347,8 +386,14 @@ class TIamJwtCredentialsProviderFactory : public ICredentialsProviderFactory {
 public:
     TIamJwtCredentialsProviderFactory(const TIamJwtParams& params): Params_(params) {}
 
+    // Deprecated. Kept for backward compatibility with callers (including out-of-tree mirrors)
+    // that don't have access to an ICoreFacility. Spins up a private TSimpleCoreFacility and ties
+    // its lifetime to the returned provider via TOwningFacilityCredentialsProvider.
     TCredentialsProviderPtr CreateProvider() const final {
-        ythrow yexception() << "Not supported";
+        auto facility = CreateSimpleCoreFacility();
+        auto inner = std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(
+            Params_, std::weak_ptr<ICoreFacility>(facility));
+        return std::make_shared<TOwningFacilityCredentialsProvider>(std::move(facility), std::move(inner));
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
@@ -364,8 +409,12 @@ class TIamOAuthCredentialsProviderFactory : public ICredentialsProviderFactory {
 public:
     TIamOAuthCredentialsProviderFactory(const TIamOAuth& params): Params_(params) {}
 
+    // Deprecated. Kept for backward compatibility — see comment on TIamJwtCredentialsProviderFactory.
     TCredentialsProviderPtr CreateProvider() const final {
-        ythrow yexception() << "Not supported";
+        auto facility = CreateSimpleCoreFacility();
+        auto inner = std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(
+            Params_, std::weak_ptr<ICoreFacility>(facility));
+        return std::make_shared<TOwningFacilityCredentialsProvider>(std::move(facility), std::move(inner));
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {

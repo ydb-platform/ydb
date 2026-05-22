@@ -258,7 +258,7 @@ message TFeatureFlags {
     optional bool EnableForcedCompactions = 231 [default = true];
     optional bool EnableLocalBloomFilterIndex = 232 [default = true];
     optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
-    optional bool EnableSetDropDefaultValue = 234 [ default = false];
+    optional bool EnableSetDropDefaultValue = 234 [default = true];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableSkipConflictCheckForTopicsInTransaction = 243 [default = false];
     // Split protocol control.

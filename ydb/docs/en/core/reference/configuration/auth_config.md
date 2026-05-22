@@ -385,6 +385,3 @@ auth_config:
   node_registration_token: ""
   ...
 ```
-
-    ||
-|#

@@ -2888,16 +2888,44 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit)
         tc);
 }
 
-ui64 GetStorageChannelFallbackToMainCounter(TTestContext &tc) {
+struct TStorageChannelFallbackCounters {
+    ui64 Cumulative = 0;
+    ui64 RecentGauge = 0;
+};
+
+TStorageChannelFallbackCounters GetStorageChannelFallbackCounters(TTestContext &tc) {
     const auto sender = tc.Runtime->AllocateEdgeActor();
     tc.Runtime->SendToPipe(tc.TabletId, sender, new TEvTablet::TEvGetCounters,
             0, GetPipeConfigWithRetries());
     TAutoPtr<IEventHandle> handle;
     auto *result = tc.Runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(handle);
     UNIT_ASSERT(result);
-    return result->Record.GetTabletCounters().GetAppCounters()
+    const auto &appCounters = result->Record.GetTabletCounters().GetAppCounters();
+    TStorageChannelFallbackCounters counters;
+    counters.Cumulative = appCounters
             .GetCumulativeCounters(NKeyValue::COUNTER_STORAGE_CHANNEL_FALLBACK_TO_MAIN)
             .GetValue();
+    counters.RecentGauge = appCounters
+            .GetSimpleCounters(NKeyValue::COUNTER_STORAGE_CHANNEL_FALLBACK_RECENT)
+            .GetValue();
+    return counters;
+}
+
+ui64 GetStorageChannelFallbackToMainCounter(TTestContext &tc) {
+    return GetStorageChannelFallbackCounters(tc).Cumulative;
+}
+
+// Force the periodic gauge-update tick to run immediately by sending the
+// scheduled event directly to the tablet. This makes the test independent
+// of wall-clock pacing of the 1-second scheduler.
+void ForceStorageChannelFallbackGaugeUpdate(TTestContext &tc) {
+    const auto sender = tc.Runtime->AllocateEdgeActor();
+    tc.Runtime->SendToPipe(tc.TabletId, sender,
+            new TEvKeyValue::TEvUpdateStorageChannelFallbackGauge,
+            0, GetPipeConfigWithRetries());
+    // Give the tablet a chance to process the event before the next counter read.
+    TDispatchOptions options;
+    tc.Runtime->DispatchEvents(options, TDuration::MilliSeconds(10));
 }
 
 Y_UNIT_TEST(TestStorageChannelFallbackToMainCounter) {
@@ -2906,36 +2934,88 @@ Y_UNIT_TEST(TestStorageChannelFallbackToMainCounter) {
     bool activeZone = false;
     tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
 
-    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 0u);
+    {
+        auto counters = GetStorageChannelFallbackCounters(tc);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Cumulative, 0u);
+        // Gauge may be either 0 (initial) or already toggled by an early tick,
+        // but with no fallback events it must be 0 after a forced tick.
+        ForceStorageChannelFallbackGaugeUpdate(tc);
+        UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackCounters(tc).RecentGauge, 0u);
+    }
 
     // Write to MAIN: should not trigger fallback.
     CmdWrite("key-main", "value-main",
             NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME,
             tc);
-    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 0u);
+    ForceStorageChannelFallbackGaugeUpdate(tc);
+    {
+        auto counters = GetStorageChannelFallbackCounters(tc);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Cumulative, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecentGauge, 0u);
+    }
 
     // Write to INLINE: should not trigger fallback either.
     CmdWrite("key-inline", "value-inline",
             NKikimrClient::TKeyValueRequest::INLINE,
             NKikimrClient::TKeyValueRequest::REALTIME,
             tc);
-    UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 0u);
+    ForceStorageChannelFallbackGaugeUpdate(tc);
+    {
+        auto counters = GetStorageChannelFallbackCounters(tc);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Cumulative, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecentGauge, 0u);
+    }
 
     // Write to a non-existing storage channel: should silently fall back to MAIN
-    // and bump the counter once.
+    // and bump the cumulative counter once. The pending counter is incremented
+    // immediately, but the gauge is only updated by the periodic tick.
     CmdWrite("key-extra9", "value-extra9",
             NKikimrClient::TKeyValueRequest::EXTRA9,
             NKikimrClient::TKeyValueRequest::REALTIME,
             tc);
     UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 1u);
 
-    // Another write to the same non-existing channel: counter increments again.
+    // After the next tick, the gauge should observe the pending event and
+    // flip to 1.
+    ForceStorageChannelFallbackGaugeUpdate(tc);
+    {
+        auto counters = GetStorageChannelFallbackCounters(tc);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Cumulative, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecentGauge, 1u);
+    }
+
+    // A subsequent tick with no new fallback events resets the gauge to 0
+    // while keeping the cumulative counter intact.
+    ForceStorageChannelFallbackGaugeUpdate(tc);
+    {
+        auto counters = GetStorageChannelFallbackCounters(tc);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Cumulative, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecentGauge, 0u);
+    }
+
+    // Another write to the same non-existing channel: cumulative increments
+    // again and the gauge flips back to 1 after the next tick.
     CmdWrite("key-extra9-2", "value-extra9-2",
             NKikimrClient::TKeyValueRequest::EXTRA9,
             NKikimrClient::TKeyValueRequest::REALTIME,
             tc);
     UNIT_ASSERT_VALUES_EQUAL(GetStorageChannelFallbackToMainCounter(tc), 2u);
+
+    ForceStorageChannelFallbackGaugeUpdate(tc);
+    {
+        auto counters = GetStorageChannelFallbackCounters(tc);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Cumulative, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecentGauge, 1u);
+    }
+
+    // And falls back to 0 again on the next quiet tick.
+    ForceStorageChannelFallbackGaugeUpdate(tc);
+    {
+        auto counters = GetStorageChannelFallbackCounters(tc);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Cumulative, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecentGauge, 0u);
+    }
 
     // Make sure both keys are readable (data ended up on MAIN).
     CmdRead({"key-extra9"},

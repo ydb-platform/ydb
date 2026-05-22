@@ -297,6 +297,12 @@ protected:
 
     ui64 TotalTrashSize = 0;
 
+    // Counts storage-channel-fallback events that happened since the last
+    // TEvUpdateStorageChannelFallbackGauge tick. Read & reset by the periodic
+    // tick handler, then used to set a 0/1 gauge counter. Single-threaded
+    // access only (tablet actor), so no atomic needed.
+    ui64 StorageChannelFallbackPending = 0;
+
     TControlWrapper ReadRequestsInFlightLimit_Base;
     TMemorizableControlWrapper ReadRequestsInFlightLimit;
     TControlWrapper UsePayload_Base;
@@ -326,6 +332,7 @@ public:
     void CountTrashDeleted(const TLogoBlobID& id);
     void CountOverrun();
     void CountStorageChannelFallbackToMain();
+    void OnUpdateStorageChannelFallbackGauge();
     void CountLatencyBsOps(const TRequestStat &stat);
     void CountLatencyBsCollect();
     void CountLatencyQueue(const TRequestStat &stat);

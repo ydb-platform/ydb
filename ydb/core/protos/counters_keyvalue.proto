@@ -135,6 +135,10 @@ enum ESimpleCounters {
     COUNTER_UNCOMMITTED_TRASH_BYTES = 14                             [(CounterOpts) = {Name: "UncommittedTrashBytes"}];
     COUNTER_VIRTUAL_TRASH_COUNT = 15                                 [(CounterOpts) = {Name: "VirtualTrashCount"}];
     COUNTER_VIRTUAL_TRASH_BYTES = 16                                 [(CounterOpts) = {Name: "VirtualTrashBytes"}];
+
+    // Set to 1 if at least one storage-channel fallback to MAIN happened
+    // during the last update interval, otherwise 0.
+    COUNTER_STORAGE_CHANNEL_FALLBACK_RECENT = 17                     [(CounterOpts) = {Name: "StorageChannelFallbackRecent"}];
 }
 
 enum EPercentileCounters {

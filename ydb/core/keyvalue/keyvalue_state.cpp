@@ -399,6 +399,12 @@ void TKeyValueState::CountOverrun() {
 
 void TKeyValueState::CountStorageChannelFallbackToMain() {
     TabletCounters->Cumulative()[COUNTER_STORAGE_CHANNEL_FALLBACK_TO_MAIN].Increment(1);
+    ++StorageChannelFallbackPending;
+}
+
+void TKeyValueState::OnUpdateStorageChannelFallbackGauge() {
+    const ui64 pending = std::exchange(StorageChannelFallbackPending, 0);
+    TabletCounters->Simple()[COUNTER_STORAGE_CHANNEL_FALLBACK_RECENT].Set(pending ? 1 : 0);
 }
 
 void TKeyValueState::CountLatencyBsOps(const TRequestStat &stat) {

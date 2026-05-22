@@ -4,7 +4,7 @@
 
     Lexers for Objective-C family languages.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -13,7 +13,7 @@ import re
 from pygments.lexer import RegexLexer, include, bygroups, using, this, words, \
     inherit, default
 from pygments.token import Text, Keyword, Name, String, Operator, \
-    Number, Punctuation, Literal, Comment
+    Number, Punctuation, Literal, Comment, Whitespace
 
 from pygments.lexers.c_cpp import CLexer, CppLexer
 
@@ -296,7 +296,7 @@ class SwiftLexer(RegexLexer):
         'root': [
             # Whitespace and Comments
             (r'\n', Text),
-            (r'\s+', Text),
+            (r'\s+', Whitespace),
             (r'//', Comment.Single, 'comment-single'),
             (r'/\*', Comment.Multiline, 'comment-multi'),
             (r'#(if|elseif|else|endif|available)\b', Comment.Preproc, 'preproc'),
@@ -437,11 +437,11 @@ class SwiftLexer(RegexLexer):
              r'|#(?:file|line|column|function))\b', Keyword.Constant),
             (r'import\b', Keyword.Declaration, 'module'),
             (r'(class|enum|extension|struct|protocol)(\s+)([a-zA-Z_]\w*)',
-             bygroups(Keyword.Declaration, Text, Name.Class)),
+             bygroups(Keyword.Declaration, Whitespace, Name.Class)),
             (r'(func)(\s+)([a-zA-Z_]\w*)',
-             bygroups(Keyword.Declaration, Text, Name.Function)),
+             bygroups(Keyword.Declaration, Whitespace, Name.Function)),
             (r'(var|let)(\s+)([a-zA-Z_]\w*)', bygroups(Keyword.Declaration,
-             Text, Name.Variable)),
+             Whitespace, Name.Variable)),
             (words((
                 'actor', 'associatedtype', 'class', 'deinit', 'enum', 'extension', 'func', 'import',
                 'init', 'internal', 'let', 'operator', 'private', 'protocol', 'public',
@@ -455,24 +455,24 @@ class SwiftLexer(RegexLexer):
 
         # Nested
         'comment-single': [
-            (r'\n', Text, '#pop'),
+            (r'\n', Whitespace, '#pop'),
             include('comment'),
-            (r'[^\n]', Comment.Single)
+            (r'[^\n]+', Comment.Single)
         ],
         'comment-multi': [
             include('comment'),
-            (r'[^*/]', Comment.Multiline),
+            (r'[^*/]+', Comment.Multiline),
             (r'/\*', Comment.Multiline, '#push'),
             (r'\*/', Comment.Multiline, '#pop'),
-            (r'[*/]', Comment.Multiline)
+            (r'[*/]+', Comment.Multiline)
         ],
         'module': [
-            (r'\n', Text, '#pop'),
+            (r'\n', Whitespace, '#pop'),
             (r'[a-zA-Z_]\w*', Name.Class),
             include('root')
         ],
         'preproc': [
-            (r'\n', Text, '#pop'),
+            (r'\n', Whitespace, '#pop'),
             include('keywords'),
             (r'[A-Za-z]\w*', Comment.Preproc),
             include('root')

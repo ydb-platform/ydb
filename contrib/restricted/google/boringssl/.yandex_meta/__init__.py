@@ -14,17 +14,6 @@ def post_install(self):
             with open(filePath, "r") as file:
                 filedata = file.read()
             filedata = filedata.replace("<openssl/", "<contrib/restricted/google/boringssl/include/openssl/")
-            filedata = filedata.replace(
-                '"openssl/arm_arch.h"', "<contrib/restricted/google/boringssl/include/openssl/arm_arch.h>"
-            )
-            filedata = filedata.replace(
-                "<boringssl_prefix_symbols.h>",
-                "<contrib/restricted/google/boringssl/include/boringssl_prefix_symbols.h>",
-            )
-            filedata = filedata.replace(
-                "<boringssl_prefix_symbols_asm.h>",
-                "<contrib/restricted/google/boringssl/include/boringssl_prefix_symbols_asm.h>",
-            )
             filedata = filedata.replace("OPENSSL_armcap_P", "BSSL_armcap_P")
 
             with open(filePath, "w") as file:
@@ -60,7 +49,6 @@ boringssl = NixProject(
         "crypto/*.h",
         "third_party/fiat/*.h",
         "third_party/fiat/*.inc",
-        "include/boringssl_prefix_symbols*",
     ],
     post_install=post_install,
 )

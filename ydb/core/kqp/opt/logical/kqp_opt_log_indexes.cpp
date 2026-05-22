@@ -1968,6 +1968,99 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     return res;
 }
 
+TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!kqpCtx.Config->FeatureFlags.GetEnableJsonIndexAutoSelect()) {
+        return node;
+    }
+
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Cast<TCoFlatMap>();
+    if (!flatMap.Input().Maybe<TKqlReadTableRanges>()) {
+        return node;
+    }
+
+    auto read = flatMap.Input().Cast<TKqlReadTableRanges>();
+    auto readSettings = TKqpReadTableSettings::Parse(read.Settings());
+    if (readSettings.ForcePrimary) {
+        return node;
+    }
+
+    const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    if (mainTableDesc.Metadata->Kind == EKikimrTableKind::Olap) {
+        return node;
+    }
+
+    if (!read.Ranges().Maybe<TCoVoid>()) {
+        return node;
+    }
+
+    THashSet<TString> jsonIndexedColumns;
+    for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson) {
+            continue;
+        }
+
+        if (indexInfo.State != TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        YQL_ENSURE(indexInfo.KeyColumns.size() == 1, "Expected single key column in JSON index");
+        jsonIndexedColumns.insert(indexInfo.KeyColumns.at(0));
+    }
+
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
+    if (!expectedSettings.has_value()) {
+        return node;
+    }
+
+    const TString& columnName = expectedSettings->ColumnName;
+
+    std::optional<TString> selectedIndex;
+    for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
+        if (indexInfo.Type != TIndexDescription::EType::GlobalJson) {
+            continue;
+        }
+
+        if (indexInfo.State != TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        YQL_ENSURE(indexInfo.KeyColumns.size() == 1, "Expected single key column in JSON index");
+        const auto& keyCol = indexInfo.KeyColumns.at(0);
+
+        if (keyCol == columnName) {
+            selectedIndex = indexInfo.Name;
+            break;
+        }
+    }
+
+    if (!selectedIndex.has_value()) {
+        return node;
+    }
+
+    const auto& jsonIndexSettings = expectedSettings.value();
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings.ColumnName).Done())
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(Build<TCoAtom>(ctx, node.Pos()).Value(selectedIndex.value()).Done())
+        .Columns(read.Columns())
+        .Query<TExprList>().Build()
+        .QueryColumns(searchColumns.Ptr())
+        .Settings(jsonIndexSettings.Settings.BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TCoFlatMap>(ctx, node.Pos())
+        .Input(newInput)
+        .Lambda(flatMap.Lambda())
+        .Done();
+}
+
 TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
@@ -1987,13 +2080,23 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         return {};
     }
 
-    auto jsonIndexSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx);
-    if (!jsonIndexSettings) {
+    if (indexDesc->State != TIndexDescription::EIndexState::Ready) {
         return {};
     }
 
+    THashSet<TString> jsonIndexedColumns;
+    YQL_ENSURE(indexDesc->KeyColumns.size() == 1, "Expected single key column in JSON index");
+    jsonIndexedColumns.insert(indexDesc->KeyColumns.at(0));
+
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns);
+    if (!expectedSettings.has_value()) {
+        ctx.AddError(std::move(expectedSettings.error()));
+        return {};
+    }
+
+    const auto& jsonIndexSettings = expectedSettings.value();
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
-        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings->ColumnName).Done())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonIndexSettings.ColumnName).Done())
         .Done();
 
     auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
@@ -2002,10 +2105,10 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         .Columns(read.Columns())
         .Query<TExprList>().Build()
         .QueryColumns(searchColumns.Ptr())
-        .Settings(jsonIndexSettings->Settings.BuildNode(ctx, node.Pos()))
+        .Settings(jsonIndexSettings.Settings.BuildNode(ctx, node.Pos()))
         .Done();
 
-    return Build<TCoFlatMap>(ctx, read.Pos())
+    return Build<TCoFlatMap>(ctx, node.Pos())
         .Input(newInput)
         .Lambda(flatMap.Lambda())
         .Done();

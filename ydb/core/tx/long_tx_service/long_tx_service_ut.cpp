@@ -451,6 +451,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 UNIT_ASSERT(registry->GetActiveSnapshots(tableWithSysView).contains(snapshots.front()));
                 UNIT_ASSERT_VALUES_EQUAL(registry->GetActiveSnapshots(otherTable).contains(snapshots.front()), !hasTable);
             }
+
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() == (manySnapshots ? snapshots[10] : TRowVersion::Max()));
         }
 
         handles.clear();
@@ -471,6 +473,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 UNIT_ASSERT(!registry->HasSnapshot(tableWithSysView, snapshot));
                 UNIT_ASSERT(!registry->HasSnapshot(otherTable, snapshot));
             }
+
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() == TRowVersion::Max());
         }
     }
 
@@ -488,6 +492,405 @@ Y_UNIT_TEST_SUITE(LongTxService) {
 
     Y_UNIT_TEST_TWIN(SimpleSnapshotsManyNodesManySnapshots, HasTable) {
         RunSimpleSnapshotsTest(4, HasTable, true);
+    }
+
+    Y_UNIT_TEST(SnapshotsLockingNetworkPartition) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(3);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetPrefillTimeoutSeconds(10);
+
+        const size_t nodeCount = 10;
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodeCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        THashMap<ui32, ui32> indexByNodeId;
+        for (size_t i = 0; i < nodeCount; ++i) {
+            indexByNodeId[runtime.GetNodeId(i)] = i;
+            UNIT_ASSERT(runtime.GetNodeId(i) != 0);
+        }
+
+        // Sleep to allow nodes to discover each other
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        const ::NKikimr::TTableId table(0, 1);
+
+        ui32 rootNode = 0; 
+        size_t dropCounter = 0;
+        bool splitNetwork = false;
+        auto grabFirst = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NLongTxService::TEvLongTxService::TEvCollectSnapshots::EventType
+                || ev->GetTypeRewrite() == NKikimr::NLongTxService::TEvLongTxService::TEvPropagateSnapshots::EventType) {
+
+                if (rootNode == 0) {
+                    rootNode = ev->Sender.NodeId();
+                }
+
+                if (dropCounter == 0 && ev->Sender.NodeId() == rootNode && ev->Recipient.NodeId() != ev->Sender.NodeId()) {
+                    ++dropCounter;
+                    auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(ev->Recipient.NodeId());
+                    runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), indexByNodeId.at(ev->Sender.NodeId()), true);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                if (splitNetwork && ev->Recipient.NodeId() != ev->Sender.NodeId()) {
+                    if ((indexByNodeId.at(ev->Recipient.NodeId()) < (nodeCount / 2)) != (indexByNodeId.at(ev->Sender.NodeId()) < (nodeCount / 2))) {
+                        ++dropCounter;
+                        auto disconnectEv = new TEvInterconnect::TEvNodeDisconnected(ev->Recipient.NodeId());
+                        runtime.Send(new IEventHandle(ev->Sender, TActorId(), disconnectEv), indexByNodeId.at(ev->Sender.NodeId()), true);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        auto saveObserver = runtime.SetObserverFunc(grabFirst);
+        Y_DEFER {
+            runtime.SetObserverFunc(saveObserver);
+        };
+
+        // Create a snapshot on node 1
+        NKqp::TSnapshotHandle handle1;
+        TRowVersion snapshot1;
+        {
+            auto sender1 = runtime.AllocateEdgeActor(0);
+            auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            handle1 = std::move(msg->SnapshotHandle);
+            snapshot1 = msg->Snapshot;
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(5));
+
+        UNIT_ASSERT(dropCounter == 1); // retry
+        for (size_t i = 0; i < nodeCount; ++i) {
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot1));
+        }
+
+        splitNetwork = true;
+
+        // Create a snapshot at rootNode 
+        NKqp::TSnapshotHandle handle2;
+        TRowVersion snapshot2;
+        {
+            auto sender2 = runtime.AllocateEdgeActor(indexByNodeId.at(rootNode));
+            auto service2 = MakeLongTxServiceID(rootNode);
+            runtime.Send(
+                new IEventHandle(service2, sender2,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                indexByNodeId.at(rootNode), true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender2);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            handle2 = std::move(msg->SnapshotHandle);
+            snapshot2 = msg->Snapshot;
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(5));
+
+        UNIT_ASSERT(dropCounter > 1);
+        for (size_t i = 0; i < nodeCount / 2; ++i) {
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2)
+                    == runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2));
+        }
+        for (size_t i = nodeCount / 2; i < nodeCount; ++i) {
+            UNIT_ASSERT(runtime.GetAppData(i).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2)
+                    != runtime.GetAppData(0).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot2));
+        }
+    }
+
+    Y_UNIT_TEST(SnapshotsLockingOverflow) {
+        const ui32 nodesCount = 2;
+        const ::NKikimr::TTableId table(0, 1);
+        const ::NKikimr::TTableId otherTable(0, 2);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(true);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetMaxRemoteSnapshots(3);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(1);
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        auto sender1 = runtime.AllocateEdgeActor(0);
+        auto service1 = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        std::vector<NKqp::TSnapshotHandle> handles;
+        std::vector<TRowVersion> snapshots;
+        
+        for (size_t i = 0; i < 10; ++i) {
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+
+            UNIT_ASSERT(snapshots.empty() || msg->Snapshot != snapshots.back());
+
+            handles.emplace_back(std::move(msg->SnapshotHandle));
+            snapshots.emplace_back(msg->Snapshot);
+
+            SimulateSleep(runtime, TDuration::Seconds(1));
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(3));
+
+
+        for (size_t node = 0; node < nodesCount; ++node) {
+            for (size_t index = 0; index < snapshots.size(); ++index) {
+                const auto& snapshot = snapshots[index];
+                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(table, snapshot));
+                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == (index >= 3));
+            }
+
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetBorder() == snapshots[3]);
+
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(table).size() == 3);
+            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->GetActiveSnapshots(otherTable).size() == 0);
+        }
+    }
+
+    Y_UNIT_TEST(SnapshotsLockingFeatureFlag) {
+        const ui32 nodesCount = 2;
+        const ::NKikimr::TTableId table(0, 1);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetMaxRemoteSnapshots(3);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(1);
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        auto sender0 = runtime.AllocateEdgeActor(0);
+        auto service0 = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        NKqp::TSnapshotHandle handle1;
+        TRowVersion snapshot1;
+        {
+            runtime.Send(
+                new IEventHandle(service0, sender0,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender0);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            handle1 = std::move(msg->SnapshotHandle);
+            snapshot1 = msg->Snapshot;
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(3));
+
+        {
+            UNIT_ASSERT(runtime.GetAppData(0).SnapshotRegistryHolder->Get().get() == nullptr);
+            UNIT_ASSERT(runtime.GetAppData(1).SnapshotRegistryHolder->Get().get() == nullptr);
+        }
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
+        runtime.GetAppData(1).FeatureFlags.SetEnableSnapshotsLocking(true);
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        NKqp::TSnapshotHandle handle2;
+        TRowVersion snapshot2;
+        {
+            runtime.Send(
+                new IEventHandle(service0, sender0,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender0);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            handle2 = std::move(msg->SnapshotHandle);
+            snapshot2 = msg->Snapshot;
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(3));
+
+        {
+            const auto& registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(!registry->HasSnapshot(table, snapshot1));
+            UNIT_ASSERT(registry->HasSnapshot(table, snapshot2));
+        }
+        {
+            const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(!registry->HasSnapshot(table, snapshot1));
+            UNIT_ASSERT(registry->HasSnapshot(table, snapshot2));
+        }
+
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(false);
+        runtime.GetAppData(1).FeatureFlags.SetEnableSnapshotsLocking(false);
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        {
+            UNIT_ASSERT(runtime.GetAppData(0).SnapshotRegistryHolder->Get().get() == nullptr);
+            UNIT_ASSERT(runtime.GetAppData(1).SnapshotRegistryHolder->Get().get() == nullptr);
+        }
+    }
+
+    Y_UNIT_TEST(SnapshotsLockingPrefill) {
+        const ui32 nodesCount = 2;
+        const ::NKikimr::TTableId table(0, 1);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
+        appConfig.MutableLongTxServiceConfig()->SetInsideDataCenterExchangeFanOut(2);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsExchangeIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetSnapshotsRegistryUpdateIntervalSeconds(1);
+        appConfig.MutableLongTxServiceConfig()->SetMaxRemoteSnapshots(3);
+        appConfig.MutableLongTxServiceConfig()->SetLocalSnapshotPromotionTimeSeconds(1);
+
+        TTenantTestRuntime runtime(MakeTenantTestConfig(false, nodesCount), appConfig);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+        StartSchemeCache(runtime);
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+
+        bool prefillNotEmpty = false;
+        bool blockPropagation = true;
+        std::vector<TAutoPtr<IEventHandle>> captured;
+
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvLongTxService::TEvCollectSnapshots::EventType:
+                case TEvLongTxService::TEvPropagateSnapshots::EventType:
+                    if (blockPropagation && ev->Sender.NodeId() != ev->Recipient.NodeId()) {
+                        captured.push_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    } else {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+                case TEvLongTxService::TEvRemoteSnapshotsPrefillResult::EventType: {
+                    auto& record = ev->Get<TEvLongTxService::TEvRemoteSnapshotsPrefillResult>()->Record;
+                    if (record.GetSnapshots().SnapshotsSize() > 0) {
+                        prefillNotEmpty = true;
+                    }
+                    break;
+                }                
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(observer);
+        Y_DEFER {
+            runtime.SetObserverFunc(saveObserver);
+        };
+
+        {
+            UNIT_ASSERT(runtime.GetAppData(0).SnapshotRegistryHolder->Get().get() == nullptr);
+            UNIT_ASSERT(runtime.GetAppData(1).SnapshotRegistryHolder->Get().get() == nullptr);
+        }
+        runtime.GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(true);
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        auto sender0 = runtime.AllocateEdgeActor(0);
+        auto service0 = MakeLongTxServiceID(runtime.GetNodeId(0));
+
+        NKqp::TSnapshotHandle handle2;
+        TRowVersion snapshot2;
+        {
+            runtime.Send(
+                new IEventHandle(service0, sender0,
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", {table})),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender0);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+            handle2 = std::move(msg->SnapshotHandle);
+            snapshot2 = msg->Snapshot;
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(3));
+
+        {
+            const auto& registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(registry->HasSnapshot(table, snapshot2));
+        }
+        {
+            const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(!registry.get());
+        }
+
+        UNIT_ASSERT(!prefillNotEmpty);
+
+        runtime.GetAppData(1).FeatureFlags.SetEnableSnapshotsLocking(true);
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        UNIT_ASSERT(prefillNotEmpty);
+        
+        {
+            const auto& registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(registry->HasSnapshot(table, snapshot2));
+        }
+        {
+            const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(registry->HasSnapshot(table, snapshot2));
+        }
+
+        handle2.Reset();
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        {
+            const auto& registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(!registry->HasSnapshot(table, snapshot2));
+        }
+        {
+            const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(registry->HasSnapshot(table, snapshot2));
+        }
+
+        blockPropagation = false;
+        for (auto& ev : captured) {
+            runtime.Send(ev.Release());
+        }
+
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        {
+            const auto& registry = runtime.GetAppData(0).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(!registry->HasSnapshot(table, snapshot2));
+        }
+        {
+            const auto& registry = runtime.GetAppData(1).SnapshotRegistryHolder->Get();
+            UNIT_ASSERT(registry.get());
+            UNIT_ASSERT(!registry->HasSnapshot(table, snapshot2));
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(LongTxService)

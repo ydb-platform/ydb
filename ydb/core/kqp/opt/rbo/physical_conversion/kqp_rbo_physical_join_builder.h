@@ -11,17 +11,17 @@ using namespace NKikimr::NKqp;
 using TModifyKeysList = TVector<std::tuple<TCoAtom, TCoAtom, ui32, const TTypeAnnotationNode*>>;
 enum EJoinSide { Right, Left, Both };
 
-class TPhysicalJoinBuilder: public TPhysicalBinaryOpBuilderWithOpProps {
+class TPhysicalJoinBuilder: public TPhysicalBinaryOpBuilderWithParams {
 public:
     TPhysicalJoinBuilder(TIntrusivePtr<TOpJoin> join, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalBinaryOpBuilderWithOpProps(ctx, pos)
+        : TPhysicalBinaryOpBuilderWithParams(ctx, pos)
         , Join(join) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, const TPhysicalOpProps& props) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin) override;
 
 private:
-    TExprNode::TPtr BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, const TPhysicalOpProps& props);
+    TExprNode::TPtr BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoins);
     TExprNode::TPtr BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput);
     TString GetValidJoinKind(const TString& joinKind) const;
     void PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVector<TString>& rightJoinKeys, TModifyKeysList& remapLeft, TModifyKeysList& remapRight,
@@ -37,6 +37,9 @@ private:
     TExprNode::TPtr BuildGraceJoin(const TString& joinType, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TVector<TCoAtom>& leftColumnIdxs, TVector<TCoAtom>& rightColumnIdxs,
                                    TVector<TCoAtom>& leftRenames, TVector<TCoAtom>& rightRenames, TVector<TCoAtom>& leftKeyColumnNames,
                                    TVector<TCoAtom>& rightKeyColumnNames);
+    TExprNode::TPtr BuildBlockHashJoin(const TString& joinType, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput,
+                                       const TVector<TCoAtom>& leftKeyColumnIdxs, const TVector<TCoAtom>& rightKeyColumnIdsx,
+                                       const TVector<TCoAtom>& leftKeyColumnNames, const TVector<TCoAtom>& rightKeyColumnNames, bool isReverseBlockJoin);
 
     TIntrusivePtr<TOpJoin> Join;
 };

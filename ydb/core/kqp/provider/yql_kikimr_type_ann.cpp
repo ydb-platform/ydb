@@ -4,6 +4,11 @@
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <yql/essentials/core/type_ann/type_ann_impl.h>
 #include <yql/essentials/core/type_ann/type_ann_list.h>
@@ -13,11 +18,9 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/services/metadata/optimization/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+
 #include <util/generic/is_in.h>
 
 #include <functional>
@@ -592,14 +595,27 @@ namespace {
     }
 }
 
-class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer
-{
+class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer {
 public:
     TKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
         : Gateway(gateway)
         , SessionCtx(sessionCtx)
-        , Types(types) {}
+        , Types(types)
+        , DqTypeAnn(NDq::CreateDqTypeAnnotationTransformer())
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (auto* extendedTypeAnn = SessionCtx->GetInternalTypeAnnTransformer()) {
+            if (extendedTypeAnn->CanParse(*input)) {
+                return extendedTypeAnn->DoTransform(input, output, ctx);
+            }
+            if (DqTypeAnn->CanParse(*input)) {
+                return DqTypeAnn->DoTransform(input, output, ctx);
+            }
+        }
+        return TKiSinkVisitorTransformer::DoTransform(input, output, ctx);
+    }
 
 private:
     virtual TStatus HandleWriteTable(TKiWriteTable node, TExprContext& ctx) override {
@@ -1221,6 +1237,10 @@ private:
             } else if (type == "globalJson") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
+                    return TStatus::Error;
+                }
+                if (meta->StoreType == EStoreType::Column) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index is not supported on column tables"));
                     return TStatus::Error;
                 }
                 indexType = TIndexDescription::EType::GlobalJson;
@@ -3000,6 +3020,7 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TTypeAnnotationContext& Types;
+    const THolder<TVisitorTransformerBase> DqTypeAnn;
 };
 
 } // namespace

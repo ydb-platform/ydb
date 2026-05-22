@@ -504,6 +504,16 @@ struct TPersistentBufferFormat {
             ui64 Size;
         };
 
+        struct TOpStats {
+            TString Name;
+            ui64 RequestsInFlight = 0;
+            ui64 Requests = 0; // requests in the measurement window
+            double LatencyP50Ms = 0;
+            double LatencyP99Ms = 0;
+            double LatencyMaxMs = 0;
+            double WindowSeconds = 0; // measurement window for Requests / latencies
+        };
+
         TInstant StartedAt;
         ui32 AllocatedChunks;
         ui32 MaxChunks;
@@ -514,9 +524,11 @@ struct TPersistentBufferFormat {
         ui64 InMemoryCacheLimit;
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
+        ui64 PerTabletStorageLimit;
         std::vector<TTabletInfo> TabletInfos;
         std::unordered_map<ui64, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
+        std::vector<TOpStats> OpStats;
     };
 
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {

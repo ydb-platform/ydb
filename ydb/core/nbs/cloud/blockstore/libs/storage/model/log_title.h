@@ -45,9 +45,19 @@ public:
         ui32 VChunkIndex;
     };
 
+    struct TDDiskDataCopier
+    {
+        TString DiskId;
+        int Destination = 0;
+    };
+
 private:
-    using TData =
-        std::variant<TVolume, TPartitionDirect, TDirectBlockGroup, TVChunk>;
+    using TData = std::variant<
+        TVolume,
+        TPartitionDirect,
+        TDirectBlockGroup,
+        TVChunk,
+        TDDiskDataCopier>;
 
     ui64 StartTime = 0;
     TData Data;

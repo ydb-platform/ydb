@@ -215,11 +215,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-            // Fulltext index only supports tables with a single PK column of type Uint64
+            // Fulltext index only supports tables with a single integer PK column
             if (baseTableColumns.Keys.size() != 1) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
                 error = TStringBuilder()
-                    << "Fulltext index requires exactly one primary key column of type 'Uint64'"
+                    << "Fulltext index requires exactly one primary key column of type 'Uint64', 'Int64', 'Uint32' or 'Int32'"
                     << ", but table has " << baseTableColumns.Keys.size() << " primary key columns";
                 return false;
             }
@@ -228,11 +228,15 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 const TString& pkColumnName = baseTableColumns.Keys[0];
                 Y_ABORT_UNLESS(baseColumnTypes.contains(pkColumnName));
                 auto pkTypeInfo = baseColumnTypes.at(pkColumnName);
-                if (pkTypeInfo.GetTypeId() != NScheme::NTypeIds::Uint64) {
+                auto pkTypeId = pkTypeInfo.GetTypeId();
+                if (pkTypeId != NScheme::NTypeIds::Uint64 &&
+                    pkTypeId != NScheme::NTypeIds::Int64 &&
+                    pkTypeId != NScheme::NTypeIds::Uint32 &&
+                    pkTypeId != NScheme::NTypeIds::Int32) {
                     status = NKikimrScheme::EStatus::StatusInvalidParameter;
                     error = TStringBuilder()
                         << "Fulltext index requires primary key column '" << pkColumnName
-                        << "' to be of type 'Uint64' but got " << NScheme::TypeName(pkTypeInfo);
+                        << "' to be of type 'Uint64', 'Int64', 'Uint32' or 'Int32' but got " << NScheme::TypeName(pkTypeInfo);
                     return false;
                 }
             }

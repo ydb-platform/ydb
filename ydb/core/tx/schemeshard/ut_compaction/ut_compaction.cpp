@@ -2806,6 +2806,78 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             Ydb::Table::CompactState::STATE_DONE
         );
     }
+
+    Y_UNIT_TEST(SchemeshardShouldHandleTableDropDuringCompaction) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        {
+            // first case: compaction should progress after timeout
+
+            CreateTable(runtime, env, "/MyRoot", "Simple1", 2, ++txId);
+            WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets);
+            WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets + 1);
+
+            // block compact request, so compaction results will never delivered
+            TBlockEvents<TEvDataShard::TEvCompactTable> block(runtime);
+
+            TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
+            ui64 compactionId = txId;
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+                Ydb::Table::CompactState::STATE_IN_PROGRESS
+            );
+
+            // drop the table mid-compaction
+            TestDropTable(runtime, ++txId, "/MyRoot", "Simple1");
+            env.TestWaitNotification(runtime, txId);
+
+            // release blocked EvCompactTable, but shards should be deleted and no EvCompactTable will be delivered
+            block.Stop().Unblock();
+            env.SimulateSleep(runtime, TDuration::Seconds(35)); // greter than two default timouts (15 sec)
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+                Ydb::Table::CompactState::STATE_DONE
+            );
+        }
+
+        {
+            // second case: compaction should progress after stale or failed EvCompactTableResult
+            
+            CreateTable(runtime, env, "/MyRoot", "Simple2", 2, ++txId);
+            WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 2);
+            WriteData(runtime, "Simple2", 0, 100, TTestTxConfig::FakeHiveTablets + 3);
+
+            // block result, so compaction will be stuck in progress
+            TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+            TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple2");
+            ui64 compactionId = txId;
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+                Ydb::Table::CompactState::STATE_IN_PROGRESS
+            );
+
+            // drop the table mid-compaction
+            TestDropTable(runtime, ++txId, "/MyRoot", "Simple2");
+            env.TestWaitNotification(runtime, txId);
+
+            // release blocked results so schemeshard can finalize the compaction
+            block.Stop().Unblock();
+            env.SimulateSleep(runtime, TDuration::Seconds(16)); // greter than default timout (15 sec)
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
+                Ydb::Table::CompactState::STATE_DONE
+            );
+        }
+    }
 }
 
 } // NKikimr::NSchemeShard

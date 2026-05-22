@@ -25,7 +25,6 @@ namespace TEvKeyValue {
         EvUpdateWeights,
         EvCompleteGC,
         EvVacuumRequest,
-        EvUpdateStorageChannelFallbackGauge,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -220,12 +219,6 @@ namespace TEvKeyValue {
 
     struct TEvPeriodicRefresh : public TEventLocal<TEvPeriodicRefresh, EvPeriodicRefresh> {
         TEvPeriodicRefresh() { }
-    };
-
-    struct TEvUpdateStorageChannelFallbackGauge
-        : public TEventLocal<TEvUpdateStorageChannelFallbackGauge, EvUpdateStorageChannelFallbackGauge>
-    {
-        TEvUpdateStorageChannelFallbackGauge() { }
     };
 
     struct TEvCompleteGC : public TEventLocal<TEvCompleteGC, EvCompleteGC> {

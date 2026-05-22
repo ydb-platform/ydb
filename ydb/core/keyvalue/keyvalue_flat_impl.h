@@ -37,7 +37,6 @@ constexpr ui64 CollectorErrorInitialBackoffMs = 10;
 constexpr ui64 CollectorErrorMaxBackoffMs = 5000;
 constexpr ui64 CollectorMaxErrors = 20;
 constexpr ui64 PeriodicRefreshMs = 15000;
-constexpr ui64 StorageChannelFallbackGaugeUpdateMs = 1000;
 
 class TKeyValueFlat : public TActor<TKeyValueFlat>, public NTabletFlatExecutor::TTabletExecutedFlat {
 protected:
@@ -375,8 +374,6 @@ protected:
         Executor()->RegisterExternalTabletCounters(State.TakeTabletCounters());
         State.SetupResourceMetrics(Executor()->GetResourceMetrics());
         ctx.Schedule(TDuration::MilliSeconds(PeriodicRefreshMs), new TEvKeyValue::TEvPeriodicRefresh);
-        ctx.Schedule(TDuration::MilliSeconds(StorageChannelFallbackGaugeUpdateMs),
-                new TEvKeyValue::TEvUpdateStorageChannelFallbackGauge);
         Execute(new TTxInit(ctx.SelfID, *this), ctx);
     }
 
@@ -521,12 +518,6 @@ protected:
         State.OnPeriodicRefresh();
     }
 
-    void HandleUpdateStorageChannelFallbackGauge() {
-        Schedule(TDuration::MilliSeconds(StorageChannelFallbackGaugeUpdateMs),
-                new TEvKeyValue::TEvUpdateStorageChannelFallbackGauge);
-        State.OnUpdateStorageChannelFallbackGauge();
-    }
-
     void Handle(TChannelBalancer::TEvUpdateWeights::TPtr ev, const TActorContext& /*ctx*/) {
         State.OnUpdateWeights(ev);
     }
@@ -642,7 +633,6 @@ public:
             HFunc(TEvKeyValue::TEvIntermediate, Handle);
             HFunc(TEvKeyValue::TEvNotify, Handle);
             sFunc(TEvKeyValue::TEvPeriodicRefresh, HandlePeriodicRefresh);
-            sFunc(TEvKeyValue::TEvUpdateStorageChannelFallbackGauge, HandleUpdateStorageChannelFallbackGauge);
             HFunc(TChannelBalancer::TEvUpdateWeights, Handle);
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);

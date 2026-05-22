@@ -1,7 +1,7 @@
 # Interactive query execution mode
 ## General Description
 
-After executing the `{{ ydb-cli }}` command without subcommands, the interactive query execution mode starts. After that, you can enter queries directly into the console or terminal. When you enter a newline character, the query is considered complete and begins to execute. The query text can be either a YQL query or a [special command](#spec-commands).
+After executing the `{{ ydb-cli }}` command without subcommands, the interactive query execution mode is launched. After that, you can enter queries directly into the console or terminal. When you enter a line break character, the query is considered complete and begins to be executed. The query text can be either a YQL query or a [special command](#spec-commands).
 
 The general form of the command:
 ```bash
@@ -9,7 +9,7 @@ The general form of the command:
 ```
 * `global options` — [global options](commands/global-options.md).
 {% note info %}
-Please note that to run the commands, [connection parameters](./connect.md) must be specified. It can be a default profile, an explicitly specified profile, and/or a set of connection parameters.
+Please note that to run the commands, [connection parameters](connect.md) must be specified. It can be a default profile, an explicitly specified profile, and/or a set of connection parameters.
 {% endnote %}
 Example of use:
 
@@ -33,7 +33,7 @@ The interactive mode supports syntax highlighting for YQL, which helps to better
 * String literals (text in quotes)
 * Numeric literals
 * Operators (=, <, >, +, - and others)
-* Special characters (parentheses, commas, dots)
+* Special characters (parentheses, commas, periods)
 * Comments
 ## Hot Keys {#hotkeys}
 
@@ -57,19 +57,19 @@ The history is saved locally and is available between CLI launches.
 The search function for queries is also supported (CTRL + R):
 
 ![Search](_assets/history-search.gif)
-## Autocompletion {#auto-completion}
+## Auto-completion {#auto-completion}
 
-Autocompletion helps to write queries more efficiently. As you type, possible options for completing the current word based on YQL syntax are suggested.
+Auto-completion helps to write queries more efficiently. As you type, possible options for completing the current word based on YQL syntax are suggested.
 
 It also searches for schema object names in the database where possible.
 
-There are two types of hints: autocompletion by pressing the `TAB` key and interactive hints.
+There are two types of hints: auto-completion by pressing the `TAB` key and interactive hints.
 
-### Autocompletion by pressing the TAB key {#auto-completion-tab}
+### Auto-completion by pressing the TAB key {#auto-completion-tab}
 
 In interactive mode, pressing the `TAB` key displays a list of options for completing the current word in accordance with YQL syntax.
 
-![Autocompletion](_assets/candidates.gif)
+![Auto-completion](_assets/candidates.gif)
 
 Continue typing to reduce the number of matching options.
 

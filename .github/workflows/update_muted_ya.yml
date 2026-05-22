@@ -49,7 +49,7 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     
       - name: Collect testowners
         run: python3 .github/scripts/analytics/upload_testowners.py
@@ -80,7 +80,7 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}

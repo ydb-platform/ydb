@@ -292,6 +292,9 @@ private:
                 ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
                 const bool isPrefixed = index.index_columns().size() > 1;
                 NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
+                if (isPrefixed) {
+                    vectorIndexKmeansTreeDescription.MutableSettings()->set_adaptive_clusters(true);
+                }
             }
 
             const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();

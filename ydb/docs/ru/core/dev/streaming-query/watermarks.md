@@ -1,12 +1,12 @@
 # Водяные знаки
 
-Водяной знак (watermark) в потоковой обработке данных ([stream processing](https://en.wikipedia.org/wiki/Stream_processing)) — это монотонно возрастающая нижняя оценка времён событий, которые ещё могут поступить в поток. Когда водяной знак достигает значения X, система объявляет, что все события с временем меньше X уже получены, и может выдать результаты для временных диапазонов, заканчивающихся до X.
+Водяной знак (watermark) — механизм отслеживания прогресса времени в [потоковых запросах](../../concepts/streaming-query.md) {{ ydb-short-name }}. Подробнее о концепции водяных знаков: [{#T}](../../concepts/watermarks.md).
 
 В данном разделе описаны время события, принцип работы водяных знаков и их настройка в потоковых запросах {{ ydb-short-name }}.
 
 ## Назначение водяного знака {#purpose}
 
-Водяной знак позволяет системе определять, когда временное окно можно считать завершённым и выдать результат. При получении водяного знака [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) закрывает все окна, которые полностью покрыты этим временем.
+Водяной знак позволяет системе определять, когда временное окно можно считать завершённым и выдать результат. Для оконной агрегации в {{ ydb-short-name }} используется функция [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) — она определяет скользящие временные окна, по которым группируются события. При получении водяного знака `HoppingWindow` закрывает все окна, которые полностью покрыты этим временем.
 
 ```mermaid
 sequenceDiagram
@@ -93,12 +93,12 @@ sequenceDiagram
 ```yql
 CREATE STREAMING QUERY example AS
 DO BEGIN
-    $input =
+    $input = (
         SELECT
             t.*,
             SystemMetadata("write_time") AS ts
         FROM
-            input_topic
+            Input
         WITH (
             FORMAT = json_each_row,
             SCHEMA = (
@@ -106,16 +106,24 @@ DO BEGIN
                 payload String
             ),
             WATERMARK = SystemMetadata("write_time") - Interval("PT5S")
-        ) AS t;
+        ) AS t
+    );
 
+    $output = (
+        SELECT
+            AGGREGATE_LIST(payload) AS result,
+            HOP_END() AS ts
+        FROM
+            $input
+        WHERE pass > 0
+        GROUP BY
+            HoppingWindow(ts, "PT5S", "PT10S")
+    );
+
+    INSERT INTO Output
     SELECT
-        AGGREGATE_LIST(payload) AS result,
-        HOP_END() AS ts
-    FROM
-        $input
-    WHERE pass > 0
-    GROUP BY
-        HoppingWindow(ts, "PT5S", "PT10S");
+        ToBytes(Unwrap(Yson2::SerializeJson(Yson::From(TableRow()))))
+    FROM $output;
 END DO;
 ```
 

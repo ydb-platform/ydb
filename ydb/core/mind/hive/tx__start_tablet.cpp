@@ -58,8 +58,10 @@ public:
                 }
 
                 if (leader.IsStarting() || BootingSuppressed && External) {
-                    leader.IncreaseGeneration();
-                    db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
+                    const TInstant now = TActivationContext::Now();
+                    leader.IncreaseGeneration(now);
+                    db.Table<Schema::Tablet>().Key(leader.Id).Update(NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(leader.KnownGeneration),
+                                                                     NIceDb::TUpdate<Schema::Tablet::Statistics>(leader.Statistics));
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute Tablet " << leader.ToString() << " (" << leader.StateString() << ") skipped generation increment " << (ui64)leader.State);
                 }

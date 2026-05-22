@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         ui64 txId = 100;
 
         SetupLogging(runtime);
-          untime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
 
         // 1. Create column table with local bloom indexes

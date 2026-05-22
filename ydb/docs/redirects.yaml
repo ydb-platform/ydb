@@ -121,6 +121,10 @@ common:
     to: /devops/configuration-management/configuration-v1/cms.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
 
   # Redirects for Deployment Options
   - from: /devops/(ansible|kubernetes|manual)/(.*)$
@@ -481,7 +485,7 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
-# Redirects for concepts
+# Redirects for query_execution
 
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
@@ -503,10 +507,6 @@ common:
     to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
-  - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery/index.md
-  - from: /devops/backup-and-recovery.md
-    to: /devops/backup-and-recovery/index.md
 
 ru:
   - from: /postgresql/index.md

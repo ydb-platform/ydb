@@ -36,9 +36,6 @@ namespace NKikimr::NDDisk {
         SectorInChunk = ChunkSize / SectorSize;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
         PersistentBufferBarriersManager.Initialize(PersistentBufferUniqueId, BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
-        // Start collecting periodic snapshots of PB op counters to support a sliding-window
-        // latency/IOPS view on the monitoring page.
-        CollectPbStatsSnapshot();
     }
 
     void TDDiskActor::CollectPbStatsSnapshot() {

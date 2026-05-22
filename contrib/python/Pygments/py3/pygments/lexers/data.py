@@ -4,7 +4,7 @@
 
     Lexers for data file format.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -447,7 +447,7 @@ class JsonLexer(Lexer):
     name = 'JSON'
     url = 'https://www.json.org'
     aliases = ['json', 'json-object']
-    filenames = ['*.json', '*.jsonl', '*.ndjson', 'Pipfile.lock']
+    filenames = ['*.json', '*.jsonl', '*.ndjson', 'Pipfile.lock', '*.module', '*.xc']
     mimetypes = ['application/json', 'application/json-object', 'application/x-ndjson', 'application/jsonl', 'application/json-seq']
     version_added = '1.5'
 

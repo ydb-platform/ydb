@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.5.0)
+VERSION(0.6.0)
 
 LICENSE(MIT)
 
@@ -35,12 +35,18 @@ PY_SRCS(
     mdit_py_plugins/footnote/index.py
     mdit_py_plugins/front_matter/__init__.py
     mdit_py_plugins/front_matter/index.py
+    mdit_py_plugins/gfm/__init__.py
+    mdit_py_plugins/gfm_autolink/__init__.py
+    mdit_py_plugins/gfm_autolink/_match.py
+    mdit_py_plugins/gfm_autolink/index.py
     mdit_py_plugins/myst_blocks/__init__.py
     mdit_py_plugins/myst_blocks/index.py
     mdit_py_plugins/myst_role/__init__.py
     mdit_py_plugins/myst_role/index.py
     mdit_py_plugins/subscript/__init__.py
     mdit_py_plugins/substitution.py
+    mdit_py_plugins/superscript/__init__.py
+    mdit_py_plugins/superscript/index.py
     mdit_py_plugins/tasklists/__init__.py
     mdit_py_plugins/texmath/__init__.py
     mdit_py_plugins/texmath/index.py

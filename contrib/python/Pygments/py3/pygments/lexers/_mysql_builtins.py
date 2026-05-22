@@ -6,7 +6,7 @@
 
     Run with `python -I` to update.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -31,6 +31,12 @@ MYSQL_CONSTANTS = (
 #
 # This list is also used to strip data types out of the list of
 # MySQL keywords, which is automatically updated later in the file.
+#
+# For future updates, these pages may be helpful references
+# when looking for additional data types and aliases:
+#
+# https://dev.mysql.com/doc/refman/9.4/en/data-types.html
+# https://dev.mysql.com/doc/refman/9.4/en/other-vendor-data-types.html
 #
 MYSQL_DATATYPES = (
     # Numeric data types
@@ -71,6 +77,7 @@ MYSQL_DATATYPES = (
     # String data types
     'binary',
     'blob',
+    'byte',
     'char',
     'enum',
     'long',
@@ -167,6 +174,7 @@ MYSQL_FUNCTIONS = (
     'dayofyear',
     'degrees',
     'elt',
+    'etag',
     'exp',
     'export_set',
     'extract',
@@ -180,6 +188,7 @@ MYSQL_FUNCTIONS = (
     'from_base64',
     'from_days',
     'from_unixtime',
+    'from_vector',
     'get_dd_column_privileges',
     'get_dd_create_options',
     'get_dd_index_private_data',
@@ -187,6 +196,7 @@ MYSQL_FUNCTIONS = (
     'get_dd_property_key_value',
     'get_dd_schema_options',
     'get_dd_tablespace_private_data',
+    'get_jdv_property_key_value',
     'get_lock',
     'greatest',
     'group_concat',
@@ -238,6 +248,7 @@ MYSQL_FUNCTIONS = (
     'internal_tablespace_type',
     'internal_tablespace_version',
     'internal_update_time',
+    'internal_use_terminology_previous',
     'is_free_lock',
     'is_ipv4',
     'is_ipv4_compat',
@@ -254,6 +265,7 @@ MYSQL_FUNCTIONS = (
     'json_contains',
     'json_contains_path',
     'json_depth',
+    'json_duality_object',
     'json_extract',
     'json_insert',
     'json_keys',
@@ -455,6 +467,7 @@ MYSQL_FUNCTIONS = (
     'stddev_samp',
     'str_to_date',
     'strcmp',
+    'string_to_vector',
     'subdate',
     'substr',
     'substring',
@@ -470,6 +483,7 @@ MYSQL_FUNCTIONS = (
     'to_base64',
     'to_days',
     'to_seconds',
+    'to_vector',
     'trim',
     'ucase',
     'uncompress',
@@ -485,6 +499,8 @@ MYSQL_FUNCTIONS = (
     'var_pop',
     'var_samp',
     'variance',
+    'vector_dim',
+    'vector_to_string',
     'version',
     'wait_for_executed_gtid_set',
     'wait_until_sql_thread_after_gtids',
@@ -541,6 +557,7 @@ MYSQL_OPTIMIZER_HINTS = (
 
 
 MYSQL_KEYWORDS = (
+    'absent',
     'accessible',
     'account',
     'action',
@@ -552,6 +569,7 @@ MYSQL_KEYWORDS = (
     'aggregate',
     'algorithm',
     'all',
+    'allow_missing_files',
     'alter',
     'always',
     'analyze',
@@ -566,21 +584,25 @@ MYSQL_KEYWORDS = (
     'at',
     'attribute',
     'authentication',
+    'auto',
     'auto_increment',
+    'auto_refresh',
+    'auto_refresh_source',
     'autoextend_size',
     'avg',
     'avg_row_length',
     'backup',
     'before',
     'begin',
+    'bernoulli',
     'between',
     'binlog',
     'block',
     'both',
     'btree',
     'buckets',
+    'bulk',
     'by',
-    'byte',
     'cache',
     'call',
     'cascade',
@@ -675,6 +697,7 @@ MYSQL_KEYWORDS = (
     'do',
     'drop',
     'dual',
+    'duality',
     'dumpfile',
     'duplicate',
     'dynamic',
@@ -710,6 +733,8 @@ MYSQL_KEYWORDS = (
     'export',
     'extended',
     'extent_size',
+    'external',
+    'external_format',
     'factor',
     'failed_login_attempts',
     'false',
@@ -719,6 +744,11 @@ MYSQL_KEYWORDS = (
     'fields',
     'file',
     'file_block_size',
+    'file_format',
+    'file_name',
+    'file_pattern',
+    'file_prefix',
+    'files',
     'filter',
     'finish',
     'first',
@@ -736,6 +766,7 @@ MYSQL_KEYWORDS = (
     'fulltext',
     'function',
     'general',
+    'generate',
     'generated',
     'geomcollection',
     'get',
@@ -750,9 +781,11 @@ MYSQL_KEYWORDS = (
     'grouping',
     'groups',
     'gtid_only',
+    'gtids',
     'handler',
     'hash',
     'having',
+    'header',
     'help',
     'high_priority',
     'histogram',
@@ -783,6 +816,7 @@ MYSQL_KEYWORDS = (
     'insert_method',
     'install',
     'instance',
+    'intersect',
     'interval',
     'into',
     'invisible',
@@ -816,6 +850,7 @@ MYSQL_KEYWORDS = (
     'left',
     'less',
     'level',
+    'library',
     'like',
     'limit',
     'linear',
@@ -828,10 +863,12 @@ MYSQL_KEYWORDS = (
     'lock',
     'locked',
     'locks',
+    'log',
     'logfile',
     'logs',
     'loop',
     'low_priority',
+    'manual',
     'master',
     'master_auto_position',
     'master_bind',
@@ -934,6 +971,9 @@ MYSQL_KEYWORDS = (
     'owner',
     'pack_keys',
     'page',
+    'parallel',
+    'parameters',
+    'parse_tree',
     'parser',
     'partial',
     'partition',
@@ -965,6 +1005,7 @@ MYSQL_KEYWORDS = (
     'profiles',
     'proxy',
     'purge',
+    'qualify',
     'quarter',
     'query',
     'quick',
@@ -984,6 +1025,7 @@ MYSQL_KEYWORDS = (
     'references',
     'regexp',
     'registration',
+    'relational',
     'relay',
     'relay_log_file',
     'relay_log_pos',
@@ -1040,6 +1082,7 @@ MYSQL_KEYWORDS = (
     'row_number',
     'rows',
     'rtree',
+    's3',
     'savepoint',
     'schedule',
     'schema',
@@ -1139,6 +1182,7 @@ MYSQL_KEYWORDS = (
     'stored',
     'straight_join',
     'stream',
+    'strict_load',
     'string',
     'subclass_origin',
     'subject',
@@ -1153,6 +1197,7 @@ MYSQL_KEYWORDS = (
     'table_checksum',
     'table_name',
     'tables',
+    'tablesample',
     'tablespace',
     'temporary',
     'temptable',
@@ -1190,6 +1235,8 @@ MYSQL_KEYWORDS = (
     'until',
     'update',
     'upgrade',
+    'uri',
+    'url',
     'usage',
     'use',
     'use_frm',
@@ -1204,6 +1251,8 @@ MYSQL_KEYWORDS = (
     'values',
     'variables',
     'vcpu',
+    'vector',
+    'verify_key_constraints',
     'view',
     'virtual',
     'visible',
@@ -1238,7 +1287,7 @@ if __name__ == '__main__':  # pragma: no cover
     from pygments.util import format_lines
 
     # MySQL source code
-    SOURCE_URL = 'https://github.com/mysql/mysql-server/raw/8.0'
+    SOURCE_URL = 'https://github.com/mysql/mysql-server/raw/trunk'
     LEX_URL = SOURCE_URL + '/sql/lex.h'
     ITEM_CREATE_URL = SOURCE_URL + '/sql/item_create.cc'
 

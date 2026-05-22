@@ -4,7 +4,7 @@
 
     Pygments lexers for JVM languages.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -55,16 +55,17 @@ class JavaLexer(RegexLexer):
              r'(\s*)(\()',                              # signature start
              bygroups(using(this), Name.Function, Whitespace, Punctuation)),
             (r'@[^\W\d][\w.]*', Name.Decorator),
-            (r'(abstract|const|enum|extends|final|implements|native|private|'
-             r'protected|public|sealed|static|strictfp|super|synchronized|throws|'
-             r'transient|volatile|yield)\b', Keyword.Declaration),
+            (r'(abstract|const|enum|exports|extends|final|implements|native|non-sealed|'
+             r'open|opens|permits|private|protected|provides|public|requires|sealed|static|strictfp|'
+             r'super|synchronized|throws|to|transient|transitive|uses|volatile|with|yield)\b', Keyword.Declaration),
             (r'(boolean|byte|char|double|float|int|long|short|void)\b',
              Keyword.Type),
             (r'(package)(\s+)', bygroups(Keyword.Namespace, Whitespace), 'import'),
             (r'(true|false|null)\b', Keyword.Constant),
             (r'(class|interface)\b', Keyword.Declaration, 'class'),
+            (r'(module)\b', Keyword.Declaration, 'module'),
             (r'(var)(\s+)', bygroups(Keyword.Declaration, Whitespace), 'var'),
-            (r'(import(?:\s+static)?)(\s+)', bygroups(Keyword.Namespace, Whitespace),
+            (r'(import(?:\s+(?:static|module))?)(\s+)', bygroups(Keyword.Namespace, Whitespace),
              'import'),
             (r'"""\n', String, 'multiline_string'),
             (r'"', String, 'string'),
@@ -92,6 +93,10 @@ class JavaLexer(RegexLexer):
             (r'\n', Whitespace)
         ],
         'class': [
+            (r'\s+', Text),
+            (r'([^\W\d]|\$)[\w$]*', Name.Class, '#pop')
+        ],
+        'module': [
             (r'\s+', Text),
             (r'([^\W\d]|\$)[\w$]*', Name.Class, '#pop')
         ],

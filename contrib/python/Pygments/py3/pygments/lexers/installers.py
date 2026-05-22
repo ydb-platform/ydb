@@ -4,7 +4,7 @@
 
     Lexers for installer/packager DSLs and formats.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -343,7 +343,7 @@ class DebianControlLexer(RegexLexer):
             (r'\n', Whitespace, '#pop'),
             (r'[,\s]', Text),
             (r'[+.a-zA-Z0-9-]+', Name.Function),
-            (r'\[.*?\]', Name.Entity),
+            (r'(\[)(!?)(.*?)(\])', bygroups(Punctuation, Operator, Name.Entity, Punctuation)),
         ],
         'package_list_vers': [
             (r'\)', Punctuation, '#pop'),

@@ -375,6 +375,18 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
 
+// Single source of truth for the SHOW CREATE setting names attached to
+// KiReadTable nodes and the corresponding PathType values understood by
+// the .sys/show_create system view.
+bool IsShowCreateSettingName(TStringBuf name);
+// Returns the PathType ("Table" / "View" / "ExternalDataSource") for a
+// SHOW CREATE setting name, or an empty string-buf if `name` is not one
+// of the known SHOW CREATE settings.
+TStringBuf ShowCreateSettingToPathType(TStringBuf name);
+// Returns the first SHOW CREATE setting name found in `settings`, or an
+// empty string if none is present.
+TString GetShowCreateSetting(const TExprNode& settings);
+
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx);

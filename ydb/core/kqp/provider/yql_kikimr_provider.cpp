@@ -1,5 +1,8 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <yql/essentials/core/yql_opt_utils.h>
+
+#include <array>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -970,6 +973,48 @@ const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
 
 bool IsKikimrSystemColumn(const TStringBuf columnName) {
     return KikimrSystemColumns().FindPtr(columnName);
+}
+
+namespace {
+
+struct TShowCreateSettingMapping {
+    TStringBuf SettingName;
+    TStringBuf PathType;
+};
+
+constexpr std::array<TShowCreateSettingMapping, 3> ShowCreateSettingsMap = {{
+    {"showCreateTable", "Table"},
+    {"showCreateView", "View"},
+    {"showCreateExternalDataSource", "ExternalDataSource"},
+}};
+
+} // anonymous namespace
+
+bool IsShowCreateSettingName(TStringBuf name) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (name == entry.SettingName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TStringBuf ShowCreateSettingToPathType(TStringBuf name) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (name == entry.SettingName) {
+            return entry.PathType;
+        }
+    }
+    return {};
+}
+
+TString GetShowCreateSetting(const TExprNode& settings) {
+    for (const auto& entry : ShowCreateSettingsMap) {
+        if (HasSetting(settings, entry.SettingName)) {
+            return TString(entry.SettingName);
+        }
+    }
+    return {};
 }
 
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos) {

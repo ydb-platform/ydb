@@ -153,6 +153,8 @@ public:
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
 
+    [[nodiscard]] THostMask GetWriteRequested() const;
+
     TString DebugPrint(TInstant now) const;
 
 private:

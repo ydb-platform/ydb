@@ -251,6 +251,11 @@ void TStreamingTestFixture::CreateTopic(const std::string& topicName, std::optio
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
 
+void TStreamingTestFixture::AlterTopic(const std::string& topicName, NYdb::NTopic::TAlterTopicSettings settings, bool local) {
+    const auto result = GetTopicClient(local)->AlterTopic(topicName, settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+
 void TStreamingTestFixture::WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition, bool local) {
     auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
         .Path(topicName)
@@ -303,6 +308,9 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
         auto event = readSession->GetEvent(/* block */ true);
         if (const auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             for (const auto& message : dataEvent->GetMessages()) {
+                if (message.GetWriteTime() < disposition) {
+                    continue;
+                }
                 received.push_back(std::make_pair(message.GetData(), message.GetWriteTime()));
             }
 

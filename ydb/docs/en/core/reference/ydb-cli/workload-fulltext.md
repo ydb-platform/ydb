@@ -59,7 +59,7 @@ After import is complete, a fulltext index named `index` is automatically built 
 
 ### Importing from files {#load-files}
 
-Import documents from files (CSV, TSV, or Parquet, optionally gzip-compressed). The dataset must contain `id` and `text` columns. For column `id` used storage type Uint64 in internal table, for column `text` used type String.
+Import documents from files (CSV, TSV, or Parquet, optionally gzip-compressed). The dataset must contain `id` and `text` columns. In the internal table, the `id` column is stored as `Uint64` and the `text` column as `String`.
 
 Example:
 
@@ -171,7 +171,7 @@ Before using the generator or the `run upsert` / `run select` modes with generat
 |---|---|---|
 | `--input <path>` or `-i <path>` | Path to the dataset file or directory. Supports `.csv[.gz]` and `.tsv[.gz]` formats. The file must have a `text` column. | Required |
 | `--output <path>` or `-o <path>` | Output file path for the model dictionary. | `markov_dict.tsv.gz` |
-| `--order <value>` or `-n <value>` | Order of the Markov chain (n-gram context size). Order 1 uses only one word to predict next word, order 2 uses context from two word, etc. Must be between 1 and 5. | `1` |
+| `--order <value>` or `-n <value>` | Order of the Markov chain (n-gram context size). Order 1 uses only one word to predict next word, order 2 uses context from two words, etc. Must be between 1 and 5. | `1` |
 
 The `--order` parameter specifies the number of previous words used to predict the next word. Typical values range from 1 to 5: lower values produce noisier text, while higher values generate text that is more similar to the source. The size of the Markov model grows exponentially with the `--order` value.
 
@@ -217,13 +217,13 @@ Drop tables created for load testing:
 3. Generate and load synthetic documents:
 
     ```bash
-    {{ ydb-cli }} workload fulltext import generator
+    {{ ydb-cli }} workload fulltext import generator --model markov_dict.tsv.gz
     ```
 
 4. Run the search workload:
 
     ```bash
-    {{ ydb-cli }} workload fulltext run select
+    {{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
     ```
     Output example:
     ```
@@ -257,7 +257,7 @@ Drop tables created for load testing:
 5. Run the upsert workload:
 
     ```bash
-    {{ ydb-cli }} workload fulltext run upsert
+    {{ ydb-cli }} workload fulltext run upsert --model markov_dict.tsv.gz
     ```
     Output example:
     ```

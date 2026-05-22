@@ -2102,7 +2102,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore62: {
-            // show_create_table_stmt: SHOW CREATE (TABLE | VIEW) table_ref
+            // show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE) simple_table_ref
             Ctx_.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core62().GetRule_show_create_table_stmt1();
 
@@ -2110,14 +2110,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref4(), tr)) {
                 return false;
             }
+            const auto& block = rule.GetBlock3();
             TString type;
-            if (auto typeToken = to_lower(rule.GetToken3().GetValue()); typeToken == "table") {
-                type = "showCreateTable";
-            } else if (typeToken == "view") {
-                type = "showCreateView";
-            } else {
-                YQL_ENSURE(false, "Unsupported SHOW CREATE statement type: " << typeToken);
+            if (block.HasAlt1()) {
+                type = "showCreateTable"; // TABLE
+            } else if (block.HasAlt2()) {
+                type = "showCreateView"; // VIEW
+            } else if (block.HasAlt3()) {
+                type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
             }
+            YQL_ENSURE(!type.empty(),
+                "Unsupported SHOW CREATE statement type, expected one of TABLE, VIEW, EXTERNAL DATA SOURCE; got: "
+                << block.DebugString());
 
             AddStatementToBlocks(blocks, BuildShowCreate(Ctx_.Pos(), tr, type, Ctx_.Scoped));
             break;

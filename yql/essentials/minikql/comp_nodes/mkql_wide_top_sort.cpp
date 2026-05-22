@@ -712,6 +712,30 @@ private:
         ProcessSpilled
     };
 
+    // Reason why we entered Spilling mode. Also tells us whether Storage currently
+    // ends with a placeholder row (everything except Exception adds the placeholder
+    // before switching).
+    enum class ESpillReason {
+        None,        // not currently spilling
+        YellowZone,  // memory pressure (placeholder present)
+        FinalFlush,  // input flow finished, flushing in-memory tail (placeholder present)
+        Exception,   // TMemoryLimitExceededException in Storage.insert (placeholder NOT present)
+    };
+
+    static const char* SpillReasonName(ESpillReason r) {
+        switch (r) {
+            case ESpillReason::None:       return "None";
+            case ESpillReason::YellowZone: return "YellowZone";
+            case ESpillReason::FinalFlush: return "FinalFlush";
+            case ESpillReason::Exception:  return "Exception";
+        }
+        return "Unknown";
+    }
+
+    bool HasPlaceholder() const {
+        return SpillReason != ESpillReason::Exception;
+    }
+
     struct TMergeState {
         TSpilledData::TPtr Target;
         std::vector<TSpilledUnboxedValuesIterator> Iterators;
@@ -720,11 +744,6 @@ private:
     };
 
     bool ResetFields() {
-        const bool hasData = !Storage.empty();
-        if (hasData && ((CanSpill() && !HasMemoryForProcessing()) && HasEnoughRowsToSpill())) {
-            SwitchMode(EOperatingMode::Spilling);
-            return false;
-        }
         try {
             auto pos = Storage.size();
             Storage.insert(Storage.end(), Indexes.size(), {});
@@ -735,16 +754,18 @@ private:
             auto ptr = Pointer = Storage.data() + pos;
             std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
         } catch (TMemoryLimitExceededException) {
-            if (CanSpill() && HasEnoughRowsToSpill()) {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                     << (const void*)this << "# TMemoryLimitExceededException caught in ResetFields()"
-                     << " | rowsInMemory=" << (Storage.size() / Indexes.size())
-                     << " memUsed=" << TlsAllocState->GetUsed()
-                     << " memLimit=" << TlsAllocState->GetLimit());
+            if (CanSpill()) {
+                SpillReason = ESpillReason::Exception;
                 SwitchMode(EOperatingMode::Spilling);
                 return false;
             }
             throw;
+        }
+
+        if (CanSpill() && !HasMemoryForProcessing() && HasEnoughRowsToSpill()) {
+            SpillReason = ESpillReason::YellowZone;
+            SwitchMode(EOperatingMode::Spilling);
+            return false;
         }
         return true;
     }
@@ -832,6 +853,7 @@ public:
         if (SealedStates.empty() && !ActiveSpill) {
             SealInMemory();
         } else {
+            SpillReason = ESpillReason::FinalFlush;
             SwitchMode(EOperatingMode::Spilling);
         }
         return IsReadyToContinue();
@@ -906,7 +928,8 @@ private:
             auto log = TStringBuilder()
                 << (const void*)this << "# SwitchMode "
                 << ModeName(Mode) << " -> " << ModeName(mode)
-                << " | memUsed=" << TlsAllocState->GetUsed()
+                << " | reason=" << SpillReasonName(SpillReason)
+                << " memUsed=" << TlsAllocState->GetUsed()
                 << " memLimit=" << TlsAllocState->GetLimit()
                 << " yellowZone=" << (TlsAllocState->IsMemoryYellowZoneEnabled() ? "yes" : "no")
                 << " maxLimitReached=" << (TlsAllocState->GetMaximumLimitValueReached() ? "yes" : "no")
@@ -1104,7 +1127,10 @@ private:
     }
 
     void SealInMemory() {
-        Storage.resize(Storage.size() - Indexes.size());
+        if (HasPlaceholder()) {
+            MKQL_ENSURE(Storage.size() >= Indexes.size(), "Cannot drop placeholder: Storage too small");
+            Storage.resize(Storage.size() - Indexes.size());
+        }
         Full.clear();
         for (auto it = Storage.begin(); it != Storage.end(); it += Indexes.size()) {
             Full.emplace_back(&*it);
@@ -1137,6 +1163,7 @@ private:
     std::vector<TSpilledUnboxedValuesIterator> SpilledUnboxedValuesIterators;
     ISpiller::TPtr Spiller = nullptr;
     bool IsFinishWriteInProgress = false;
+    ESpillReason SpillReason = ESpillReason::None;
     std::optional<TMergeState> Merge;
     size_t LastSpilledRows = 0;
 };

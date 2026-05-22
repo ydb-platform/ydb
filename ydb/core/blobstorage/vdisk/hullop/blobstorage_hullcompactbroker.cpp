@@ -16,24 +16,24 @@
 namespace NKikimr {
     struct TCompBrokerMon : public TThrRefBase {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
-        
+
         NMonitoring::TDynamicCounters::TCounterPtr CompBrokerPendingCompactions;
         NMonitoring::TDynamicCounters::TCounterPtr CompBrokerActiveCompactions;
-        
+
         NMonitoring::TDynamicCounters::TCounterPtr CompBrokerTokenRequests;
         NMonitoring::TDynamicCounters::TCounterPtr CompBrokerTokenGrants;
         NMonitoring::TDynamicCounters::TCounterPtr CompBrokerTokenReleases;
-        
+
         TCompBrokerMon(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
             : Group(GetServiceCounters(counters, "storage_utils"))
         {
             CompBrokerPendingCompactions = Group->GetCounter("CompBrokerPendingCompactions", false);
             CompBrokerActiveCompactions = Group->GetCounter("CompBrokerActiveCompactions", false);
-            
+
             CompBrokerTokenRequests = Group->GetCounter("CompBrokerTokenRequests", true);
             CompBrokerTokenGrants = Group->GetCounter("CompBrokerTokenGrants", true);
             CompBrokerTokenReleases = Group->GetCounter("CompBrokerTokenReleases", true);
-            
+
         }
     };
 
@@ -189,12 +189,12 @@ namespace NKikimr {
 
         void ReleaseCompactionToken(const TGroupId& groupId, const TVDiskIdShort& vdiskId, const TActorId& actorId, TCompactionTokenId token) {
             TCompactionKey key(groupId, vdiskId, actorId);
-            
+
             auto tokenIt = CompactionsToken.find(token);
             Y_VERIFY_S(tokenIt != CompactionsToken.end(), "ReleaseCompactionToken: token " << token << " not found");
-            Y_VERIFY_S(tokenIt->second == key, "ReleaseCompactionToken: token " << token << " belongs to " << tokenIt->second.ToString() 
+            Y_VERIFY_S(tokenIt->second == key, "ReleaseCompactionToken: token " << token << " belongs to " << tokenIt->second.ToString()
                 << ", not " << key.ToString());
-            
+
             auto infoIt = ActiveCompactionsInfo.find(key);
             Y_VERIFY_S(infoIt != ActiveCompactionsInfo.end(), "ReleaseCompactionToken: no active compaction for " << key.ToString());
 
@@ -365,16 +365,16 @@ namespace NKikimr {
                 Send(compactionInfo->ActorId, new TEvCompactionTokenResult(compactionInfo->Token, compactionInfo->GroupId, compactionInfo->VDiskId));
                 Token++;
             }
-            
+
             UpdateMetrics(ctx);
         }
 
         void CollectCurrentCompactionsStats(const TActorContext& ctx) {
             TInstant now = TInstant::Now();
-            
+
             TVector<TString> longWaitingCompactions;
             TVector<TString> longWorkingCompactions;
-            
+
             for (const auto& [pdiskId, queue] : CompactionsPerPDisk.CompactionsPerPDisk) {
                 for (const auto& [key, request] : queue.PendingCompactions) {
                     double waitTimeSeconds = (now - request.RequestTime).SecondsFloat();
@@ -389,7 +389,7 @@ namespace NKikimr {
                         longWaitingCompactions.push_back(ss.Str());
                     }
                 }
-                
+
                 for (const auto& [key, info] : queue.ActiveCompactionsInfo) {
                     double workTimeSeconds = (now - info.StartTime).SecondsFloat();
 
@@ -405,17 +405,17 @@ namespace NKikimr {
                     }
                 }
             }
-            
+
             if (!longWaitingCompactions.empty()) {
                 YDB_LOG_CTX_WARN(ctx, "Long waiting compactions detected: Compactions# [",
                     {"Count", longWaitingCompactions.size()},
-                    {"#_num_0", JoinSeq(", ", longWaitingCompactions)});
+                    {"longWaitingCompactions", JoinSeq(", ", longWaitingCompactions)});
             }
-            
+
             if (!longWorkingCompactions.empty()) {
                 YDB_LOG_CTX_WARN(ctx, "Long working compactions detected: Compactions# [",
                     {"Count", longWorkingCompactions.size()},
-                    {"#_num_0", JoinSeq(", ", longWorkingCompactions)});
+                    {"longWaitingCompactions", JoinSeq(", ", longWorkingCompactions)});
             }
         }
 

@@ -611,7 +611,7 @@ namespace NKikimr {
                 const TLogoBlobID& id = Key.LogoBlobID();
                 if (!TBlobStorageGroupType::IsCrcModeValid(id.CrcMode())) {
                     YDB_LOG_COMP_CRIT(NKikimrServices::BS_SKELETON, "invalid CrcMode in BlobId found during compaction",
-                        {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                         {"BlobId", id.ToString()},
                         {"KeepIndex", keep.KeepIndex},
                         {"KeepData", keep.KeepData},

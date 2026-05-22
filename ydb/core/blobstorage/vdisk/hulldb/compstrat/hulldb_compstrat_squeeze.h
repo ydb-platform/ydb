@@ -78,7 +78,7 @@ namespace NKikimr {
                     if (p.Level > 0) {
                         if (p.SstPtr->Info.CTime < SqueezeBefore) {
                             YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategySqueeze decided to compact Sst",
-                                {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                                 {"p", p.ToString()});
                             // rewrite this SST squeezed
                             TUtils::SqueezeOneSst(LevelSnap.SliceSnap, p, Task->CompactSsts);

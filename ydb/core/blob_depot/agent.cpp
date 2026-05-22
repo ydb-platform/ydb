@@ -59,7 +59,7 @@ namespace NKikimr::NBlobDepot {
             {"Msg", req},
             {"NodeId", nodeId},
             {"PipeServerId", pipeServerId},
-            {"#_Id", ev->Cookie});
+            {"Cookie", ev->Cookie});
 
         const auto it = PipeServers.find(pipeServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());

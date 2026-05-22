@@ -88,8 +88,8 @@ namespace NKikimr::NHullComp {
             if (levelOfInterest) {
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyExplicit decided to compact level",
-                        {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                        {"#_*levelOfInterest", *levelOfInterest},
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"levelOfInterest", *levelOfInterest},
                         {"task", (Task ? Task->ToString() : "nullptr")});
                 }
                 return ActCompactSsts;

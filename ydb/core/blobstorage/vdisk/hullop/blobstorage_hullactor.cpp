@@ -359,7 +359,7 @@ namespace NKikimr {
 
                         const ui64 cookie = NextPreCompactCookie++;
                         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "requesting PreCompact for ActDeleteSsts",
-                            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
+                            {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
                         ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                         PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                             Y_VERIFY_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitPreCompact,
@@ -368,7 +368,7 @@ namespace NKikimr {
 
                             Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                             YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "got PreCompactResult for ActDeleteSsts,",
-                                {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                                {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                                 {"wId", wId});
                             ApplyCompactionResult(ctx, {}, {}, wId);
                             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
@@ -388,7 +388,7 @@ namespace NKikimr {
                     LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                    
+
                     if (CompactionTokenState == ECompactionTokenState::NotNeeded || !HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
                         CancelOrReleaseCompactionTokenIfNeeded(ctx);
                         LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
@@ -397,7 +397,7 @@ namespace NKikimr {
                         RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                         break;
                     }
-                    
+
                     if (CompactionTokenState == ECompactionTokenState::Acquired) {
                         CompactionTokenState = ECompactionTokenState::InProgress;
                         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
@@ -440,7 +440,7 @@ namespace NKikimr {
         }
 
         void TryStartCompaction(const TActorContext &ctx, double maxRatio) {
-            Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Idle || 
+            Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Idle ||
                        CompactionTokenState == ECompactionTokenState::Requested,
                 HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
 
@@ -454,7 +454,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with ratio %f",
                     PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
-        
+
         }
 
         void Handle(typename TEvCompactionTokenResult::TPtr &ev, const TActorContext &ctx) {
@@ -467,15 +467,15 @@ namespace NKikimr {
 
             Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Requested,
                 HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
-            
+
             CompactionToken = ev->Get()->Token;
             CompactionTokenState = ECompactionTokenState::Acquired;
             CompactionWaitingStartTime = TMonotonic();
-            
+
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(HullDs->HullCtx->VCtx, "%s: got compaction token# %" PRIu64 ", scheduling compaction",
                     PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
-            
+
             ScheduleCompaction(ctx);
         }
 
@@ -599,12 +599,12 @@ namespace NKikimr {
             if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty()) && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
                 YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "requesting PreCompact for THullChange",
-                    {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
+                    {VDiskLogPrefix, HullDs->HullCtx->VCtx->VDiskLogPrefix});
                 ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                 PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                     Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "got PreCompactResult for THullChange,",
-                        {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                        {VDiskLogPrefix, HullDs->HullCtx->VCtx->VDiskLogPrefix},
                         {"wId", wId});
                     Handle(ev, ctx, wId);
                 });
@@ -871,7 +871,7 @@ namespace NKikimr {
 
         void HandlePoison(const TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            if (CompactionTokenState == ECompactionTokenState::Acquired || 
+            if (CompactionTokenState == ECompactionTokenState::Acquired ||
                 CompactionTokenState == ECompactionTokenState::InProgress) {
                 Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                 ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(

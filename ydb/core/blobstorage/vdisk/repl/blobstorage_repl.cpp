@@ -321,7 +321,7 @@ namespace NKikimr {
                     if (RequestedReplicationToken) {
                         YDB_LOG_CRIT("excessive replication token requested",
                             {"Marker", "BSVR38"},
-                            {"#_ReplCtx->VCtx->VDiskLogPrefix", ReplCtx->VCtx->VDiskLogPrefix});
+                            {VDiskLogPrefix, ReplCtx->VCtx->VDiskLogPrefix});
                         break;
                     }
                     RequestedReplicationToken = true;
@@ -743,7 +743,7 @@ namespace NKikimr {
                 if (RequestedReplicationToken || HoldingReplicationToken) {
                     YDB_LOG_CRIT("stuck replication token",
                         {"Marker", "BSVR37"},
-                        {"#_ReplCtx->VCtx->VDiskLogPrefix", ReplCtx->VCtx->VDiskLogPrefix});
+                        {VDiskLogPrefix, ReplCtx->VCtx->VDiskLogPrefix});
                 }
             }
 

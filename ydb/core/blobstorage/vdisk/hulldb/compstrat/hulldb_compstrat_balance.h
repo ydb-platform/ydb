@@ -78,7 +78,7 @@ namespace NKikimr {
                         CompactSsts.PushSstFromLevelX(level, trgtFirstIt, trgtEndIt);
                         if (HullCtx->VCtx->ActorSystem) {
                             YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalanceBase::FindNeighborhoods decided to compact",
-                                {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                                 {"to_level", level},
                                 {"Task", CompactSsts.ToString()});
                         }
@@ -162,7 +162,7 @@ namespace NKikimr {
 
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalanceLevel0 decided to compact,",
-                        {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                         {"Task", CompactSsts.ToString()});
                 }
             }
@@ -376,7 +376,7 @@ namespace NKikimr {
 
                     if (HullCtx->VCtx->ActorSystem) {
                         YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalancePartiallySortedLevels decided to compact,",
-                            {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                            {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                             {"Task", CompactSsts.ToString()},
                             {"firstKeyToCover", (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")},
                             {"lastKeyToCover", (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")});
@@ -404,7 +404,7 @@ namespace NKikimr {
 
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalancePartiallySortedLevels decided to compact,",
-                        {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                         {"Task", CompactSsts.ToString()},
                         {"firstKeyToCover", (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")},
                         {"lastKeyToCover", (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")});
@@ -524,7 +524,7 @@ namespace NKikimr {
 
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalanceLevelX decided to compact,",
-                        {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                         {"Task", CompactSsts.ToString()},
                         {"lastCompactedKey", lastCompactedKey.ToString()});
                 }
@@ -538,7 +538,7 @@ namespace NKikimr {
 
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TBalanceLevelX: take sst with",
-                        {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                         {"firstKeyToCover", firstKeyToCover.ToString()},
                         {"lastKeyToCover", lastKeyToCover.ToString()});
                 }
@@ -740,7 +740,7 @@ namespace NKikimr {
                         if (BalanceLevel0.FullCompact(FullCompactionAttrs->FullCompactionLsn)) {
                             if (HullCtx->VCtx->ActorSystem) {
                                 YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyBalance decided to full compact compact level 0",
-                                    {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix});
+                                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix});
                             }
                             return ActCompactSsts;
                         }
@@ -748,7 +748,7 @@ namespace NKikimr {
                         if (BalancePartiallySortedLevels.FullCompact(FullCompactionAttrs->FullCompactionLsn)) {
                             if (HullCtx->VCtx->ActorSystem) {
                                 YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyBalance decided to full compact compact sorted level",
-                                    {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix});
+                                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix});
                             }
                             return ActCompactSsts;
                         }
@@ -756,7 +756,7 @@ namespace NKikimr {
                         if (BalanceLevelX.FullCompact(*FullCompactionAttrs)) {
                             if (HullCtx->VCtx->ActorSystem) {
                                 YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyBalance decided to full compact compact level x",
-                                    {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix});
+                                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix});
                             }
                             return ActCompactSsts;
                         }
@@ -771,7 +771,7 @@ namespace NKikimr {
                 } else {
                     if (HullCtx->VCtx->ActorSystem) {
                         YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyBalance decided to compact,",
-                            {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                            {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                             {"ranks", ranks.ToString()});
                     }
                     switch (ranks.VirtualLevelToCompact) {

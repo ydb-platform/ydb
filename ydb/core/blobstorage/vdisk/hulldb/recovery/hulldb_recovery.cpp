@@ -373,7 +373,7 @@ namespace NKikimr {
             EOpMode mode)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Db# LogoBlobs action# sync_data_batch",
-            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+            {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
             {"mode", OpMode2Str(mode)},
             {"lsn", seg});
 
@@ -389,7 +389,7 @@ namespace NKikimr {
             EOpMode mode)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Db# Blocks action# sync_data_batch",
-            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+            {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
             {"mode", OpMode2Str(mode)},
             {"lsn", seg});
 
@@ -406,7 +406,7 @@ namespace NKikimr {
             EOpMode mode)
     {
         YDB_LOG_CTX_DEBUG(ctx, "Db# Barriers action# sync_data_batch",
-            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+            {VDiskLogPrefix, HullDs->HullCtx->VCtx->VDiskLogPrefix},
             {"mode", OpMode2Str(mode)},
             {"lsn", seg});
 

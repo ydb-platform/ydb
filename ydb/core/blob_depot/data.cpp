@@ -603,7 +603,7 @@ namespace NKikimr::NBlobDepot {
                 {"Marker", "BDT13"},
                 {"Id", Self->GetLogId()},
                 {"AgentId", agent.Connection->NodeId},
-                {"#_Id", ev->Cookie},
+                {"Cookie", ev->Cookie},
                 {"Channel", int(channelIndex)},
                 {"InvalidatedStep", invalidatedStep},
                 {"GivenIdRanges", channel.GivenIdRanges},

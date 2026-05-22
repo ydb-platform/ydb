@@ -286,8 +286,8 @@ namespace NKikimr {
             msg->ReservedChunks = {reservedChunks.begin(), reservedChunks.end()};
 
             YDB_LOG_CTX_COMP(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, ": Compaction job ( ) finished:",
-                {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                {"#_PDiskSignatureForHullDbKey<TKey>().ToString()", PDiskSignatureForHullDbKey<TKey>().ToString()},
+                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                {"Signature", PDiskSignatureForHullDbKey<TKey>().ToString()},
                 {"CompactionID", CompactionID},
                 {"FreshSegment", (FreshSegment ? "true" : "false")},
                 {"FreedHugeBlobs", Worker.GetFreedHugeBlobs().Size()},

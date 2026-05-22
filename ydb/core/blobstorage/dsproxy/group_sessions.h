@@ -192,7 +192,7 @@ namespace NKikimr {
             TActorId queueActorId = queues.GetQueue(queueId).ActorId;
             YDB_LOG_COMP_DEBUG(NKikimrServices::BS_PROXY, "Send",
                 {"to_queueActorId", queueActorId},
-                {"#_TypeName(*event)", TypeName(*event)},
+                {"TypeName", TypeName(*event)},
                 {"event", event->ToString()},
                 {"cookie", cookie});
             TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,

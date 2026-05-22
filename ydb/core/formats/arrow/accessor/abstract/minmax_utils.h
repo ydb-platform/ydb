@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arrow/datum.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 #include <library/cpp/json/writer/json_value.h>
 namespace NKikimr::NArrow::NAccessor {
 

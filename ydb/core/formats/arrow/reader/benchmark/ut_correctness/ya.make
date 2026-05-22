@@ -1,4 +1,4 @@
-Y_BENCHMARK()
+UNITTEST_FOR(ydb/core/formats/arrow/reader)
 
 
 PEERDIR(
@@ -14,7 +14,7 @@ PEERDIR(
 )
 
 SRCS(
-    main.cpp
+    ut_correctness.cpp
 )
 
 END()

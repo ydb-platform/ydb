@@ -140,7 +140,9 @@ config:
 
 Подготовленные ключи и сертификаты TLS необходимо скопировать в защищённый каталог на каждом из узлов кластера {{ ydb-short-name }}.
 
-Подробности подготовки — в разделе [{#T}](deployment-preparation.md#tls-certificates). На каждом сервере скопируйте `ca.crt` и файлы этого хоста в один каталог и выполните команды ниже из него.
+Подробности подготовки — в разделе [{#T}](deployment-preparation.md#tls-certificates). Если сертификаты сгенерированы скриптом `tls_cert_gen`, возьмите `ca.crt` из каталога `CA/certs/YYYY-MM-DD_hh-mi-ss` (подставьте метку времени из вывода скрипта или выберите нужный каталог в `CA/certs/`), а `node.crt`, `node.key` и `web.pem` — из подкаталога с именем FQDN этого сервера в `ydb-ca-nodes.txt`. Перенесите эти четыре файла на соответствующий сервер кластера (например, через `scp`) в один локальный каталог.
+
+На каждом сервере, в каталоге, где уже лежат `ca.crt`, `node.crt`, `node.key` и `web.pem` этого узла, выполните команды ниже.
 
 Ниже приведён пример создания защищённого каталога и копирования:
 
@@ -154,6 +156,14 @@ sudo chown -R ydb:ydb /opt/ydb/certs
 sudo chmod 700 /opt/ydb/certs
 ```
 
+Перед запуском `ydbd` убедитесь, что процессы от пользователя `ydb` смогут прочитать сертификат мониторинга (иначе при `--mon-cert /opt/ydb/certs/web.pem` будет ошибка `Permission denied`):
+
+```bash
+sudo -u ydb test -r /opt/ydb/certs/web.pem
+```
+
+При успешной проверке команда завершается без вывода, код возврата `0` (проверить: `echo $?` → `0`). Если файл отсутствует или права настроены неверно — код `1`; повторите `chown`/`chmod` из блока выше и убедитесь, что на этот узел скопирован `web.pem` этого хоста.
+
 ## Подготовьте конфигурацию на статических узлах кластера
 
 Создайте на каждой машине пустую директорию `opt/ydb/cfg` для работы кластера с конфигурацией. В случае запуска нескольких узлов кластера на одной машине создайте отдельные директории под каждый узел.
@@ -166,7 +176,7 @@ sudo chown -R ydb:ydb /opt/ydb/cfg
 Выполнив специальную команду на каждой машине, инициализируйте эту директорию файлом конфигурации.
 
 ```bash
-sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-config /tmp/config.yaml
+sudo /opt/ydb/bin/ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
 ```
 
 Исходный файл `/tmp/config.yaml` после выполнения этой команды больше не используется, его можно удалить.
@@ -177,15 +187,37 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-con
 
 * Вручную
 
-  Запустите сервис хранения данных {{ ydb-short-name }} на каждом статическом узле кластера:
+  Запустите сервис хранения данных {{ ydb-short-name }} на каждом статическом узле кластера. Поочередно выполните команды ниже. Не вставляйте все строки разом вместе с `sudo su - ydb` — иначе следующие команды могут выполниться не от пользователя `ydb`.
+  
+  После шага 1 дождитесь приглашения `ydb@...$`.
+  
+  На шаге 4 дождитесь вывода `ydbd` в этом же терминале.
 
-  ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
-  ```
+  1. Переключитесь на пользователя `ydb`:
+
+     ```bash
+     sudo su - ydb
+     ```
+
+  2. Перейдите в каталог установки:
+
+     ```bash
+     cd /opt/ydb
+     ```
+
+  3. Укажите путь к библиотекам:
+
+     ```bash
+     export LD_LIBRARY_PATH=/opt/ydb/lib
+     ```
+
+  4. Запустите статический узел:
+
+     ```bash
+     /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
+     ```
+
+     При успешном старте в выводе появится, в частности, `Determined node ID: ...`. Если [проверка `web.pem`](#tls-copy-cert) не пройдена, здесь будет ошибка `Permission denied` для `/opt/ydb/certs/web.pem`.
 
 * С использованием systemd
 
@@ -243,11 +275,11 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-con
 
 Операция инициализации кластера осуществляет настройку набора статических узлов, перечисленных в конфигурационном файле кластера, для хранения данных {{ ydb-short-name }}.
 
-Для инициализации кластера потребуется файл сертификата центра регистрации `ca.crt`, путь к которому должен быть указан при выполнении соответствующих команд. Перед выполнением соответствующих команд скопируйте файл `ca.crt` на сервер, на котором эти команды будут выполняться.
+Для инициализации кластера потребуются файлы `ca.crt`, `node.crt` и `node.key`. Пути к ним указываются в командах ниже (для bootstrap — все три, для получения токена — `ca.crt`). Перед выполнением убедитесь, что эти файлы есть на сервере, где запускаете команды (см. [копирование TLS](#tls-copy-cert)).
 
 На одном из серверов хранения в составе кластера выполните команды:
 
-Инициализируйте кластер используя полученный токен
+Инициализируйте кластер:
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
@@ -263,7 +295,7 @@ echo $?
 
 ```bash
 /opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file /opt/ydb/certs/ca.crt \
---user root --no-password auth get-token --force > token-file
+--user root --no-password auth get-token --force > auth_token
 ```
 
 При успешном выполнении инициализации кластера выведенный на экран код завершения команды инициализации кластера должен быть нулевым.
@@ -303,25 +335,37 @@ echo $?
 
 * Вручную
 
-  Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
+  Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`. Поочередно выполните команды ниже. Не вставляйте все строки разом вместе с `sudo su - ydb` — иначе следующие команды могут выполниться не от пользователя `ydb`.
 
-  ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
-      --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
-      --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --yaml-config  /opt/ydb/cfg/config.yaml \
-      --tenant /Root/testdb \
-      --grpc-cert /opt/ydb/certs/node.crt \
-      --grpc-key /opt/ydb/certs/node.key \
-      --node-broker grpcs://<ydb-static-node1>:2135 \
-      --node-broker grpcs://<ydb-static-node2>:2135 \
-      --node-broker grpcs://<ydb-static-node3>:2135
-  ```
+  После шага 1 дождитесь приглашения `ydb@...$`.
 
-  В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
+  На шаге 4 дождитесь вывода `ydbd` в этом же терминале. В команде ниже замените `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` на FQDN трёх любых серверов со статическими узлами.
+
+  1. Переключитесь на пользователя `ydb`:
+
+     ```bash
+     sudo su - ydb
+     ```
+
+  2. Перейдите в каталог установки:
+
+     ```bash
+     cd /opt/ydb
+     ```
+
+  3. Укажите путь к библиотекам:
+
+     ```bash
+     export LD_LIBRARY_PATH=/opt/ydb/lib
+     ```
+
+  4. Запустите динамический узел:
+
+     ```bash
+     /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt --ic-port 19002 --ca /opt/ydb/certs/ca.crt --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem --yaml-config /opt/ydb/cfg/config.yaml --tenant /Root/testdb --grpc-cert /opt/ydb/certs/node.crt --grpc-key /opt/ydb/certs/node.key --node-broker grpcs://<ydb-static-node1>:2135 --node-broker grpcs://<ydb-static-node2>:2135 --node-broker grpcs://<ydb-static-node3>:2135
+     ```
+
+     Если [проверка `web.pem`](#tls-copy-cert) не пройдена, будет ошибка `Permission denied` для `/opt/ydb/certs/web.pem`.
 
 * С использованием systemd
 
@@ -382,7 +426,7 @@ echo $?
 1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
+    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 
@@ -391,14 +435,14 @@ echo $?
 1. Создайте дополнительные учетные записи:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
         yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
     ```
 
 1. Установите права учетных записей, включив их во встроенные группы:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
         yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
     ```
 
@@ -417,14 +461,14 @@ echo $?
 * Создание строковой таблицы
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
     ```
 
 * Создание колоночной таблицы
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file /opt/ydb/certs/ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64 NOT NULL, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
     ```
 

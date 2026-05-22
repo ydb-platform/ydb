@@ -64,7 +64,7 @@
 
 ```bash
 sudo groupadd ydb
-sudo useradd ydb -g ydb
+sudo useradd -m -g ydb ydb
 ```
 
 Для того, чтобы сервис {{ ydb-short-name }} имел доступ к блочным дискам для работы, необходимо добавить пользователя, под которым будут запущены процессы {{ ydb-short-name }}, в группу `disk`:
@@ -117,6 +117,8 @@ ydb hard nofile 10000
 {% endlist %}
 
   где `binaries_url` — ссылка на архив нужной вам версии со страницы [загрузок](../../../../downloads/index.md).
+
+  В командах выше: `-xz` — для архива `.tar.gz` (OSS), `-xJ` — для `.tar.xz` (Enterprise).
 
 ### Создайте на сервере директорию
 

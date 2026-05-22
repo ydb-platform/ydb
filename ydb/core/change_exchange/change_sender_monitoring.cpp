@@ -5,7 +5,6 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
-#include <util/generic/yexception.h>
 
 namespace NKikimr::NChangeExchange {
 
@@ -19,7 +18,8 @@ TStringBuf TabletAppRelativePath(ETabletAppPath tabletAppPath) {
             return TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
     }
 
-    Y_UNREACHABLE();
+    // Unreachable: adding a new ETabletAppPath value must update this switch.
+    return "";
 }
 
 } // namespace
@@ -102,13 +102,13 @@ TPathId ParsePathId(TStringBuf str) {
 }
 
 TString TabletPath(ui64 tabletId, ETabletAppPath tabletAppPath) {
-    const TStringBuf prefix = TabletAppRelativePath(tabletAppPath);
-    return TStringBuilder() << prefix << "?TabletID=" << tabletId;
+    const TStringBuf tabletAppRelPath = TabletAppRelativePath(tabletAppPath);
+    return TStringBuilder() << tabletAppRelPath << "?TabletID=" << tabletId;
 }
 
 void PathLink(IOutputStream& str, const TPathId& pathId, ETabletAppPath tabletAppPath) {
-    const TStringBuf prefix = TabletAppRelativePath(tabletAppPath);
-    const TString path = TStringBuilder() << prefix
+    const TStringBuf tabletAppRelPath = TabletAppRelativePath(tabletAppPath);
+    const TString path = TStringBuilder() << tabletAppRelPath
         << "?TabletID=" << pathId.OwnerId
         << "&Page=" << "PathInfo"
         << "&OwnerPathId=" << pathId.OwnerId

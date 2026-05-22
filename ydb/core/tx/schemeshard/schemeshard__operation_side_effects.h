@@ -35,9 +35,11 @@ private:
     using TActivateShardCreated = std::tuple<TShardIdx, TTxId>;
     using TWaitPublication = std::tuple<TOperationId, TPathId>;
     using TBarrierRec = std::tuple<TOperationId, TString>;
+    using TDelayedActivationPart = std::tuple<TOperationId, TDuration>;
 
     THashSet<TTxId> ActivationOps;
     THashSet<TOperationId> ActivationParts;
+    TDeque<TDelayedActivationPart> DelayedActivationParts;
 
     TDeque<TCoordinatorAck> CoordinatorAcks;
     TDeque<TMediatorAck> MediatorAcks;
@@ -117,6 +119,7 @@ public:
 
     void Dependence(TTxId parent, TTxId child);
     void ActivateTx(TOperationId opId);
+    void ActivateTxDelayed(TOperationId opId, TDuration delay);
     void ActivateOperation(TTxId txId);
 
     void WaitShardCreated(TShardIdx idx, TOperationId opId);

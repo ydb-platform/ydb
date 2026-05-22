@@ -111,6 +111,10 @@ void TSideEffects::ActivateTx(TOperationId opId) {
     ActivationParts.insert(opId);
 }
 
+void TSideEffects::ActivateTxDelayed(TOperationId opId, TDuration delay) {
+    DelayedActivationParts.emplace_back(opId, delay);
+}
+
 void TSideEffects::ActivateOperation(TTxId txId) {
     ActivationOps.insert(txId);
 }
@@ -284,6 +288,29 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Activate send for " << opPart);
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(opPart.GetTxId()), opPart.GetSubTxId()));
+    }
+
+    for (auto& [opPart, delay]: DelayedActivationParts) {
+        if (!ss->Operations.contains(opPart.GetTxId())) {
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "Unable to activate delayed " << opPart);
+            continue;
+        }
+
+        auto operation = ss->Operations.at(opPart.GetTxId());
+
+        if (operation->WaitOperations.size()) {
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "Delay activating"
+                           << ", operation part: " << opPart
+                           << ", there is await operations num " << operation->WaitOperations.size());
+            continue;
+        }
+
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Delayed activate send for " << opPart
+                    << ", delay: " << delay);
+        ctx.Schedule(delay, new TEvPrivate::TEvProgressOperation(ui64(opPart.GetTxId()), opPart.GetSubTxId()));
     }
 }
 

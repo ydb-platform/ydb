@@ -9,7 +9,7 @@ namespace {
 
 class TNamedNodes final: public INamedNodes {
 public:
-    const TNamedNode* Resolve(const TNamedNodeRef& ref) const override {
+    [[nodiscard]] const TNamedNode* Resolve(const TNamedNodeRef& ref) const override {
         const auto* parent = References_.FindPtr(ref);
         if (!parent) {
             return nullptr;

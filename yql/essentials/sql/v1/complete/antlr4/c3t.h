@@ -102,7 +102,7 @@ private:
                (forced != ForcedPreviousByToken_.end() && !forced->second.contains(previous));
     }
 
-    bool IsIgnored(TRuleId head, const std::vector<TRuleId> tail) const {
+    [[nodiscard]] bool IsIgnored(TRuleId head, const std::vector<TRuleId> tail) const {
         return IgnoredRules_.contains(head) ||
                AnyOf(tail, [this](TRuleId r) { return IgnoredRules_.contains(r); });
     }

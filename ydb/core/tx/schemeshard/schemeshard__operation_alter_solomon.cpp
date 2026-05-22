@@ -243,8 +243,8 @@ public:
         }
 
         if (status == NKikimrProto::BLOCKED) {
-            // Hive is blocking this request; it will retry internally and send
-            // another reply later. Keep waiting (timeout will fire if it doesn't).
+            // Hive returned BLOCKED for this owner. Keep the timeout armed;
+            // when it fires, this actor will retry the request.
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          DebugHint() << " CreateTablet BLOCKED"
                                      << ", shardIdx: " << expectedShardIdx
@@ -387,6 +387,7 @@ public:
 
 class TRollingUpdateParts: public TSubOperationState {
 private:
+    static constexpr TDuration RetryDelay = TDuration::Seconds(60);
     TOperationId OperationId;
 
     TString DebugHint() const override {
@@ -441,15 +442,14 @@ public:
         if (!ev->Get()->Success) {
             // Rolling update could not finish (e.g. Hive permanently rejected
             // a shard). We do NOT have an abort path for AlterSolomon today,
-            // so the safest action is to keep retrying: schedule a fresh
-            // rolling-update actor by re-activating the same state. The
-            // transient-failure budget inside the actor protects against
-            // tight loops; here we just re-arm.
+            // so retry with a delay instead of immediately spawning a fresh
+            // rolling-update actor and resetting its failure budget.
             LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " rolling update reported failure, will retry"
+                                    << ", delay: " << RetryDelay
                                     << ", error: " << ev->Get()->Error);
             txState->ClearShardsInProgress();
-            context.OnComplete.ActivateTx(OperationId);
+            context.OnComplete.ActivateTxDelayed(OperationId, RetryDelay);
             return false;
         }
 

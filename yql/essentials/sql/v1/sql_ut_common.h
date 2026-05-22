@@ -14834,6 +14834,40 @@ Y_UNIT_TEST(WindowBad) {
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:27: Error: Expected a YqlSelect-compatible window function, but got Length");
 }
 
+Y_UNIT_TEST(AnsiCurrentRow) {
+    const auto check = [](TString spec, TString a, TString b, TString c, THashSet<TString> flags) {
+        TString query = R"sql(
+            PRAGMA YqlSelect = 'force';
+            $events = (SELECT * FROM (VALUES
+                (1, 10,  5),
+                (2, 10,  5),
+                (3, 20, 10)
+            ) AS events (event_id, ts, val));
+            SELECT ts, val, SUM(val) OVER (SPEC) AS run_sum FROM $events ORDER BY ts, event_id;
+        )sql";
+        SubstGlobal(query, "SPEC", spec);
+
+        NSQLTranslation::TTranslationSettings settings;
+        settings.Flags = std::move(flags);
+        settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat = {"YqlSelect"};
+        TString program = VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 4);
+        UNIT_ASSERT_STRING_CONTAINS(program, "'('type '" + a + ")");
+        UNIT_ASSERT_STRING_CONTAINS(program, "'('from '" + b + ")");
+        UNIT_ASSERT_STRING_CONTAINS(program, "'('to '" + c + ")");
+    };
+
+    check("ORDER BY ts", "rows", "up", "f", {}); // to_value is 0
+    check("", /*      */ "rows", "up", "uf", {});
+    check("ORDER BY ts", "range", "up", "c", {"AnsiCurrentRow"});
+    check("", /*      */ "rows", "up", "uf", {"AnsiCurrentRow"});
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {

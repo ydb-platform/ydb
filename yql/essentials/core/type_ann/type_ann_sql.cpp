@@ -5075,7 +5075,7 @@ IGraphTransformer::TStatus SqlWindowWrapper(const TExprNode::TPtr& input, TExprN
             }
 
             auto type = x->Tail().Content();
-            if (type != "rows") {
+            if (!IsIn({"rows", "range"}, type)) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Unsupported frame type: " << type));
                 return IGraphTransformer::TStatus::Error;
             }

@@ -1183,9 +1183,9 @@
     ],
     "test.test[select_yql-window_pg_tutorial_6-default.txt-Debug]": [
         {
-            "checksum": "33cf4d72316a666cd4829133d6c8969d",
-            "size": 1917,
-            "uri": "https://{canondata_backend}/1847551/c9103bf55cc11afa84471242d8aeba02b20d6dea/resource.tar.gz#test.test_select_yql-window_pg_tutorial_6-default.txt-Debug_/opt.yql"
+            "checksum": "36964cc9db635115f7b47be123206795",
+            "size": 1911,
+            "uri": "https://{canondata_backend}/1946324/899b26cf97dd7eb99bb4ee510428e8792e23880e/resource.tar.gz#test.test_select_yql-window_pg_tutorial_6-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_pg_tutorial_6-default.txt-Results]": [

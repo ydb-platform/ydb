@@ -10,8 +10,7 @@ namespace NKikimr::NKqp::NScheduler {
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
-    TComputeScheduler(bool enabled, const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams,
-        NHdrf::NSnapshot::ELeafFairShare fairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT);
+    TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options);
 
     void ToggleEnabled(bool enable) {
         Enabled = enable;
@@ -56,11 +55,6 @@ private:
 };
 
 using TComputeSchedulerPtr = std::shared_ptr<TComputeScheduler>;
-
-struct TOptions {
-    TDelayParams DelayParams;
-    TDuration UpdateFairSharePeriod;
-};
 
 struct TEvents {
     enum : ui32 {
@@ -130,6 +124,13 @@ struct TEvReadFactoryResponse : public TEventLocal<TEvReadFactoryResponse, TEven
 
 } // namespace NKikimr::NKqp::NScheduler
 
+namespace NKikimrConfig {
+    class TAppConfig;
+}
+
 namespace NKikimr::NKqp {
-    IActor* CreateKqpComputeSchedulerService(const NScheduler::TOptions& options);
+    NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(
+        const NMonitoring::TDynamicCounterPtr& counters,
+        const NKikimrConfig::TAppConfig& appConfig);
+    IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod);
 }

@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
@@ -26,7 +27,7 @@ constexpr double Epsilon = 1e-8;
 
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
-    explicit TComputeSchedulerService(const NScheduler::TOptions& options) : Options(options) {}
+    explicit TComputeSchedulerService(const TDuration& updateFairSharePeriod) : UpdateFairSharePeriod(updateFairSharePeriod) {}
 
     void Bootstrap() {
         Scheduler = AppData()->KqpComputeScheduler;
@@ -48,7 +49,7 @@ public:
         Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
 
         Become(&TComputeSchedulerService::State);
-        Schedule(Options.UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
+        Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 
     STATEFN(State) {
@@ -216,7 +217,7 @@ public:
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         Scheduler->UpdateFairShare();
-        Schedule(Options.UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
+        Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 
     void Handle(TEvGetReadFactory::TPtr& ev) {
@@ -249,7 +250,7 @@ private:
 
 private:
     TComputeSchedulerPtr Scheduler;
-    const NScheduler::TOptions Options;
+    const TDuration UpdateFairSharePeriod;
 
     struct TPoolParams {
         bool IsFirstRemoval = false;
@@ -265,11 +266,11 @@ namespace NKikimr::NKqp {
 
 namespace NScheduler {
 
-TComputeScheduler::TComputeScheduler(bool enabled, const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams, NHdrf::NSnapshot::ELeafFairShare fairShareMode)
-    : Enabled(enabled)
+TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options)
+    : Enabled(options.Enabled)
     , Root(std::make_shared<TRoot>(counters))
-    , DelayParams(delayParams)
-    , FairShareMode(fairShareMode)
+    , DelayParams(options.DelayParams)
+    , FairShareMode(options.FairShareMode)
     , KqpCounters(counters)
 {
     auto group = counters->GetKqpCounters();
@@ -400,13 +401,29 @@ void TComputeScheduler::UpdateFairShare() {
 
 } // namespace NScheduler
 
-IActor* CreateKqpComputeSchedulerService(const NScheduler::TOptions& options) {
-    Y_ENSURE(options.UpdateFairSharePeriod > TDuration::Zero());
+NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(const NMonitoring::TDynamicCounterPtr& counters, const NKikimrConfig::TAppConfig& appConfig) {
+    const auto& schedulerSettings = appConfig.GetTableServiceConfig().GetComputeSchedulerSettings();
+
+    auto options = TOptions{
+        .Enabled = appConfig.GetFeatureFlags().GetEnableResourcePoolsScheduler(),
+        .DelayParams = TDelayParams{
+            .MaxDelay = TDuration::MicroSeconds(schedulerSettings.GetMaxTaskDelayUs()),
+            .MinDelay = TDuration::MicroSeconds(schedulerSettings.GetMinTaskDelayUs()),
+            .AttemptBonus = TDuration::MicroSeconds(schedulerSettings.GetAttemptTaskBonusUs()),
+            .MaxRandomDelay = TDuration::MicroSeconds(schedulerSettings.GetMaxTaskRandomDelayUs()),
+        }
+    };
+
     Y_ENSURE(options.DelayParams.MaxDelay > TDuration::Zero());
     Y_ENSURE(options.DelayParams.MinDelay > TDuration::Zero());
     Y_ENSURE(options.DelayParams.AttemptBonus > TDuration::Zero());
     Y_ENSURE(options.DelayParams.MaxRandomDelay > TDuration::Zero());
-    return new TComputeSchedulerService(options);
+    return std::make_shared<NScheduler::TComputeScheduler>(MakeIntrusive<NKqp::TKqpCounters>(counters), options);
+}
+
+IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod) {
+    Y_ENSURE(updateFairSharePeriod > TDuration::Zero());
+    return new TComputeSchedulerService(updateFairSharePeriod);
 }
 
 } // namespace NKikimr::NKqp

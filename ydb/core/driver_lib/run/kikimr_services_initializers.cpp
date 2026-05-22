@@ -2411,24 +2411,6 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));
         }
-
-        // Create Compute Scheduler service
-        {
-            NKqp::NScheduler::TOptions schedulerOptions {
-                .DelayParams = {
-                    .MaxDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
-                    .MinDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMinTaskDelayUs()),
-                    .AttemptBonus = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
-                    .MaxRandomDelay = TDuration::MicroSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
-                },
-                .UpdateFairSharePeriod = TDuration::MilliSeconds(Config.GetTableServiceConfig().GetComputeSchedulerSettings().GetUpdateFairShareMs()),
-            };
-            auto* computeSchedulerActor = NKqp::CreateKqpComputeSchedulerService(schedulerOptions);
-            setup->LocalServices.push_back(std::make_pair(
-                NKqp::MakeKqpSchedulerServiceId(NodeId),
-                TActorSetupCmd(computeSchedulerActor, TMailboxType::HTSwap, appData->UserPoolId)
-            ));
-        }
     }
 }
 

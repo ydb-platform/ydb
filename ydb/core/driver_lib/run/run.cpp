@@ -1661,22 +1661,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
     }
 
-    {
-        using namespace NKqp::NScheduler;
-
-        const auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
-
-        AppData->KqpComputeScheduler = std::make_shared<NKqp::NScheduler::TComputeScheduler>(
-            runConfig.AppConfig.GetFeatureFlags().GetEnableResourcePoolsScheduler(),
-            MakeIntrusive<NKqp::TKqpCounters>(Counters),
-            TDelayParams{
-                .MaxDelay = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
-                .MinDelay = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
-                .AttemptBonus = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
-                .MaxRandomDelay = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
-            }
-        );
-    }
+    AppData->KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(Counters, runConfig.AppConfig);
 
     TAppDataInitializersList appDataInitializers;
     // setup domain info

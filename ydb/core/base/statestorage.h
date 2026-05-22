@@ -28,6 +28,7 @@ struct TEvStateStorage {
         EvListStateStorage,
         EvBoardInfoUpdate,
         EvPublishActorGone,
+        EvListBoard,
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -37,6 +38,7 @@ struct TEvStateStorage {
         EvDeleteResult,
         EvListSchemeBoardResult,
         EvListStateStorageResult,
+        EvListBoardResult,
 
         // replicas interface
         EvReplicaLookup = EvLock + 2 * 512,
@@ -380,6 +382,8 @@ struct TEvStateStorage {
     struct TEvListStateStorageResult;
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
+    struct TEvListBoard;
+    struct TEvListBoardResult;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };

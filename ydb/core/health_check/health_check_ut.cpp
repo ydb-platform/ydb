@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                                           std::string_view pool = "/Root:test") {
         int issuesCount = 0;
         for (const auto& issue_log : result.Getissue_log()) {
-            if (issue_log.type() == type && issue_log.location().storage().pool().name() == pool && issue_log.status() == expectingStatus) {
+            if (issue_log.type() == type && (pool.empty() || issue_log.location().storage().pool().name() == pool) && issue_log.status() == expectingStatus) {
                 issuesCount++;
             }
         }
@@ -2426,7 +2426,84 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.DispatchEvents({}, TDuration::MilliSeconds(500));
         block.Stop().Unblock();
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+    }
+
+    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(9)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
+        info->Rings.resize(9);
+        info->NToSelect = 9;
+        for (ui32 i = 0; i < 9; ++i) {
+            info->Rings[i].Replicas.emplace_back(runtime.GetNodeId(i), "FAKE");
+        }
+
+        auto ssObserver = runtime.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto sbObserver = runtime.AddObserver<TEvStateStorage::TEvListSchemeBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto bObserver = runtime.AddObserver<TEvStateStorage::TEvListBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
+
+        std::optional<TActorId> selfCheckActor;
+        auto systemStateRequestObserver = runtime.AddObserver<TEvWhiteboard::TEvSystemStateRequest>([&](auto&& ev) {
+            if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
+                selfCheckActor = ev->Sender;
+            }
+        });
+        auto disconnectObserver = runtime.AddObserver<TEvWhiteboard::TEvSystemStateResponse>([&](auto&& ev) {
+            if (!selfCheckActor || ev->Recipient != *selfCheckActor) {
+                return;
+            }
+            auto actor = ev->Recipient;
+            auto nodeId = ev->Sender.NodeId();
+            auto nodeIdx = nodeId - runtime.GetNodeId(0);
+            if (nodeIdx < deadNodes) {
+                runtime.Send(new IEventHandle(actor, actor, new TEvInterconnect::TEvNodeDisconnected(nodeId)), actor.NodeId() - runtime.GetNodeId(0));
+                ev.Reset();
+            }
+        });
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest();
+        request->Request.set_merge_records(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString() << Endl;
+        if (expectedStatus) {
+            CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1, "");
+            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1, "");
+            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1, "");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+        }
+    }
+
+    Y_UNIT_TEST(TestStateStorageOk) {
+        TestStateStorage(0, std::nullopt);
+    }
+
+    Y_UNIT_TEST(TestStateStorageBlue) {
+        TestStateStorage(1, Ydb::Monitoring::StatusFlag::BLUE);
+    }
+
+    Y_UNIT_TEST(TestStateStorageYellow) {
+        TestStateStorage(3, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(TestStateStorageRed) {
+        TestStateStorage(6, Ydb::Monitoring::StatusFlag::RED);
     }
 }
 }

@@ -632,7 +632,7 @@ private:
         settings.Enable(
             EFlag::ExpressionAsPredicate | EFlag::ImplicitConversionToInt64 |
             EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-            EFlag::JustPassthroughOperators | EFlag::PredicateAsExpression |
+            EFlag::JustPassthroughOperators |
             EFlag::SplitOrOperator | EFlag::TimestampCtor
         );
 
@@ -687,7 +687,7 @@ private:
         settings.Enable(
             EFlag::ExpressionAsPredicate | EFlag::ImplicitConversionToInt64 |
             EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-            EFlag::JustPassthroughOperators | EFlag::PredicateAsExpression |
+            EFlag::JustPassthroughOperators |
             EFlag::SplitOrOperator | EFlag::TimestampCtor | EFlag::IntervalCtor | EFlag::ArithmeticalExpressions
         );
         if (anyExpressions) {

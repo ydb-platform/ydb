@@ -256,6 +256,11 @@ void TStreamingTestFixture::DropTopic(const std::string& topicName, bool local) 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
 
+void TStreamingTestFixture::AlterTopic(const std::string& topicName, NYdb::NTopic::TAlterTopicSettings settings, bool local) {
+    const auto result = GetTopicClient(local)->AlterTopic(topicName, settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+
 void TStreamingTestFixture::WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition, bool local) {
     auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
         .Path(topicName)

@@ -180,8 +180,6 @@ private:
         }
     }
 
-    template<typename TEvResponse, typename... TCtorArgs>
-    void ReplyFsSystemError(const NActors::TActorId& sender, const TSystemError& ex, TCtorArgs&&... ctorArgs) {
     template<typename TEvResponse, typename... Args>
     void ReplyFsSystemError(const NActors::TActorId& sender, const TSystemError& ex, Args&&... args) {
         auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});

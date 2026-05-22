@@ -32,6 +32,7 @@ TScanCounters::TScanCounters(const TString& module)
     , RecordsDeniedByHeader(TBase::GetDeriviative("Headers/Denied/Records"))
     , DictionaryOnlyOptimizationCount(TBase::GetDeriviative("Dictionary/OnlyOptimization/Count"))
     , DistinctLimitSyncPointInvocations(TBase::GetDeriviative("DistinctLimit/SyncPoint/Invocations"))
+    , PredicateFilterInvocations(TBase::GetDeriviative("PredicateFilter/Invocations"))
     , HangingRequests(TBase::GetDeriviative("HangingRequests"))
 
     , HistogramReadMetadataDurationMs(TBase::GetHistogram("Portions/ReadMetadataDurationMs", NMonitoring::ExponentialHistogram(15, 2, 8)))

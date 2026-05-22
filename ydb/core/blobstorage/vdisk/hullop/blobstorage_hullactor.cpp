@@ -599,12 +599,12 @@ namespace NKikimr {
             if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty()) && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
                 YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "requesting PreCompact for THullChange",
-                    {VDiskLogPrefix, HullDs->HullCtx->VCtx->VDiskLogPrefix});
+                    {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
                 ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                 PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                     Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "got PreCompactResult for THullChange,",
-                        {VDiskLogPrefix, HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                        {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                         {"wId", wId});
                     Handle(ev, ctx, wId);
                 });

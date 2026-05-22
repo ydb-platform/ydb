@@ -489,12 +489,12 @@ namespace NKikimr {
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBlocksBatch();
                 YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) SKIPPED:",
-                    {VDiskLogPrefix, LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
                     {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBlocksBatch();
                 YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) ADDED:",
-                    {VDiskLogPrefix, LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
                     {"lsn", seg});
 
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BlocksBatch(ctx, std::move(blocks),
@@ -511,12 +511,12 @@ namespace NKikimr {
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBarriersBatch();
                 YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) SKIPPED:",
-                    {VDiskLogPrefix, LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
                     {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBarriersBatch();
                 YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) ADDED:",
-                    {VDiskLogPrefix, LocRecCtx->VCtx->VDiskLogPrefix},
+                    {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
                     {"lsn", seg});
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BarriersBatch(ctx, std::move(barriers),
                         seg, THullDbRecovery::RECOVERY);

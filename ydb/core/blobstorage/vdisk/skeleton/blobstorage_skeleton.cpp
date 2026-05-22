@@ -704,7 +704,7 @@ namespace NKikimr {
             }
             if (!lsnCount && !hasPostponed) {
                 YDB_LOG_CTX_COMP_INFO(ctx, BS_VDISK_PUT, "TEvVMultiPut: all items have errors Marker# BSVS09",
-                    {VDiskLogPrefix, Db->VCtx->VDiskLogPrefix});
+                    {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix});
                 ReplyError(NKikimrProto::OK, TString(), ev, ctx, now, statuses);
                 return;
             }

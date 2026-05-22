@@ -59,7 +59,7 @@ namespace NKikimr {
         hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: reply; Marker# BSVSLR01",
-            {VDiskLogPrefix, hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
             {"id", Id},
             {"msg", Result->ToString()});
 
@@ -114,7 +114,7 @@ namespace NKikimr {
         hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVMultiPut: item reply; Marker# BSVSLR02",
-            {VDiskLogPrefix, hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
             {"id", Id},
             {"msg", Result->ToString()});
 
@@ -163,7 +163,7 @@ namespace NKikimr {
         }
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_PUT, "TEvVPut: realtime# false Marker# BSVSLR03",
-            {VDiskLogPrefix, hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
             {"result", msg->Result->ToString()});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;
@@ -200,7 +200,7 @@ namespace NKikimr {
         hull.AddBlockCmd(ctx, TabletId, Gen, IssuerGuid, Seg.Point(), replySender);
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_BLOCK, "TEvVBlock: Marker# BSVSLR04",
-            {VDiskLogPrefix, hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
             {"result", Result->ToString()});
         SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
     }
@@ -226,7 +226,7 @@ namespace NKikimr {
         hull.AddGCCmd(ctx, record, Ingress, Seg);
 
         YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_GC, "TEvVCollectGarbage: Marker# BSVSLR05",
-            {VDiskLogPrefix, hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
             {"result", Result->ToString()});
         Span.EndOk();
         const auto& vCtx = hull.GetHullCtx()->VCtx;

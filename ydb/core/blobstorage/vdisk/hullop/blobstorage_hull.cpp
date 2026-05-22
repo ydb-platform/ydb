@@ -432,7 +432,7 @@ namespace NKikimr {
 
         if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
             YDB_LOG_CTX_ERROR(ctx, "Db# Barriers ValidateGCCmd: empty garbage collection command",
-                {VDiskLogPrefix, HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                 {"TabletId", tabletID});
             return {NKikimrProto::ERROR, "empty garbage collection command"};
         }

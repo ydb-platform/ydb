@@ -14,8 +14,6 @@
 
 {% endnote %}
 
-{% include [server-export-workflow.md](_includes/server-export-workflow.md) %}
-
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:
@@ -48,10 +46,6 @@
 {% include [export-aux-params-table.md](_includes/export-aux-params-table.md) %}
 
 ## Выполнение выгрузки {#exec}
-
-### Ход серверной операции выгрузки
-
-Ниже описан общий порядок работы серверной команды **`export nfs`**.
 
 {% include [_includes/server-export-workflow.md](_includes/server-export-workflow.md) %}
 

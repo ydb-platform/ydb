@@ -16,8 +16,6 @@
 
 {% endnote %}
 
-{% include [server-export-workflow.md](server-export-workflow.md) %}
-
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:
@@ -51,11 +49,7 @@
 
 ## Выполнение выгрузки {#exec}
 
-### Ход серверной операции выгрузки
-
-Ниже описан общий порядок работы серверной команды **`export s3`**.
-
-{% include [server-export-workflow.md](server-export-workflow.md) %}
+{% include [_includes/server-export-workflow.md](_includes/server-export-workflow.md) %}
 
 ### Результат запуска {#result}
 

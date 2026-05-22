@@ -10,8 +10,15 @@ namespace NKikimr::NKqp::NScheduler {
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
-    TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams,
+    TComputeScheduler(bool enabled, const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams,
         NHdrf::NSnapshot::ELeafFairShare fairShareMode = NHdrf::NSnapshot::ELeafFairShare::EQUAL_TO_PARENT);
+
+    void ToggleEnabled(bool enable) {
+        Enabled = enable;
+    }
+    bool IsEnabled() const {
+        return Enabled;
+    }
 
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
@@ -28,6 +35,8 @@ public:
 
 private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
+
+    std::atomic<bool> Enabled;
 
     TRWMutex Mutex;
     NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex

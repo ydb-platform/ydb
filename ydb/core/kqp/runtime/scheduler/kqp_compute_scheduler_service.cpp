@@ -29,8 +29,9 @@ public:
     explicit TComputeSchedulerService(const NScheduler::TOptions& options) : Options(options) {}
 
     void Bootstrap() {
-        auto counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &NActors::TActivationContext::AsActorContext());
-        Scheduler = std::make_shared<NScheduler::TComputeScheduler>(counters, Options.DelayParams);
+        Scheduler = AppData()->KqpComputeScheduler;
+
+        Y_ENSURE(Scheduler);
 
         Send(
             NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -38,8 +39,7 @@ public:
             NActors::IEventHandle::FlagTrackDelivery
         );
 
-        Enabled = AppData()->FeatureFlags.GetEnableResourcePoolsScheduler();
-        if (Enabled) {
+        if (Scheduler->IsEnabled()) {
             LOG_I("Enabled on start");
         } else {
             LOG_I("Disabled on start");
@@ -80,8 +80,8 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& event = ev->Get()->Record;
 
-        Enabled = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler();
-        if (Enabled) {
+        Scheduler->ToggleEnabled(event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
+        if (Scheduler->IsEnabled()) {
             LOG_I("Become enabled");
         } else {
             LOG_I("Become disabled");
@@ -197,7 +197,7 @@ public:
         };
 
         auto response = MakeHolder<TEvQueryResponse>();
-        if (Enabled) {
+        if (Scheduler->IsEnabled()) {
             auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
             response->Query = query;
             LOG_D("Add query: " << databaseId << "/" << poolId << ", TxId: " << queryId);
@@ -248,7 +248,6 @@ private:
     }
 
 private:
-    bool Enabled = true;
     TComputeSchedulerPtr Scheduler;
     const NScheduler::TOptions Options;
 
@@ -266,8 +265,9 @@ namespace NKikimr::NKqp {
 
 namespace NScheduler {
 
-TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams, NHdrf::NSnapshot::ELeafFairShare fairShareMode)
-    : Root(std::make_shared<TRoot>(counters))
+TComputeScheduler::TComputeScheduler(bool enabled, const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams, NHdrf::NSnapshot::ELeafFairShare fairShareMode)
+    : Enabled(enabled)
+    , Root(std::make_shared<TRoot>(counters))
     , DelayParams(delayParams)
     , FairShareMode(fairShareMode)
     , KqpCounters(counters)
@@ -350,6 +350,10 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
 }
 
 NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
+    if (!IsEnabled()) {
+        return {};
+    }
+
     TReadGuard lock(Mutex);
 
     auto databaseAndPoolId = std::make_pair(databaseId, poolId);

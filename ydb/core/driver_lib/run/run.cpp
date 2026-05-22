@@ -6,6 +6,7 @@
 
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/callstack.h>
 #include <ydb/library/actors/core/events.h>
@@ -1644,11 +1645,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
-    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
+    if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize()) {
         AppData->ResourceProfiles->LoadProfiles(runConfig.AppConfig.GetBootstrapConfig().GetResourceProfiles());
+    }
 
-    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection())
+    if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection()) {
         AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection();
+    }
 
     if (runConfig.AppConfig.HasClusterDiagnosticsConfig()) {
         AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
@@ -1656,6 +1659,23 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasLongTxServiceConfig()) {
         AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
+    }
+
+    {
+        using namespace NKqp::NScheduler;
+
+        const auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
+
+        AppData->KqpComputeScheduler = std::make_shared<NKqp::NScheduler::TComputeScheduler>(
+            runConfig.AppConfig.GetFeatureFlags().GetEnableResourcePoolsScheduler(),
+            MakeIntrusive<NKqp::TKqpCounters>(Counters),
+            TDelayParams{
+                .MaxDelay = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
+                .MinDelay = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
+                .AttemptBonus = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
+                .MaxRandomDelay = TDuration::MicroSeconds(tableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
+            }
+        );
     }
 
     TAppDataInitializersList appDataInitializers;

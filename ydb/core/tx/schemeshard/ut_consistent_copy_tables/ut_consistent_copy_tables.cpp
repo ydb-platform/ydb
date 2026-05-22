@@ -422,7 +422,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         // 3. Verify the copied table and both bloom indexes are ready scheme objects
         NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy");
     }
-}
     // After a real vector index build, the transient 'indexImplPostingTable<N>build' intermediates are dropped
     // but their entries linger in the parent index's Children map.
     // CreateConsistentCopyTables should not fail on these stale references.

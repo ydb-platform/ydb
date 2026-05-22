@@ -6,13 +6,13 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
-#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/util/pb.h>
 
 namespace NKikimr {

@@ -9,7 +9,6 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/local_indexes/bloom/const.h>
-#include <util/generic/hash_set.h>
 #include <ydb/core/local_indexes/min_max/const.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
@@ -28,6 +27,7 @@
 
 #include <library/cpp/protobuf/json/util.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr {

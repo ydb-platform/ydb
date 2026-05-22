@@ -553,8 +553,6 @@ public:
                 tmp.swap(PatternCache);
             }
         }
-
-        tmp.reset();
     }
 
     TActorId SelfId;

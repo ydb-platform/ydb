@@ -212,20 +212,6 @@ public:
 
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
-
-    // Periodic barrier cleanup helpers (called from the tablet thread; the
-    // implementation must hop onto its own executor thread internally).
-    // ComputeBarrierLsnAsync walks all live VChunks and returns the LSN
-    // strictly below which PBuffer records can be safely erased (0 if there
-    // is nothing to clean this cycle). IssueBarrierAsync sends a persistent
-    // barrier erase to every PBuffer host; the returned future resolves when
-    // all per-host requests complete.
-    virtual NThreading::TFuture<ui64> ComputeBarrierLsnAsync() = 0;
-    virtual NThreading::TFuture<void> IssueBarrierAsync(ui64 lsn) = 0;
-
-    // Index of this DBG within the partition. Used as the persistence key
-    // for per-DBG barrier LSN rows.
-    virtual size_t GetDirectBlockGroupIndex() const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

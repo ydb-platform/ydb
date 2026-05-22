@@ -330,6 +330,15 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
         new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(cfg));
 }
 
+void TFastPathService::StoreBarrierLsn(size_t directBlockGroupIndex, ui64 lsn)
+{
+    ActorSystem->Send(
+        PartitionActorId,
+        new TEvPartitionDirectPrivate::TEvStoreBarrierLsn(
+            static_cast<ui32>(directBlockGroupIndex),
+            lsn));
+}
+
 ui64 TFastPathService::GenerateSequenceNumber()
 {
     return ++SequenceGenerator;

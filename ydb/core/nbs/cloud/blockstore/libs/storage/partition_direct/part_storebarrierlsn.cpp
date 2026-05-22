@@ -10,10 +10,10 @@ using namespace NKikimr::NTabletFlatExecutor;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TPartitionActor::PrepareStoreBarrierLsns(
+bool TPartitionActor::PrepareStoreBarrierLsn(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TStoreBarrierLsns& args)
+    TTxPartition::TStoreBarrierLsn& args)
 {
     Y_UNUSED(ctx);
     Y_UNUSED(tx);
@@ -22,24 +22,23 @@ bool TPartitionActor::PrepareStoreBarrierLsns(
     return true;
 }
 
-void TPartitionActor::ExecuteStoreBarrierLsns(
+void TPartitionActor::ExecuteStoreBarrierLsn(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TStoreBarrierLsns& args)
+    TTxPartition::TStoreBarrierLsn& args)
 {
     Y_UNUSED(ctx);
 
     TPartitionDatabase db(tx.DB);
-    for (const auto& [dbgIndex, lsn]: args.PerDbgLsn) {
-        db.StoreBarrierLsn(dbgIndex, lsn);
-    }
+    db.StoreBarrierLsn(args.DirectBlockGroupIndex, args.Lsn);
 }
 
-void TPartitionActor::CompleteStoreBarrierLsns(
+void TPartitionActor::CompleteStoreBarrierLsn(
     const TActorContext& ctx,
-    TTxPartition::TStoreBarrierLsns& args)
+    TTxPartition::TStoreBarrierLsn& args)
 {
-    OnBarrierLsnsPersisted(ctx, std::move(args.PerDbgLsn));
+    Y_UNUSED(ctx);
+    Y_UNUSED(args);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

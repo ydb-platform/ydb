@@ -167,6 +167,7 @@ void TDirectBlockGroup::Run(IPartitionDirectService* service)
     Service = service;
 
     ScheduleOracleThinking();
+    ScheduleBarrierCleanup();
 
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this()]   //
@@ -846,7 +847,7 @@ ui64 TDirectBlockGroup::ComputeBarrierLsn() const
         if (!vchunk) {
             continue;
         }
-        const ui64 lsn = vchunk->GetMinPendingLsn();
+        const ui64 lsn = vchunk->GetMinInflightLsn();
         if (lsn == 0) {
             continue;
         }
@@ -855,75 +856,59 @@ ui64 TDirectBlockGroup::ComputeBarrierLsn() const
         }
     }
     if (minLsn == 0) {
-        // Nothing pending across any VChunk: skip this cycle so we don't
+        // No live records across any VChunk: skip this cycle so we don't
         // move the barrier without need.
         return 0;
     }
-    // Records strictly below minLsn are guaranteed safe to erase. DDisk
+    // Records strictly below minLsn are guaranteed flushed+erased. DDisk
     // semantics for TEvErasePersistentBuffer remove all records with
     // record.Lsn <= barrier, so pass minLsn - 1.
     return minLsn - 1;
 }
 
-NThreading::TFuture<void> TDirectBlockGroup::IssueBarrier(ui64 lsn)
+void TDirectBlockGroup::IssueBarrier(ui64 lsn)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (lsn == 0) {
-        return MakeFuture();
-    }
-
-    TVector<NThreading::TFuture<TDBGEraseResponse>> futures;
-    futures.reserve(PBufferConnections.size());
     for (THostIndex i = 0; i < PBufferConnections.size(); ++i) {
-        futures.push_back(EraseFromPBufferBarrier(i, lsn, NWilson::TTraceId{}));
+        // Fire-and-forget: the returned future drives counters/logging via
+        // OnResponse; the barrier itself is durably recorded on DDisk.
+        EraseFromPBufferBarrier(i, lsn, NWilson::TTraceId{});
+    }
+}
+
+void TDirectBlockGroup::BarrierCleanup()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const ui64 lsn = ComputeBarrierLsn();
+    if (lsn == 0 || lsn <= LastBarrierLsn) {
+        return;
     }
 
-    return WaitAll(futures);
+    if (Service) {
+        Service->StoreBarrierLsn(DirectBlockGroupIndex, lsn);
+    }
+    IssueBarrier(lsn);
+    LastBarrierLsn = lsn;
 }
 
-NThreading::TFuture<ui64> TDirectBlockGroup::ComputeBarrierLsnAsync()
+void TDirectBlockGroup::ScheduleBarrierCleanup()
 {
-    auto promise = NewPromise<ui64>();
-    auto future = promise.GetFuture();
+    const auto interval = StorageConfig->GetBarrierCleanupInterval();
+    if (interval == TDuration::Zero()) {
+        return;
+    }
 
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(),
-         promise = std::move(promise),
-         threadChecker = ExecutorThreadChecker.CreateDelegate()]() mutable
+    Schedule(
+        interval,
+        [weakSelf = weak_from_this()]()
         {
-            Y_ABORT_UNLESS(threadChecker.Check());
-            auto self = weakSelf.lock();
-            const ui64 lsn = self ? self->ComputeBarrierLsn() : 0;
-            promise.SetValue(lsn);
-        });
-
-    return future;
-}
-
-NThreading::TFuture<void> TDirectBlockGroup::IssueBarrierAsync(ui64 lsn)
-{
-    auto promise = NewPromise<void>();
-    auto future = promise.GetFuture();
-
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(),
-         promise = std::move(promise),
-         threadChecker = ExecutorThreadChecker.CreateDelegate(),
-         lsn]() mutable
-        {
-            Y_ABORT_UNLESS(threadChecker.Check());
-            auto self = weakSelf.lock();
-            if (!self) {
-                promise.SetValue();
-                return;
+            if (auto self = weakSelf.lock()) {
+                self->BarrierCleanup();
+                self->ScheduleBarrierCleanup();
             }
-            auto inner = self->IssueBarrier(lsn);
-            inner.Subscribe([promise = std::move(promise)](const auto&) mutable
-                            { promise.SetValue(); });
         });
-
-    return future;
 }
 
 NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(

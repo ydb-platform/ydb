@@ -35,6 +35,11 @@ struct IPartitionDirectService
     // local DB. Caller must ensure cfg.IsValid().
     virtual void UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
+
+    // Asynchronously persists the barrier LSN of the given DirectBlockGroup
+    // in the partition's local DB. Fire-and-forget; the DDisk side is the
+    // source of truth for the barrier, this is bookkeeping/diagnostics.
+    virtual void StoreBarrierLsn(size_t directBlockGroupIndex, ui64 lsn) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

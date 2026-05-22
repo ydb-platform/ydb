@@ -25,7 +25,6 @@ bool TPartitionActor::PrepareLoadState(
         db.ReadVolumeConfig(args.VolumeConfig),
         db.ReadDirectBlockGroupsConnections(args.DirectBlockGroupsConnections),
         db.ReadAllVChunkConfigs(args.VChunkConfigs),
-        db.ReadAllBarrierLsns(args.BarrierLsns),
     };
 
     bool ready = std::accumulate(
@@ -58,8 +57,7 @@ void TPartitionActor::CompleteLoadState(
             Start(
                 ctx,
                 std::move(*args.DirectBlockGroupsConnections),
-                std::move(args.VChunkConfigs),
-                std::move(args.BarrierLsns));
+                std::move(args.VChunkConfigs));
         }
     }
 }

@@ -1408,7 +1408,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             readHint1.DebugPrint());
     }
 
-    Y_UNIT_TEST(ShouldReturnMinPendingLsn)
+    Y_UNIT_TEST(ShouldReturnMinInflightLsn)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         TBlocksDirtyMap dirtyMap(
@@ -1416,16 +1416,13 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
 
-        // Empty dirty map: no pending records anywhere.
-        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinFlushPendingLsn());
-        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinErasePendingLsn());
-        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinPendingLsn());
+        // Empty dirty map: nothing tracked.
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinInflightLsn());
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
 
-        // After two writes complete: both records sit in ReadyToFlush. The
-        // min should be the smaller of the two LSNs.
+        // Two completed writes are tracked in Inflight; min is the smaller.
         dirtyMap.WriteFinished(
             500,
             TBlockRange64::WithLength(10, 5),
@@ -1436,37 +1433,36 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::WithLength(20, 5),
             requested,
             confirmed);
+        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinInflightLsn());
 
-        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinFlushPendingLsn());
-        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinErasePendingLsn());
-        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinPendingLsn());
-
-        // Take a flush hint for both records, then complete the flush on all
-        // hosts: they move to ReadyToErase.
+        // Flushing to all hosts moves records to the erase queue but they
+        // remain in Inflight, so the min does not change.
         auto flushHint = dirtyMap.MakeFlushHint(2);
         UNIT_ASSERT_VALUES_UNEQUAL(true, flushHint.Empty());
-
         for (THostIndex h: MakePrimaryHosts()) {
             dirtyMap.FlushFinished(
                 THostRoute{.SourceHostIndex = h, .DestinationHostIndex = h},
                 {500, 700},
                 {});
         }
-
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinFlushPendingLsn());
         UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinErasePendingLsn());
-        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinPendingLsn());
+        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinInflightLsn());
 
-        // A third write that lands BEFORE we drain the erase queue should
-        // push GetMinPendingLsn back down via the flush side.
-        dirtyMap.WriteFinished(
-            300,
-            TBlockRange64::WithLength(30, 5),
-            requested,
-            confirmed);
-        UNIT_ASSERT_VALUES_EQUAL(300, dirtyMap.GetMinFlushPendingLsn());
-        UNIT_ASSERT_VALUES_EQUAL(500, dirtyMap.GetMinErasePendingLsn());
-        UNIT_ASSERT_VALUES_EQUAL(300, dirtyMap.GetMinPendingLsn());
+        // Confirming erase on all hosts removes LSN 500 from Inflight; the
+        // min advances to the next record (700).
+        auto eraseHint = dirtyMap.MakeEraseHint(2);
+        UNIT_ASSERT_VALUES_UNEQUAL(true, eraseHint.Empty());
+        for (THostIndex h: MakePrimaryHosts()) {
+            dirtyMap.EraseFinished(h, {500}, {});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(700, dirtyMap.GetMinInflightLsn());
+
+        // Erasing the last record empties Inflight.
+        for (THostIndex h: MakePrimaryHosts()) {
+            dirtyMap.EraseFinished(h, {700}, {});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetMinInflightLsn());
     }
 }
 

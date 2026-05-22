@@ -127,22 +127,6 @@ public:
     void SetHostState(THostIndex hostIndex, EHostState state) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
-    // Executor-thread compute of the min still-live LSN across all VChunks.
-    // 0 means there is nothing pending and the cycle should be skipped.
-    ui64 ComputeBarrierLsn() const;
-    // Executor-thread fan-out of a barrier erase to every PBuffer host.
-    NThreading::TFuture<void> IssueBarrier(ui64 lsn);
-
-    // IDirectBlockGroup async barrier-cleanup helpers (callable from any
-    // thread; internally hop onto the executor thread).
-    NThreading::TFuture<ui64> ComputeBarrierLsnAsync() override;
-    NThreading::TFuture<void> IssueBarrierAsync(ui64 lsn) override;
-
-    size_t GetDirectBlockGroupIndex() const override
-    {
-        return DirectBlockGroupIndex;
-    }
-
 private:
     using TEvSyncWithPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
@@ -206,6 +190,17 @@ private:
 
     void Thinking();
     void ScheduleOracleThinking();
+
+    // Periodic persistent-barrier cleanup (executor thread).
+    // ScheduleBarrierCleanup re-arms the cycle via Schedule (disabled when the
+    // configured interval is 0). ComputeBarrierLsn returns the LSN strictly
+    // below which PBuffer records are safely flushed+erased (0 = nothing to
+    // do). IssueBarrier fans the barrier erase out to every PBuffer host.
+    void ScheduleBarrierCleanup();
+    void BarrierCleanup();
+    ui64 ComputeBarrierLsn() const;
+    void IssueBarrier(ui64 lsn);
+
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
@@ -232,6 +227,10 @@ private:
     THashMap<ui32, TDBGRestoreResponse> RestoredPBuffers;
     NThreading::TPromise<void> RestoredPBuffersPromise =
         NThreading::NewPromise();
+
+    // Last barrier LSN already persisted+issued by the cleanup cycle. Used to
+    // skip cycles that would not advance the barrier.
+    ui64 LastBarrierLsn = 0;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

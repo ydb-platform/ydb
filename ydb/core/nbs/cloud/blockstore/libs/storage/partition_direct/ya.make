@@ -14,7 +14,7 @@ SRCS(
     part_database.cpp
     part_initschema.cpp
     part_loadstate.cpp
-    part_storebarrierlsns.cpp
+    part_storebarrierlsn.cpp
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatevchunkconfig.cpp

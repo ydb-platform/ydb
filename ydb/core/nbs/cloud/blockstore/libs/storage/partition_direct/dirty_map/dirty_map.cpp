@@ -577,17 +577,9 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
     return *ReadyToErase.begin();
 }
 
-ui64 TBlocksDirtyMap::GetMinPendingLsn() const
+ui64 TBlocksDirtyMap::GetMinInflightLsn() const
 {
-    const ui64 flush = GetMinFlushPendingLsn();
-    const ui64 erase = GetMinErasePendingLsn();
-    if (flush == 0) {
-        return erase;
-    }
-    if (erase == 0) {
-        return flush;
-    }
-    return Min(flush, erase);
+    return Inflight.GetMinKey().value_or(0);
 }
 
 const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(

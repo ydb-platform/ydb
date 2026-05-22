@@ -240,8 +240,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
     TDirectBlockGroupsConnections directBlockGroupsConnections,
-    TVector<TVChunkConfig> vChunkConfigs,
-    THashMap<ui32, ui64> barrierLsns)
+    TVector<TVChunkConfig> vChunkConfigs)
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
@@ -263,10 +262,8 @@ void TPartitionActor::Start(
         vChunkConfigsByIndex[cfg.VChunkIndex] = cfg;
     }
 
-    BarrierLsns = std::move(barrierLsns);
-
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    FastPathService = std::make_shared<TFastPathService>(
+    auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         SelfId(),
         TabletID(),
@@ -280,9 +277,9 @@ void TPartitionActor::Start(
         nbsService->Timer,
         AppData()->Counters);
 
-    FastPathService->Run();
+    fastPathService->Run();
 
-    LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
+    LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 
     {
         auto service = GetNbsService();
@@ -298,8 +295,8 @@ void TPartitionActor::Start(
             .VhostQueuesCount = 1};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
-            FastPathService,
-            FastPathService,
+            fastPathService,
+            fastPathService,
             options);
     }
 
@@ -309,8 +306,6 @@ void TPartitionActor::Start(
         "%s Started NBS LoadActorAdapter: %s",
         LogTitle.GetWithTime().c_str(),
         LoadActorAdapter.ToString().c_str());
-
-    ScheduleBarrierCleanup(ctx);
 }
 
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
@@ -442,163 +437,22 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
-void TPartitionActor::ScheduleBarrierCleanup(const TActorContext& ctx)
+void TPartitionActor::HandleStoreBarrierLsn(
+    const TEvPartitionDirectPrivate::TEvStoreBarrierLsn::TPtr& ev,
+    const NActors::TActorContext& ctx)
 {
-    const auto interval = StorageConfig->GetBarrierCleanupInterval();
-    if (interval == TDuration::Zero()) {
-        return;
-    }
-    if (!FastPathService) {
-        return;
-    }
-    if (FastPathService->GetDirectBlockGroups().empty()) {
-        return;
-    }
-    if (BarrierCleanupScheduled) {
-        return;
-    }
-    BarrierCleanupScheduled = true;
-    ctx.Schedule(
-        interval,
-        new TEvPartitionDirectPrivate::TEvBarrierCleanupWakeup{});
-}
+    const auto* msg = ev->Get();
 
-void TPartitionActor::HandleBarrierCleanupWakeup(
-    const TEvPartitionDirectPrivate::TEvBarrierCleanupWakeup::TPtr& ev,
-    const TActorContext& ctx)
-{
-    Y_UNUSED(ev);
-    BarrierCleanupScheduled = false;
+    LOG_DEBUG_S(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        LogTitle.GetWithTime().c_str()
+            << " Handle StoreBarrierLsn, dbgIndex: "
+            << msg->DirectBlockGroupIndex << ", lsn: " << msg->Lsn);
 
-    if (BarrierCleanupInFlight) {
-        // Previous cycle is still working — try again later.
-        ScheduleBarrierCleanup(ctx);
-        return;
-    }
-
-    StartBarrierCleanupCycle(ctx);
-}
-
-void TPartitionActor::StartBarrierCleanupCycle(const TActorContext& ctx)
-{
-    if (!FastPathService) {
-        ScheduleBarrierCleanup(ctx);
-        return;
-    }
-
-    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
-    if (directBlockGroups.empty()) {
-        ScheduleBarrierCleanup(ctx);
-        return;
-    }
-
-    BarrierCleanupInFlight = true;
-
-    TVector<NThreading::TFuture<ui64>> futures;
-    TVector<size_t> dbgIndexes;
-    futures.reserve(directBlockGroups.size());
-    dbgIndexes.reserve(directBlockGroups.size());
-    for (const auto& dbg: directBlockGroups) {
-        dbgIndexes.push_back(dbg->GetDirectBlockGroupIndex());
-        futures.push_back(dbg->ComputeBarrierLsnAsync());
-    }
-
-    auto combined = NThreading::WaitAll(futures);
-    combined.Subscribe(
-        [selfId = SelfId(),
-         actorSystem = ctx.ActorSystem(),
-         futures = std::move(futures),
-         dbgIndexes = std::move(dbgIndexes)](const auto&) mutable
-        {
-            THashMap<ui32, ui64> perDbgLsn;
-            perDbgLsn.reserve(futures.size());
-            for (size_t i = 0; i < futures.size(); ++i) {
-                perDbgLsn[static_cast<ui32>(dbgIndexes[i])] =
-                    futures[i].GetValue();
-            }
-            actorSystem->Send(
-                selfId,
-                new TEvPartitionDirectPrivate::TEvBarrierLsnsReady{
-                    std::move(perDbgLsn)});
-        });
-}
-
-void TPartitionActor::HandleBarrierLsnsReady(
-    const TEvPartitionDirectPrivate::TEvBarrierLsnsReady::TPtr& ev,
-    const TActorContext& ctx)
-{
-    auto& perDbgLsn = ev->Get()->PerDbgLsn;
-
-    // Filter out DBGs whose barrier wouldn't advance (LSN == 0 or unchanged
-    // relative to what's already persisted).
-    THashMap<ui32, ui64> toPersist;
-    for (const auto& [dbgIndex, lsn]: perDbgLsn) {
-        if (lsn == 0) {
-            continue;
-        }
-        const auto it = BarrierLsns.find(dbgIndex);
-        if (it != BarrierLsns.end() && it->second >= lsn) {
-            continue;
-        }
-        toPersist.emplace(dbgIndex, lsn);
-    }
-
-    if (toPersist.empty()) {
-        BarrierCleanupInFlight = false;
-        ScheduleBarrierCleanup(ctx);
-        return;
-    }
-
-    ExecuteTx(ctx, CreateTx<TStoreBarrierLsns>(std::move(toPersist)));
-}
-
-void TPartitionActor::OnBarrierLsnsPersisted(
-    const TActorContext& ctx,
-    THashMap<ui32, ui64> perDbgLsn)
-{
-    for (const auto& [dbgIndex, lsn]: perDbgLsn) {
-        BarrierLsns[dbgIndex] = lsn;
-    }
-
-    TVector<NThreading::TFuture<void>> futures;
-    futures.reserve(perDbgLsn.size());
-    if (FastPathService) {
-        for (const auto& dbg: FastPathService->GetDirectBlockGroups()) {
-            const auto it = perDbgLsn.find(
-                static_cast<ui32>(dbg->GetDirectBlockGroupIndex()));
-            if (it == perDbgLsn.end()) {
-                continue;
-            }
-            futures.push_back(dbg->IssueBarrierAsync(it->second));
-        }
-    }
-
-    if (futures.empty()) {
-        BarrierCleanupInFlight = false;
-        ScheduleBarrierCleanup(ctx);
-        return;
-    }
-
-    auto combined = NThreading::WaitAll(futures);
-    combined.Subscribe(
-        [selfId = SelfId(),
-         actorSystem = ctx.ActorSystem()](const auto&) mutable
-        {
-            actorSystem->Send(
-                selfId,
-                new TEvPartitionDirectPrivate::TEvBarrierCycleDone{});
-        });
-}
-
-void TPartitionActor::HandleBarrierCycleDone(
-    const TEvPartitionDirectPrivate::TEvBarrierCycleDone::TPtr& ev,
-    const TActorContext& ctx)
-{
-    Y_UNUSED(ev);
-    BarrierCleanupInFlight = false;
-    ScheduleBarrierCleanup(ctx);
+    ExecuteTx(
+        ctx,
+        CreateTx<TStoreBarrierLsn>(msg->DirectBlockGroupIndex, msg->Lsn));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -628,14 +482,8 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);
         HFunc(
-            TEvPartitionDirectPrivate::TEvBarrierCleanupWakeup,
-            HandleBarrierCleanupWakeup);
-        HFunc(
-            TEvPartitionDirectPrivate::TEvBarrierLsnsReady,
-            HandleBarrierLsnsReady);
-        HFunc(
-            TEvPartitionDirectPrivate::TEvBarrierCycleDone,
-            HandleBarrierCycleDone);
+            TEvPartitionDirectPrivate::TEvStoreBarrierLsn,
+            HandleStoreBarrierLsn);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

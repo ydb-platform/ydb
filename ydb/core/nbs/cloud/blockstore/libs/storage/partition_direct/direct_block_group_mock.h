@@ -197,23 +197,6 @@ public:
         THostIndex hostIndex) override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
-
-    NThreading::TFuture<ui64> ComputeBarrierLsnAsync() override;
-    NThreading::TFuture<void> IssueBarrierAsync(ui64 lsn) override;
-
-    size_t GetDirectBlockGroupIndex() const override
-    {
-        return DirectBlockGroupIndex;
-    }
-
-    using TComputeBarrierLsnHandler =
-        std::function<NThreading::TFuture<ui64>()>;
-    using TIssueBarrierHandler =
-        std::function<NThreading::TFuture<void>(ui64 lsn)>;
-
-    TComputeBarrierLsnHandler ComputeBarrierLsnHandler;
-    TIssueBarrierHandler IssueBarrierHandler;
-    size_t DirectBlockGroupIndex = 0;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

@@ -58,7 +58,7 @@ public:
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
-    [[nodiscard]] ui64 GetMinPendingLsn() const;
+    [[nodiscard]] ui64 GetMinInflightLsn() const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
     // Persists newConfig to the partition's local DB. The in-memory config is

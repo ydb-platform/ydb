@@ -46,6 +46,12 @@ public:
     {
         Y_UNUSED(cfg);
     }
+
+    void StoreBarrierLsn(size_t directBlockGroupIndex, ui64 lsn) override
+    {
+        Y_UNUSED(directBlockGroupIndex);
+        Y_UNUSED(lsn);
+    }
 };
 
 struct TTestStorage: public IStorage

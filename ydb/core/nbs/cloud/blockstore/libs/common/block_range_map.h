@@ -214,6 +214,19 @@ public:
         return Ranges.empty();
     }
 
+    // Returns the smallest key currently stored, or nullopt if empty. O(n)
+    // over the number of stored ranges (keys are not kept in key order).
+    [[nodiscard]] std::optional<TKey> GetMinKey() const
+    {
+        std::optional<TKey> result;
+        for (const auto& [key, _]: RangeByKey) {
+            if (!result || key < *result) {
+                result = key;
+            }
+        }
+        return result;
+    }
+
     [[nodiscard]] size_t Size() const
     {
         return Ranges.size();

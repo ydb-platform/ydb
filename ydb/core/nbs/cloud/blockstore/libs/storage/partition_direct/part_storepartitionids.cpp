@@ -42,8 +42,7 @@ void TPartitionActor::CompleteStorePartitionIds(
     Start(
         ctx,
         args.DirectBlockGroupsConnections,
-        {},   // vChunkConfigs
-        {}    // barrierLsns
+        {}   // vChunkConfigs
     );
 }
 

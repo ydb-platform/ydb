@@ -437,6 +437,34 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
         UNIT_ASSERT_VALUES_EQUAL(true, extracted.has_value());
         UNIT_ASSERT_EQUAL(nullptr, extracted->Value);
     }
+
+    Y_UNIT_TEST(GetMinKey)
+    {
+        TBlockRangeMap<ui64, ui64> map;
+
+        // Empty map has no min key.
+        UNIT_ASSERT_VALUES_EQUAL(false, map.GetMinKey().has_value());
+
+        // Insert keys out of order across non-overlapping ranges; min is the
+        // smallest key regardless of insertion / range ordering.
+        map.AddRange(700, TBlockRange64::MakeClosedInterval(20, 24), 1);
+        UNIT_ASSERT_VALUES_EQUAL(true, map.GetMinKey().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(700, *map.GetMinKey());
+
+        map.AddRange(300, TBlockRange64::MakeClosedInterval(0, 4), 2);
+        map.AddRange(500, TBlockRange64::MakeClosedInterval(10, 14), 3);
+        UNIT_ASSERT_VALUES_EQUAL(300, *map.GetMinKey());
+
+        // Removing the current min advances it to the next smallest key.
+        UNIT_ASSERT_VALUES_EQUAL(true, map.RemoveRange(300));
+        UNIT_ASSERT_VALUES_EQUAL(500, *map.GetMinKey());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, map.RemoveRange(500));
+        UNIT_ASSERT_VALUES_EQUAL(700, *map.GetMinKey());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, map.RemoveRange(700));
+        UNIT_ASSERT_VALUES_EQUAL(false, map.GetMinKey().has_value());
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore

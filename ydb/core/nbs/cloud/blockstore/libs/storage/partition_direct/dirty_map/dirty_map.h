@@ -240,11 +240,13 @@ public:
     [[nodiscard]] size_t GetErasePendingCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
-    // Smallest LSN currently tracked in the dirty map (either flush- or
-    // erase-pending). Returns 0 if nothing is pending. Used by periodic
-    // barrier cleanup to determine the LSN below which PBuffer records can
-    // be safely erased via a persistent barrier.
-    [[nodiscard]] ui64 GetMinPendingLsn() const;
+    // Smallest LSN of any record still tracked in the Inflight map, i.e. the
+    // oldest record that is not yet fully erased from PBuffer (a record stays
+    // in Inflight from WriteFinished until erase is confirmed on all hosts).
+    // Returns 0 if no records are tracked. Used by periodic barrier cleanup:
+    // everything strictly below this LSN is durably flushed+erased and can be
+    // wiped via a persistent barrier.
+    [[nodiscard]] ui64 GetMinInflightLsn() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "fast_path_service.h"
 #include "part_counters.h"
 #include "partition_direct_events_private.h"
 
@@ -21,8 +20,6 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <ydb/library/services/services.pb.h>
-
-#include <util/generic/hash.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -52,20 +49,6 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DdiskBlockGroupAllocated = false;
-
-    // Owns the DBGs (via TFastPathService::DirectBlockGroups). Kept as a
-    // member so the tablet can drive periodic barrier cleanup against the
-    // same DBGs that TFastPathService uses, and so DBG lifetime cannot
-    // outlast the service that owns their IPartitionDirectService backref.
-    std::shared_ptr<TFastPathService> FastPathService;
-
-    // Last persisted barrier LSN per DBG index. Populated from local DB at
-    // boot; updated after every successful TStoreBarrierLsns Tx. Used to
-    // skip cycles that would not advance the barrier.
-    THashMap<ui32, ui64> BarrierLsns;
-
-    bool BarrierCleanupScheduled = false;
-    bool BarrierCleanupInFlight = false;
 
 public:
     TPartitionActor(
@@ -125,29 +108,14 @@ private:
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleBarrierCleanupWakeup(
-        const TEvPartitionDirectPrivate::TEvBarrierCleanupWakeup::TPtr& ev,
+    void HandleStoreBarrierLsn(
+        const TEvPartitionDirectPrivate::TEvStoreBarrierLsn::TPtr& ev,
         const NActors::TActorContext& ctx);
-
-    void HandleBarrierLsnsReady(
-        const TEvPartitionDirectPrivate::TEvBarrierLsnsReady::TPtr& ev,
-        const NActors::TActorContext& ctx);
-
-    void HandleBarrierCycleDone(
-        const TEvPartitionDirectPrivate::TEvBarrierCycleDone::TPtr& ev,
-        const NActors::TActorContext& ctx);
-
-    void ScheduleBarrierCleanup(const NActors::TActorContext& ctx);
-    void StartBarrierCleanupCycle(const NActors::TActorContext& ctx);
-    void OnBarrierLsnsPersisted(
-        const NActors::TActorContext& ctx,
-        THashMap<ui32, ui64> perDbgLsn);
 
     void Start(
         const NActors::TActorContext& ctx,
         TDirectBlockGroupsConnections directBlockGroupsConnections,
-        TVector<TVChunkConfig> vChunkConfigs,
-        THashMap<ui32, ui64> barrierLsns);
+        TVector<TVChunkConfig> vChunkConfigs);
 
     TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(
         TDirectBlockGroupsConnections directBlockGroupsConnections);

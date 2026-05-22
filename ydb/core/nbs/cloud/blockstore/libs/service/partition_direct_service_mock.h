@@ -4,6 +4,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
+#include <util/generic/hash.h>
+
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,6 +38,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
     {
         Y_UNUSED(cfg);
+    }
+
+    THashMap<size_t, ui64> BarrierLsns;
+
+    void StoreBarrierLsn(size_t directBlockGroupIndex, ui64 lsn) override
+    {
+        BarrierLsns[directBlockGroupIndex] = lsn;
     }
 };
 

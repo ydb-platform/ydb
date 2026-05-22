@@ -87,16 +87,6 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set EraseFromPBufferBarrierHandler");
         return NThreading::TFuture<TDBGEraseResponse>();
     };
-    ComputeBarrierLsnHandler = [](const auto&...)
-    {
-        Y_ABORT_UNLESS(false, "Should set ComputeBarrierLsnHandler");
-        return NThreading::TFuture<ui64>();
-    };
-    IssueBarrierHandler = [](const auto&...)
-    {
-        Y_ABORT_UNLESS(false, "Should set IssueBarrierHandler");
-        return NThreading::TFuture<void>();
-    };
     RestoreDBGPBuffersHandler = [](const auto&...)
     {
         Y_ABORT_UNLESS(false, "Should set RestoreDBGPBuffersHandler");
@@ -286,16 +276,6 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 {
     return DumpHandler();
-}
-
-NThreading::TFuture<ui64> TDirectBlockGroupMock::ComputeBarrierLsnAsync()
-{
-    return ComputeBarrierLsnHandler();
-}
-
-NThreading::TFuture<void> TDirectBlockGroupMock::IssueBarrierAsync(ui64 lsn)
-{
-    return IssueBarrierHandler(lsn);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

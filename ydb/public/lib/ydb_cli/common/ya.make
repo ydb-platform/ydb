@@ -10,6 +10,7 @@ SRCS(
     command_utils.cpp
     common.cpp
     completion_generator.cpp
+    completion_graph_json.cpp
     completion.cpp
     config.cpp
     log.cpp

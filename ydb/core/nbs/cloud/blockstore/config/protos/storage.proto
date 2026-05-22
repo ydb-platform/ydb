@@ -106,4 +106,16 @@ message TStorageServiceConfig
 
     // Interval (in milliseconds) for dirty map debug printing.
     optional uint32 DirtyMapDebugPrintInterval = 23;
+
+    // Number of OS threads in the vhost server pool. Each thread runs
+    // libvhost's request-queue event loop and dispatches dequeued
+    // requests through the device handler. Should be sized to the
+    // expected aggregate vhost-queue concurrency.
+    optional uint32 VhostThreadsCount = 24;
+
+    // Number of virtio-blk request queues each vhost endpoint exposes
+    // to QEMU. A higher count gives more parallelism between queues
+    // (each queue can be served by a different VHOST thread). Capped
+    // at runtime by VhostThreadsCount.
+    optional uint32 VhostQueuesCount = 25;
 }

@@ -2379,6 +2379,11 @@ public:
                                         TStringBuilder() << "JSON index support is disabled"));
                                     return SyncError();
                                 }
+                                if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        "JSON index is not supported on column tables"));
+                                    return SyncError();
+                                }
                                 add_index->mutable_global_json_index();
                             } else if (type == "localBloomFilter") {
                                 if (table.Metadata->Kind != EKikimrTableKind::Datashard &&

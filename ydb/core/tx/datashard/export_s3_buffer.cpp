@@ -508,24 +508,17 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
         );
     }
 
-    IExport::IBuffer* buffer = nullptr;
     if (Task.HasS3Settings()) {
         bufferSettings.WithRowGroupSize(Task.GetS3Settings().GetLimits().GetRowGroupSize());
         
         switch (Task.GetS3Settings().GetDataFormat()) {
         case NKikimrSchemeOp::TS3Settings::CSV:
-            buffer = CreateS3ExportBuffer(std::move(bufferSettings));
-            break;
+            return CreateS3ExportBuffer(std::move(bufferSettings));
         case NKikimrSchemeOp::TS3Settings::PARQUET:
-            buffer = CreateS3ParquetExportBuffer(std::move(bufferSettings));
-            break;
+            return CreateS3ParquetExportBuffer(std::move(bufferSettings));
         }
     }
-    if (!buffer) {
-        buffer = CreateS3ExportBuffer(std::move(bufferSettings));
-    }
-    return buffer;
-    // return CreateS3ParquetExportBuffer(std::move(bufferSettings));
+    return CreateS3ExportBuffer(std::move(bufferSettings));
 }
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings) {

@@ -534,6 +534,7 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
         UNIT_ASSERT_EQUAL(3, table->num_rows());
 
         auto schema = arrow::schema({
+            // TODO(#41099): "nullable" should not depend on "isOlap", it should be true here.
             arrow::field("key", arrow::int64(), isOlap),
             arrow::field("value", arrow::binary()),
         });

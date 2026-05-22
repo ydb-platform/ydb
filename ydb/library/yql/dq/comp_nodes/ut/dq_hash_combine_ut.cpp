@@ -21,6 +21,34 @@ namespace NMiniKQL {
 
 namespace {
 
+template<typename Func>
+void ApplyTestPoint(THolder<IComputationGraph>& graph, Func func)
+{
+    for (auto& node : graph->GetNodes()) {
+        auto* testPoints = dynamic_cast<TDqHashCombineTestPoints*>(node.Get());
+        if (!testPoints) {
+            continue;
+        }
+        func(*testPoints);
+        return;
+    }
+    UNIT_ASSERT_C(false, "Couldn't find a DqHashCombine node wrapper in the graph");
+}
+
+void DisableDehydration(THolder<IComputationGraph>& graph)
+{
+    ApplyTestPoint(graph, [](TDqHashCombineTestPoints& tp) {
+        tp.DisableStateDehydration(true);
+    });
+}
+
+void DisableKeyPassthrough(THolder<IComputationGraph>& graph)
+{
+    ApplyTestPoint(graph, [](TDqHashCombineTestPoints& tp) {
+        tp.DisableKeyPassthrough(true);
+    });
+}
+
 template<bool Embedded>
 void NativeToUnboxed(const ui64 value, NUdf::TUnboxedValuePod& result)
 {
@@ -120,7 +148,6 @@ void AssertMapsEqual(std::unordered_map<K, std::vector<Item>>& left, std::unorde
         }
     }
 }
-
 
 // String -> (ui64, ...) wide row generator
 class TWideStream : public NUdf::TBoxedValue
@@ -617,34 +644,6 @@ void RunDqCombineWideTest(const bool useFlow, StreamCreator streamCreator, ui32 
     CollectStreamOutputs(resultStream, columnTypes.size(), keyWidth, graphResult, false, true);
 
     AssertMapsEqual(refResult, graphResult);
-}
-
-template<typename Func>
-void ApplyTestPoint(THolder<IComputationGraph>& graph, Func func)
-{
-    for (auto& node : graph->GetNodes()) {
-        auto* testPoints = dynamic_cast<TDqHashCombineTestPoints*>(node.Get());
-        if (!testPoints) {
-            continue;
-        }
-        func(*testPoints);
-        return;
-    }
-    UNIT_ASSERT_C(false, "Couldn't find a DqHashCombine node wrapper in the graph");
-}
-
-void DisableDehydration(THolder<IComputationGraph>& graph)
-{
-    ApplyTestPoint(graph, [](TDqHashCombineTestPoints& tp) {
-        tp.DisableStateDehydration(true);
-    });
-}
-
-void DisableKeyPassthrough(THolder<IComputationGraph>& graph)
-{
-    ApplyTestPoint(graph, [](TDqHashCombineTestPoints& tp) {
-        tp.DisableKeyPassthrough(true);
-    });
 }
 
 template<bool UseLLVM, bool Spilling, typename StreamCreator, typename StreamChecker>

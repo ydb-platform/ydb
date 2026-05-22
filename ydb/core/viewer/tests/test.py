@@ -747,6 +747,37 @@ class TestViewer(object):
         ]
 
     @classmethod
+    def test_viewer_groups_sort_by_vdisk_slot_usage_with_allocation_units(cls):
+        def request_and_check(fields_required):
+            result = cls.get_viewer("/viewer/groups", {
+                'fields_required': fields_required,
+                'sort': '-MaxVDiskSlotUsage',
+                'limit': 1,
+            })
+            assert 'status_code' not in result, result
+            assert not result.get('NeedFilter'), result
+            assert not result.get('NeedSort'), result
+            assert not result.get('NeedLimit'), result
+            assert result.get('Problems', []) == [], result
+            groups = result.get('StorageGroups', [])
+            assert len(groups) == 1, result
+            assert 'MaxVDiskSlotUsage' in groups[0], result
+            return {
+                'FoundGroups': result.get('FoundGroups'),
+                'ReturnedGroups': len(groups),
+                'HasMaxVDiskSlotUsage': 'MaxVDiskSlotUsage' in groups[0],
+                'NeedFilter': result.get('NeedFilter', False),
+                'NeedSort': result.get('NeedSort', False),
+                'NeedLimit': result.get('NeedLimit', False),
+                'Problems': result.get('Problems', []),
+            }
+
+        return {
+            'without_allocation_units': request_and_check('MaxVDiskSlotUsage'),
+            'with_allocation_units': request_and_check('AllocationUnits,MaxVDiskSlotUsage'),
+        }
+
+    @classmethod
     def test_viewer_groups_with_invalid_database(cls):
         # Test that the endpoint doesn't crash when provided with an invalid database
         result = cls.call_viewer("/viewer/groups", {

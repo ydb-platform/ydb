@@ -606,6 +606,24 @@ class MouseScrollUp(MouseEvent, bubble=True, verbose=True):
     """
 
 
+@rich.repr.auto
+class MouseScrollRight(MouseEvent, bubble=True, verbose=True):
+    """Sent when the mouse wheel is scrolled *right*.
+
+    - [X] Bubbles
+    - [X] Verbose
+    """
+
+
+@rich.repr.auto
+class MouseScrollLeft(MouseEvent, bubble=True, verbose=True):
+    """Sent when the mouse wheel is scrolled *left*.
+
+    - [X] Bubbles
+    - [X] Verbose
+    """
+
+
 class Click(MouseEvent, bubble=True):
     """Sent when a widget is clicked.
 
@@ -958,3 +976,7 @@ class DeliveryFailed(Event, bubble=False):
 
     name: str | None = None
     """Optional name returned to the app to identify the download."""
+
+
+class TextSelected(Event, bubble=True):
+    """Sent from the screen when text is selected (Not Input and TextArea)"""

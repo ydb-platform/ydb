@@ -10,8 +10,6 @@
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
 
 #include <library/cpp/http/server/http.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_value.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
@@ -47,19 +45,11 @@ private:
     ui32 UsedRetries{0};
 };
 
-
 struct THttpResponseData {
-    bool IsYmq = false;
-    bool UseYmqStatusCode = false;
-    NYdb::EStatus Status{NYdb::EStatus::SUCCESS};
-    NJson::TJsonValue Body;
-    TString ErrorText{"OK"};
-    TString YmqStatusCode;
-    ui32 YmqHttpCode = 500;
-    bool YmqIsFifo = false;
-    THashMap<TString, TString> QueueTags;
-
-    TString DumpBody(MimeTypes contentType);
+    ui32 HttpCode;
+    MimeTypes ContentType = MimeTypes::MIME_TEXT;
+    TString Message;
+    TString Body;
 };
 
 struct THttpRequestContext {
@@ -74,7 +64,6 @@ struct THttpRequestContext {
     NYdb::TDriver* Driver;
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
 
-    THttpResponseData ResponseData;
     TString ServiceAccountId;
     TString RequestId;
     TString DiscoveryEndpoint;
@@ -98,9 +87,9 @@ struct THttpRequestContext {
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
-    void DoReply(const TActorContext& ctx, size_t issueCode = ISSUE_CODE_GENERIC);
     void ParseHeaders(TStringBuf headers);
-    void RequestBodyToProto(NProtoBuf::Message* request);
+
+    void DoReply(THttpResponseData&& data);
 };
 
 class IHttpRequestProcessor {
@@ -142,17 +131,28 @@ protected:
 class IHttpController {
 public:
     enum class EError {
-        NotMyProtocol,
-        MethodNotFound
+        MethodNotFound,
+        ServiceDisabled
     };
 
     virtual ~IHttpController() = default;
 
-    virtual std::expected<IHttpRequestProcessor*, EError> GetProcessor(
-        const TString& name,
-        const THttpRequestContext& context
+    virtual bool Execute(
+        THttpRequestContext&& context,
+        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
     ) const = 0;
+
+    virtual THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const = 0;
+
+    virtual bool IsPossible(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const = 0;
 };
+
+class THttpControllerRegistry {
+public:
+    const IHttpController* GetController(const TStringBuf apiVersion, const NKikimrConfig::TServerlessProxyConfig& config) const;
+};
+
+const THttpControllerRegistry& GetHttpControllerRegistry();
 
 class THttpRequestProcessors {
 public:
@@ -165,10 +165,9 @@ public:
     bool Execute(const TString& name, THttpRequestContext&& params,
                  THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                  const TActorContext& ctx);
-
-private:
-    const std::vector<std::shared_ptr<const IHttpController>> Controllers;
 };
+
+TString AsAwsContentType(MimeTypes contentType);
 
 } // namespace NKikimr::NHttpProxy
 

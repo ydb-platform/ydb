@@ -322,6 +322,25 @@ public:
                 const TCoLambda lambda(watermarkNode);
                 const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
                 const auto lambdaBody = lambda.Body();
+
+                if (!IsPureIsolatedLambda(*lambdaBody.Ptr())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected pure expression for watermark definition"));
+                    return TStatus::Error;
+                }
+
+                const auto maybeSub = lambdaBody.Maybe<TCoSub>();
+                if (!maybeSub) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected top-level subtraction"));
+                    return TStatus::Error;
+                }
+                const auto sub = maybeSub.Cast();
+
+                const auto maybeInterval = sub.Right().Maybe<TCoInterval>();
+                if (!maybeInterval) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected interval as watermark delay"));
+                    return TStatus::Error;
+                }
+
                 if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
                     TStringBuilder err;
                     err << "Bad watermark expression: ";
@@ -350,7 +369,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 7, 9, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 10, 12, ctx)) {
             return TStatus::Error;
         }
 
@@ -358,6 +377,9 @@ public:
         const auto topic = input->Child(TDqPqTopicSource::idx_Topic);
         const auto settings = input->Child(TDqPqTopicSource::idx_Settings);
         const auto rowType = input->Child(TDqPqTopicSource::idx_RowType);
+        const auto partitions = input->Child(TDqPqTopicSource::idx_Partitions);
+        const auto offsetPredicate = input->Child(TDqPqTopicSource::idx_OffsetPredicate);
+        const auto writeTimePredicate = input->Child(TDqPqTopicSource::idx_WriteTimePredicate);
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -471,6 +493,20 @@ public:
                 return TStatus::Error;
             }
             items.emplace_back(BuildPqMetaFieldExprType(*descriptor, ctx));
+        }
+
+        if (!partitions->IsCallable(TCoVoid::CallableName())) {
+            if (!EnsureListType(*partitions, ctx)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (!EnsureAtom(*offsetPredicate, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*writeTimePredicate, ctx)) {
+            return TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TTupleExprType>(items)));

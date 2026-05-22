@@ -275,13 +275,13 @@ inline double ConvertTo(const NYson::TYsonStringBuf& str)
 }
 
 template <>
-inline TString ConvertTo(const NYson::TYsonString& str)
+inline std::string ConvertTo(const NYson::TYsonString& str)
 {
     return NDetail::ConvertYsonStringBufToString(str);
 }
 
 template <>
-inline TString ConvertTo(const NYson::TYsonStringBuf& str)
+inline std::string ConvertTo(const NYson::TYsonStringBuf& str)
 {
     return NDetail::ConvertYsonStringBufToString(str);
 }

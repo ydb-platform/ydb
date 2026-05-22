@@ -138,8 +138,8 @@ class ScrollBarRender:
             start_index, start_bar = divmod(max(0, start), len_bars)
             end_index, end_bar = divmod(max(0, end), len_bars)
 
-            upper = {"@mouse.up": "scroll_up"}
-            lower = {"@mouse.up": "scroll_down"}
+            upper = {"@mouse.down": "scroll_up"}
+            lower = {"@mouse.down": "scroll_down"}
 
             upper_back_segment = Segment(blank, _Style(bgcolor=back, meta=upper))
             lower_back_segment = Segment(blank, _Style(bgcolor=back, meta=lower))
@@ -287,7 +287,7 @@ class ScrollBar(Widget):
             background = styles.scrollbar_background
             color = styles.scrollbar_color
         if background.a < 1:
-            base_background, _ = self.parent._opacity_background_colors
+            base_background, _ = self.parent.background_colors
             background = base_background + background
         color = background + color
         scrollbar_style = Style.from_color(color.rich_color, background.rich_color)

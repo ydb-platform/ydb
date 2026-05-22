@@ -133,6 +133,7 @@ namespace NKikimr::NDDisk {
     private:
         struct TOpCountersBase {
             NMonitoring::TDynamicCounters::TCounterPtr Requests;
+            NMonitoring::TDynamicCounters::TCounterPtr RequestsInFlight;
             NMonitoring::TDynamicCounters::TCounterPtr Bytes;
             NMonitoring::TDynamicCounters::TCounterPtr BytesInFlight;
             NMonitoring::THistogramPtr RequestSizeKiB;
@@ -140,6 +141,7 @@ namespace NKikimr::NDDisk {
 
             void Request(ui32 bytes = 0) {
                 ++*Requests;
+                ++*RequestsInFlight;
                 if (bytes) {
                     *Bytes += bytes;
                     *BytesInFlight += bytes;
@@ -148,6 +150,7 @@ namespace NKikimr::NDDisk {
             }
 
             void Done(ui32 bytes, double durationMs = 0) {
+                --*RequestsInFlight;
                 *BytesInFlight -= bytes;
                 if (durationMs != 0) {
                     ResponseTime->Collect(durationMs);
@@ -204,6 +207,13 @@ namespace NKikimr::NDDisk {
                 NMonitoring::TDynamicCounters::TCounterPtr RunningCount;
                 NMonitoring::THistogramPtr QueueTime;
             } DirectIO;
+
+            struct {
+                NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
+                NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
+                NMonitoring::TDynamicCounters::TCounterPtr PendingEventsQueueSize;
+                NMonitoring::TDynamicCounters::TCounterPtr InMemoryCacheSize;
+            } PersistentBuffer;
         };
 
         TCounters Counters;
@@ -308,7 +318,22 @@ namespace NKikimr::NDDisk {
         enum EWakeupTag {
             WakeupIoSubmitQueue = 1,
             WakeupUpdateFreeSpaceInfo = 2,
+            WakeupCollectPbStats = 3,
         };
+
+        struct TPbOpSnapshot {
+            TInstant Timestamp;
+            ui64 Requests = 0;
+            std::vector<ui64> BucketCounts;
+        };
+
+        // Sliding window of cumulative snapshots for each PB operation,
+        // used to compute IOPS and latency percentiles over the last ~15 seconds.
+        std::unordered_map<TString, std::deque<TPbOpSnapshot>> PbStatsHistory;
+        static constexpr TDuration PbStatsWindow = TDuration::Seconds(15);
+        static constexpr TDuration PbStatsSnapshotPeriod = TDuration::Seconds(1);
+
+        void CollectPbStatsSnapshot();
 
         const bool IsPersistentBufferActor = false;
 
@@ -327,7 +352,8 @@ namespace NKikimr::NDDisk {
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
-            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd);
+            ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
+            TFileHandle&& diskFd);
 
         ~TDDiskActor();
         void Bootstrap();
@@ -695,6 +721,7 @@ namespace NKikimr::NDDisk {
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
         std::vector<ui32> PersistentBufferChunks;
+        ui64 PersistentBufferUniqueId = 0;
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
         TPersistentBufferBarriersManager PersistentBufferBarriersManager;
@@ -709,6 +736,8 @@ namespace NKikimr::NDDisk {
 
         TActorId WritePersistentBuffersActor;
         TActorId PersistentBufferActorId;
+
+        ui64 CalculateChecksum(const TRope::TIterator begin);
 
         void CreatePersistentBuffer();
         void InitPersistentBuffer();

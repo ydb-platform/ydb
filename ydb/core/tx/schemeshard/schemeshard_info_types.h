@@ -177,6 +177,29 @@ struct TBackupSettings {
     }
 };
 
+// Per-incremental restore orchestrator rate-limit settings. Sentinel -1 means unbounded.
+struct TIncrementalRestoreSettings {
+    TControlWrapper MaxIncrementalRestoreTablesInFlight;
+    // Wall-clock deadlines (seconds). Sentinel -1 disables the deadline.
+    TControlWrapper MaxIncrementalRestoreOverallDurationSeconds;
+    TControlWrapper MaxIncrementalRestoreStageDurationSeconds;
+
+    TIncrementalRestoreSettings()
+        : MaxIncrementalRestoreTablesInFlight(32, -1, 1000000)
+        , MaxIncrementalRestoreOverallDurationSeconds(86400, -1, 604800)
+        , MaxIncrementalRestoreStageDurationSeconds(86400, -1, 604800)
+    {}
+
+    void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreTablesInFlight,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreTablesInFlight);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreOverallDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreOverallDurationSeconds);
+        TControlBoard::RegisterSharedControl(MaxIncrementalRestoreStageDurationSeconds,
+                                             icb->SchemeShardControls.MaxIncrementalRestoreStageDurationSeconds);
+    }
+};
+
 
 struct TBindingsRoomsChange {
     TChannelsBindings ChannelsBindings;
@@ -3837,17 +3860,14 @@ struct TIncrementalRestoreState {
         Running = 1,
         Finalizing = 2,
         Completed = 3,
+        Failed = 4,
     };
 
     EState State = EState::Running;
 
-    // The backup collection path this restore belongs to
-    TPathId BackupCollectionPathId; // used for DB scoping and finalization
-
-    // Global id of the original incremental restore operation
+    TPathId BackupCollectionPathId;
     ui64 OriginalOperationId = 0;
 
-    // Sequential incremental backup processing
     struct TIncrementalBackup {
         TPathId BackupPathId;
         TString BackupPath;
@@ -3866,6 +3886,10 @@ struct TIncrementalRestoreState {
         THashSet<TShardIdx> CompletedShards;
         THashSet<TShardIdx> FailedShards;
 
+        // When true, completion is detected from per-shard reports rather than
+        // Self->Operations.contains(txId) (no schema transaction was proposed).
+        bool RequestsDispatched = false;
+
         TTableOperationState() = default;
         explicit TTableOperationState(const TOperationId& opId) : OperationId(opId) {}
 
@@ -3877,20 +3901,125 @@ struct TIncrementalRestoreState {
         bool HasFailures() const {
             return !FailedShards.empty();
         }
+
+        bool HasNonRetriableFailure = false;
+
+        // Idempotent against re-delivery: the first terminal report wins.
+        bool RecordShardResult(TShardIdx shardIdx, bool success, bool retriable = true) {
+            if (CompletedShards.contains(shardIdx) || FailedShards.contains(shardIdx)) {
+                return false;
+            }
+            if (success) {
+                CompletedShards.insert(shardIdx);
+            } else {
+                FailedShards.insert(shardIdx);
+                if (!retriable) {
+                    HasNonRetriableFailure = true;
+                }
+            }
+            return true;
+        }
     };
 
-    TVector<TIncrementalBackup> IncrementalBackups; // Sorted by timestamp
+    // Pending sub-op dispatched in batches bounded by MaxIncrementalRestoreTablesInFlight.
+    // Both Table and Index sub-ops share the queue so indexes don't fan out unbounded.
+    struct TPendingRestoreOp {
+        enum class EKind { Table, Index };
+        EKind Kind = EKind::Table;
+
+        TString BackupName;
+        TString TablePath;
+
+        TString IndexName;
+        TString TargetTablePath;
+        TString SpecificImplTableName;
+    };
+
+    // Sorted by timestamp.
+    TVector<TIncrementalBackup> IncrementalBackups;
     ui32 CurrentIncrementalIdx = 0;
     bool CurrentIncrementalStarted = false;
 
-    // Operation completion tracking for current incremental backup
+    bool RetryNeeded = false;
+
+    // Two-tier wall-clock deadline anchors. Persisted across reboots so the
+    // budget cannot be defeated by a reboot loop.
+    TInstant RestoreStartedAt;
+    TInstant CurrentStageStartedAt;
+
+    // Two-phase backoff guard: set when a retry is scheduled, cleared when it fires.
+    // Prevents concurrent completion events from double-counting retries.
+    bool RetryScheduled = false;
+    TInstant NextRetryAttemptAt;
+
+    bool NonRetriableFailure = false;
+
+    // Set by TTxInit when retryNeeded=true. The first post-reboot retry-fire
+    // absorbs failed sub-ops as completed rather than re-dispatching (pre-reboot
+    // scan data is authoritative; re-dispatch won't get a fresh reply).
+    bool FreshBootRetryAbsorbPending = false;
+
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
 
-    // Table operation state tracking for DataShard completion
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
-    THashSet<TShardIdx> InvolvedShards;
+    struct TPerShardDispatch {
+        TPathId SrcPathId;
+        TPathId DstPathId;
+        ui64 SchemeShardGeneration = 0;
+        THashMap<TShardIdx, TTabletId> ShardTablets;
+    };
+    THashMap<TOperationId, TPerShardDispatch> ShardDispatchByOp;
+
+    // Populated by ProcessNextIncrementalBackup, drained by DispatchPendingIncrementalRestoreTables.
+    // In-memory only; rebuilt after reboot from backup-collection contents.
+    TDeque<TPendingRestoreOp> PendingTables;
+
+    // ui32 maps to Ydb::StatusIds::StatusCode (0 == STATUS_CODE_UNSPECIFIED);
+    // typed here to avoid pulling Ydb::StatusIds into the header.
+    ui32 FinalStatus = 0;
+    TString FinalIssues;
+
+    // Per-sub-op tracking. Items move from PendingItems to InFlightItems once
+    // TxAllocatorClient supplies a TxId.
+    struct TItem {
+        enum class EKind : ui32 {
+            Table = 0,
+            Index = 1,
+            Finalize = 2,
+        };
+        ui32 ItemSeq = 0;
+        EKind Kind = EKind::Table;
+        TPathId TablePathId;
+        TPathId SrcTablePathId; // 0/0 for Finalize items or unresolved src path
+        // 0 == awaiting allocation.
+        ui64 WaitTxId = 0;
+
+        // Filled in and sent once TxAllocatorClient replies. In-memory only;
+        // rebuilt on reboot via the orchestrator's re-entry path.
+        TAutoPtr<NActors::IEventBase> PendingRequest;
+    };
+
+    ui32 NextItemSeq = 0;
+    TDeque<TItem> PendingItems;
+    THashMap<ui32 /*ItemSeq*/, TItem> InFlightItems;
+    THashMap<ui64 /*WaitTxId*/, ui32 /*ItemSeq*/> WaitTxIdToItemSeq;
+
+    // Returns progress within the current incremental as a fraction [0.0, 1.0]
+    // based on per-shard completion across all table operations
+    float CalcCurrentIncrementalProgress() const {
+        ui32 totalShards = 0;
+        ui32 doneShards = 0;
+        for (const auto& [_, tableOp] : TableOperations) {
+            totalShards += tableOp.ExpectedShards.size();
+            doneShards += tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+        }
+        if (totalShards == 0) {
+            return 0.0f;
+        }
+        return static_cast<float>(doneShards) / totalShards;
+    }
 
     bool AllIncrementsProcessed() const {
         return CurrentIncrementalIdx >= IncrementalBackups.size();
@@ -3905,11 +4034,15 @@ struct TIncrementalRestoreState {
         // If we started processing the current incremental but there are no operations at all,
         // it means no table backups were found in this incremental backup, so consider it complete
         // TODO: probably have to ensure that empty backups are impossible
-        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()) {
+        if (CurrentIncrementalStarted && InProgressOperations.empty() && CompletedOperations.empty()
+            && PendingTables.empty() && PendingItems.empty()) {
             return true;
         }
-        // Normal case: all operations have moved from InProgress to Completed
-        return InProgressOperations.empty() && !CompletedOperations.empty();
+        // All in-progress ops completed and no sub-ops still queued or awaiting allocation.
+        return InProgressOperations.empty()
+            && PendingTables.empty()
+            && PendingItems.empty()
+            && !CompletedOperations.empty();
     }
 
     void MarkCurrentIncrementalComplete() {
@@ -3923,11 +4056,17 @@ struct TIncrementalRestoreState {
             CurrentIncrementalIdx++;
             CurrentIncrementalStarted = false;
 
-            // Reset operation tracking for next incremental
             InProgressOperations.clear();
             CompletedOperations.clear();
+            // TableOperations.clear() also clears HasNonRetriableFailure on each table.
             TableOperations.clear();
-            // Note: We don't clear InvolvedShards as it accumulates across all incrementals
+            PendingTables.clear();
+
+            // Stage deadline anchor reset is owned by the caller (HandleAllOperationsComplete)
+            // because it needs ctx.Now() and a paired db.Update.
+            RetryScheduled = false;
+            NextRetryAttemptAt = TInstant::Zero();
+            NonRetriableFailure = false;
         }
     }
 

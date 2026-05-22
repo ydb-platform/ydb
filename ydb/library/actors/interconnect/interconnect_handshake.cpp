@@ -25,7 +25,7 @@
 #include <variant>
 
 namespace NActors {
-    static constexpr size_t StackSize = 64 * 1024; // 64k should be enough
+    static constexpr ui32 StackSize = 64 * 1024; // 64k should be enough
 
     static constexpr size_t RdmaHandshakeRegionSize = 4096;
 
@@ -383,7 +383,7 @@ namespace NActors {
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
                         ui32 nodeId, ui64 nextPacket, TString peerHostName, TSessionParams params)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , SelfVirtualId(self)
             , PeerVirtualId(peer)
@@ -406,7 +406,7 @@ namespace NActors {
         }
 
         THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , MainChannel(this, std::move(socket))
             , ExternalDataChannel(this, nullptr)

@@ -652,14 +652,14 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         if (CanRetry(error)) {
-            if (error.GetExceptionName() == "FsUploadSessionLost") {
+            if (error.GetExceptionName() == "FsCompleteMultipartUploadFailed") {
                 ForceNewUpload = true;
             }
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
             Error = TStringBuilder() << "S3 error: " << error;
-            this->PassAway();
+            PassAway();
         }
     }
 
@@ -682,7 +682,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
                 << error;
-            this->PassAway();
+            PassAway();
         }
     }
 
@@ -735,7 +735,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 return;
             }
 
-            this->PassAway();
+            PassAway();
         } else {
             if (success) {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,

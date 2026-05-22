@@ -51,8 +51,7 @@ private:
 
 } // namespace
 
-TRuntimeNode TBlockHelper::ConvertLiteralListToDatum(TRuntimeNode::TList nodes, TType* type, ui64 fuzzId) {
-    auto list = Pb_.NewList(type, std::move(nodes));
+TRuntimeNode TBlockHelper::ConvertLiteralListToDatum(TRuntimeNode list, ui64 fuzzId) {
     auto flowList = Pb_.ToFlow(list);
     auto blocksStream = Pb_.FromFlow(Pb_.ToBlocks(flowList));
     auto block = MaterializeBlockStream(*Setup_.PgmBuilder, blocksStream, fuzzId);

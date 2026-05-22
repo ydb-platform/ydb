@@ -45,6 +45,8 @@ struct TTestEnvironment
         TBlockRangeComparator>
         ZeroPromises;
 
+    std::optional<NProto::TError> SyncZeroBlocksError;
+
     TTestEnvironment()
     {
         Storage = std::make_shared<TTestStorage>();
@@ -80,6 +82,12 @@ struct TTestEnvironment
             -> TFuture<TZeroBlocksLocalResponse>
         {
             Y_UNUSED(callContext);
+
+            if (SyncZeroBlocksError) {
+                TZeroBlocksLocalResponse response;
+                response.Error = *SyncZeroBlocksError;
+                return MakeFuture(std::move(response));
+            }
 
             auto& info =
                 ZeroPromises[request->Headers.Range] = {.Request = request};
@@ -483,6 +491,47 @@ Y_UNIT_TEST_SUITE(TSplitRequestsStorageWrapperTest)
         UNIT_ASSERT_VALUES_EQUAL_C(
             E_REJECTED,
             result.Error.code(),
+            FormatError(result.Error));
+    }
+
+    Y_UNIT_TEST(ShouldNotFailWhenSubRequestCompletesSynchronously)
+    {
+        constexpr ui32 BlockSize = 2;
+        constexpr ui32 BlockCount = 10;
+        constexpr ui32 TotalBlockCount = 1000;
+        constexpr ui32 StripeSize = 6;
+
+        TString diskId("disk-1");
+
+        auto volumeConfig(std::make_shared<TVolumeConfig>(
+            diskId,
+            BlockSize,
+            TotalBlockCount,
+            StripeSize));
+
+        TTestEnvironment env;
+
+        env.SyncZeroBlocksError = MakeError(E_REJECTED, "sync fail");
+
+        auto range = TBlockRange64::WithLength(1, BlockCount);
+
+        // Run request
+        auto request = std::make_shared<TZeroBlocksLocalRequest>(
+            TRequestHeaders{.VolumeConfig = volumeConfig, .Range = range});
+
+        TFuture<TZeroBlocksLocalResponse> future;
+        UNIT_ASSERT_NO_EXCEPTION(
+            future = env.Wrapper->ZeroBlocksLocal(
+                MakeIntrusive<TCallContext>(),
+                std::move(request)));
+
+        // Future must be valid and already carry the propagated error.
+        UNIT_ASSERT(future.Initialized());
+        UNIT_ASSERT(future.HasValue());
+        const auto& result = future.GetValue();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            result.Error.GetCode(),
             FormatError(result.Error));
     }
 }

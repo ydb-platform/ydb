@@ -4,7 +4,7 @@
 
     Lexers for non-source code file types.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -16,7 +16,7 @@ from pygments.lexers.console import PyPyLogLexer
 from pygments.lexers.textedit import VimLexer
 from pygments.lexers.markup import BBCodeLexer, MoinWikiLexer, RstLexer, \
     TexLexer, GroffLexer
-from pygments.lexers.installers import DebianControlLexer, SourcesListLexer
+from pygments.lexers.installers import DebianControlLexer, DebianSourcesLexer, SourcesListLexer
 from pygments.lexers.make import MakefileLexer, BaseMakefileLexer, CMakeLexer
 from pygments.lexers.haxe import HxmlLexer
 from pygments.lexers.sgf import SmartGameFormatLexer

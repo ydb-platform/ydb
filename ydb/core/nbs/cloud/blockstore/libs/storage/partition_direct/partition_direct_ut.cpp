@@ -549,6 +549,36 @@ void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(MultipleInit)
+    {
+        {
+            TEnvironmentSetup env{{
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            }};
+            auto& runtime = env.Runtime;
+            runtime->SetLogPriority(
+                NKikimrServices::NBS_PARTITION,
+                NActors::NLog::PRI_DEBUG);
+
+            auto scopedService =
+                SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+        }
+        {
+            TEnvironmentSetup env{{
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            }};
+            auto& runtime = env.Runtime;
+            runtime->SetLogPriority(
+                NKikimrServices::NBS_PARTITION,
+                NActors::NLog::PRI_DEBUG);
+
+            auto scopedService =
+                SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+        }
+    }
+
     Y_UNIT_TEST(ShouldCorrectlyAllocateDirectBlockGroups)
     {
         TEnvironmentSetup env{{

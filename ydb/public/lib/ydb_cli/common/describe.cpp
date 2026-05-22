@@ -72,6 +72,8 @@ void PrintMain(const NTopic::TTopicDescription& topicDescription, IOutputStream&
     }
     out << Endl << "PartitionsCount: " << topicDescription.GetTotalPartitionsCount();
     out << Endl << "PartitionWriteSpeed: " << topicDescription.GetPartitionWriteSpeedBytesPerSecond() / 1_KB << " KB";
+    out << Endl << "PartitionWriteSpeedMessagesPerSecond: " << topicDescription.GetPartitionWriteSpeedMessagesPerSecond();
+    out << Endl << "PartitionWriteBurstMessages: " << topicDescription.GetPartitionWriteBurstMessages();
     out << Endl << "MeteringMode: " << (TStringBuilder() << topicDescription.GetMeteringMode());
     if (topicDescription.GetMetricsLevel().has_value()) {
         out << Endl << "MetricsLevel: " << *topicDescription.GetMetricsLevel();

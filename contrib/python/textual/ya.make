@@ -2,12 +2,14 @@
 
 PY3_LIBRARY()
 
-VERSION(4.0.0)
+VERSION(6.12.0)
 
 LICENSE(MIT)
 
 PEERDIR(
+    contrib/python/Pygments
     contrib/python/markdown-it-py
+    contrib/python/mdit-py-plugins
     contrib/python/platformdirs
     contrib/python/rich
     contrib/python/typing-extensions
@@ -40,7 +42,6 @@ PY_SRCS(
     textual/_cells.py
     textual/_color_constants.py
     textual/_compat.py
-    textual/_compose.py
     textual/_compositor.py
     textual/_context.py
     textual/_debug.py
@@ -66,6 +67,7 @@ PY_SRCS(
     textual/_partition.py
     textual/_path.py
     textual/_profile.py
+    textual/_queue.py
     textual/_resolve.py
     textual/_segment_tools.py
     textual/_sleep.py
@@ -95,6 +97,7 @@ PY_SRCS(
     textual/clock.py
     textual/color.py
     textual/command.py
+    textual/compose.py
     textual/constants.py
     textual/containers.py
     textual/content.py
@@ -120,6 +123,9 @@ PY_SRCS(
     textual/css/transition.py
     textual/css/types.py
     textual/demo/__main__.py
+    textual/demo/_project_data.py
+    textual/demo/_project_stargazer_updater.py
+    textual/demo/_project_stars.py
     textual/demo/data.py
     textual/demo/demo_app.py
     textual/demo/game.py
@@ -159,12 +165,14 @@ PY_SRCS(
     textual/fuzzy.py
     textual/geometry.py
     textual/getters.py
+    textual/highlight.py
     textual/keys.py
     textual/layout.py
     textual/layouts/__init__.py
     textual/layouts/factory.py
     textual/layouts/grid.py
     textual/layouts/horizontal.py
+    textual/layouts/stream.py
     textual/layouts/vertical.py
     textual/lazy.py
     textual/logging.py

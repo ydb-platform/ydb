@@ -142,6 +142,8 @@ namespace NKikimr::NDDisk {
         for (const ui32 chunkIdx : PersistentBufferChunks) {
             record.AddChunkIdxs(chunkIdx);
         }
+        record.SetUniqueId(PersistentBufferUniqueId);
+        Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
         return record;
     }
 

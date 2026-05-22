@@ -151,7 +151,8 @@ TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOpt
     std::optional<std::pair<TString, bool>> selectedIndex;
 
     for (auto& indexInfo : mainTableDesc.Metadata->Indexes) {
-        if (indexInfo.Type == TIndexDescription::EType::GlobalAsync) {
+        if (indexInfo.Type == TIndexDescription::EType::GlobalAsync
+            || indexInfo.Type == TIndexDescription::EType::GlobalJson) {
             continue;
         }
 
@@ -365,7 +366,10 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
         if (primaryBuildResult.PointPrefixLen < mainTableDesc.Metadata->KeyColumnNames.size()) {
             auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false, mainTableDesc);
             for (auto& index : mainTableDesc.Metadata->Indexes) {
-                if (index.Type != TIndexDescription::EType::GlobalAsync && index.State == TIndexDescription::EIndexState::Ready) {
+                if (index.Type != TIndexDescription::EType::GlobalAsync
+                    && index.Type != TIndexDescription::EType::GlobalJson
+                    && index.State == TIndexDescription::EIndexState::Ready)
+                {
                     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(index.Name).first->Name);
 
                     bool uselessIndex = true;

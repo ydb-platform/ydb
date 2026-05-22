@@ -49,7 +49,7 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
         with self.patch_get_machines(["host1"]), mock.patch.object(install, "act", act):
             self.assertFalse(await install.do(args))
 
-    async def test_act_returns_bool_from_progress_result(self):
+    async def test_act_returns_progress_result(self):
         console = Console()
         calls = []
 
@@ -65,7 +65,10 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(install, "make_install_steps", make_install_steps), \
                 mock.patch.object(install.progress, "MyProgress", MyProgress), \
                 mock.patch.object(install.progress, "run_steps", run_steps):
-            self.assertFalse(await install.act(["host1"], self.config(), waiting=7, do_not_init=True, ignore_failed_stop=True, console=console))
+            result = await install.act(["host1"], self.config(), waiting=7, do_not_init=True, ignore_failed_stop=True, console=console)
+
+        self.assertFalse(result)
+        self.assertIsInstance(result, RunStepsResult)
 
         self.assertEqual(calls, [(["host1"], self.config(), 7, True, True)])
         self.assertEqual(console.printed, ["panel"])
@@ -129,6 +132,80 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls, [
             ("split", ["host1"], config, "10.00GB"),
             ("obliterate", ["host1"], config),
+        ])
+
+    def test_make_install_steps_ensures_agents_first(self):
+        with mock.patch.object(install.deploy_ctx, "do_rebuild", False), \
+                mock.patch.object(install.deploy_ctx, "do_redeploy_bin", False):
+            steps = install.make_install_steps(
+                ["host1"],
+                self.config(sector_map_use="always"),
+                waiting=1,
+                do_not_init=True,
+                ignore_failed_stop=False,
+            )
+
+        self.assertEqual(steps.steps[0].title, "[bold blue]Ensure agents are installed[/]")
+
+    async def test_ensure_agents_installed_skips_install_when_health_ok(self):
+        calls = []
+        step = install.make_ensure_agents_installed_step(["host1"], self.config())
+
+        class CheckAgents:
+            def __init__(self, hosts):
+                calls.append(("check-init", hosts))
+
+            async def run(self, parent_task, subtasks=None, kv_storage=None):
+                calls.append(("check-run", parent_task is not None))
+                return progress.TaskResult(level=progress.TaskResultLevel.OK)
+
+        def make_install_steps(*args, **kwargs):
+            raise AssertionError("agent install should not be called when agents are healthy")
+
+        parent_task = ParentTask()
+        with mock.patch.object(install.agent_client, "CheckAgentHealthOnHosts", CheckAgents), \
+                mock.patch.object(install.agent, "make_install_steps", make_install_steps):
+            result = await step.run(parent_task)
+
+        ensure_task = parent_task.subtasks[0][2]
+        self.assertTrue(result)
+        self.assertEqual(calls, [("check-init", ["host1"]), ("check-run", True)])
+        self.assertEqual(ensure_task.updates, [{"advance": 1}, {"completed": 3}])
+
+    async def test_ensure_agents_installed_installs_and_checks_again_when_health_fails(self):
+        calls = []
+        step = install.make_ensure_agents_installed_step(["host1"], self.config())
+
+        class CheckAgents:
+            def __init__(self, hosts):
+                calls.append(("check-init", hosts))
+
+            async def run(self, parent_task, subtasks=None, kv_storage=None):
+                calls.append(("check-run", parent_task is not None))
+                level = progress.TaskResultLevel.ERROR if len([c for c in calls if c[0] == "check-run"]) == 1 else progress.TaskResultLevel.OK
+                return progress.TaskResult(level=level)
+
+        class InstallAgents:
+            async def run(self, parent_task, subtasks=None, kv_storage=None):
+                calls.append(("install-run", parent_task is not None))
+                return progress.TaskResult(level=progress.TaskResultLevel.OK)
+
+        def make_install_steps(hosts, config, do_not_build, do_not_start, waiting):
+            calls.append(("install-init", hosts, config, do_not_build, do_not_start, waiting))
+            return InstallAgents()
+
+        with mock.patch.object(install.agent_client, "CheckAgentHealthOnHosts", CheckAgents), \
+                mock.patch.object(install.agent, "make_install_steps", make_install_steps):
+            result = await step.run(ParentTask())
+
+        self.assertTrue(result)
+        self.assertEqual(calls, [
+            ("check-init", ["host1"]),
+            ("check-run", True),
+            ("install-init", ["host1"], self.config(), False, False, 2),
+            ("install-run", True),
+            ("check-init", ["host1"]),
+            ("check-run", True),
         ])
 
     def test_make_install_steps_skips_disk_steps_when_sector_map_always(self):

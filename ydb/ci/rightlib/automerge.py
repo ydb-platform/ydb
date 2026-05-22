@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 import datetime
 import logging
 import subprocess
@@ -79,26 +80,32 @@ class PrAutomerger:
         pr.add_to_labels(pr_label_fail)
 
     def git_merge_pr(self, pr: PullRequest):
-        self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "merge-repo")
-        os.chdir("merge-repo")
-        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
-        self.git_run("checkout", pr.base.ref)
-
-        commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
+        shutil.rmtree("merge-repo", ignore_errors=True)
+        original_dir = os.getcwd()
         try:
-            self.git_run("merge", "PR", "-m", commit_msg)
-        except subprocess.CalledProcessError:
-            self.add_failed_comment(pr, "Unable to merge PR.")
-            self.add_pr_failed_label(pr)
-            return False
+            self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "merge-repo")
+            os.chdir("merge-repo")
+            self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
+            self.git_run("checkout", pr.base.ref)
 
-        try:
-            self.git_run("push")
-            return True
-        except subprocess.CalledProcessError:
-            self.add_failed_comment(pr, "Unable to push merged revision.")
-            self.add_pr_failed_label(pr)
-            return False
+            commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
+            try:
+                self.git_run("merge", "PR", "-m", commit_msg)
+            except subprocess.CalledProcessError:
+                self.add_failed_comment(pr, "Unable to merge PR.")
+                self.add_pr_failed_label(pr)
+                return False
+
+            try:
+                self.git_run("push")
+                return True
+            except subprocess.CalledProcessError:
+                self.add_failed_comment(pr, "Unable to push merged revision.")
+                self.add_pr_failed_label(pr)
+                return False
+        finally:
+            os.chdir(original_dir)
+            shutil.rmtree("merge-repo", ignore_errors=True)
 
     def merge_pr(self, pr: PullRequest):
         self.logger.info("start merge %s into %s", pr, pr.base.ref)

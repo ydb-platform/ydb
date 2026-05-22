@@ -10,7 +10,6 @@ import re
 import threading
 from functools import lru_cache, partial
 from inspect import getfile
-from operator import attrgetter
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -126,7 +125,7 @@ class _ClassesDescriptor:
             class_names = set(classes)
         check_identifiers("class name", *class_names)
         obj._classes = class_names
-        obj._update_styles()
+        obj.update_node_styles()
 
 
 @rich.repr.auto
@@ -180,7 +179,7 @@ class DOMNode(MessagePump):
     # Names of potential computed reactives
     _computes: ClassVar[frozenset[str]]
 
-    _PSEUDO_CLASSES: ClassVar[dict[str, Callable[[object], bool]]] = {}
+    _PSEUDO_CLASSES: ClassVar[dict[str, Callable[[App[Any]], bool]]] = {}
     """Pseudo class checks."""
 
     def __init__(
@@ -229,6 +228,7 @@ class DOMNode(MessagePump):
         ) = None
         self._pruning = False
         self._query_one_cache: LRUCache[QueryOneCacheKey, DOMNode] = LRUCache(1024)
+        self._trap_focus = False
 
         super().__init__()
 
@@ -408,6 +408,29 @@ class DOMNode(MessagePump):
         """
         return self._nodes
 
+    @property
+    def displayed_children(self) -> Sequence[Widget]:
+        """The displayed children (where `node.display==True`).
+
+        Returns:
+            A sequence of widgets.
+        """
+        return self._nodes.displayed
+
+    @property
+    def displayed_and_visible_children(self) -> Sequence[Widget]:
+        """The displayed children (where `node.display==True` and `node.visible==True`).
+
+        Returns:
+            A sequence of widgets.
+        """
+        return self._nodes.displayed_and_visible
+
+    @property
+    def is_empty(self) -> bool:
+        """Are there no displayed children?"""
+        return not any(child.display for child in self._nodes)
+
     def sort_children(
         self,
         *,
@@ -452,6 +475,20 @@ class DOMNode(MessagePump):
     def workers(self) -> WorkerManager:
         """The app's worker manager. Shortcut for `self.app.workers`."""
         return self.app.workers
+
+    def trap_focus(self, trap_focus: bool = True) -> None:
+        """Trap the focus.
+
+        When applied to a container, this will limit tab-to-focus to the children of that
+        container (once focus is within that container).
+
+        This can be useful for widgets that act like modal dialogs, where you want to restrict
+        the user to the controls within the dialog.
+
+        Args:
+            trap_focus: `True` to trap focus. `False` to restore default behavior.
+        """
+        self._trap_focus = trap_focus
 
     def run_worker(
         self,
@@ -1097,7 +1134,7 @@ class DOMNode(MessagePump):
     def _get_title_style_information(
         self, background: Color
     ) -> tuple[Color, Color, VisualStyle]:
-        """Get a Visual Style object for for titles.
+        """Get a Visual Style object for titles.
 
         Args:
             background: The background color.
@@ -1120,7 +1157,7 @@ class DOMNode(MessagePump):
     def _get_subtitle_style_information(
         self, background: Color
     ) -> tuple[Color, Color, VisualStyle]:
-        """Get a Rich Style object for for titles.
+        """Get a Rich Style object for subtitles.
 
         Args:
             background: The background color.
@@ -1141,26 +1178,12 @@ class DOMNode(MessagePump):
 
     @property
     def background_colors(self) -> tuple[Color, Color]:
-        """The background color and the color of the parent's background.
-
-        Returns:
-            `(<background color>, <color>)`
-        """
-        base_background = background = BLACK
-        for node in reversed(self.ancestors_with_self):
-            styles = node.styles
-            base_background = background
-            background += styles.background.tint(styles.background_tint)
-        return (base_background, background)
-
-    @property
-    def _opacity_background_colors(self) -> tuple[Color, Color]:
         """Background colors adjusted for opacity.
 
         Returns:
             `(<background color>, <color>)`
         """
-        base_background = background = BLACK
+        base_background = background = Color(0, 0, 0, 0)
         opacity = 1.0
         for node in reversed(self.ancestors_with_self):
             styles = node.styles
@@ -1223,15 +1246,6 @@ class DOMNode(MessagePump):
         while (node := node._parent) is not None:
             add_node(node)
         return cast("list[DOMNode]", nodes)
-
-    @property
-    def displayed_children(self) -> list[Widget]:
-        """The child nodes which will be displayed.
-
-        Returns:
-            A list of nodes.
-        """
-        return list(filter(attrgetter("display"), self._nodes))
 
     def watch(
         self,
@@ -1609,7 +1623,7 @@ class DOMNode(MessagePump):
         self,
         selector: str | type[QueryType],
         expect_type: type[QueryType] | None = None,
-    ) -> DOMNode | None:
+    ) -> DOMNode:
         """Get an ancestor which matches a query.
 
         Args:
@@ -1719,13 +1733,11 @@ class DOMNode(MessagePump):
         self.classes = classes
         return self
 
-    def _update_styles(self) -> None:
+    def update_node_styles(self) -> None:
         """Request an update of this node's styles.
 
-        Should be called whenever CSS classes / pseudo classes change.
+        Called by Textual whenever CSS classes / pseudo classes change.
         """
-        if not self.is_attached:
-            return
         try:
             self.app.update_styles(self)
         except NoActiveAppError:
@@ -1747,7 +1759,7 @@ class DOMNode(MessagePump):
         if old_classes == self._classes:
             return self
         if update:
-            self._update_styles()
+            self.update_node_styles()
         return self
 
     def remove_class(self, *class_names: str, update: bool = True) -> Self:
@@ -1766,7 +1778,7 @@ class DOMNode(MessagePump):
         if old_classes == self._classes:
             return self
         if update:
-            self._update_styles()
+            self.update_node_styles()
         return self
 
     def toggle_class(self, *class_names: str) -> Self:
@@ -1783,7 +1795,7 @@ class DOMNode(MessagePump):
         self._classes.symmetric_difference_update(class_names)
         if old_classes == self._classes:
             return self
-        self._update_styles()
+        self.update_node_styles()
         return self
 
     def has_pseudo_class(self, class_name: str) -> bool:

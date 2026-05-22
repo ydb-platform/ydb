@@ -374,8 +374,8 @@ message TEvLoadTestRequest {
 
     // NBS-DBG-like persistent tablet load.
     //
-    // TNbsDbgLikeLoadTablet immitates a simplified NBS tablet: it owns one or more
-    // DBG's, allow to configure performance related functionality and provides
+    // TNbsDbgLikeLoadTablet imitates a simplified NBS tablet: it owns one or more
+    // DBGs, allows configuring performance-related functionality, and provides
     // interface to write/read similarly to real NBS users. TNbsDbgLikeLoadActor
     // generates the actual load.
     //

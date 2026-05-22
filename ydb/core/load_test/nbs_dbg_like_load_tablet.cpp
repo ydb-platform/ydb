@@ -749,7 +749,7 @@ private:
 
     // ---- State ------------------------------------------------------------
 
-    ETabletPhase Phase = ETabletPhase::Unitialized;
+    ETabletPhase Phase = ETabletPhase::Uninitialized;
 
     // Cached at OnActivateExecutor so generation-fenced messages (peer
     // disconnects in particular) still carry the right value on the poison /
@@ -939,13 +939,13 @@ public:
             Self->AllocConfigSerialized.clear();
             Self->AllocConfig.Clear();
             Self->Dbgs.clear();
-            Self->Phase = ETabletPhase::Unitialized;
+            Self->Phase = ETabletPhase::Uninitialized;
         } else {
             Self->Dbgs = std::move(Dbgs);
             if (!Self->AllocConfigSerialized.empty()) {
                 Self->Phase = Self->Dbgs.empty() ? ETabletPhase::Allocating : ETabletPhase::Ready;
             } else {
-                Self->Phase = ETabletPhase::Unitialized;
+                Self->Phase = ETabletPhase::Uninitialized;
             }
         }
         Self->OnLoadComplete(ctx);
@@ -1085,7 +1085,7 @@ public:
         Self->Conn.clear();
         Self->AllocConfigSerialized.clear();
         Self->AllocConfig.Clear();
-        Self->Phase = ETabletPhase::Unitialized;
+        Self->Phase = ETabletPhase::Uninitialized;
         Self->EmitPhaseGauge();
         if (Self->PendingDeleteReplyTo) {
             auto reply = std::make_unique<TEvLoad::TEvNbsLoadTabletDeleteResult>();
@@ -1148,7 +1148,7 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletAllocateGroups::TPtr
     if (Phase == ETabletPhase::Deleting || Phase == ETabletPhase::Allocating) {
         return reply(NBSLT_BUSY);
     }
-    Y_DEBUG_ABORT_UNLESS(Phase == ETabletPhase::Unitialized);
+    Y_DEBUG_ABORT_UNLESS(Phase == ETabletPhase::Uninitialized);
 
     if (!ev->Get()->Record.HasAllocConfig()) {
         return reply(NBSLT_INTERNAL_ERROR, "missing AllocConfig");
@@ -1257,7 +1257,7 @@ void TNbsDbgLikeLoadTablet::FailPendingCreate(const TActorContext& ctx, const TS
         PendingCreateReplyTo = TActorId();
         PendingCreateCookie = 0;
     }
-    Phase = ETabletPhase::Unitialized;
+    Phase = ETabletPhase::Uninitialized;
     EmitPhaseGauge();
     BscRetryAttempts = 0;
 }
@@ -1344,7 +1344,7 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletDelete::TPtr& ev,
     if (Phase == ETabletPhase::Allocating || Phase == ETabletPhase::Deleting) {
         return reply(NBSLT_BUSY);
     }
-    if (Phase == ETabletPhase::Unitialized) {
+    if (Phase == ETabletPhase::Uninitialized) {
         return reply(NBSLT_OK);
     }
     Y_DEBUG_ABORT_UNLESS(Phase == ETabletPhase::Ready);
@@ -1361,7 +1361,7 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletGetSummary::TPtr& ev
     const TActorContext& ctx)
 {
     auto r = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummaryResult>();
-    if (Phase == ETabletPhase::Unitialized) {
+    if (Phase == ETabletPhase::Uninitialized) {
         r->Record.SetStatus(NBSLT_NOT_INITIALIZED);
         r->Record.SetErrorReason("not initialized");
         ctx.Send(ev->Sender, r.release(), 0, ev->Cookie);

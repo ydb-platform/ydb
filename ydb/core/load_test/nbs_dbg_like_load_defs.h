@@ -30,7 +30,7 @@ enum class ETabletPhase {
     // KV-flat base intercepts all events until
     // CreatedHook fires, so we never observe this
     // value from outside)
-    Unitialized,
+    Uninitialized,
 
     Allocating,
     Ready,

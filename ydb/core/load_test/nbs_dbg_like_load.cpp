@@ -523,13 +523,13 @@ private:
 
         // Build a minimal JsonResult compatible with service_actor's aggregation.
         const double durationSec = durationMs > 0 ? durationMs / 1000.0 : 1.0;
+        const ui64 writeErrors = WritesIssued >= WritesOk ? (WritesIssued - WritesOk) : 0;
+        const ui64 readErrors  = ReadsIssued  >= ReadsOk  ? (ReadsIssued  - ReadsOk)  : 0;
         finishEv->JsonResult["txs"] = static_cast<ui64>(WritesOk + ReadsOk);
         finishEv->JsonResult["rps"] = (WritesOk + ReadsOk) / durationSec;
-        finishEv->JsonResult["errors"] = 0.0;
+        finishEv->JsonResult["errors"] = static_cast<double>(writeErrors + readErrors) / durationSec;
         finishEv->JsonResult["percentile"]["50"] = static_cast<double>(writeP50Us) / 1000.0;
-        finishEv->JsonResult["percentile"]["95"] = static_cast<double>(writeP99Us) / 1000.0;
         finishEv->JsonResult["percentile"]["99"] = static_cast<double>(writeP99Us) / 1000.0;
-        finishEv->JsonResult["percentile"]["100"] = static_cast<double>(writeP99Us) / 1000.0;
 
         // Render a brief HTML summary as the "last page".
         {

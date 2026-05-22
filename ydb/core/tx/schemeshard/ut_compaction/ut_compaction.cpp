@@ -2821,7 +2821,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
             WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets);
             WriteData(runtime, "Simple1", 0, 100, TTestTxConfig::FakeHiveTablets + 1);
 
-            // block compact request, so compaction results will never delivered
+            // block compact requests, so compaction results will never be delivered
             TBlockEvents<TEvDataShard::TEvCompactTable> block(runtime);
 
             TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple1");
@@ -2838,7 +2838,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
             // release blocked EvCompactTable, but shards should be deleted and no EvCompactTable will be delivered
             block.Stop().Unblock();
-            env.SimulateSleep(runtime, TDuration::Seconds(35)); // greter than two default timouts (15 sec)
+            env.SimulateSleep(runtime, TDuration::Seconds(35)); // greater than two default timeouts (15 sec)
 
             UNIT_ASSERT_VALUES_EQUAL(
                 TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),
@@ -2870,7 +2870,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
             // release blocked results so schemeshard can finalize the compaction
             block.Stop().Unblock();
-            env.SimulateSleep(runtime, TDuration::Seconds(16)); // greter than default timout (15 sec)
+            env.SimulateSleep(runtime, TDuration::Seconds(16)); // greater than default timeout (15 sec)
 
             UNIT_ASSERT_VALUES_EQUAL(
                 TestGetCompaction(runtime, compactionId, "/MyRoot").GetForcedCompaction().GetState(),

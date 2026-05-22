@@ -194,6 +194,7 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);

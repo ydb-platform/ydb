@@ -242,13 +242,9 @@ public:
     bool InitiateBlockStorage(TSideEffects& sideEffects, ui32 generation);
     bool InitiateDeleteStorage(TSideEffects& sideEffects);
 
-    void IncreaseGeneration(TInstant now) {
+    void IncreaseGeneration() {
         Y_ABORT_UNLESS(KnownGeneration < Max<ui32>());
         ++KnownGeneration;
-
-        // Update restart statistics
-        Statistics.AddRestartTimestamp(now.MilliSeconds());
-        ActualizeTabletStatistics(now);
     }
 
     const TTabletInfo* FindTablet(TFollowerId followerId) const { // get leader or follower tablet depending on followerId

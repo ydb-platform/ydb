@@ -30,6 +30,8 @@
 
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/counters_keyvalue.pb.h>
+#include <ydb/core/protos/tablet_counters.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
@@ -262,6 +264,7 @@ public:
         ui64 MaxClockSkewUs = 0; // maximum clock skew between database nodes
         TNodeId MaxClockSkewNodeId = 0; // node id reported by most of the other nodes
         i64 MaxClockSkewNodeAvgUs = 0; // average clock skew reported by most of the other nodes
+        TVector<TTabletId> KeyValueStorageChannelFallbackTablets;
     };
 
     struct TGroupState {
@@ -671,6 +674,7 @@ public:
     THashMap<TString, THolder<NTenantSlotBroker::TEvTenantSlotBroker::TEvTenantState>> TenantStateByPath;
     THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
     THashMap<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveInfo>> HiveInfo;
+    THashMap<TTabletId, TRequestResponse<TEvTablet::TEvGetCountersResponse>> KeyValueCounters;
     ui64 HiveNodeStatsToGo = 0;
     std::optional<TRequestResponse<TEvConsole::TEvListTenantsResponse>> ListTenants;
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfo;
@@ -980,6 +984,7 @@ public:
             hFunc(TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(TEvHive::TEvResponseHiveInfo, Handle);
+            hFunc(TEvTablet::TEvGetCountersResponse, Handle);
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle)
             hFunc(TEvSysView::TEvGetStoragePoolsResponse, Handle);
@@ -1097,6 +1102,10 @@ public:
     [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveNodeStats> RequestHiveNodeStats(TTabletId hiveId) {
         THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
         return RequestTabletPipe<TEvHive::TEvResponseHiveNodeStats>(hiveId, request.Release());
+    }
+
+    [[nodiscard]] TRequestResponse<TEvTablet::TEvGetCountersResponse> RequestTabletCounters(TTabletId tabletId) {
+        return RequestTabletPipe<TEvTablet::TEvGetCountersResponse>(tabletId, new TEvTablet::TEvGetCounters());
     }
 
     [[nodiscard]] TRequestResponse<TEvConsole::TEvListTenantsResponse> RequestListTenants() {
@@ -1471,6 +1480,9 @@ public:
             if (GetPartitionStatsResult.count(tabletId) != 0) {
                 GetPartitionStatsResult[tabletId].Error(error);
             }
+            if (KeyValueCounters.count(tabletId) != 0) {
+                KeyValueCounters[tabletId].Error(error);
+            }
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
             for (const auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
                 if (requestState.TabletId == tabletId) {
@@ -1828,7 +1840,26 @@ public:
         if (!HiveInfo[hiveId].Set(std::move(ev))) {
             return;
         }
+        for (const NKikimrHive::TTabletInfo& hiveTablet : HiveInfo[hiveId]->Record.GetTablets()) {
+            if (hiveTablet.GetFollowerID() == 0
+                    && hiveTablet.GetTabletType() == TTabletTypes::KeyValue
+                    && KeyValueCounters.count(hiveTablet.GetTabletID()) == 0)
+            {
+                KeyValueCounters[hiveTablet.GetTabletID()] = RequestTabletCounters(hiveTablet.GetTabletID());
+            }
+        }
         RequestDone("TEvResponseHiveInfo");
+    }
+
+    void Handle(TEvTablet::TEvGetCountersResponse::TPtr& ev) {
+        TTabletId tabletId = TabletRequests.CompleteRequest(ev->Cookie);
+        if (tabletId) {
+            auto& response = KeyValueCounters[tabletId];
+            if (!response.Set(std::move(ev))) {
+                return;
+            }
+        }
+        RequestDone("TEvGetCountersResponse");
     }
 
     void Handle(TEvConsole::TEvListTenantsResponse::TPtr& ev) {
@@ -1913,6 +1944,56 @@ public:
                             state.NodeRestartsPerPeriod[hiveStat.GetNodeId()] = hiveStat.GetRestartsPerPeriod();
                         }
                     }
+                }
+            }
+        }
+    }
+
+    static ui64 GetSimpleCounterValue(const NKikimrTabletBase::TTabletCountersBase& counters, ui32 index) {
+        return index < static_cast<ui32>(counters.SimpleCountersSize())
+            ? counters.GetSimpleCounters(index).GetValue()
+            : 0;
+    }
+
+    void AggregateKeyValueCounters() {
+        for (auto& [dbPath, dbState] : DatabaseState) {
+            const auto& hiveResponse = HiveInfo[dbState.HiveId];
+            if (!hiveResponse.IsOk()) {
+                continue;
+            }
+
+            for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
+                if (hiveTablet.GetFollowerID() != 0 || hiveTablet.GetTabletType() != TTabletTypes::KeyValue) {
+                    continue;
+                }
+
+                TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
+                auto itDomain = FilterDomainKey.find(tenantId);
+                TDatabaseState* database = nullptr;
+                if (itDomain == FilterDomainKey.end()) {
+                    continue;
+                } else if (!itDomain->second) {
+                    if (!FilterDatabase || FilterDatabase == dbPath) {
+                        database = &dbState;
+                    }
+                } else {
+                    auto itDatabase = DatabaseState.find(*itDomain->second);
+                    if (itDatabase != DatabaseState.end()) {
+                        database = &itDatabase->second;
+                    }
+                }
+                if (!database) {
+                    continue;
+                }
+
+                auto itCounters = KeyValueCounters.find(hiveTablet.GetTabletID());
+                if (itCounters == KeyValueCounters.end() || !itCounters->second.IsOk()) {
+                    continue;
+                }
+
+                const auto& appCounters = itCounters->second->Record.GetTabletCounters().GetAppCounters();
+                if (GetSimpleCounterValue(appCounters, NKeyValue::COUNTER_STORAGE_CHANNEL_FALLBACK_RECENT) != 0) {
+                    database->KeyValueStorageChannelFallbackTablets.push_back(hiveTablet.GetTabletID());
                 }
             }
         }
@@ -3465,6 +3546,18 @@ public:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Storage usage over 75%", ETags::StorageState);
             }
         }
+        if (!databaseState.KeyValueStorageChannelFallbackTablets.empty()) {
+            TSelfCheckContext fallbackContext(&context, "KEYVALUE_STORAGE_CHANNEL");
+            auto& protoTablet = *fallbackContext.Location.mutable_compute()->mutable_tablet();
+            protoTablet.set_type(TTabletTypes::EType_Name(TTabletTypes::KeyValue));
+            for (TTabletId tabletId : databaseState.KeyValueStorageChannelFallbackTablets) {
+                protoTablet.add_id(ToString(tabletId));
+            }
+            fallbackContext.ReportStatus(
+                Ydb::Monitoring::StatusFlag::YELLOW,
+                "KeyValue storage channel fallback to main channel was detected",
+                ETags::StorageState);
+        }
         storageStatus.set_overall(context.GetOverallStatus());
         MergeRecords(context.IssueRecords);
     }
@@ -3700,6 +3793,7 @@ public:
 
         AggregateHiveInfo();
         AggregateHiveNodeStats();
+        AggregateKeyValueCounters();
         AggregateStoragePools();
         AggregateWhiteboard();
 

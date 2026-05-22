@@ -4712,6 +4712,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 break;
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
+            case EIndexTypeLocalMinMax:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

@@ -9,7 +9,7 @@ namespace NKikimr::NNbsDbgLike {
 ui32 GetHostsPerDbg(const TEvLoadTestRequest::TNbsDbgLikeLoad::TAllocConfig& cfg) {
     const ui32 hosts = cfg.GetHostsPerDbg();
     if (hosts == 0) {
-        return 1;
+        return kHostsPerDbgMax;
     }
     return std::min(hosts, kHostsPerDbgMax);
 }

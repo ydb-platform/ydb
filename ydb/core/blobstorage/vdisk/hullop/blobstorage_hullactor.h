@@ -3,6 +3,7 @@
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -101,11 +102,11 @@ namespace NKikimr {
     {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
         bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired"
-            << ", required: " << compact
-            << ", yardFreeUpToLsn: " << yardFreeUpToLsn
-            << ", force: " << force
-            << ", allowGarbageCollection: " << allowGarbageCollection);
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired",
+            {"required", compact},
+            {"yardFreeUpToLsn", yardFreeUpToLsn},
+            {"force", force},
+            {"allowGarbageCollection", allowGarbageCollection});
         if (compact) {
             CompactFreshSegment<TKey, TMemRec>(hullDs, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx, ctx,
                 allowGarbageCollection);

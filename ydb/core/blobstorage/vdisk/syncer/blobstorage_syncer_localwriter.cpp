@@ -1,6 +1,9 @@
 #include "blobstorage_syncer_localwriter.h"
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SYNCER
 
 namespace NKikimr {
 
@@ -156,10 +159,11 @@ namespace NKikimr {
             auto startTime = TAppData::TimeProvider->Now();
             Ev->UnpackData(VCtx);
             auto finishTime = TAppData::TimeProvider->Now();
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
-                    << "TLocalSyncDataExtractorActor: VDiskId# " << Ev->VDiskID.ToString()
-                    << " dataSize# " << Ev->Data.size()
-                    << " duration# %s" << (finishTime - startTime));
+            YDB_LOG_CTX_DEBUG(ctx, "TLocalSyncDataExtractorActor: duration# %s",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"VDiskId", Ev->VDiskID.ToString()},
+                {"dataSize", Ev->Data.size()},
+                {"#_(finishTime - startTime)", (finishTime - startTime)});
 
             ctx.Send(new IEventHandle(TargetId, ParentId, Ev.release()));
             PassAway();
@@ -234,10 +238,11 @@ namespace NKikimr {
             }
             addChunk();
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER, VCtx->VDiskLogPrefix
-                    << "TLocalSyncDataCutterActor: VDiskId# " << Ev->VDiskID.ToString()
-                    << " dataSize# " << Ev->Data.size()
-                    << " duration# " << TDuration::Seconds(timer.Passed()));
+            YDB_LOG_DEBUG("TLocalSyncDataCutterActor:",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"VDiskId", Ev->VDiskID.ToString()},
+                {"dataSize", Ev->Data.size()},
+                {"duration", TDuration::Seconds(timer.Passed())});
 
             Become(&TThis::StateFunc);
             SendChunks();

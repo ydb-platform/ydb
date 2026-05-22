@@ -2,6 +2,9 @@
 #include "data_uncertain.h"
 #include "garbage_collection.h"
 #include "s3.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -95,8 +98,11 @@ namespace NKikimr::NBlobDepot {
             Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
         }
         if (underHard && !Data.contains(key)) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT59, "UpdateKey: key under hard barrier, will not be created",
-                (Id, Self->GetLogId()), (Key, key), (Reason, reason));
+            YDB_LOG_DEBUG("UpdateKey: key under hard barrier, will not be created",
+                {"Marker", "BDT59"},
+                {"Id", Self->GetLogId()},
+                {"Key", key},
+                {"Reason", reason});
             return false; // no such key existed and will not be created as it hits the barrier
         }
 
@@ -153,9 +159,16 @@ namespace NKikimr::NBlobDepot {
                     case EUpdateOutcome::DROP:      return "DROP";
                 }
             };
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT60, "UpdateKey", (Id, Self->GetLogId()), (Key, key), (Reason, reason),
-                (Outcome, outcomeToString()), (UnderSoft, underSoft), (Inserted, inserted), (Value, value),
-                (UncertainWriteBefore, uncertainWriteBefore));
+            YDB_LOG_DEBUG("UpdateKey",
+                {"Marker", "BDT60"},
+                {"Id", Self->GetLogId()},
+                {"Key", key},
+                {"Reason", reason},
+                {"Outcome", outcomeToString()},
+                {"UnderSoft", underSoft},
+                {"Inserted", inserted},
+                {"Value", value},
+                {"UncertainWriteBefore", uncertainWriteBefore});
 
             auto returnRefCount = [&](auto& map, auto&& key, auto& deleteQ) {
                 const auto [it, inserted] = map.try_emplace(std::move(key));
@@ -313,7 +326,11 @@ namespace NKikimr::NBlobDepot {
 
     void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "UpdateKey", (Id, Self->GetLogId()), (Key, key), (Item, item));
+        YDB_LOG_DEBUG("UpdateKey",
+            {"Marker", "BDT10"},
+            {"Id", Self->GetLogId()},
+            {"Key", key},
+            {"Item", item});
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "UpdateKey", [&](TValue& value, bool inserted) {
             if (!inserted) { // update value items
@@ -329,8 +346,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "BindToBlob", (Id, Self->GetLogId()), (Key, key), (BlobSeqId, blobSeqId),
-            (Keep, keep), (DoNotKeep, doNotKeep));
+        YDB_LOG_DEBUG("BindToBlob",
+            {"Marker", "BDT49"},
+            {"Id", Self->GetLogId()},
+            {"Key", key},
+            {"BlobSeqId", blobSeqId},
+            {"Keep", keep},
+            {"DoNotKeep", doNotKeep});
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool /*inserted*/) {
             EUpdateOutcome outcome = EUpdateOutcome::NO_CHANGE;
@@ -438,7 +460,11 @@ namespace NKikimr::NBlobDepot {
         const bool success = proto.ParseFromString(value);
         Y_ABORT_UNLESS(success);
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT79, "AddDataOnLoad", (Id, Self->GetLogId()), (Key, key), (Value, proto));
+        YDB_LOG_DEBUG("AddDataOnLoad",
+            {"Marker", "BDT79"},
+            {"Id", Self->GetLogId()},
+            {"Key", key},
+            {"Value", proto});
 
         // we can only add key that is not loaded before; if key exists, it MUST have been loaded from the dataset
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(proto), uncertainWrite);
@@ -512,8 +538,12 @@ namespace NKikimr::NBlobDepot {
     bool TData::UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         return UpdateKey(std::move(key), txc, cookie, "UpdateKeepState", [&](TValue& value, bool inserted) {
-             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT51, "UpdateKeepState", (Id, Self->GetLogId()), (Key, key),
-                (KeepState, keepState), (Value, value));
+             YDB_LOG_DEBUG("UpdateKeepState",
+                 {"Marker", "BDT51"},
+                 {"Id", Self->GetLogId()},
+                 {"Key", key},
+                 {"KeepState", keepState},
+                 {"Value", value});
              if (inserted) {
                 return EUpdateOutcome::CHANGE;
              } else if (value.KeepState < keepState) {
@@ -526,7 +556,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT14, "DeleteKey", (Id, Self->GetLogId()), (Key, key));
+        YDB_LOG_DEBUG("DeleteKey",
+            {"Marker", "BDT14"},
+            {"Id", Self->GetLogId()},
+            {"Key", key});
         UpdateKey(key, txc, cookie, "DeleteKey", [&](TValue&, bool inserted) {
             Y_ABORT_UNLESS(!inserted);
             return EUpdateOutcome::DROP;
@@ -566,11 +599,16 @@ namespace NKikimr::NBlobDepot {
                 return s.Str();
             };
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Id, ev->Cookie), (Channel, int(channelIndex)), (InvalidatedStep, invalidatedStep),
-                (GivenIdRanges, channel.GivenIdRanges),
-                (Agent.GivenIdRanges, agent.GivenIdRanges[channelIndex]),
-                (WritesInFlight, makeWritesInFlight()));
+            YDB_LOG_DEBUG("Trim",
+                {"Marker", "BDT13"},
+                {"Id", Self->GetLogId()},
+                {"AgentId", agent.Connection->NodeId},
+                {"#_Id", ev->Cookie},
+                {"Channel", int(channelIndex)},
+                {"InvalidatedStep", invalidatedStep},
+                {"GivenIdRanges", channel.GivenIdRanges},
+                {"Agent.GivenIdRanges", agent.GivenIdRanges[channelIndex]},
+                {"WritesInFlight", makeWritesInFlight()});
 
             // sanity check -- ensure that current writes in flight would be conserved when processing garbage
             for (auto it = begin; it != writesInFlight.end() && it->Channel == channelIndex; ++it) {
@@ -597,8 +635,15 @@ namespace NKikimr::NBlobDepot {
 
     bool TData::OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT18, "OnBarrierShift", (Id, Self->GetLogId()), (TabletId, tabletId),
-            (Channel, int(channel)), (Hard, hard), (Previous, previous), (Current, current), (MaxItems, maxItems));
+        YDB_LOG_DEBUG("OnBarrierShift",
+            {"Marker", "BDT18"},
+            {"Id", Self->GetLogId()},
+            {"TabletId", tabletId},
+            {"Channel", int(channel)},
+            {"Hard", hard},
+            {"Previous", previous},
+            {"Current", current},
+            {"MaxItems", maxItems});
 
         Y_ABORT_UNLESS(Loaded);
 
@@ -632,7 +677,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddFirstMentionedBlob(TLogoBlobID id) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT80, "AddFirstMentionedBlob", (Id, Self->GetLogId()), (BlobId, id));
+        YDB_LOG_DEBUG("AddFirstMentionedBlob",
+            {"Marker", "BDT80"},
+            {"Id", Self->GetLogId()},
+            {"BlobId", id});
         auto& record = GetRecordsPerChannelGroup(id);
         const auto [_, inserted] = record.Used.insert(id);
         Y_ABORT_UNLESS(inserted);
@@ -649,7 +697,11 @@ namespace NKikimr::NBlobDepot {
 
     void TData::AccountBlob(TLogoBlobID id, bool add) {
         // account record
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT81, "AccountBlob", (Id, Self->GetLogId()), (BlobId, id), (Add, add));
+        YDB_LOG_DEBUG("AccountBlob",
+            {"Marker", "BDT81"},
+            {"Id", Self->GetLogId()},
+            {"BlobId", id},
+            {"Add", add});
         const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
         auto& groupStat = Self->Groups[groupId];
         if (add) {

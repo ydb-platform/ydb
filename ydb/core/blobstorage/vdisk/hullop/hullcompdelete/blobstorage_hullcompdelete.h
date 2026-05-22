@@ -6,6 +6,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/queue.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 // Delayed huge blob deletion mechanism is needed to prevent races between huge blob reads and compactions when compacted
 // items are being read at the moment of deletion. To ensure this we have LevelIndex shared state that holds actual
@@ -97,13 +98,14 @@ namespace NKikimr {
                 const TVDiskContextPtr& vctx) {
             Y_ABORT_UNLESS(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, vctx->VDiskLogPrefix
-                << "TDelayedCompactionDeleter: Update recordLsn# " << recordLsn
-                << " removedHugeBlobs.size# " << removedHugeBlobs.Size()
-                << " allocatedHugeBlobs.size# " << allocatedHugeBlobs.Size()
-                << " CurrentSnapshots.size# " << CurrentSnapshots.size()
-                << " CurrentSnapshots.front# " << (CurrentSnapshots.empty() ? 0 : CurrentSnapshots.begin()->first)
-                << " CurrentSnapshots.back# " << (CurrentSnapshots.empty() ? 0 : (--CurrentSnapshots.end())->first));
+            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "TDelayedCompactionDeleter: Update",
+                {"VDiskLogPrefix", vctx->VDiskLogPrefix},
+                {"recordLsn", recordLsn},
+                {"removedHugeBlobs.size", removedHugeBlobs.Size()},
+                {"allocatedHugeBlobs.size", allocatedHugeBlobs.Size()},
+                {"CurrentSnapshots.size", CurrentSnapshots.size()},
+                {"CurrentSnapshots.front", (CurrentSnapshots.empty() ? 0 : CurrentSnapshots.begin()->first)},
+                {"CurrentSnapshots.back", (CurrentSnapshots.empty() ? 0 : (--CurrentSnapshots.end())->first)});
             ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(allocatedHugeBlobs),
                 std::move(chunksToForget), signature, wId);
             ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);

@@ -3,6 +3,9 @@
 #include "blocks.h"
 #include "data.h"
 #include "garbage_collection.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -16,7 +19,9 @@ namespace NKikimr::NBlobDepot {
             {}
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT19, "TTxLoad::Execute", (Id, Self->GetLogId()));
+                YDB_LOG_DEBUG("TTxLoad::Execute",
+                    {"Marker", "BDT19"},
+                    {"Id", Self->GetLogId()});
 
                 NIceDb::TNiceDb db(txc.DB);
 
@@ -116,8 +121,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "TTxLoad::Complete", (Id, Self->GetLogId()),
-                    (Configured, Self->Configured));
+                YDB_LOG_DEBUG("TTxLoad::Complete",
+                    {"Marker", "BDT20"},
+                    {"Id", Self->GetLogId()},
+                    {"Configured", Self->Configured});
 
                 Self->OnUpdateDecommitState();
 

@@ -1,4 +1,7 @@
 #include "node_warden_mock.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 void TNodeWardenMockActor::Connect() {
     Y_ABORT_UNLESS(!PipeId);
@@ -6,7 +9,11 @@ void TNodeWardenMockActor::Connect() {
 }
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-    STLOG(PRI_INFO, BS_NODE, NWM02, "pipe connected", (Sender, ev->Sender), (PipeId, PipeId), (Status, ev->Get()->Status));
+    YDB_LOG_INFO("pipe connected",
+        {"Marker", "NWM02"},
+        {"Sender", ev->Sender},
+        {"PipeId", PipeId},
+        {"Status", ev->Get()->Status});
     if (ev->Sender == PipeId) {
         Y_ABORT_UNLESS(!IsPipeConnected);
         if (ev->Get()->Status == NKikimrProto::OK) {
@@ -20,7 +27,10 @@ void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
 }
 
 void TNodeWardenMockActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-    STLOG(PRI_INFO, BS_NODE, NWM03, "pipe disconnected", (Sender, ev->Sender), (PipeId, PipeId));
+    YDB_LOG_INFO("pipe disconnected",
+        {"Marker", "NWM03"},
+        {"Sender", ev->Sender},
+        {"PipeId", PipeId});
     if (ev->Sender == PipeId) {
         IsPipeConnected = false;
         ScheduleReconnect();

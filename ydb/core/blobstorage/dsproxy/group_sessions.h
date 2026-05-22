@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_common.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -189,8 +190,11 @@ namespace NKikimr {
                 ui64 cookie, NWilson::TTraceId traceId, const TVDiskID vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId) {
             auto& queues = FailDomains[topology.GetFailDomainOrderNumber(vdiskId)].VDisks[vdiskId.VDisk].Queues;
             TActorId queueActorId = queues.GetQueue(queueId).ActorId;
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Send to queueActorId# " << queueActorId
-                << " " << TypeName(*event) << "# " << event->ToString() << " cookie# " << cookie);
+            YDB_LOG_COMP_DEBUG(NKikimrServices::BS_PROXY, "Send",
+                {"to_queueActorId", queueActorId},
+                {"#_TypeName(*event)", TypeName(*event)},
+                {"event", event->ToString()},
+                {"cookie", cookie});
             TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,
                 std::move(traceId)));
         }

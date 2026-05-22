@@ -4,6 +4,9 @@
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -69,9 +72,12 @@ namespace NKikimr::NBlobDepot {
             void Handle(NWrappers::TEvExternalStorage::TEvGetObjectResponse::TPtr ev) {
                 auto& msg = *ev->Get();
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA55, "received TEvGetObjectResponse",
-                    (AgentId, Agent.LogId), (ReadId, Read.ReadId),
-                    (Response, msg.Result), (BodyLen, std::size(msg.Body)));
+                YDB_LOG_DEBUG("received TEvGetObjectResponse",
+                    {"Marker", "BDA55"},
+                    {"AgentId", Agent.LogId},
+                    {"ReadId", Read.ReadId},
+                    {"Response", msg.Result},
+                    {"BodyLen", std::size(msg.Body)});
 
                 if (msg.IsSuccess()) {
                     ++*Agent.S3GetsOk;
@@ -117,8 +123,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleUndelivered() {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA56, "received TEvUndelivered",
-                    (AgentId, Agent.LogId), (ReadId, Read.ReadId));
+                YDB_LOG_DEBUG("received TEvUndelivered",
+                    {"Marker", "BDA56"},
+                    {"AgentId", Agent.LogId},
+                    {"ReadId", Read.ReadId});
                 ++*Agent.S3GetsError;
                 Read.Finish(std::nullopt, "wrapper actor terminated");
                 Agent.OnS3GetCompleted(/*success=*/false, 0);

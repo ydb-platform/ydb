@@ -1,13 +1,20 @@
 #include "blob_recovery_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
 
 namespace NKikimr {
 
     void TBlobRecoveryActor::Handle(TEvRecoverBlob::TPtr ev) {
         auto *msg = ev->Get();
         const ui64 requestId = NextRequestId++;
-        STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS31, VDISKP(LogPrefix, "received TEvRecoverBlob"), (SelfId, SelfId()),
-            (Msg, ev->Get()->ToString()), (IsConnected, IsConnected), (WakeupScheduled, WakeupScheduled),
-            (RequestId, requestId));
+        YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvRecoverBlob"),
+            {"Marker", "VDS31"},
+            {"SelfId", SelfId()},
+            {"Msg", ev->Get()->ToString()},
+            {"IsConnected", IsConnected},
+            {"WakeupScheduled", WakeupScheduled},
+            {"RequestId", requestId});
 
         // create in flight context for this request and place it into in flight map
         auto context = std::make_shared<TInFlightContext>(requestId, *ev);

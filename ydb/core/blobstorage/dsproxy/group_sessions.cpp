@@ -1,6 +1,9 @@
 #include "group_sessions.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
 
 namespace NKikimr {
 
@@ -76,11 +79,11 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             TActorId queue = TActivationContext::Register(queueActor.release(), ProxyActor, TMailboxType::ReadAsFilled,
                 AppData()->SystemPoolId);
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << info->GroupID
-                << " Actor# " << ProxyActor
-                << " Create Queue# " << queue.ToString()
-                << " targetNodeId# " << targetNodeId
-                << " Marker# DSP01");
+            YDB_LOG_DEBUG("Create Marker# DSP01",
+                {"Group", info->GroupID},
+                {"Actor", ProxyActor},
+                {"Queue", queue.ToString()},
+                {"targetNodeId", targetNodeId});
 
             auto& q = stateVDisk.Queues.GetQueue(queueId);
             q.ActorId = queue;

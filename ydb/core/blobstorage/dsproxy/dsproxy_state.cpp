@@ -2,6 +2,9 @@
 #include "dsproxy_monactor.h"
 
 #include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
 
 namespace NKikimr {
 
@@ -27,8 +30,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateEstablishingSessions() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-            << " SetStateEstablishingSessions Marker# DSP03");
+        YDB_LOG_INFO("SetStateEstablishingSessions Marker# DSP03",
+            {"Group", GroupId});
         EstablishingSessionStartTime = TActivationContext::Now();
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -39,8 +42,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateEstablishingSessionsTimeout() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-            << " SetStateEstablishingSessionsTimeout Marker# DSP09");
+        YDB_LOG_INFO("SetStateEstablishingSessionsTimeout Marker# DSP09",
+            {"Group", GroupId});
         EstablishingSessionStartTime = TInstant::Zero();
         EstablishingSessionsPutMuteChecker.Unmute();
         EstablishingSessionsTimeoutEv = nullptr;
@@ -54,8 +57,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateUnconfigured() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-            << " SetStateUnconfigured Marker# DSP07");
+        YDB_LOG_INFO("SetStateUnconfigured Marker# DSP07",
+            {"Group", GroupId});
         ErrorDescription = "StateUnconfigured (DSPE9).";
         EstablishingSessionsTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -65,8 +68,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateUnconfiguredTimeout() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-            << " SetStateUnconfiguredTimeout Marker# DSP14");
+        YDB_LOG_INFO("SetStateUnconfiguredTimeout Marker# DSP14",
+            {"Group", GroupId});
         EstablishingSessionsTimeoutEv = nullptr;
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -78,8 +81,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::SetStateWork() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-            << " SetStateWork Marker# DSP15");
+        YDB_LOG_INFO("SetStateWork Marker# DSP15",
+            {"Group", GroupId});
         EstablishingSessionsTimeoutEv = nullptr;
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
@@ -177,11 +180,10 @@ namespace NKikimr {
                     break;
             }
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-            << " TEvConfigureProxy received"
-            << " GroupGeneration# " << (Info ? ToString(Info->GroupGeneration) : "<none>")
-            << " IsLimitedKeyless# " << (IsLimitedKeyless ? "true" : "false")
-            << " Marker# DSP02");
+        YDB_LOG_INFO("TEvConfigureProxy received Marker# DSP02",
+            {"Group", GroupId},
+            {"GroupGeneration", (Info ? ToString(Info->GroupGeneration) : "<none>")},
+            {"IsLimitedKeyless", (IsLimitedKeyless ? "true" : "false")});
         if (Info) { // if the new group has arrived
             if (Sessions) { // queues are already created
                 for (size_t i = 0; i < Sessions->GroupQueues->DisksByOrderNumber.size(); ++i) {
@@ -215,8 +217,8 @@ namespace NKikimr {
                 << " UnconfiguredStateTs# " << UnconfiguredStateTs
                 << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
-                "Unconfigured Wakeup TIMEOUT Marker# DSP05 " << details);
+        YDB_LOG_ERROR("Unconfigured Wakeup TIMEOUT Marker# DSP05",
+            {"details", details});
 
         ErrorDescription = "Configuration timeout occured (DSPE1). " + details;
         EstablishingSessionsPutMuteChecker.Unmute();
@@ -226,8 +228,8 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::SwitchToWorkWhenGoodToGo() {
         Y_ABORT_UNLESS(Sessions);
         if (Sessions->GoodToGo(*Topology, ForceWaitAllDrives)) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                    << " -> StateWork" << " Marker# DSP11");
+            YDB_LOG_INFO("-> StateWork Marker# DSP11",
+                {"Group", GroupId});
             ErrorDescription = "StateWork (DSPE3).";
             EstablishingSessionStartTime = TInstant::Zero();
             EstablishingSessionsPutMuteChecker.Unmute();
@@ -244,8 +246,8 @@ namespace NKikimr {
         TString details = TStringBuilder() << " GroupId# " << GroupId
                 << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
                 << " NumUnconnectedDisks# " << NumUnconnectedDisks;
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
-                "StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12 " << details);
+        YDB_LOG_ERROR("StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12",
+            {"details", details});
         ErrorDescription = "Timeout while establishing sessions (DSPE4). " + details;
         SetStateEstablishingSessionsTimeout();
     }
@@ -253,10 +255,10 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::Handle(TEvProxyQueueState::TPtr& ev) {
         TInstant now = TActivationContext::Now();
         TDuration establishingSessionsDuration = now - EstablishingSessionStartTime;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " Handle TEvProxyQueueState# "<< ev->Get()->ToString()
-                << " Duration# " << establishingSessionsDuration
-                << " Marker# DSP04");
+        YDB_LOG_DEBUG("Handle Marker# DSP04",
+            {"Group", GroupId},
+            {"TEvProxyQueueState", ev->Get()->ToString()},
+            {"Duration", establishingSessionsDuration});
         Y_ABORT_UNLESS(Sessions);
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(Topology);
@@ -280,8 +282,9 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::Bootstrap() {
         if (IsEjected) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                    << " HasInvalidGroupId# " << HasInvalidGroupId() << " Bootstrap -> StateEjected Marker# DSP42");
+            YDB_LOG_NOTICE("Bootstrap -> StateEjected Marker# DSP42",
+                {"Group", GroupId},
+                {"HasInvalidGroupId", HasInvalidGroupId()});
             if (HasInvalidGroupId()) {
                 ErrorDescription = "Created as unconfigured in error state (DSPE11). It happens when the request was sent for an invalid groupID";
                 ExtraLogInfo = "The request was sent for an invalid groupID ";
@@ -336,12 +339,15 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::EnsureMonitoring(bool fullIfPossible) {
         if (MonActor && fullIfPossible && !IsFullMonitoring) {
             IsFullMonitoring = true;
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "EnsureMonitoring Group# " << GroupId
-                    << " IsLimitedKeyless# " << IsLimitedKeyless << " Marker# DSP57 initialize full monitoring");
+            YDB_LOG_NOTICE("EnsureMonitoring Marker# DSP57 initialize full monitoring",
+                {"Group", GroupId},
+                {"IsLimitedKeyless", IsLimitedKeyless});
             Mon->BecomeFull();
         } else if (!MonActor) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "EnsureMonitoring Group# " << GroupId
-                    << " IsLimitedKeyless# " << IsLimitedKeyless << " fullIfPossible# " << fullIfPossible << " Marker# DSP58");
+            YDB_LOG_NOTICE("EnsureMonitoring Marker# DSP58",
+                {"Group", GroupId},
+                {"IsLimitedKeyless", IsLimitedKeyless},
+                {"fullIfPossible", fullIfPossible});
 
             bool limited = IsLimitedKeyless || !fullIfPossible;
             IsFullMonitoring = IsLimitedKeyless || fullIfPossible;
@@ -361,8 +367,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::Handle(TEvRequestProxySessionsState::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "RequestProxySessionsState Group# " << GroupId
-                << " Marker# DSP59");
+        YDB_LOG_DEBUG("RequestProxySessionsState Marker# DSP59",
+            {"Group", GroupId});
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
 

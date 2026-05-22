@@ -9,6 +9,9 @@
 #include <util/datetime/base.h>
 #include <util/string/join.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_COMP_BROKER
 
 namespace NKikimr {
     struct TCompBrokerMon : public TThrRefBase {
@@ -322,7 +325,8 @@ namespace NKikimr {
         }
 
         void Handle(TEvCompactionTokenRequest::TPtr& ev, const TActorContext &ctx) {
-            LOG_TRACE_S(ctx, NKikimrServices::BS_COMP_BROKER, "Handle TEvCompactionTokenRequest: " << ev->Get()->ToString());
+            YDB_LOG_CTX_TRACE(ctx, "Handle",
+                {"TEvCompactionTokenRequest", ev->Get()->ToString()});
 
             Mon->CompBrokerTokenRequests->Inc();
             CompactionsPerPDisk.RequestCompactionToken(ev->Get()->PDiskId, ev->Get()->GroupId, ev->Get()->VDiskId, ev->Sender, ev->Get()->Ratio);
@@ -330,7 +334,8 @@ namespace NKikimr {
         }
 
         void Handle(TEvReleaseCompactionToken::TPtr& ev, const TActorContext &ctx) {
-            LOG_TRACE_S(ctx, NKikimrServices::BS_COMP_BROKER, "Handle TEvReleaseCompactionToken: " << ev->Get()->ToString());
+            YDB_LOG_CTX_TRACE(ctx, "Handle",
+                {"TEvReleaseCompactionToken", ev->Get()->ToString()});
 
             Mon->CompBrokerTokenReleases->Inc();
             if (ev->Get()->Force) {
@@ -342,18 +347,20 @@ namespace NKikimr {
         }
 
         void HandleWakeup(const TActorContext& ctx) {
-            LOG_TRACE_S(ctx, NKikimrServices::BS_COMP_BROKER, "Handle TEvWakeup");
+            YDB_LOG_CTX_TRACE(ctx, "Handle TEvWakeup");
 
             TryToStartNewCompactions(ctx);
             ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
         }
 
         void TryToStartNewCompactions(const TActorContext &ctx) {
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_COMP_BROKER, "Compactions queue state: " << CompactionsPerPDisk.ToString());
+            YDB_LOG_CTX_DEBUG(ctx, "Compactions queue",
+                {"state", CompactionsPerPDisk.ToString()});
 
             auto maxCompactions = MaxActiveCompactionsPerPDisk.Update(ctx.Now());
             while (auto compactionInfo = CompactionsPerPDisk.StartNewCompaction(maxCompactions, Token)) {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_COMP_BROKER, "Start new compaction: " << compactionInfo->ToString());
+                YDB_LOG_CTX_DEBUG(ctx, "Start new",
+                    {"compaction", compactionInfo->ToString()});
                 Mon->CompBrokerTokenGrants->Inc();
                 Send(compactionInfo->ActorId, new TEvCompactionTokenResult(compactionInfo->Token, compactionInfo->GroupId, compactionInfo->VDiskId));
                 Token++;
@@ -400,15 +407,15 @@ namespace NKikimr {
             }
             
             if (!longWaitingCompactions.empty()) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER, 
-                    "Long waiting compactions detected: Count# " << longWaitingCompactions.size() 
-                    << " Compactions# [" << JoinSeq(", ", longWaitingCompactions) << "]");
+                YDB_LOG_CTX_WARN(ctx, "Long waiting compactions detected: Compactions# [",
+                    {"Count", longWaitingCompactions.size()},
+                    {"#_num_0", JoinSeq(", ", longWaitingCompactions)});
             }
             
             if (!longWorkingCompactions.empty()) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER,
-                    "Long working compactions detected: Count# " << longWorkingCompactions.size() 
-                    << " Compactions# [" << JoinSeq(", ", longWorkingCompactions) << "]");
+                YDB_LOG_CTX_WARN(ctx, "Long working compactions detected: Compactions# [",
+                    {"Count", longWorkingCompactions.size()},
+                    {"#_num_0", JoinSeq(", ", longWorkingCompactions)});
             }
         }
 

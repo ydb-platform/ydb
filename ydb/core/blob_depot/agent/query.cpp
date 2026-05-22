@@ -1,5 +1,8 @@
 #include "agent_impl.h"
 #include "blocks.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
 
@@ -124,8 +127,11 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::ProcessStorageEvent(std::unique_ptr<IEventHandle> ev, TMonotonic received) {
         TQuery *query = CreateQuery<0>(std::move(ev), received);
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "new query", (AgentId, LogId),
-            (QueryId, query->GetQueryId()), (Name, query->GetName()));
+        YDB_LOG_DEBUG("new query",
+            {"Marker", "BDA13"},
+            {"AgentId", LogId},
+            {"QueryId", query->GetQueryId()},
+            {"Name", query->GetName()});
         if (!TabletId) {
             query->EndWithError(NKikimrProto::ERROR, "group is in error state");
         } else {
@@ -190,8 +196,11 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::CheckQueryExecutionTime(TMonotonic now) {
         const auto prio = std::exchange(WatchdogPriority, NLog::PRI_NOTICE);
-        STLOG(prio, BLOB_DEPOT_AGENT, BDA23, "query is still executing", (AgentId, Agent.LogId),
-            (QueryId, GetQueryId()), (Duration, now - StartTime));
+        YDB_LOG(prio, "query is still executing",
+            {"Marker", "BDA23"},
+            {"AgentId", Agent.LogId},
+            {"QueryId", GetQueryId()},
+            {"Duration", now - StartTime});
         auto nh = Agent.QueryWatchdogMap.extract(QueryWatchdogMapIter);
         nh.key() = now + WatchdogDuration;
         QueryWatchdogMapIter = Agent.QueryWatchdogMap.insert(std::move(nh));
@@ -202,9 +211,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA14, "query ends with error", (AgentId, Agent.LogId),
-            (QueryId, GetQueryId()), (Status, status), (ErrorReason, errorReason),
-            (Duration, TActivationContext::Monotonic() - Received));
+        YDB_LOG_INFO("query ends with error",
+            {"Marker", "BDA14"},
+            {"AgentId", Agent.LogId},
+            {"QueryId", GetQueryId()},
+            {"Status", status},
+            {"ErrorReason", errorReason},
+            {"Duration", TActivationContext::Monotonic() - Received});
 
         if (const auto it = Agent.ErrorResponseTime.find(Event->GetTypeRewrite()); it != Agent.ErrorResponseTime.end()) {
             const TMonotonic now = TActivationContext::Monotonic();
@@ -233,10 +246,12 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (AgentId, Agent.LogId),
-            (QueryId, GetQueryId()),
-            (Response, response->ToString()),
-            (Duration, TActivationContext::Monotonic() - Received));
+        YDB_LOG_DEBUG("query ends with success",
+            {"Marker", "BDA15"},
+            {"AgentId", Agent.LogId},
+            {"QueryId", GetQueryId()},
+            {"Response", response->ToString()},
+            {"Duration", TActivationContext::Monotonic() - Received});
 
         if (const auto it = Agent.SuccessResponseTime.find(Event->GetTypeRewrite()); it != Agent.SuccessResponseTime.end()) {
             const TMonotonic now = TActivationContext::Monotonic();
@@ -285,8 +300,11 @@ namespace NKikimr::NBlobDepot {
         TRequestSender::ClearRequestsInFlight();
 
         if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
-            STLOG(WatchdogPriority, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
-                (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Duration, duration));
+            YDB_LOG(WatchdogPriority, "query execution took too much time",
+                {"Marker", "BDA00"},
+                {"AgentId", Agent.LogId},
+                {"QueryId", GetQueryId()},
+                {"Duration", duration});
         }
     }
 

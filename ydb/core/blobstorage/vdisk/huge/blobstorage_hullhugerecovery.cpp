@@ -1,6 +1,9 @@
 #include "blobstorage_hullhugerecovery.h"
 #include "blobstorage_hullhugeheap.h"
 #include <library/cpp/random_provider/random_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLHUGE
 
 
 using namespace NKikimrServices;
@@ -613,8 +616,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
-                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+                YDB_LOG_CRIT("size is not as",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"HugeSlot", hugeSlot.ToString()},
+                    {"Expected", size});
             }
             ++refcount;
         }
@@ -626,8 +631,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_HULLHUGE, VCtx->VDiskLogPrefix
-                    << "HugeSlot# " << hugeSlot.ToString() << " size is not as Expected# " << size);
+                YDB_LOG_CRIT("size is not as",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"HugeSlot", hugeSlot.ToString()},
+                    {"Expected", size});
             }
             if (!--refcount) {
                 ChunkToSlotSize.erase(jt);

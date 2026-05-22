@@ -6,11 +6,17 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
 #include <util/string/split.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
-        STLOG(PRI_INFO, BS_NODE, NW35, "DestroyLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()));
+        YDB_LOG_INFO("DestroyLocalVDisk",
+            {"Marker", "NW35"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vdisk.GetVSlotId()});
         Y_ABORT_UNLESS(!vdisk.RuntimeData);
 
         const TVSlotId vslotId = vdisk.GetVSlotId();
@@ -23,8 +29,11 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
-        STLOG(PRI_INFO, BS_NODE, NW00, "PoisonLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
-            (RuntimeData, vdisk.RuntimeData.has_value()));
+        YDB_LOG_INFO("PoisonLocalVDisk",
+            {"Marker", "NW00"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vdisk.GetVSlotId()},
+            {"RuntimeData", vdisk.RuntimeData.has_value()});
 
         bool vdiskRunning = false;
 
@@ -64,10 +73,15 @@ namespace NKikimr::NStorage {
         const bool readOnly = vdisk.Config.GetReadOnly();
         Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
-        STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (SlayInFlight, SlayInFlight.contains(vslotId)),
-            (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId), (PDiskGuid, pdiskGuid), (DonorMode, donorMode),
-            (PDiskRestartInFlight, PDiskRestartInFlight.contains(vslotId.PDiskId)),
-            (PDisksWaitingToStart, PDisksWaitingToStart.contains(vslotId.PDiskId)));
+        YDB_LOG_DEBUG("StartLocalVDiskActor",
+            {"Marker", "NW23"},
+            {"SlayInFlight", SlayInFlight.contains(vslotId)},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vslotId},
+            {"PDiskGuid", pdiskGuid},
+            {"DonorMode", donorMode},
+            {"PDiskRestartInFlight", PDiskRestartInFlight.contains(vslotId.PDiskId)},
+            {"PDisksWaitingToStart", PDisksWaitingToStart.contains(vslotId.PDiskId)});
 
         if (SlayInFlight.contains(vslotId)) {
             return;
@@ -345,8 +359,13 @@ namespace NKikimr::NStorage {
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
-        STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
-            (PDiskGuid, pdiskGuid), (DDisk, ddisk), (VDiskServiceId, vdiskServiceId));
+        YDB_LOG_DEBUG("StartLocalVDiskActor done",
+            {"Marker", "NW24"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vslotId},
+            {"PDiskGuid", pdiskGuid},
+            {"DDisk", ddisk},
+            {"VDiskServiceId", vdiskServiceId});
 
         // for dynamic groups -- start state aggregator
         if (!ddisk && TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
@@ -463,8 +482,11 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Slay(TVDiskRecord& vdisk) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
-        STLOG(PRI_INFO, BS_NODE, NW33, "Slay", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
-            (SlayInFlight, SlayInFlight.contains(vslotId)));
+        YDB_LOG_INFO("Slay",
+            {"Marker", "NW33"},
+            {"VDiskId", vdisk.GetVDiskId()},
+            {"VSlotId", vdisk.GetVSlotId()},
+            {"SlayInFlight", SlayInFlight.contains(vslotId)});
         if (!SlayInFlight.contains(vslotId)) {
             PoisonLocalVDisk(vdisk);
             const TVSlotId vslotId = vdisk.GetVSlotId();
@@ -493,7 +515,10 @@ namespace NKikimr::NStorage {
     void TNodeWarden::Handle(TEvBlobStorage::TEvDropDonor::TPtr ev) {
         auto *msg = ev->Get();
         const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
-        STLOG(PRI_INFO, BS_NODE, NW34, "TEvDropDonor", (VSlotId, vslotId), (VDiskId, msg->VDiskId));
+        YDB_LOG_INFO("TEvDropDonor",
+            {"Marker", "NW34"},
+            {"VSlotId", vslotId},
+            {"VDiskId", msg->VDiskId});
         SendDropDonorQuery(msg->NodeId, msg->PDiskId, msg->VSlotId, msg->VDiskId);
 
         if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end()) {

@@ -3,6 +3,9 @@
 #include <util/system/fs.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -19,8 +22,11 @@ void TNodeWarden::EstablishPipe() {
         .DoFirstRetryInstantly = false,
     }));
 
-    STLOG(PRI_DEBUG, BS_NODE, NW21, "EstablishPipe", (AvailDomainId, AvailDomainId),
-        (PipeClientId, PipeClientId), (ControllerId, controllerId));
+    YDB_LOG_DEBUG("EstablishPipe",
+        {"Marker", "NW21"},
+        {"AvailDomainId", AvailDomainId},
+        {"PipeClientId", PipeClientId},
+        {"ControllerId", controllerId});
 
     for (auto& [key, pdisk] : LocalPDisks) {
         if (pdisk.PDiskMetrics) {
@@ -44,20 +50,32 @@ void TNodeWarden::EstablishPipe() {
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->Status != NKikimrProto::OK) {
-        STLOG(PRI_ERROR, BS_NODE, NW71, "TEvTabletPipe::TEvClientConnected", (Status, msg->Status),
-            (ClientId, msg->ClientId), (ServerId, msg->ServerId), (TabletId, msg->TabletId),
-            (PipeClientId, PipeClientId));
+        YDB_LOG_ERROR("TEvTabletPipe::TEvClientConnected",
+            {"Marker", "NW71"},
+            {"Status", msg->Status},
+            {"ClientId", msg->ClientId},
+            {"ServerId", msg->ServerId},
+            {"TabletId", msg->TabletId},
+            {"PipeClientId", PipeClientId});
         OnPipeError();
     } else {
-        STLOG(PRI_DEBUG, BS_NODE, NW05, "TEvTabletPipe::TEvClientConnected OK", (ClientId, msg->ClientId),
-            (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
+        YDB_LOG_DEBUG("TEvTabletPipe::TEvClientConnected OK",
+            {"Marker", "NW05"},
+            {"ClientId", msg->ClientId},
+            {"ServerId", msg->ServerId},
+            {"TabletId", msg->TabletId},
+            {"PipeClientId", PipeClientId});
     }
 }
 
 void TNodeWarden::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
     TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-    STLOG(PRI_ERROR, BS_NODE, NW42, "Handle(TEvTabletPipe::TEvClientDestroyed)", (ClientId, msg->ClientId),
-        (ServerId, msg->ServerId), (TabletId, msg->TabletId), (PipeClientId, PipeClientId));
+    YDB_LOG_ERROR("Handle(TEvTabletPipe::TEvClientDestroyed)",
+        {"Marker", "NW42"},
+        {"ClientId", msg->ClientId},
+        {"ServerId", msg->ServerId},
+        {"TabletId", msg->TabletId},
+        {"PipeClientId", PipeClientId});
     OnPipeError();
 }
 
@@ -70,7 +88,8 @@ void TNodeWarden::OnPipeError() {
 }
 
 void TNodeWarden::SendRegisterNode() {
-    STLOG(PRI_DEBUG, BS_NODE, NW20, "SendRegisterNode");
+    YDB_LOG_DEBUG("SendRegisterNode",
+        {"Marker", "NW20"});
 
     TVector<ui32> startedDynamicGroups, generations;
     for (const auto& [groupId, group] : Groups) {
@@ -131,7 +150,9 @@ void TNodeWarden::SendInitialGroupRequests() {
         }
     }
     if (!groupIds.empty()) {
-        STLOG(PRI_DEBUG, BS_NODE, NW22, "SendInitialGroupRequests", (GroupIds, FormatList(groupIds)));
+        YDB_LOG_DEBUG("SendInitialGroupRequests",
+            {"Marker", "NW22"},
+            {"GroupIds", FormatList(groupIds)});
         SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(LocalNodeId,
             groupIds.begin(), groupIds.end()));
     }

@@ -16,6 +16,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/valgrind.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
 
 namespace NKikimr {
 namespace NPDisk {
@@ -901,7 +904,8 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     //             Conf.GroupInfo, vdisks));
     //     dataSetPtr.Reset(new TGeneratedDataSet(generator));
 
-    //     LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data());
+    //     YDB_LOG_CTX_NOTICE(*Conf.ActorSystem1, "first read pass w/repl took",
+    //           {"data", timedelta.ToString().data()});
     //     LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
     //     TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
     //     begin = Now();

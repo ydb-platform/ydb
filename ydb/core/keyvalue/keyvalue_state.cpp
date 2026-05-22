@@ -131,6 +131,7 @@ void TKeyValueState::Clear() {
     DeletesPerRequestLimit = 100'000;
 
     PerGenerationCounter = 0;
+    StorageChannelFallbackPending = 0;
 
     if (TabletCounters) {
         ClearTabletCounters();

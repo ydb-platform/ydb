@@ -1382,6 +1382,45 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
     }
 
+    // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
+    // Tests that BreakerQuerySpanId and VictimQuerySpanId linkage is maintained even with
+    // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
+    Y_UNIT_TEST(ConcurrentUpsertSelectThreadless) {
+        TStringStream ss;
+        auto ctx = std::make_unique<TTliThreadlessTestContext>(ss);
+        ctx->CreateAndSeedTables(1);
+
+        // Seed with initial data in the key range 1-10
+        for (ui64 i = 2; i <= 10; ++i) {
+            ctx->SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
+        }
+
+        // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
+        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) "
+                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/Table1` "
+                                           "WHERE Key >= 1u AND Key <= 5u";
+
+        // Breaker transaction: simple UPSERT to key 3 (overlaps with victim's range)
+        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (3u, \"BreakerValue\")";
+
+        // Victim: start transaction with UPSERT...SELECT (reads keys 1-5, then writes them)
+        // Note: with OLTP sink, the lock is NOT created immediately here (deferred lock creation)
+        auto victimTx = ctx->BeginTx(ctx->VictimSession, victimUpsertSelect);
+
+        // Breaker: write to key 3
+        // At this point, victim's lock doesn't exist yet (deferred lock creation)
+        // The breaker's write is tracked for later TLI linkage via RecentWritesForTli cache
+        ctx->ExecuteQuery(breakerUpsert);
+
+        // Victim: try to commit - should be aborted due to MVCC conflict detection
+        auto [status, issues] = ctx->CommitTxWithIssues(*victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
+        ctx.reset();
+
+        // Verify issue and TLI logs using common verification function
+        VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect);
+    }
+
     // ==================== 2-Node Tests ====================
     // These tests use a 2-node environment:
     // - Node 0: victim KQP session

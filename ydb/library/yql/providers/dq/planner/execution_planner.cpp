@@ -348,7 +348,7 @@ namespace NYql::NDqs {
             std::tie(programStr, stageId, publicId) = StagePrograms[task.StageId];
             program.SetRaw(programStr);
             program.SetLangVer(TypeContext->LangVer);
-            program.MutableRuntimeSettings()->MergeFrom(NYql::SerializeRuntimeSettingsToProto(*TypeContext->RuntimeSettings));
+            *program.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*TypeContext->RuntimeSettings);
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
@@ -776,7 +776,7 @@ namespace NYql::NDqs {
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(Program);
         program.SetLangVer(LangVer);
-        program.MutableRuntimeSettings()->MergeFrom(NYql::SerializeRuntimeSettingsToProto(*RuntimeSettings));
+        *program.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*RuntimeSettings);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();

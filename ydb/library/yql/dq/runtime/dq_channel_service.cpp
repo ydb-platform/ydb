@@ -1264,11 +1264,13 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             break;
         }
         case TEvDqCompute::TEvChannelAckV2::EventType: {
-            // ACKs are to be repeated periodically
+            // Ack will be requested by peer with next reconciliation
+            LOG_W(LogPrefix << "UNDELIVERED ACK");
             break;
         }
         case TEvDqCompute::TEvChannelUpdateV2::EventType: {
-            // TBD: repeat Update from empty Input by schedule
+            // Updates will be resend after next reconciliation
+            LOG_W(LogPrefix << "UNDELIVERED UPDATE");
             break;
         }
     }
@@ -1294,6 +1296,9 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 g
         PeerGenMinor.store(genMinor);
         ConfirmedSeqNo = seqNo;
         FailInputs(PeerActorId, PeerGenMajor.load());
+    }
+    for (auto& [_, descriptor] : InputDescriptors) {
+        SendUpdateProgress(descriptor);
     }
 }
 
@@ -1612,7 +1617,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
-            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", InflightBytes=" << InflightBytes.load() << '-' << deltaBytes);
+            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << '-' << deltaBytes);
             if (!Queue.empty()) {
                 for (auto item : Queue) {
                     SendMessage(item);
@@ -1651,11 +1656,17 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
-        // too verbose and useless, TODO: do smth
-        // LOG_W(LogPrefix << "UPDATE IGNORED/LOST, EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
+        LOG_T(LogPrefix << "UPDATE IGNORED/LOST, ChannelId=" << info.ChannelId
+            << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+            << ", EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes);
         return;
     }
 
+    LOG_T(LogPrefix << "UPDATE, ChannelId=" << info.ChannelId
+        << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+        << ", EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes
+        << ", descriptor->IsTerminatedOrAborted()=" << descriptor->IsTerminatedOrAborted()
+    );
     if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, "Inconsistent GenMajor in HandleUpdate")) {
         descriptor->HandleUpdate(earlyFinished, popBytes, this, descriptor);
     }
@@ -1666,6 +1677,11 @@ void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
 }
 
 void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
+    std::lock_guard lock(Mutex);
+    SendUpdateProgress(descriptor);
+}
+
+void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
 
     evUpdate->Record.SetGenMajor(PeerGenMajor.load());
@@ -1683,6 +1699,10 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
+
+    LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
+        << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
+        << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load());
 
     ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evUpdate.Release(), flags));
     LastActivity.store(TInstant::Now());
@@ -1870,10 +1890,12 @@ void TNodeState::DoReconciliation() {
     auto reconciliationTimeout = ReconciliationTimeout * (1ULL << std::min<ui64>(ReconciliationCount - 1, 20));
     if (ReconciliationCount > 1) {
         LOG_W(LogPrefix << "RECONCILIATION x" << ReconciliationCount << ", G=" << GenMajor << '.' << GenMinor
-            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo);
+            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo
+            << ", WQ=" << WaitersQueueSize.load());
     } else {
         LOG_D(LogPrefix << "RECONCILIATION, G" << GenMajor << '.' << GenMinor
-            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo);
+            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo
+            << ", WQ=" << WaitersQueueSize.load());
     }
 
     ui32 delta = 0;

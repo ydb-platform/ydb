@@ -159,6 +159,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
             return std::nullopt;
         }
         CompactionTask<TKey, TPortion> result;
+        result.TargetLevel = 0;
         ui64 currentBlobBytes = 0;
         for (auto it : Portions) {
             if (isLocked(it)) {
@@ -171,7 +172,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
                 return result;
             }
         }
-        return std::nullopt;
+        return {result};
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

@@ -1,4 +1,7 @@
 #include "sequenceshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
 
 namespace NKikimr {
 namespace NSequenceShard {
@@ -16,14 +19,16 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRestoreSequence.Execute"
-                << " PathId# " << pathId
-                << " Record# " << msg->Record.ShortDebugString());
+            YDB_LOG_TRACE("TTxRestoreSequence.Execute",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId},
+                {"Record", msg->Record.ShortDebugString()});
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvRestoreSequenceResult::PIPE_OUTDATED);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRestoreSequence.Execute PIPE_OUTDATED"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxRestoreSequence.Execute PIPE_OUTDATED",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
@@ -53,8 +58,9 @@ namespace NSequenceShard {
                     NIceDb::TUpdate<Schema::Sequences::Cycle>(sequence.Cycle));
 
                 SetResult(NKikimrTxSequenceShard::TEvRestoreSequenceResult::SUCCESS);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRestoreSequence.Execute SUCCESS"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxRestoreSequence.Execute SUCCESS",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
@@ -62,8 +68,9 @@ namespace NSequenceShard {
             switch (sequence.State) {
                 case Schema::ESequenceState::Active: {
                     SetResult(NKikimrTxSequenceShard::TEvRestoreSequenceResult::SEQUENCE_ALREADY_ACTIVE);
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRestoreSequence.Execute SEQUENCE_ALREADY_ACTIVE"
-                        << " PathId# " << pathId);
+                    YDB_LOG_TRACE("TTxRestoreSequence.Execute SEQUENCE_ALREADY_ACTIVE",
+                        {"LogPrefix", LogPrefix},
+                        {"PathId", pathId});
                     return true;
                 }
                 case Schema::ESequenceState::Frozen:
@@ -93,14 +100,16 @@ namespace NSequenceShard {
                 NIceDb::TUpdate<Schema::Sequences::State>(sequence.State));
 
             SetResult(NKikimrTxSequenceShard::TEvRestoreSequenceResult::SUCCESS);
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRestoreSequence.Execute SUCCESS"
-                << " PathId# " << pathId
-                << " Record# " << msg->Record.ShortDebugString());
+            YDB_LOG_NOTICE("TTxRestoreSequence.Execute SUCCESS",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId},
+                {"Record", msg->Record.ShortDebugString()});
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxRestoreSequence.Complete");
+            YDB_LOG_TRACE("TTxRestoreSequence.Complete",
+                {"LogPrefix", LogPrefix});
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

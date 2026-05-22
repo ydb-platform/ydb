@@ -18,6 +18,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <google/protobuf/util/time_util.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -66,7 +69,12 @@ public:
     static constexpr char ActorName[] = "FQ_FINALIZER_ACTOR";
 
     void Start() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Start finalizer actor. Compute status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Status));
+        YDB_LOG_INFO("[ydb] [Finalizer] Start finalizer actor. Compute",
+            {"CloudId", Params.CloudId},
+            {"Scope", Params.Scope.ToString()},
+            {"QueryId", Params.QueryId},
+            {"JobId", Params.JobId},
+            {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(Status)});
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         Become(&TFinalizerActor::StateFunc);
@@ -161,12 +169,20 @@ public:
         pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Query moved to terminal state ");
+            YDB_LOG_INFO("[ydb] [Finalizer] Query moved to terminal state",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvFinalizerResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Finalizer] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " " <<"Error moving the query to the terminal state");
+            YDB_LOG_ERROR("[ydb] [Finalizer] Error moving the query to the terminal state",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId});
             Send(Parent, new TEvYdbCompute::TEvFinalizerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }

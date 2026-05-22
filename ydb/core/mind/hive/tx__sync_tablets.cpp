@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -38,7 +41,9 @@ public:
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxSyncTablets( )::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"Local", Local});
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
@@ -55,10 +60,18 @@ public:
         auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {
             auto tabletId = tablet->GetFullTabletId();
             if (node.MatchesFilter(tablet->NodeFilter)) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId);
+                YDB_LOG_TRACE("THive::TTxSyncTablets( ) confirmed tablet",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Local", Local},
+                    {"state", state},
+                    {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             } else {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
+                YDB_LOG_TRACE("THive::TTxSyncTablets( ) confirmed tablet, but it's not allowed to run on this node",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Local", Local},
+                    {"state", state},
+                    {"tabletId", tabletId});
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
                 tablet->InitiateStop(SideEffects);
@@ -78,7 +91,10 @@ public:
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") rejected unknown starting tablet " << tabletId);
+                YDB_LOG_TRACE("THive::TTxSyncTablets( ) rejected unknown starting tablet",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Local", Local},
+                    {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -105,14 +121,20 @@ public:
                     continue;
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") confirmed and stopped running tablet " << tabletId);
+                    YDB_LOG_TRACE("THive::TTxSyncTablets( ) confirmed and stopped running tablet",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"Local", Local},
+                        {"tabletId", tabletId});
                     tabletsToBoot.insert(tabletId);
                     tabletsToStop.erase(tabletId);
                     continue;
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ") rejected unknown running tablet " << tabletId);
+                YDB_LOG_TRACE("THive::TTxSyncTablets( ) rejected unknown running tablet",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Local", Local},
+                    {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -130,7 +152,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxSyncTablets(" << Local << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxSyncTablets( )::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"Local", Local});
         SideEffects.Complete(ctx);
     }
 };

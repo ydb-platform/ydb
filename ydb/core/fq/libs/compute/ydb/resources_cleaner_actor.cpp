@@ -17,6 +17,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 
 namespace NFq {
@@ -69,7 +72,13 @@ public:
     }
 
     void Start() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Start resources cleaner actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        YDB_LOG_INFO("[ydb] [ResourcesCleaner] Start resources cleaner actor. Compute",
+            {"CloudId", Params.CloudId},
+            {"Scope", Params.Scope.ToString()},
+            {"QueryId", Params.QueryId},
+            {"JobId", Params.JobId},
+            {"OperationId", OperationId.ToString()},
+            {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         Become(&TResourcesCleanerActor::StateFunc);
         SendForgetOperation();
     }
@@ -81,17 +90,35 @@ public:
     void Handle(const TEvYdbCompute::TEvForgetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Operation partly forgotten, will be retried: " << response.Status);
+            YDB_LOG_INFO("[ydb] [ResourcesCleaner] Operation partly forgotten, will be",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"retried", response.Status});
             SendForgetOperation(BackoffTimer.Next());
             return;
         }
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Can't forget operation: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ResourcesCleaner] Can't forget",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"operation", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResourcesCleaner] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Operation successfully forgotten " << response.Status);
+        YDB_LOG_INFO("[ydb] [ResourcesCleaner] Operation successfully forgotten",
+            {"CloudId", Params.CloudId},
+            {"Scope", Params.Scope.ToString()},
+            {"QueryId", Params.QueryId},
+            {"JobId", Params.JobId},
+            {"OperationId", OperationId.ToString()},
+            {"Status", response.Status});
         Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }

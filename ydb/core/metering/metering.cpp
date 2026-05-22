@@ -7,6 +7,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/builder.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METERING_WRITER
 
 #if defined LOG_T || \
     defined LOG_D || \
@@ -88,8 +91,8 @@ void TMeteringWriteActor::HandleWriteMeteringJson(
                 msg->MeteringJson.data(),
                 msg->MeteringJson.length()));
     } catch (const TFileError& e) {
-        LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER,"TMeteringWriteActor:"
-              << " unable to write metering data (error: " << e.what() << ")");
+        YDB_LOG_WARN("TMeteringWriteActor: unable to write metering data",
+            {"(error", e.what()});
     }
 }
 

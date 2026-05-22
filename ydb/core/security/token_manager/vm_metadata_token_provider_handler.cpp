@@ -8,6 +8,9 @@
 #include <ydb/core/security/token_manager/token_provider_settings.h>
 #include <ydb/core/security/token_manager/private_events.h>
 #include <ydb/core/security/token_manager/token_manager_log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TOKEN_MANAGER
 
 namespace NKikimr::NTokenManager {
 
@@ -22,7 +25,7 @@ TVmMetadataTokenProviderHandler::TVmMetadataTokenProviderHandler(const NActors::
 {}
 
 void TVmMetadataTokenProviderHandler::Bootstrap() {
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Handle send request to vm metaservice");
+    YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "Handle send request to vm metaservice");
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(ProviderInfo.GetEndpoint());
     httpRequest->Set("Metadata-Flavor", "Google");
     std::unique_ptr<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest> outgoingRequest = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
@@ -53,30 +56,36 @@ void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomin
             if (NJson::ReadJsonTree(response->Body, &JsonConfig, &jsonValue)) {
                 auto jsonValueMap = jsonValue.GetMap();
                 if (auto it = jsonValueMap.find("access_token"); it == jsonValueMap.end()) {
-                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Result doesn't contain access_token. Request: " << requestInfo);
+                    YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Result doesn't contain access_token.",
+                        {"Request", requestInfo});
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Result doesn't contain access_token"};
                 } else if (token = it->second.GetStringSafe(); token.empty()) {
-                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Got empty token. Request: " << requestInfo);
+                    YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Got empty token.",
+                        {"Request", requestInfo});
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Got empty token"};
                 } else {
-                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Updating vm metadata token");
+                    YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Updating vm metadata token");
                     refreshPeriod = Settings.SuccessRefreshPeriod;
                 }
                 if (auto it = jsonValueMap.find("expires_in"); it == jsonValueMap.end()) {
-                    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Result doesn't contain expires_in. Request: " << requestInfo);
+                    YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Result doesn't contain expires_in.",
+                        {"Request", requestInfo});
                 } else {
                     tokenExpiresIn = TDuration::Seconds(it->second.GetUInteger());
                 }
             } else {
-                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Can not read json");
+                YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Can not read json");
                 status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Can not read json"};
             }
         } else {
-            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Error refreshing metadata token, status: " << response->Status << ", error: " << response->Message);
+            YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Error refreshing metadata token,",
+                {"status", response->Status},
+                {"error", response->Message});
             status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = TString(response->Message)};
         }
     } else {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::TOKEN_MANAGER,"Error refreshing metadata token, error: " << ev->Get()->Error);
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Error refreshing metadata token,",
+            {"error", ev->Get()->Error});
         status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = ev->Get()->Error};
     }
     refreshPeriod = Min(tokenExpiresIn, refreshPeriod);

@@ -12,6 +12,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -65,9 +68,9 @@ private:
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
         default:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Unexpected event"
-                << ": type# " << ev->GetTypeRewrite()
-                << ", event# " << ev->ToString());
+            YDB_LOG_ERROR("[InfoCollector] Unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
         }
     }
 
@@ -231,16 +234,16 @@ void TInfoCollector::Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev
 
     BootstrapConfigReceived = true;
     if (!config->HasBootstrapConfig()) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Couldn't collect bootstrap config from Console. Taking the local config");
+        YDB_LOG_INFO("[InfoCollector] Couldn't collect bootstrap config from Console. Taking the local config");
         Info->BootstrapConfig.CopyFrom(initialBootstrapConfig);
     } else {
         const auto& currentBootstrapConfig = config->GetBootstrapConfig();
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got Bootstrap config"
-              << ": record# " <<  currentBootstrapConfig.ShortDebugString());
+        YDB_LOG_TRACE("[InfoCollector] Got Bootstrap config",
+            {"record", currentBootstrapConfig.ShortDebugString()});
 
         if (!::google::protobuf::util::MessageDifferencer::Equals(initialBootstrapConfig, currentBootstrapConfig)) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Local Bootstrap config is different from the config from the console");
+            YDB_LOG_DEBUG("[InfoCollector] Local Bootstrap config is different from the config from the console");
             Info->IsLocalBootConfDiffersFromConsole = true;
         }
 
@@ -260,7 +263,7 @@ void TInfoCollector::RequestStateStorageConfig() {
 void TInfoCollector::Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev) {
     auto& info = ev->Get()->Info;
     if (!info) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Couldn't collect state storage config");
+        YDB_LOG_ERROR("[InfoCollector] Couldn't collect state storage config");
         ReplyAndDie();
         return;
     }
@@ -286,11 +289,11 @@ void TInfoCollector::RequestBaseConfig() {
 
 void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
     const auto& record = ev->Get()->Record.GetResponse();
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got base config"
-        << ": record# " << record.ShortDebugString());
+    YDB_LOG_TRACE("[InfoCollector] Got base config",
+        {"record", record.ShortDebugString()});
 
     if (!record.GetSuccess() || !record.StatusSize() || !record.GetStatus(0).GetSuccess()) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Couldn't get base config");
+        YDB_LOG_ERROR("[InfoCollector] Couldn't get base config");
         ReplyAndDie();
     } else {
         BaseConfigReceived = true;
@@ -328,7 +331,7 @@ void TInfoCollector::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
 }
 
 void TInfoCollector::OnPipeDestroyed() {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "BscPipe destroyed");
+    YDB_LOG_WARN("[InfoCollector] BscPipe destroyed");
 
     if (BscPipe) {
         NTabletPipe::CloseAndForgetClient(SelfId(), BscPipe);
@@ -360,8 +363,8 @@ void TInfoCollector::SendNodeEvent(ui32 nodeId, const TActorId& recipient, IEven
 bool TInfoCollector::IsNodeInfoRequired(ui32 nodeId, ui32 eventType) const {
     auto it = NodeEvents.find(nodeId);
     if (it == NodeEvents.end()) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got info from unknown node"
-            << ": nodeId# " << nodeId);
+        YDB_LOG_WARN("[InfoCollector] Got info from unknown node",
+            {"nodeId", nodeId});
         return false;
     }
 
@@ -385,18 +388,18 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     const auto& record = ev->Get()->Record;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got system state"
-        << ": nodeId# " << nodeId
-        << ", record# " << record.DebugString());
+    YDB_LOG_TRACE("[InfoCollector] Got system state",
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
     }
 
     if (record.SystemStateInfoSize() != 1) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Unexpected system state's size"
-            << ": nodeId# " << nodeId
-            << ", size# " << record.SystemStateInfoSize());
+        YDB_LOG_ERROR("[InfoCollector] Unexpected system state's size",
+            {"nodeId", nodeId},
+            {"size", record.SystemStateInfoSize()});
         return;
     }
 
@@ -408,9 +411,9 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     const auto& record = ev->Get()->Record;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got tablet state"
-        << ": nodeId# " << nodeId
-        << ", record# " << record.DebugString());
+    YDB_LOG_TRACE("[InfoCollector] Got tablet state",
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -427,9 +430,9 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     auto& record = ev->Get()->Record;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got PDisk state"
-        << ": nodeId# " << nodeId
-        << ", record# " << record.DebugString());
+    YDB_LOG_TRACE("[InfoCollector] Got PDisk state",
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -448,9 +451,9 @@ void TInfoCollector::Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     auto& record = ev->Get()->Record;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got VDisk state"
-        << ": nodeId# " << nodeId
-        << ", record# " << record.DebugString());
+    YDB_LOG_TRACE("[InfoCollector] Got VDisk state",
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -469,9 +472,9 @@ void TInfoCollector::Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev) {
     const ui32 nodeId = ev->Sender.NodeId();
     const auto& record = ev->Get()->Record;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Got TenantPoolStatus"
-        << ": nodeId# " << nodeId
-        << ", record# " << record.DebugString());
+    YDB_LOG_TRACE("[InfoCollector] Got TenantPoolStatus",
+        {"nodeId", nodeId},
+        {"record", record.DebugString()});
 
     if (!IsNodeInfoRequired(nodeId, ev->Type)) {
         return;
@@ -485,14 +488,14 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     const auto& msg = *ev->Get();
     const ui32 nodeId = ev->Cookie;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Undelivered"
-        << ": nodeId# " << nodeId
-        << ", source# " << msg.SourceType
-        << ", reason# " << msg.Reason);
+    YDB_LOG_TRACE("[InfoCollector] Undelivered",
+        {"nodeId", nodeId},
+        {"source", msg.SourceType},
+        {"reason", msg.Reason});
 
     if (!NodeEvents.contains(nodeId)) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Undelivered to unknown node"
-            << ": nodeId# " << nodeId);
+        YDB_LOG_ERROR("[InfoCollector] Undelivered to unknown node",
+            {"nodeId", nodeId});
         return;
     }
 
@@ -511,12 +514,12 @@ void TInfoCollector::Handle(TEvents::TEvUndelivered::TPtr& ev) {
 void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Disconnected"
-        << ": nodeId# " << nodeId);
+    YDB_LOG_TRACE("[InfoCollector] Disconnected",
+        {"nodeId", nodeId});
 
     if (!NodeEvents.contains(nodeId)) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[InfoCollector] " << "Disconnected unknown node"
-            << ": nodeId# " << nodeId);
+        YDB_LOG_ERROR("[InfoCollector] Disconnected unknown node",
+            {"nodeId", nodeId});
         return;
     }
 

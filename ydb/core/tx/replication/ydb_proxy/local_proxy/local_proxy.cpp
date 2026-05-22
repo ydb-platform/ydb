@@ -6,6 +6,9 @@
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
 
@@ -65,7 +68,9 @@ auto CreateCallback(std::shared_ptr<T>&& ctx) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"LogPrefix", LogPrefix},
+        {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
     auto [path, settings] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
@@ -97,7 +102,9 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"LogPrefix", LogPrefix},
+        {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
     auto [path, _] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
@@ -133,7 +140,9 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"LogPrefix", LogPrefix},
+        {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
     auto [path, _] = std::move(ev->Get()->GetArgs());
     path = MakeLocalPath(path);
@@ -169,7 +178,9 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+    YDB_LOG_ERROR("Handle",
+        {"LogPrefix", LogPrefix},
+        {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
     auto [path, settings] = std::move(ev->Get()->GetArgs());
 

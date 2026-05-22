@@ -4,6 +4,9 @@
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -24,7 +27,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -37,8 +42,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"step", step});
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
@@ -93,9 +100,11 @@ public:
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropLock Propose"
-            << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << op.GetName());
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropLock Propose /",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", workingDir},
+            {"GetName", op.GetName()});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -211,15 +220,17 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropLock AbortPropose"
-            << ": opId# " << OperationId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropLock AbortPropose",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Add(1);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TDropLock AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << forceDropTxId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropLock AbortUnsafe",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", forceDropTxId});
         context.OnComplete.DoneOperation(OperationId);
     }
 };

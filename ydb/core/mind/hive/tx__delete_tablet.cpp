@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -16,11 +19,15 @@ public:
     {}
 
     void DeleteTablet(TTabletId tabletId, NIceDb::TNiceDb& db) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet::Execute Tablet " << tabletId);
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute Tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
         if (tablet != nullptr) {
             if (tablet->SeizedByChild) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet tablet " << tabletId << " seized by child");
+                YDB_LOG_WARN("THive::TTxDeleteTablet tablet seized by child",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"tabletId", tabletId});
                 return;
             }
             if (tablet->State != ETabletState::Deleting) {
@@ -41,10 +48,14 @@ public:
                 }
                 Self->BlockStorageForDelete(tabletId, SideEffects);
             } else {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet::Execute Tablet " << tabletId << " already in ETabletState::Deleting");
+                YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute Tablet already in ETabletState::Deleting",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"tabletId", tabletId});
             }
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet tablet " << tabletId << " wasn't found");
+            YDB_LOG_WARN("THive::TTxDeleteTablet tablet wasn't found",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tabletId", tabletId});
         }
     }
 };
@@ -64,14 +75,18 @@ public:
         if (forwardRequest.GetHiveTabletId() != 0) {
             response->Record.MutableForwardRequest()->CopyFrom(forwardRequest);
         }
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet::Execute() result " << response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute() result",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"ShortDebugString", response->Record.ShortDebugString()});
         SideEffects.Send(Event->Sender, response.Release(), 0, Event->Cookie);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         const NKikimrHive::TEvDeleteTablet& rec = Event->Get()->Record;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet::Execute() " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute()",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"ShortDebugString", rec.ShortDebugString()});
         // resolving ownerid:owneridx to tabletids
         std::vector<TTabletId> tablets;
         tablets.reserve(rec.ShardLocalIdxSize());
@@ -85,14 +100,21 @@ public:
             } else {
                 if (pos < rec.TabletIDSize()) {
                     TTabletId tabletId = rec.GetTabletID(pos);
-                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet tablet " << ownerIdx << " wasn't found - using supplied " << tabletId);
+                    YDB_LOG_WARN("THive::TTxDeleteTablet tablet wasn't found - using supplied",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"ownerIdx", ownerIdx},
+                        {"tabletId", tabletId});
                     tablets.push_back(tabletId);
                 } else {
-                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet tablet " << ownerIdx << " wasn't found");
+                    YDB_LOG_WARN("THive::TTxDeleteTablet tablet wasn't found",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"ownerIdx", ownerIdx});
                 }
             }
             if (Self->PendingCreateTablets.erase({owner, idx}) != 0) {
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet tablet " << ownerIdx << " was cleared from pending creates");
+                YDB_LOG_NOTICE("THive::TTxDeleteTablet tablet was cleared from pending creates",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"ownerIdx", ownerIdx});
             }
         }
         // checking for possible forwards
@@ -101,7 +123,8 @@ public:
             TTabletId prevForwardHiveTabletId = forwardRequest.GetHiveTabletId();
             if (Self->CheckForForwardTabletRequest(tabletId, forwardRequest)) {
                 if (prevForwardHiveTabletId != 0 && prevForwardHiveTabletId != forwardRequest.GetHiveTabletId()) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Forward of DeleteTablet is not possible - different owners of tablets");
+                    YDB_LOG_ERROR("Forward of DeleteTablet is not possible - different owners of tablets",
+                        {"GetLogPrefix", GetLogPrefix()});
                     RespondToSender(NKikimrProto::ERROR);
                     return true; // abort transaction
                 }
@@ -118,7 +141,9 @@ public:
            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
             if (tablet != nullptr) {
                 if (tablet->SeizedByChild) {
-                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet tablet " << tabletId << " seized by child");
+                    YDB_LOG_WARN("THive::TTxDeleteTablet tablet seized by child",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tabletId", tabletId});
                     RespondToSender(NKikimrProto::ERROR);
                     return true; // abort transaction
                 }
@@ -133,7 +158,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet::Complete() SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Complete()",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"SideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };
@@ -150,14 +177,18 @@ public:
     void RespondToSender(NKikimrProto::EReplyStatus status) {
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
         auto response = MakeHolder<TEvHive::TEvDeleteOwnerTabletsReply>(status, Self->TabletID(), rec.GetOwner(), rec.GetTxId());
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteOwnerTablets::Execute() result " << response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxDeleteOwnerTablets::Execute() result",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"ShortDebugString", response->Record.ShortDebugString()});
         SideEffects.Send(Event->Sender, response.Release(), 0, Event->Cookie);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TEvDeleteOwnerTablets::Execute() " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TEvDeleteOwnerTablets::Execute()",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"ShortDebugString", rec.ShortDebugString()});
         // resolving owner to tabletids
         std::vector<TTabletId> tablets;
         ui64 owner = rec.GetOwner();
@@ -168,7 +199,9 @@ public:
             tablets.push_back(tabletId);
             if (Self->PendingCreateTablets.erase(ownerIdx) != 0) {
                 auto id = ownerIdx;
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteOwnerTablets tablet " << id << " was cleared from pending creates");
+                YDB_LOG_NOTICE("THive::TTxDeleteOwnerTablets tablet was cleared from pending creates",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"id", id});
             }
         }
         // checking for possible migration
@@ -176,7 +209,9 @@ public:
            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
             if (tablet != nullptr) {
                 if (tablet->SeizedByChild) {
-                    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxDeleteTablet tablet " << tabletId << " seized by child");
+                    YDB_LOG_WARN("THive::TTxDeleteTablet tablet seized by child",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tabletId", tabletId});
                     RespondToSender(NKikimrProto::ERROR);
                     return true; // abort transaction
                 }
@@ -193,7 +228,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TEvDeleteOwnerTablets::Complete(" << Event->Get()->Record.GetOwner() << ") SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TEvDeleteOwnerTablets::Complete(",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"GetOwner", Event->Get()->Record.GetOwner()},
+            {"SideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };

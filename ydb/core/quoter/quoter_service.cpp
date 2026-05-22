@@ -9,6 +9,9 @@
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <cmath>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::QUOTER_SERVICE
 
 LWTRACE_USING(QUOTER_SERVICE_PROVIDER);
 
@@ -222,10 +225,12 @@ TDuration TResource::Charge(TRequest& request, TResourceLeaf& leaf, TInstant now
 }
 
 void TResource::ChargeUsedAmount(double amount, TInstant now) {
-    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"ChargeUsedAmount \"" << Resource << "\" for " << amount
-           << ". Balance: " << Balance
-           << ". FreeBalance: " << FreeBalance
-           << ". Now: " << now);
+    YDB_LOG_TRACE("ChargeUsedAmount for.. .",
+        {"Resource", Resource},
+        {"amount", amount},
+        {"Balance", Balance},
+        {"FreeBalance", FreeBalance},
+        {"Now", now});
     LastAllocated = now;
     FreeBalance -= amount;
     Balance -= amount;
@@ -255,14 +260,16 @@ TDuration TResource::Charge(double amount, TInstant now) {
     // TODO: calculate time for many requests (not for one). Now errors can be accumulated when big rates are used.
     const TInstant timeToFullfill = LastAllocated + TDuration::MicroSeconds(lround(durationToFullfillInUs));
 
-    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Charge \"" << Resource << "\" for " << amount
-           << ". Balance: " << Balance
-           << ". FreeBalance: " << FreeBalance
-           << ". TicksToFullfill: " << ticksToFullfill
-           << ". DurationToFullfillInUs: " << durationToFullfillInUs
-           << ". TimeToFullfill: " << timeToFullfill
-           << ". Now: " << now
-           << ". LastAllocated: " << LastAllocated);
+    YDB_LOG_TRACE("Charge for...... .",
+        {"Resource", Resource},
+        {"amount", amount},
+        {"Balance", Balance},
+        {"FreeBalance", FreeBalance},
+        {"TicksToFullfill", ticksToFullfill},
+        {"DurationToFullfillInUs", durationToFullfillInUs},
+        {"TimeToFullfill", timeToFullfill},
+        {"Now", now},
+        {"LastAllocated", LastAllocated});
 
     if (Balance >= 0.0) {
         if (timeToFullfill <= now) {
@@ -333,7 +340,10 @@ void TQuoterService::ScheduleNextTick(TInstant requested, TResource &quores) {
     const TInstant selected = Max(next, last, LastProcessed);
     quores.NextTick = selected;
     quores.LastTick = selected;
-    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Schedule next tick for \"" << quores.Resource << "\". Tick size: " << quores.TickSize << ". Time: " << quores.NextTick);
+    YDB_LOG_TRACE("Schedule next tick for. Tick .",
+        {"Resource", quores.Resource},
+        {"size", quores.TickSize},
+        {"Time", quores.NextTick});
     ScheduleFeed[quores.NextTick].emplace(&quores);
 }
 
@@ -543,12 +553,15 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         if (qIndxIt == QuotersIndex.end()) {
             TVector<TString> path = NKikimr::SplitPath(leaf.Quoter);
             if (path.empty()) {
-                LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Empty path to quoter is provided: \"" << leaf.Quoter << "\"");
+                YDB_LOG_WARN("Empty path to quoter is provided:",
+                    {"Quoter", leaf.Quoter});
                 return EInitLeafStatus::GenericError;
             }
 
             if (CanonizePath(path) != leaf.Quoter) {
-                LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Not canonized path to quoter is provided. Provided: \"" << leaf.Quoter << "\", but canonized is \"" << CanonizePath(path) << "\"");
+                YDB_LOG_WARN("Not canonized path to quoter is provided. Provided:, but canonized is",
+                    {"Quoter", leaf.Quoter},
+                    {"#_CanonizePath(path)", CanonizePath(path)});
                 return EInitLeafStatus::GenericError;
             }
 
@@ -566,7 +579,8 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             req->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req), IEventHandle::FlagTrackDelivery, 0);
 
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resolve new quoter " << leaf.Quoter);
+            YDB_LOG_INFO("resolve new quoter",
+                {"Quoter", leaf.Quoter});
         } else {
             // ok, got quoterId, proceed
             quoterId = qIndxIt->second;
@@ -624,7 +638,9 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             resLeaf.State = EResourceState::ResolveResource;
 
             if (rIndxIt.second) { // new resource, create resource session
-                LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resolve resource " << resLeaf.ResourceName << " on quoter " << quoter->QuoterName);
+                YDB_LOG_INFO("resolve resource on quoter",
+                    {"ResourceName", resLeaf.ResourceName},
+                    {"QuoterName", quoter->QuoterName});
                 Send(quoter->ProxyId, new TEvQuota::TEvProxyRequest(resLeaf.ResourceName));
             }
 
@@ -907,7 +923,8 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
-    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Request(" << PrintEvent(ev) << ")");
+    YDB_LOG_TRACE("Request(",
+        {"#_PrintEvent(ev)", PrintEvent(ev)});
 
     Counters.RequestsInFly->Inc();
     Counters.Requests->Inc();
@@ -994,7 +1011,9 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const bool isError = msg->Result != msg->Success;
     if (isError) {
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resource sesson failed: " << quoter.QuoterName << ":" << resourceName);
+        YDB_LOG_INFO("resource sesson",
+            {"failed", quoter.QuoterName},
+            {"resourceName", resourceName});
 
         for (TRequestId reqIdx : waitingRequests) {
             if (msg->Result == TEvQuota::TEvProxySession::UnknownResource) {
@@ -1009,7 +1028,10 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const ui64 resourceId = msg->ResourceId;
 
-    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resource session established: " << quoter.QuoterName << ":" << resourceName << " as " << resourceId);
+    YDB_LOG_INFO("resource session as",
+        {"established", quoter.QuoterName},
+        {"resourceName", resourceName},
+        {"resourceId", resourceId});
 
     // success, create resource
     auto resPairIt = quoter.Resources.emplace(resourceId, new TResource(quoterId, resourceId, quoter.QuoterName, resourceName, Config, quoter.Counters.QuoterCounters));
@@ -1083,11 +1105,13 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         return;
 
     if (msg->QuoterState == EUpdateState::Broken || (msg->QuoterState == EUpdateState::Evict && quoter.Empty())) {
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"closing quoter on ProxyUpdate " << quoter.QuoterName);
+        YDB_LOG_INFO("closing quoter on ProxyUpdate",
+            {"QuoterName", quoter.QuoterName});
         return BreakQuoter(quoterIt);
     }
 
-    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"ProxyUpdate for quoter " << quoter.QuoterName);
+    YDB_LOG_DEBUG("ProxyUpdate for quoter",
+        {"QuoterName", quoter.QuoterName});
 
     for (auto &resUpdate : msg->Resources) {
         auto resourceIt = quoter.Resources.find(resUpdate.ResourceId);
@@ -1193,7 +1217,10 @@ void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStrin
     }
 
     TResource &quores = *resourceIt->second;
-    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"closing resource on " << reason << " " << quoter.QuoterName << ":" << quores.Resource);
+    YDB_LOG_INFO("closing resource on",
+        {"reason", reason},
+        {"QuoterName", quoter.QuoterName},
+        {"Resource", quores.Resource});
     Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
 
     ForbidResource(quores);
@@ -1206,7 +1233,9 @@ bool TQuoterService::CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TS
         return false;
     }
 
-    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"closing quoter on " << reason << " as no activity left " << quoterIt->second.QuoterName);
+    YDB_LOG_INFO("closing quoter on as no activity left",
+        {"reason", reason},
+        {"QuoterName", quoterIt->second.QuoterName});
     BreakQuoter(quoterIt);
     return true;
 }
@@ -1220,7 +1249,8 @@ void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {
         HandleCleanup();
         return;
     default:
-        LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Unknown TEvWakeup tag: " << ev->Get()->Tag);
+        YDB_LOG_WARN("Unknown TEvWakeup",
+            {"tag", ev->Get()->Tag});
         return;
     }
 }
@@ -1243,10 +1273,12 @@ void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
 
     switch (navEntry.Kind) {
     case NSchemeCache::TSchemeCacheNavigate::KindKesus:
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"path resolved as Kesus " << path);
+        YDB_LOG_INFO("path resolved as Kesus",
+            {"path", path});
         return CreateKesusQuoter(navEntry, quotersIndexIt, quoterIt);
     default:
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"path not resolved as known entity " << path);
+        YDB_LOG_INFO("path not resolved as known entity",
+            {"path", path});
         return BreakQuoter(quotersIndexIt, quoterIt);
     }
 }
@@ -1275,7 +1307,9 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
                 itpair.first->second.emplace(reqIdx);
 
                 if (itpair.second) { // new resolve entry, request
-                    LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"resolve resource " << leaf.ResourceName << " on quoter " << quoter.QuoterName);
+                    YDB_LOG_INFO("resolve resource on quoter",
+                        {"ResourceName", leaf.ResourceName},
+                        {"QuoterName", quoter.QuoterName});
                     Send(quoter.ProxyId, new TEvQuota::TEvProxyRequest(leaf.ResourceName));
                 }
 
@@ -1394,7 +1428,10 @@ void TQuoterService::FeedResource(TResource &quores) {
         }
     }
 
-    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Feed resource \"" << quores.Resource << "\". Balance: " << quores.Balance << ". FreeBalance: " << quores.FreeBalance);
+    YDB_LOG_TRACE("Feed resource. .",
+        {"Resource", quores.Resource},
+        {"Balance", quores.Balance},
+        {"FreeBalance", quores.FreeBalance});
     LWPROBE(FeedResource,
             quores.Quoter,
             quores.Resource,
@@ -1429,7 +1466,8 @@ void TQuoterService::FeedResource(TResource &quores) {
 }
 
 void TQuoterService::AllocateResource(TResource &quores) {
-    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE,"Allocate resource \"" << quores.Resource << "\"");
+    YDB_LOG_TRACE("Allocate resource",
+        {"Resource", quores.Resource});
     const TInstant now = TActivationContext::Now();
     ui64 requestsProcessed = 0;
     const double prevAmountConsumed = quores.AmountConsumed;

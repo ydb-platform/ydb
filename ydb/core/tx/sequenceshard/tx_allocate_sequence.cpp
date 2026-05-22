@@ -1,4 +1,7 @@
 #include "sequenceshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
 
 namespace NKikimr {
 namespace NSequenceShard {
@@ -17,22 +20,25 @@ namespace NSequenceShard {
             auto pathId = msg->GetPathId();
             auto cache = msg->Record.GetCache();
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute"
-                << " PathId# " << pathId
-                << " Cache# " << cache);
+            YDB_LOG_TRACE("TTxAllocateSequence.Execute",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId},
+                {"Cache", cache});
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::PIPE_OUTDATED);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute PIPE_OUTDATED"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxAllocateSequence.Execute PIPE_OUTDATED",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_NOT_FOUND);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_NOT_FOUND"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxAllocateSequence.Execute SEQUENCE_NOT_FOUND",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
@@ -42,16 +48,18 @@ namespace NSequenceShard {
                     break;
                 case Schema::ESequenceState::Frozen: {
                     SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_FROZEN);
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_FROZEN"
-                        << " PathId# " << pathId);
+                    YDB_LOG_TRACE("TTxAllocateSequence.Execute SEQUENCE_FROZEN",
+                        {"LogPrefix", LogPrefix},
+                        {"PathId", pathId});
                     return true;
                 }
                 case Schema::ESequenceState::Moved: {
                     SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_MOVED);
                     Result->Record.SetMovedTo(sequence.MovedTo);
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_MOVED"
-                        << " PathId# " << pathId
-                        << " MovedTo# " << sequence.MovedTo);
+                    YDB_LOG_TRACE("TTxAllocateSequence.Execute SEQUENCE_MOVED",
+                        {"LogPrefix", LogPrefix},
+                        {"PathId", pathId},
+                        {"MovedTo", sequence.MovedTo});
                     return true;
                 }
             }
@@ -68,8 +76,9 @@ namespace NSequenceShard {
             if (res.second == 0) {
                 // Cannot allocate even a single value
                 SetResult(NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_OVERFLOW);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SEQUENCE_OVERFLOW"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxAllocateSequence.Execute SEQUENCE_OVERFLOW",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
@@ -82,11 +91,12 @@ namespace NSequenceShard {
             Result->Record.SetAllocationStart(res.first);
             Result->Record.SetAllocationCount(res.second);
             Result->Record.SetAllocationIncrement(sequence.Increment);
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Execute SUCCESS"
-                << " PathId# " << pathId
-                << " AllocationStart# " << Result->Record.GetAllocationStart()
-                << " AllocationCount# " << Result->Record.GetAllocationCount()
-                << " AllocationIncrement# " << Result->Record.GetAllocationIncrement());
+            YDB_LOG_TRACE("TTxAllocateSequence.Execute SUCCESS",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId},
+                {"AllocationStart", Result->Record.GetAllocationStart()},
+                {"AllocationCount", Result->Record.GetAllocationCount()},
+                {"AllocationIncrement", Result->Record.GetAllocationIncrement()});
             return true;
         }
 
@@ -171,7 +181,8 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext& ctx) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxAllocateSequence.Complete");
+            YDB_LOG_TRACE("TTxAllocateSequence.Complete",
+                {"LogPrefix", LogPrefix});
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

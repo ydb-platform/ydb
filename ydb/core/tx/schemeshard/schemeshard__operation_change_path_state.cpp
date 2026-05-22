@@ -3,6 +3,9 @@
 #include "schemeshard__operation_base.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_states.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -44,9 +47,9 @@ public:
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TChangePathStateOp Propose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_CTX_INFO(context.Ctx, "TChangePathStateOp Propose",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
 
         const auto& changePathState = tx.GetChangePathState();
         TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
@@ -88,16 +91,17 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TChangePathStateOp AbortPropose"
-            << ", opId: " << OperationId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TChangePathStateOp AbortPropose",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
         // Nothing to cleanup since Propose hasn't committed anything yet
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TChangePathStateOp AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TChangePathStateOp AbortUnsafe",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId});
 
         context.OnComplete.DoneOperation(OperationId);
     }

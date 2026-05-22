@@ -24,6 +24,9 @@
 #include <ydb/library/actors/core/mon.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
 
 template<>
 void Out<std::vector<ui32>>(IOutputStream& o, const std::vector<ui32>& v) {
@@ -643,7 +646,8 @@ private:
         if (actor) {
             Register(actor);
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Unable to process EvViewerRequest");
+            YDB_LOG_ERROR("Unable to process EvViewerRequest",
+                {"GetLogPrefix", GetLogPrefix()});
             Send(ev->Sender, new TEvViewer::TEvViewerResponse(), 0, ev->Cookie);
         }
     }

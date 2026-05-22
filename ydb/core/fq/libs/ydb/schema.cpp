@@ -9,6 +9,9 @@
 
 #include <util/string/builder.h>
 #include <util/system/defaults.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT this->LogComponent
 
 namespace NFq {
 
@@ -60,7 +63,9 @@ public:
 
     void Bootstrap() {
         Init();
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Run " << GetActionName() << " " << GetEntityName() << " actor");
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Run actor",
+            {"GetActionName", GetActionName()},
+            {"GetEntityName", GetEntityName()});
         this->Become(&TSchemaActorBase<TResponseEvent>::StateFunc);
         CallAndSubscribe();
     }
@@ -102,7 +107,9 @@ public:
     virtual NYdb::TAsyncStatus CallYdbSdk() = 0;
 
     virtual void CallAndSubscribe() {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Call " << GetActionName() << " " << GetEntityName());
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Call",
+            {"GetActionName", GetActionName()},
+            {"GetEntityName", GetEntityName()});
         CallYdbSdk().Subscribe(
             [actorId = this->SelfId(), actorSystem = NActors::TActivationContext::ActorSystem()](const NYdb::TAsyncStatus& result) {
                 actorSystem->Send(actorId, new TResponseEvent(result.GetValue()));
@@ -111,7 +118,10 @@ public:
     }
 
     void ReplyStatusAndDie(const NYdb::TStatus& status) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Reply for " << GetActionName() << " " << GetEntityName() << ": " << status.GetIssues().ToOneLineString());
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Reply for",
+            {"GetActionName", GetActionName()},
+            {"GetEntityName", GetEntityName()},
+            {"ToOneLineString", status.GetIssues().ToOneLineString()});
         if (Parent) {
             this->Send(Parent, new TResponseEvent(status), 0, Cookie);
         }
@@ -144,12 +154,16 @@ public:
 protected:
     void Handle(TEvents::TEvSchemaCreated::TPtr& ev) override {
         if (IsTableCreated(ev->Get()->Result)) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Successfully created " << GetEntityName());
+            YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Successfully created",
+                {"GetEntityName", GetEntityName()});
             ReplyAndDie(ev);
             return;
         }
 
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, this->LogComponent, "Create " << GetEntityName() << " error: " << ev->Get()->Result.GetStatus() << " " << ev->Get()->Result.GetIssues().ToOneLineString());
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, "Create",
+            {"GetEntityName", GetEntityName()},
+            {"error", ev->Get()->Result.GetStatus()},
+            {"ToOneLineString", ev->Get()->Result.GetIssues().ToOneLineString()});
 
         if (!ScheduleNextAttempt(ev)) {
             ReplyAndDie(ev);
@@ -168,12 +182,16 @@ public:
 protected:
     void Handle(TEvents::TEvSchemaDeleted::TPtr& ev) override {
         if (IsTableDeleted(ev->Get()->Result)) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Successfully deleted " << GetEntityName());
+            YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Successfully deleted",
+                {"GetEntityName", GetEntityName()});
             ReplyAndDie(ev);
             return;
         }
 
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, this->LogComponent, "Delete " << GetEntityName() << " error: " << ev->Get()->Result.GetStatus() << " " << ev->Get()->Result.GetIssues().ToOneLineString());
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, "Delete",
+            {"GetEntityName", GetEntityName()},
+            {"error", ev->Get()->Result.GetStatus()},
+            {"ToOneLineString", ev->Get()->Result.GetIssues().ToOneLineString()});
 
         if (!ScheduleNextAttempt(ev)) {
             ReplyAndDie(ev);
@@ -192,12 +210,16 @@ public:
 protected:
     void Handle(TEvents::TEvSchemaUpdated::TPtr& ev) override {
         if (ev->Get()->Result.IsSuccess()) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Successfully updated " << GetEntityName());
+            YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Successfully updated",
+                {"GetEntityName", GetEntityName()});
             ReplyAndDie(ev);
             return;
         }
 
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, this->LogComponent, "Update " << GetEntityName() << " error: " << ev->Get()->Result.GetStatus() << " " << ev->Get()->Result.GetIssues().ToOneLineString());
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, "Update",
+            {"GetEntityName", GetEntityName()},
+            {"error", ev->Get()->Result.GetStatus()},
+            {"ToOneLineString", ev->Get()->Result.GetIssues().ToOneLineString()});
 
         if (!ScheduleNextAttempt(ev)) {
             ReplyAndDie(ev);
@@ -233,7 +255,8 @@ protected:
 
     void Handle(TEvents::TEvSchemaCreated::TPtr& ev) override {
         if (CurrentRequest < RequestsPath.size() - 1 && IsTableCreated(ev->Get()->Result)) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Successfully created " << GetEntityName(RequestsPath[CurrentRequest]));
+            YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Successfully created",
+                {"#_GetEntityName(RequestsPath[CurrentRequest])", GetEntityName(RequestsPath[CurrentRequest])});
             ++CurrentRequest;
             if (!OnCurrentRequestChanged()) {
                 return;
@@ -250,7 +273,8 @@ protected:
                 }
                 TriedPaths[CurrentRequest] = true;
                 this->RetryState = nullptr;
-                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Trying to recursively create " << GetEntityName(RequestsPath[CurrentRequest]));
+                YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Trying to recursively create",
+                    {"#_GetEntityName(RequestsPath[CurrentRequest])", GetEntityName(RequestsPath[CurrentRequest])});
                 this->CallAndSubscribe();
                 return;
             }
@@ -282,11 +306,14 @@ protected:
 
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) override {
         if (ev->Get()->Result.IsSuccess()) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Create " << GetEntityName() << ". Create session OK");
+            YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Create. Create session OK",
+                {"GetEntityName", GetEntityName()});
             Session = ev->Get()->Result.GetSession();
             CallAndSubscribe();
         } else {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, this->LogComponent, "Create " << GetEntityName() << ". Create session error: " << ev->Get()->Result.GetIssues().ToOneLineString());
+            YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, "Create. Create session",
+                {"GetEntityName", GetEntityName()},
+                {"error", ev->Get()->Result.GetIssues().ToOneLineString()});
             if (!ScheduleNextAttempt(ev)) {
                 ReplyAndDie(ev);
             }
@@ -343,7 +370,8 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk() override {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Call create table \"" << TablePath << "\"");
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Call create table",
+            {"TablePath", TablePath});
         return Session->CreateTable(TablePath, NYdb::NTable::TTableDescription(TableDesc));
     }
 
@@ -372,7 +400,8 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk() override {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Call create directory \"" << DirectoryPath << "\"");
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Call create directory",
+            {"DirectoryPath", DirectoryPath});
         return Connection->SchemeClient.MakeDirectory(DirectoryPath);
     }
 
@@ -400,7 +429,8 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk() override {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, this->LogComponent, "Call create coordination node \"" << CoordinationNodePath << "\"");
+        YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, "Call create coordination node",
+            {"CoordinationNodePath", CoordinationNodePath});
         return Connection->CoordinationClient.CreateNode(CoordinationNodePath);
     }
 
@@ -443,7 +473,8 @@ private:
 
     bool OnCurrentRequestChanged() override {
         if (CurrentRequest == 0 && !Limits[0]) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, this->LogComponent, "Create " << TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName() << ". Attempt to create rate limiter resource root without limit");
+            YDB_LOG_CTX(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, "Create. Attempt to create rate limiter resource root without limit",
+                {"#_TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName()", TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName()});
             NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Internal error: attempt to create rate limiter resource root \"" << RequestsPath[0].Path << "\" without limit");
             NYdb::TStatus status(NYdb::EStatus::INTERNAL_ERROR, std::move(issues));

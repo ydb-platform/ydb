@@ -17,6 +17,9 @@
 #include <ydb/public/lib/fq/scope.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -103,14 +106,14 @@ public:
         const auto& status = ev->Get()->Status;
         auto it = Requests.find(ev->Cookie);
         if (it == Requests.end()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " <<"Request doesn't exist (CreateDatabaseResponse). Need to fix this bug urgently");
+            YDB_LOG_ERROR("[ydb] [CmsGrpcClient]: Request doesn't exist (CreateDatabaseResponse). Need to fix this bug urgently");
             return;
         }
         auto requestVariant = it->second;
         Requests.erase(it);
         const auto* requestPtr = std::get_if<TEvYdbCompute::TEvCreateDatabaseRequest::TPtr>(&requestVariant);
         if (!requestPtr) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " <<"Request differs from the CreateDatabaseRequest type. Need to fix this bug urgently");
+            YDB_LOG_ERROR("[ydb] [CmsGrpcClient]: Request differs from the CreateDatabaseRequest type. Need to fix this bug urgently");
             return;
         }
         auto request = *requestPtr;
@@ -159,14 +162,14 @@ public:
 
         auto it = Requests.find(ev->Cookie);
         if (it == Requests.end()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " <<"Request doesn't exist (ListDatabasesResponse). Need to fix this bug urgently");
+            YDB_LOG_ERROR("[ydb] [CmsGrpcClient]: Request doesn't exist (ListDatabasesResponse). Need to fix this bug urgently");
             return;
         }
         auto requestVariant = it->second;
         Requests.erase(it);
         const auto* requestPtr = std::get_if<TEvYdbCompute::TEvListDatabasesRequest::TPtr>(&requestVariant);
         if (!requestPtr) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [CmsGrpcClient]: " <<"Request differs from the ListDatabasesRequest type. Need to fix this bug urgently");
+            YDB_LOG_ERROR("[ydb] [CmsGrpcClient]: Request differs from the ListDatabasesRequest type. Need to fix this bug urgently");
             return;
         }
         auto request = *requestPtr;

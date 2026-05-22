@@ -1,6 +1,9 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -23,7 +26,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<DebugHint() << " ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"DebugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -36,9 +41,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<DebugHint() << " HandleReply TEvOperationPlan"
-            << ", step: " << step
-        );
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"DebugHint", DebugHint()},
+            {"step", step});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -111,10 +117,11 @@ public:
         const TString& workingDir = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TDropSecret Propose"
-            << ", opId: " << OperationId
-            << ", path: " << workingDir << "/" << name
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropSecret Propose /",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"opId", OperationId},
+            {"path", workingDir},
+            {"name", name});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ssId);
 
@@ -182,16 +189,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TDropSecret AbortPropose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropSecret AbortPropose",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " <<"TDropSecret AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", txId: " << forceDropTxId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropSecret AbortUnsafe",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"opId", OperationId},
+            {"txId", forceDropTxId});
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -7,6 +7,9 @@
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -16,12 +19,15 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe succeeded"
-                << ": path# " << Database);
+            YDB_LOG_DEBUG("Describe succeeded",
+                {"LogPrefix", LogPrefix},
+                {"path", Database});
 
             for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
                 if (k == "cloud_id") {
@@ -31,11 +37,12 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
 
             Reply(false, "Cannot resolve RESOURCE_ID");
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Describe failed"
-                << ": path# " << Database
-                << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString()
-                << ", iteration# " << Backoff.GetIteration());
+            YDB_LOG_ERROR("Describe failed",
+                {"LogPrefix", LogPrefix},
+                {"path", Database},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()},
+                {"iteration", Backoff.GetIteration()});
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 Schedule(Backoff.Next(), new TEvents::TEvWakeup);

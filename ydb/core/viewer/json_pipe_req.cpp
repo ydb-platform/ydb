@@ -3,6 +3,9 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
 
 namespace NKikimr::NViewer {
 
@@ -1158,7 +1161,10 @@ void TViewerPipeClient::RequestDone(i32 requests) {
         return;
     }
     if (requests > DataRequests) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Requests count mismatch: " << requests << " > " << DataRequests);
+        YDB_LOG_ERROR("Requests count >",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"mismatch", requests},
+            {"DataRequests", DataRequests});
         if (Span) {
             Span.Event("Requests count mismatch");
         }
@@ -1196,7 +1202,8 @@ void TViewerPipeClient::Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TViewerPipeClient::Cancelled() {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Request cancelled");
+    YDB_LOG_DEBUG("Request cancelled",
+        {"GetLogPrefix", GetLogPrefix()});
     AddEvent("Cancelled");
     PassAway();
 }

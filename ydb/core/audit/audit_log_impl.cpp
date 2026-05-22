@@ -17,6 +17,9 @@
 #include "audit_log_item_builder.h"
 #include "audit_log_service.h"
 #include "audit_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::AUDIT_LOG_WRITER
 
 namespace NKikimr::NAudit {
 
@@ -61,7 +64,8 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
                 log.length()
             ));
         } catch (const std::exception& e) {
-            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, "WriteLog: unable to write audit log (error: " << e.what() << ")");
+            YDB_LOG_ERROR("WriteLog: unable to write audit log",
+                {"(error", e.what()});
         }
     }
 }
@@ -224,10 +228,9 @@ private:
     }
 
     void HandleUnexpectedEvent(STFUNC_SIG) {
-        LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, "TAuditLogActor:"
-            << " unhandled event type: " << ev->GetTypeRewrite()
-            << " event: " << ev->GetTypeName()
-        );
+        YDB_LOG_WARN("TAuditLogActor: unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->GetTypeName()});
     }
 };
 

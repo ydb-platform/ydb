@@ -19,6 +19,9 @@
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_RESOLVER
 
 
 namespace NKikimr {
@@ -290,29 +293,31 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (retryDelay) {
                 TDuration delay = (entry.LastResolved + retryDelay) - TActivationContext::Monotonic();
                 if (delay) {
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletResolveLoop tabletId: " << tabletId
-                        << " sleeping for retry delay " << delay);
+                    YDB_LOG_TRACE("TabletResolveLoop sleeping for retry delay",
+                        {"tabletId", tabletId},
+                        {"delay", delay});
                     co_await AsyncSleepFor(delay);
                 }
             }
 
             {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletResolveLoop tabletId: " << tabletId
-                        << " sending TEvLookup");
+                YDB_LOG_TRACE("TabletResolveLoop sending TEvLookup",
+                    {"tabletId", tabletId});
                 auto ev = co_await LookupTablet(tabletId);
                 if (!ev) {
                     // StateStorage proxy is not configured on this node
-                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletResolveLoop tabletId: " << tabletId
-                            << " StateStorage proxy not configured");
+                    YDB_LOG_INFO("TabletResolveLoop StateStorage proxy not configured",
+                        {"tabletId", tabletId});
                     SendQueuedError(entry, NKikimrProto::ERROR);
                     break;
                 }
 
                 auto* msg = ev->Get();
 
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletResolveLoop tabletId: " << tabletId
-                    << " received TEvInfo Status: " << msg->Status
-                    << " event: " << msg->ToString());
+                YDB_LOG_TRACE("TabletResolveLoop received TEvInfo",
+                    {"tabletId", tabletId},
+                    {"Status", msg->Status},
+                    {"event", msg->ToString()});
 
                 // This will handle errors and send replies
                 ApplyEntryInfo(entry, *msg);
@@ -320,8 +325,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
             if (!entry.InCache) {
                 // This entry was evicted while resolving, stop processing
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletResolveLoop tabletId: " << tabletId
-                    << " processing stopped for an evicted entry");
+                YDB_LOG_TRACE("TabletResolveLoop processing stopped for an evicted entry",
+                    {"tabletId", tabletId});
                 break;
             }
 
@@ -343,8 +348,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             co_await entry.Wakeup.Wait();
 
             if (!entry.InCache || entry.State == TEntry::StRemove) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletResolveLoop tabletId: " << tabletId
-                    << " processing stopped for an evicted entry");
+                YDB_LOG_TRACE("TabletResolveLoop processing stopped for an evicted entry",
+                    {"tabletId", tabletId});
                 break;
             }
 
@@ -410,8 +415,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         TEntry& entry = it->second;
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"OnTabletProblem tabletId: " << tabletId << " actorId: " << actorId
-            << " entry.State: " << TEntry::StateToString(entry.State));
+        YDB_LOG_TRACE("OnTabletProblem",
+            {"tabletId", tabletId},
+            {"actorId", actorId},
+            {"entry.State", TEntry::StateToString(entry.State)});
 
         if (!actorId) {
             // TEvTabletProblem without actorId is used for forced eviction
@@ -423,9 +430,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         if (entry.KnownLeader == actorId || entry.KnownLeaderTablet == actorId) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"OnTabletProblem tabletId: " << tabletId
-                << " marking leader " << entry.KnownLeader
-                << " with a" << (permanent ? " permanent" : "") << " problem");
+            YDB_LOG_TRACE("OnTabletProblem marking leader with a problem",
+                {"tabletId", tabletId},
+                {"KnownLeader", entry.KnownLeader},
+                {"#_num_0", (permanent ? " permanent" : "")});
             entry.CurrentLeaderProblem = true;
             if (permanent) {
                 entry.CurrentLeaderProblemPermanent = true;
@@ -436,8 +444,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         for (auto it = entry.KnownFollowers.begin(); it != entry.KnownFollowers.end(); ++it) {
             if (it->Follower == actorId || it->FollowerTablet == actorId) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"OnTabletProblem tabletId: " << tabletId
-                    << " removing follower " << it->Follower);
+                YDB_LOG_TRACE("OnTabletProblem removing follower",
+                    {"tabletId", tabletId},
+                    {"Follower", it->Follower});
                 entry.KnownFollowers.erase(it);
                 if (entry.State == TEntry::StNormal) {
                     entry.State = TEntry::StResolve;
@@ -464,8 +473,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             subscription.State = NKikimrTabletBase::TEvTabletStateUpdate::StateUnknown;
 
             if (retryDelay) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
-                    << " sleeping for " << retryDelay);
+                YDB_LOG_TRACE("TabletStateSubscriptionLoop sleeping for",
+                    {"tabletId", tabletId},
+                    {"actor", actorId},
+                    {"retryDelay", retryDelay});
             }
             // Note: this yields and checks for scope cancellation even when delay is zero
             co_await AsyncSleepFor(retryDelay);
@@ -476,15 +487,19 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (actorId.NodeId() != SelfId().NodeId()) {
                 flags |= IEventHandle::FlagSubscribeOnSession;
             }
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
-                    << " sending TEvTabletStateSubscribe seqNo=" << seqNo);
+            YDB_LOG_TRACE("TabletStateSubscriptionLoop sending TEvTabletStateSubscribe",
+                {"tabletId", tabletId},
+                {"actor", actorId},
+                {"seqNo", seqNo});
             Send(actorId, new TEvTablet::TEvTabletStateSubscribe(tabletId, seqNo), flags, seqNo);
 
             bool subscribed = true;
             auto unsubscribe = [&]() {
                 if (subscribed) {
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
-                        << " sending TEvTabletStateUnsubscribe seqNo=" << seqNo);
+                    YDB_LOG_TRACE("TabletStateSubscriptionLoop sending TEvTabletStateUnsubscribe",
+                        {"tabletId", tabletId},
+                        {"actor", actorId},
+                        {"seqNo", seqNo});
                     Send(actorId, new TEvTablet::TEvTabletStateUnsubscribe(tabletId, seqNo));
                     subscribed = false;
                 }
@@ -503,8 +518,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 if (!ev) {
                     // Node disconnected, start a new iteration
                     subscribed = false;
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
-                        << " node " << (stream.HadConnect() ? "disconnected" : "failed to connect"));
+                    YDB_LOG_TRACE("TabletStateSubscriptionLoop node",
+                        {"tabletId", tabletId},
+                        {"actor", actorId},
+                        {"#_num_0", (stream.HadConnect() ? "disconnected" : "failed to connect")});
                     if (!stream.HadConnect()) {
                         // Mark tablet as having a problem only when connection fails
                         OnTabletProblem(tabletId, actorId);
@@ -516,16 +533,19 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     case TEvents::TEvUndelivered::EventType: {
                         // Tablet actor doesn't exist (note: this will not be delivered after a disconnect)
                         subscribed = false;
-                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
-                            << " undelivered, assuming actor permanently unavailable");
+                        YDB_LOG_TRACE("TabletStateSubscriptionLoop undelivered, assuming actor permanently unavailable",
+                            {"tabletId", tabletId},
+                            {"actor", actorId});
                         OnTabletProblem(tabletId, actorId, /* permanent */ true);
                         co_return;
                     }
                     case TEvTablet::TEvTabletStateUpdate::EventType: {
                         retryNumber = 0;
                         auto* msg = ev->Get<TEvTablet::TEvTabletStateUpdate>();
-                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TabletStateSubscriptionLoop tabletId: " << tabletId << " actor: " << actorId
-                            << " received state update: " << msg->ToString());
+                        YDB_LOG_TRACE("TabletStateSubscriptionLoop received state",
+                            {"tabletId", tabletId},
+                            {"actor", actorId},
+                            {"update", msg->ToString()});
                         subscription.State = msg->Record.GetState();
                         switch (subscription.State) {
                             case NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating:
@@ -691,21 +711,21 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             size_t winnerIndex = (winners.size() == 1 ? 0 : (AppData()->RandomProvider->GenRand64() % winners.size()));
             const TCandidate& winner = winners[winnerIndex];
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"SelectForward"
-                << " node: " << selfNode
-                << " selfDC: " << dcName(selfDc)
-                << " leaderDC: " << dcName(leaderDc)
-                << " resolveFlags: " << info.ResFlags.ToString()
-                << " local: " << info.NumLocal
-                << " localDc: " << info.NumLocalDc
-                << " other: " << info.NumOtherDc
-                << " disallowed: " << disallowed
-                << " tabletId: " << tabletId
-                << " followers: " << entry.KnownFollowers.size()
-                << " allowLeader: " << allowLeader
-                << " allowFollowers: " << allowFollowers
-                << " candidates: " << winners.size()
-                << " winner: " << winner.KnownLeader);
+            YDB_LOG_DEBUG("SelectForward",
+                {"node", selfNode},
+                {"selfDC", dcName(selfDc)},
+                {"leaderDC", dcName(leaderDc)},
+                {"resolveFlags", info.ResFlags.ToString()},
+                {"local", info.NumLocal},
+                {"localDc", info.NumLocalDc},
+                {"other", info.NumOtherDc},
+                {"disallowed", disallowed},
+                {"tabletId", tabletId},
+                {"followers", entry.KnownFollowers.size()},
+                {"allowLeader", allowLeader},
+                {"allowFollowers", allowFollowers},
+                {"candidates", winners.size()},
+                {"winner", winner.KnownLeader});
 
             if (winner.IsLeader) {
                 if (winner.IsLocal)
@@ -726,19 +746,19 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             return std::make_pair(winner.KnownLeader, winner.KnownLeaderTablet);
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"No candidates for SelectForward,"
-            << " node: " << selfNode
-            << " selfDC: " << dcName(selfDc)
-            << " leaderDC: " << dcName(leaderDc)
-            << " resolveFlags: " << info.ResFlags.ToString()
-            << " local: " << info.NumLocal
-            << " localDc: " << info.NumLocalDc
-            << " other: " << info.NumOtherDc
-            << " disallowed: " << disallowed
-            << " tabletId: " << tabletId
-            << " followers: " << entry.KnownFollowers.size()
-            << " allowLeader: " << allowLeader
-            << " allowFollowers: " << allowFollowers);
+        YDB_LOG_INFO("No candidates for SelectForward,",
+            {"node", selfNode},
+            {"selfDC", dcName(selfDc)},
+            {"leaderDC", dcName(leaderDc)},
+            {"resolveFlags", info.ResFlags.ToString()},
+            {"local", info.NumLocal},
+            {"localDc", info.NumLocalDc},
+            {"other", info.NumOtherDc},
+            {"disallowed", disallowed},
+            {"tabletId", tabletId},
+            {"followers", entry.KnownFollowers.size()},
+            {"allowLeader", allowLeader},
+            {"allowFollowers", allowFollowers});
 
         SelectedNone->Inc();
 
@@ -821,9 +841,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         entry.LastResolved = TActivationContext::Monotonic();
         entry.CacheEpoch = ++LastCacheEpoch;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"ApplyEntry tabletId: " << msg.TabletID
-            << " leader: " << entry.KnownLeader
-            << " followers: " << entry.KnownFollowers.size());
+        YDB_LOG_DEBUG("ApplyEntry",
+            {"tabletId", msg.TabletID},
+            {"leader", entry.KnownLeader},
+            {"followers", entry.KnownFollowers.size()});
 
         if (entry.KnownLeader && entry.InCache) {
             SubscribeTabletState(entry.TabletId, entry.KnownLeader);
@@ -880,8 +901,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (entry.State == TEntry::StNormal) {
                 auto* pMaxProblemEpoch = NodeProblems.FindPtr(entry.KnownLeader.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Delayed invalidation of tabletId: " << tabletId
-                        << " leader: " << entry.KnownLeader << " by nodeId");
+                    YDB_LOG_DEBUG("Delayed invalidation of by nodeId",
+                        {"tabletId", tabletId},
+                        {"leader", entry.KnownLeader});
                     entry.CurrentLeaderProblem = true;
                 }
             }
@@ -891,8 +913,9 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             while (itSrc != entry.KnownFollowers.end()) {
                 auto* pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->Follower.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Delayed invalidation of tabletId: " << tabletId
-                        << " follower: " << itSrc->Follower << " by nodeId");
+                    YDB_LOG_DEBUG("Delayed invalidation of by nodeId",
+                        {"tabletId", tabletId},
+                        {"follower", itSrc->Follower});
                     ++itSrc;
                     continue;
                 }
@@ -919,12 +942,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         CheckDelayedNodeProblem(tabletId);
 
         TEntry& entry = GetEntry(tabletId);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Handle TEvForward tabletId: " << tabletId
-                << " entry.State: " << TEntry::StateToString(entry.State)
-                << " leader: " << entry.KnownLeader
-                << (entry.CurrentLeaderProblem ? " (known problem)" : "")
-                << " followers: " << entry.KnownFollowers.size()
-                << " ev: " << msg->ToString());
+        YDB_LOG_DEBUG("Handle TEvForward",
+            {"tabletId", tabletId},
+            {"entry.State", TEntry::StateToString(entry.State)},
+            {"leader", entry.KnownLeader},
+            {"#_num_0", (entry.CurrentLeaderProblem ? " (known problem)" : "")},
+            {"followers", entry.KnownFollowers.size()},
+            {"ev", msg->ToString()});
 
         switch (entry.State) {
             case TEntry::StNormal: {
@@ -959,13 +983,16 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         // Note: avoid promoting tablet entry in the cache
         auto it = Tablets.find(tabletId);
         if (it == Tablets.end()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Handle TEvTabletProblem tabletId: " << tabletId << " not cached");
+            YDB_LOG_DEBUG("Handle TEvTabletProblem not cached",
+                {"tabletId", tabletId});
             return;
         }
 
         TEntry& entry = it->second;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Handle TEvTabletProblem tabletId: " << tabletId << " actor: " << msg->Actor
-            << " entry.State: " << TEntry::StateToString(entry.State));
+        YDB_LOG_DEBUG("Handle TEvTabletProblem",
+            {"tabletId", tabletId},
+            {"actor", msg->Actor},
+            {"entry.State", TEntry::StateToString(entry.State)});
 
         OnTabletProblem(tabletId, msg->Actor, /* permanent */ false);
     }
@@ -977,13 +1004,16 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         ui64& maxProblemEpoch = NodeProblems[nodeId];
         if (maxProblemEpoch < problemEpoch) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Handle TEvNodeProblem nodeId: " << nodeId
-                << " max(problemEpoch): " << problemEpoch);
+            YDB_LOG_DEBUG("Handle TEvNodeProblem",
+                {"nodeId", nodeId},
+                {"max(problemEpoch)", problemEpoch});
             maxProblemEpoch = problemEpoch;
             LastNodeProblemsUpdateEpoch = ++LastCacheEpoch;
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Handle TEvNodeProblem nodeId: " << nodeId
-                << " problemEpoch: " << problemEpoch << " <= max(problemEpoch): " << maxProblemEpoch);
+            YDB_LOG_DEBUG("Handle TEvNodeProblem <=",
+                {"nodeId", nodeId},
+                {"problemEpoch", problemEpoch},
+                {"max(problemEpoch)", maxProblemEpoch});
         }
     }
 
@@ -991,7 +1021,10 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         auto* msg = ev->Get();
         const ui64 tabletId = msg->Record.GetTabletID();
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"Handle TEvPong tabletId: " << tabletId << " actor: " << ev->Sender << " cookie: " << ev->Cookie);
+        YDB_LOG_TRACE("Handle TEvPong",
+            {"tabletId", tabletId},
+            {"actor", ev->Sender},
+            {"cookie", ev->Cookie});
 
         auto it = Tablets.find(tabletId);
         if (it == Tablets.end()) {
@@ -1137,7 +1170,9 @@ public:
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvPrivate::TEvRefreshNodes, Handle);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::TABLET_RESOLVER,"TTabletResolver::StateWork unexpected event type: " << Hex(ev->GetTypeRewrite()) << " event: " << ev->ToString());
+                YDB_LOG_WARN("TTabletResolver::StateWork unexpected event",
+                    {"type", Hex(ev->GetTypeRewrite())},
+                    {"event", ev->ToString()});
                 break;
         }
     }

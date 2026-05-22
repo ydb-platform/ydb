@@ -23,6 +23,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/escape.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_WORKER
 
 namespace NKikimr {
 namespace NKqp {
@@ -133,7 +136,8 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Worker bootstrapped");
+        YDB_LOG_DEBUG("Worker bootstrapped",
+            {"LogPrefix", LogPrefix()});
         Counters->ReportWorkerCreated(Settings.DbCounters);
         Become(&TKqpWorkerActor::ReadyState);
     }
@@ -150,7 +154,8 @@ public:
     void HandleReady(TEvKqp::TEvCloseSessionRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
         if (CheckRequest(ev->Get()->Record.GetRequest().GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Session closed due to explicit close event");
+            YDB_LOG_INFO("Session closed due to explicit close event",
+                {"LogPrefix", LogPrefix()});
             Counters->ReportWorkerClosedRequest(Settings.DbCounters);
             FinalCleanup(ctx);
         }
@@ -167,8 +172,10 @@ public:
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Received request, proxyRequestId: " << proxyRequestId
-            << " rpcCtx: " << (void*)(ev->Get()->GetRequestCtx().get()));
+        YDB_LOG_DEBUG("Received request,",
+            {"LogPrefix", LogPrefix()},
+            {"proxyRequestId", proxyRequestId},
+            {"rpcCtx", (void*)(ev->Get()->GetRequestCtx().get())});
 
         Y_ABORT_UNLESS(!QueryState);
 
@@ -294,7 +301,8 @@ public:
     }
 
     void HandlePerformQuery(TEvKqp::TEvCloseSessionRequest::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Got TEvCloseSessionRequest during PerformQuery state");
+        YDB_LOG_DEBUG("Got TEvCloseSessionRequest during PerformQuery state",
+            {"LogPrefix", LogPrefix()});
         Y_UNUSED(ev);
         Y_UNUSED(ctx);
         QueryState->KeepSession = false;
@@ -358,7 +366,9 @@ public:
             Y_ABORT_UNLESS(CleanupState);
             auto result = CleanupState->AsyncResult->GetResult();
             if (!result.Success()) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Failed to cleanup: " << result.Issues().ToString());
+                YDB_LOG_ERROR("Failed",
+                    {"LogPrefix", LogPrefix()},
+                    {"to_cleanup", result.Issues().ToString()});
             }
 
             EndCleanup(ctx);
@@ -431,10 +441,11 @@ private:
                 return true;
         }
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Legacy YQL request"
-            << ", action: " << (ui32)queryRequest->GetAction()
-            << ", type: " << (ui32)queryRequest->GetType()
-            << ", query: \"" << queryRequest->GetQuery().substr(0, 1000) << "\"");
+        YDB_LOG_NOTICE("Legacy YQL request, query:",
+            {"LogPrefix", LogPrefix()},
+            {"action", (ui32)queryRequest->GetAction()},
+            {"type", (ui32)queryRequest->GetType()},
+            {"#_queryRequest->GetQuery().substr(0, 1000)", queryRequest->GetQuery().substr(0, 1000)});
 
         return false;
     }
@@ -747,32 +758,38 @@ private:
         }
 
         ctx.Send<ESendingType::Tail>(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
-            << ", proxyId: " << QueryState->Sender.ToString());
+        YDB_LOG_DEBUG("Sent query response back to proxy,",
+            {"LogPrefix", LogPrefix()},
+            {"proxyRequestId", QueryState->ProxyRequestId},
+            {"proxyId", QueryState->Sender.ToString()});
 
         QueryState.Reset();
 
         if (Settings.LongSession) {
             if (status == Ydb::StatusIds::INTERNAL_ERROR) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Worker destroyed due to internal error");
+                YDB_LOG_DEBUG("Worker destroyed due to internal error",
+                    {"LogPrefix", LogPrefix()});
                 Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
             if (status == Ydb::StatusIds::BAD_SESSION) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Worker destroyed due to session error");
+                YDB_LOG_DEBUG("Worker destroyed due to session error",
+                    {"LogPrefix", LogPrefix()});
                 Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
         } else {
             if (status != Ydb::StatusIds::SUCCESS) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Worker destroyed due to query error");
+                YDB_LOG_DEBUG("Worker destroyed due to query error",
+                    {"LogPrefix", LogPrefix()});
                 Counters->ReportWorkerClosedError(Settings.DbCounters);
                 return false;
             }
         }
 
         if (!keepSession) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Worker destroyed due to negative keep session flag");
+            YDB_LOG_DEBUG("Worker destroyed due to negative keep session flag",
+                {"LogPrefix", LogPrefix()});
             Counters->ReportWorkerClosedRequest(Settings.DbCounters);
             return false;
         }
@@ -852,7 +869,8 @@ private:
     template<class TEvRecord>
     void AddTrailingInfo(TEvRecord& record) {
         if (ShutdownState) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Session is closing, set trailing metadata to request session shutdown");
+            YDB_LOG_DEBUG("Session is closing, set trailing metadata to request session shutdown",
+                {"LogPrefix", LogPrefix()});
             record.SetWorkerIsClosing(true);
         }
     }
@@ -860,7 +878,9 @@ private:
     bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId,
         Ydb::StatusIds::StatusCode ydbStatus, const TString& message)
     {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<message);
+        YDB_LOG_WARN("",
+            {"LogPrefix", LogPrefix()},
+            {"message", message});
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.SetYdbStatus(ydbStatus);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
@@ -1043,7 +1063,9 @@ private:
     }
 
     void InternalError(const TString& message) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKER, LogPrefix() <<"Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error,",
+            {"LogPrefix", LogPrefix()},
+            {"message", message});
         if (QueryState) {
             ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::INTERNAL_ERROR, message);
         }

@@ -12,6 +12,9 @@
 
 #include <util/generic/guid.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -50,14 +53,18 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         context.OnComplete.Barrier(OperationId, "DoneBarrier");
         return false;
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvCompleteBarrier");
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvCompleteBarrier",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         if (!TDone::Process(context)) {
             return false;
@@ -74,7 +81,9 @@ public:
         // Find the backup collection path from the long incremental restore operation
         auto itOp = context.SS->LongIncrementalRestoreOps.find(OperationId);
         if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
-            LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "Failed to find long incremental restore operation");
+            YDB_LOG_CTX_ERROR(context.Ctx, "Failed to find long incremental restore operation",
+                {"TabletID", context.SS->TabletID()},
+                {"DebugHint", DebugHint()});
             return false;
         }
 
@@ -93,7 +102,10 @@ public:
             incrementalBackupNames.push_back(name);
         }
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << " Found " << incrementalBackupNames.size() << " incremental backups to restore");
+        YDB_LOG_CTX_INFO(context.Ctx, "Found incremental backups to restore",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"size", incrementalBackupNames.size()});
 
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, OperationId, incrementalBackupNames));
 
@@ -215,9 +227,9 @@ public:
 
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateRestoreOpControlPlane Propose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_CTX_INFO(context.Ctx, "TCreateRestoreOpControlPlane Propose",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
 
         TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
 
@@ -305,15 +317,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateRestoreOpControlPlane AbortPropose"
-            << ", opId: " << OperationId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateRestoreOpControlPlane AbortPropose",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateRestoreOpControlPlane AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateRestoreOpControlPlane AbortUnsafe",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId});
 
         context.OnComplete.DoneOperation(OperationId);
     }

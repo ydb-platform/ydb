@@ -7,6 +7,9 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <library/cpp/threading/future/core/future.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT LogComponent
 
 namespace NFq {
 
@@ -113,7 +116,10 @@ private:
         if (DataQuery->TxControl.SnapshotRead) {
             tx.SnapshotRead(true);
         }
-        LOG_TRACE_S(*NActors::TlsActivationContext, LogComponent, LogPrefix() <<"Run query " << DataQuery->Sql << " commit " << tx.Commit_);
+        YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "Run query commit",
+            {"LogPrefix", LogPrefix()},
+            {"Sql", DataQuery->Sql},
+            {"Commit_", tx.Commit_});
         RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx);
     }
 

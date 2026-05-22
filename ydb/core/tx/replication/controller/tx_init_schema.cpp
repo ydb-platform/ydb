@@ -1,4 +1,7 @@
 #include "controller_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -14,7 +17,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute");
+        YDB_LOG_CTX_DEBUG(ctx, "Execute",
+            {"LogPrefix", LogPrefix});
 
         NIceDb::TNiceDb db(txc.DB);
         db.Materialize<Schema>();
@@ -23,7 +27,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
         Self->RunTxInit(ctx);
     }
 

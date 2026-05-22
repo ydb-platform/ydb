@@ -26,6 +26,9 @@
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
 
 namespace NKikimr::NConsole {
 
@@ -333,7 +336,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
 
 void TConfigsDispatcher::Bootstrap()
 {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"TConfigsDispatcher Bootstrap");
+    YDB_LOG_DEBUG("TConfigsDispatcher Bootstrap");
 
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
@@ -375,7 +378,8 @@ void TConfigsDispatcher::Bootstrap()
 
 void TConfigsDispatcher::EnqueueEvent(TAutoPtr<IEventHandle> &ev)
 {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Enqueue event type: " << ev->GetTypeRewrite());
+    YDB_LOG_DEBUG("Enqueue event",
+        {"type", ev->GetTypeRewrite()});
     EventsQueue.push_back(ev);
 }
 
@@ -383,7 +387,8 @@ void TConfigsDispatcher::ProcessEnqueuedEvents()
 {
     while (!EventsQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = EventsQueue.front();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Dequeue event type: " << ev->GetTypeRewrite());
+        YDB_LOG_DEBUG("Dequeue event",
+            {"type", ev->GetTypeRewrite()});
         TlsActivationContext->Send(ev.Release());
         EventsQueue.pop_front();
     }
@@ -398,8 +403,9 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
     auto notification = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
     notification->Record.CopyFrom(subscription->UpdateInProcess->Record);
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
-                << ": " << notification->Record.ShortDebugString());
+    YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to",
+        {"subscriber", subscriber},
+        {"ShortDebugString", notification->Record.ShortDebugString()});
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
 }
@@ -442,7 +448,8 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             &ResolvedYamlConfig,
             &ResolvedJsonConfig);
     } catch (const yexception& ex) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Got invalid config from console error# " << ex.what());
+        YDB_LOG_ERROR("Got invalid config from console",
+            {"error", ex.what()});
     }
 
     return newYamlProtoConfig;
@@ -512,7 +519,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     const auto &rec = ev->Get()->Record;
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
+    YDB_LOG_TRACE("Send",
+        {"TEvConfigNotificationResponse", resp->Record.ShortDebugString()});
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1188,7 +1196,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
             for (auto &[subscriber, updates] : subscription->Subscribers) {
                 auto k = kinds;
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Sending for kinds: " << KindsToString(k));
+                YDB_LOG_TRACE("Sending for",
+                    {"kinds", KindsToString(k)});
                 SendUpdateToSubscriber(subscription, subscriber);
                 ++updates;
             }
@@ -1200,11 +1209,11 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     }
 
     if (CurrentStateFunc() == &TThis::StateInit) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
+        YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
     }
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Handle TEvConfigSubscriptionNotification: exit");
+    YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: exit");
 }
 
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const
@@ -1242,8 +1251,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     }
     resp->Config = trunc;
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Send TEvConfigsDispatcher::TEvGetConfigResponse"
-        " to " << ev->Sender << ": " << resp->Config->ShortDebugString());
+    YDB_LOG_TRACE("",
+        {"Sender", ev->Sender},
+        {"#_resp->Config->ShortDebugString()", resp->Config->ShortDebugString()});
 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
 }
@@ -1326,7 +1336,8 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
         }
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Sending for kinds: " << KindsToString(kinds));
+        YDB_LOG_TRACE("Sending for",
+            {"kinds", KindsToString(kinds)});
         SendUpdateToSubscriber(subscription, subscriber->Subscriber);
         ++(subscriberIt->second);
     }
@@ -1372,23 +1383,29 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
 
     // Probably subscription was cleared up due to tenant's change.
     if (!subscription) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Got notification response for unknown subscription " << ev->Sender);
+        YDB_LOG_ERROR("Got notification response for unknown subscription",
+            {"Sender", ev->Sender});
         return;
     }
 
     if (!subscription->UpdateInProcess) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Notification was ignored for subscription " << ev->Sender);
+        YDB_LOG_DEBUG("Notification was ignored for subscription",
+            {"Sender", ev->Sender});
         return;
     }
 
     if (ev->Cookie != subscription->UpdateInProcessCookie) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Notification cookie mismatch for subscription " << ev->Sender << " " << ev->Cookie << " != " << subscription->UpdateInProcessCookie);
+        YDB_LOG_ERROR("Notification cookie mismatch for subscription",
+            {"Sender", ev->Sender},
+            {"Cookie", ev->Cookie},
+            {"!", subscription->UpdateInProcessCookie});
         // TODO fix clients
         return;
     }
 
     if (!subscription->SubscribersToUpdate.contains(ev->Sender)) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Notification from unexpected subscriber for subscription " << ev->Sender);
+        YDB_LOG_ERROR("Notification from unexpected subscriber for subscription",
+            {"Sender", ev->Sender});
         return;
     }
 
@@ -1435,7 +1452,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeConfigurationVersionReques
         if (versionLabel == "v1" || versionLabel == "v2") {
             versionString = versionLabel;
         } else {
-             LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER,"Unexpected value for 'configuration_version' label: " << versionLabel << ". Reporting 'unknown'.");
+             YDB_LOG_WARN("Unexpected value for 'configuration_version'. Reporting 'unknown'.",
+                 {"label", versionLabel});
         }
     }
 

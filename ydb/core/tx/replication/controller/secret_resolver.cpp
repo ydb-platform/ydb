@@ -13,6 +13,9 @@
 #include <ydb/services/metadata/service.h>
 
 #include <util/generic/ptr.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -27,15 +30,18 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()},
+            {"entry", entry.ToString()});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"LogPrefix", LogPrefix},
+                {"entry", entry.ToString()});
             return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }
 

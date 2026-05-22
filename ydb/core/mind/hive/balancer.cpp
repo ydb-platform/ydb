@@ -5,6 +5,9 @@
 #include "hive_log.h"
 #include "node_info.h"
 #include "balancer.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -134,7 +137,9 @@ protected:
     }
 
     void PassAway() override {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer finished with " << Movements << " movements made");
+        YDB_LOG_INFO("Balancer finished with movements made",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"Movements", Movements});
         Stats.TotalRuns++;
         Stats.TotalMovements += Movements;
         Stats.LastRunMovements = Movements;
@@ -146,14 +151,16 @@ protected:
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
                 if (node != nullptr && node->IsOverloaded()) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer suggests scale-up");
+                    YDB_LOG_DEBUG("Balancer suggests scale-up",
+                        {"GetLogPrefix", GetLogPrefix()});
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_SUGGESTED_SCALE_UP].Increment(1);
                     break;
                 }
             }
         }
         if (Settings.RecheckOnFinish && Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer initiated recheck");
+            YDB_LOG_DEBUG("Balancer initiated recheck",
+                {"GetLogPrefix", GetLogPrefix()});
             Hive->ProcessTabletBalancer();
         } else {
             Send(Hive->SelfId(), new TEvPrivate::TEvBalancerOut());
@@ -234,7 +241,9 @@ protected:
             if (node == nullptr) {
                 continue;
             }
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer selected node " << node->Id);
+            YDB_LOG_TRACE("Balancer selected node",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"Id", node->Id});
             auto itTablets = node->Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
             if (itTablets == node->Tablets.end()) {
                 continue;
@@ -250,7 +259,11 @@ protected:
                     tablets.emplace_back(tablet);
                 }
             }
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer on node " << node->Id <<  ": " << tablets.size() << "/" << nodeTablets.size() << " tablets are suitable for balancing");
+            YDB_LOG_TRACE("Balancer on node / tablets are suitable for balancing",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"Id", node->Id},
+                {"size", tablets.size()},
+                {"#_size", nodeTablets.size()});
             if (!tablets.empty()) {
                 // avoid moving system tablets if possible
                 std::vector<TTabletInfo*>::iterator partitionIt;
@@ -304,7 +317,8 @@ protected:
 
         while (CanKickNextTablet()) {
             if (tabletsProcessed == MAX_TABLETS_PROCESSED) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer - rescheduling");
+                YDB_LOG_TRACE("Balancer - rescheduling",
+                    {"GetLogPrefix", GetLogPrefix()});
                 Send(SelfId(), new TEvents::TEvWakeup);
                 return;
             }
@@ -316,7 +330,9 @@ protected:
             if (tablet == nullptr || !tablet->IsRunning()) {
                 continue;
             }
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer selected tablet " << tablet->ToString());
+            YDB_LOG_TRACE("Balancer selected tablet",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tablet", tablet->ToString()});
             THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
             if (std::holds_alternative<TNodeInfo*>(result)) {
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
@@ -325,9 +341,11 @@ protected:
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
                     ++Movements;
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer moving tablet " << tablet->ToString()
-                           << " from node " << tablet->Node->Id
-                           << " to node " << node->Id);
+                    YDB_LOG_DEBUG("Balancer moving tablet from node to node",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tablet", tablet->ToString()},
+                        {"#_tablet->Node->Id", tablet->Node->Id},
+                        {"Id", node->Id});
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
@@ -342,7 +360,11 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Balancer " << SelfId() << " received " << ev->Get()->Status << " for tablet " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("Balancer received for tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"SelfId", SelfId()},
+            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
         --KickInFlight;
         BalanceNodes();
         KickNextTablet();

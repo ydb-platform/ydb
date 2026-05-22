@@ -10,6 +10,9 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimrHive::TDataCentersGroup*>, out, vec) {
     out << '[';
@@ -34,7 +37,9 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvHive::TEvCreateTablet(" << rec.GetTabletType() << '(' << rec.GetOwner() << ',' << rec.GetOwnerIdx() << "))");
         Execute(CreateCreateTablet(std::move(rec), ev->Sender, ev->Cookie));
     } else {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Invalid arguments specified to TEvCreateTablet: " << rec.DebugString());
+        YDB_LOG_ERROR("Invalid arguments specified",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"to_TEvCreateTablet", rec.DebugString()});
         THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
         reply->Record.SetStatus(NKikimrProto::EReplyStatus::ERROR);
         reply->Record.SetErrorReason(NKikimrHive::EErrorReason::ERROR_REASON_INVALID_ARGUMENTS);
@@ -74,7 +79,10 @@ void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         }
     }
     if (!PipeClientCache->OnConnect(ev)) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Failed to connect to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
+        YDB_LOG_ERROR("Failed to connect to tablet from tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"#_ev->Get()->TabletId", ev->Get()->TabletId},
+            {"TabletID", TabletID()});
         RestartPipeTx(ev->Get()->TabletId);
     } else {
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Connected to tablet " << ev->Get()->TabletId << " from tablet " << TabletID());
@@ -111,7 +119,9 @@ void THive::RestartPipeTx(ui64 tabletId) {
 
 bool THive::TryToDeleteNode(TNodeInfo* node) {
     if (node->CanBeDeleted(TActivationContext::Now())) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"TryToDeleteNode(" << node->Id << "): deleting");
+        YDB_LOG_INFO("TryToDeleteNode( ): deleting",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"Id", node->Id});
         if (BridgeInfo) {
             auto& pileInfo = GetPile(node->BridgePileId);
             pileInfo.Nodes.erase(node->Id);
@@ -132,7 +142,10 @@ bool THive::TryToDeleteNode(TNodeInfo* node) {
 
 void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvTabletPipe::TEvServerConnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
+        YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ClientId", ev->Get()->ClientId},
+            {"#_ev->Get()->ServerId", ev->Get()->ServerId});
         TNodeInfo& node = GetNode(ev->Get()->ClientId.NodeId());
         node.PipeServers.emplace_back(ev->Get()->ServerId);
     }
@@ -140,7 +153,10 @@ void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
 
 void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
+        YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"#_ev->Get()->ClientId", ev->Get()->ClientId},
+            {"#_ev->Get()->ServerId", ev->Get()->ServerId});
         auto nodeId = ev->Get()->ClientId.NodeId();
         TNodeInfo* node = FindNode(nodeId);
         if (node != nullptr) {
@@ -163,7 +179,10 @@ void THive::Handle(TEvLocal::TEvRegisterNode::TPtr& ev) {
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ev->Sender.NodeId()));
         Execute(CreateRegisterNode(local, std::move(record)));
     } else {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle incorrect TEvLocal::TEvRegisterNode from " << ev->Sender << " " << record.ShortDebugString());
+        YDB_LOG_WARN("Handle incorrect TEvLocal::TEvRegisterNode from",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"Sender", ev->Sender},
+            {"ShortDebugString", record.ShortDebugString()});
     }
 }
 
@@ -256,7 +275,11 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
     waitingTablets.reserve(std::min<size_t>(BootQueue.Size(), GetMaxBootBatchSize()));
     while (!BootQueue.Empty() && processedItems < GetMaxBootBatchSize()) {
         TBootQueue::TBootQueueRecord record = BootQueue.PopFromBootQueue();
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet " << record.TabletId << "." << record.FollowerId << " has priority " << record.Priority);
+        YDB_LOG_TRACE("Tablet. has priority",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", record.TabletId},
+            {"FollowerId", record.FollowerId},
+            {"Priority", record.Priority});
         ++processedItems;
         TTabletInfo* tablet = FindTablet(record.TabletId, record.FollowerId);
         if (tablet == nullptr) {
@@ -341,12 +364,14 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
 }
 
 void THive::HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&) {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received TEvProcessBootQueue while in StateInit");
+    YDB_LOG_WARN("Received TEvProcessBootQueue while in StateInit",
+        {"GetLogPrefix", GetLogPrefix()});
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessBootQueue());
 }
 
 void THive::Handle(TEvPrivate::TEvProcessBootQueue::TPtr& ev) {
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"ProcessBootQueue - executing");
+    YDB_LOG_TRACE("ProcessBootQueue - executing",
+        {"GetLogPrefix", GetLogPrefix()});
     if (ev->Get()->ProcessWaitQueue) {
         ProcessWaitQueue();
     }
@@ -362,7 +387,8 @@ void THive::Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&) {
 void THive::ProcessBootQueue() {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"ProcessBootQueue (" << BootQueue.BootQueue.size() << ")");
     if (!ProcessBootQueueScheduled) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"ProcessBootQueue - sending");
+        YDB_LOG_TRACE("ProcessBootQueue - sending",
+            {"GetLogPrefix", GetLogPrefix()});
         ProcessBootQueueScheduled = true;
         Send(SelfId(), new TEvPrivate::TEvProcessBootQueue());
     }
@@ -435,7 +461,8 @@ TVector<TTabletId> THive::UpdateStoragePools(const google::protobuf::RepeatedPtr
         if (storagePool.RefreshRequestInFlight > 0) {
             --storagePool.RefreshRequestInFlight;
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle TEvControllerSelectGroupsResult: Out of inflight counter response received");
+            YDB_LOG_WARN("THive::Handle TEvControllerSelectGroupsResult: Out of inflight counter response received",
+                {"GetLogPrefix", GetLogPrefix()});
         }
         storagePool.SetAsFresh();
         storagePool.ConfigurationGeneration = ConfigurationGeneration;
@@ -456,7 +483,8 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
             TVector<TTabletId> tablets;
             for (const auto& matchingGroups : rec.GetMatchingGroups()) {
                 if (matchingGroups.GroupsSize() == 0) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle TEvControllerSelectGroupsResult: BSC didn't return matching groups set");
+                    YDB_LOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: BSC didn't return matching groups set",
+                        {"GetLogPrefix", GetLogPrefix()});
                     continue;
                 }
                 TVector<TTabletId> tabletsWaiting = UpdateStoragePools(matchingGroups.GetGroups());
@@ -470,7 +498,9 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
             for (TTabletId tabletId : tablets) {
                 TLeaderTabletInfo* tablet = FindTablet(tabletId);
                 if (!tablet) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle TEvControllerSelectGroupsResult: tablet# " << tabletId << " not found");
+                    YDB_LOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: not found",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tablet", tabletId});
                 } else {
                     Execute(CreateUpdateTabletGroups(tabletId));
                 }
@@ -479,10 +509,13 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
                 ProcessStorageBalancer();
             }
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle TEvControllerSelectGroupsResult: obsolete BSC response");
+            YDB_LOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: obsolete BSC response",
+                {"GetLogPrefix", GetLogPrefix()});
         }
     } else {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle TEvControllerSelectGroupsResult: " << rec.GetStatus());
+        YDB_LOG_ERROR("THive::Handle",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TEvControllerSelectGroupsResult", rec.GetStatus()});
     }
 }
 
@@ -491,7 +524,9 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
     TNodeInfo* node = FindNode(nodeId);
     if (node != nullptr) {
         if (node->IsDisconnected()) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvLocal::TEvTabletStatus, NodeId " << nodeId << " disconnected, reconnecting");
+            YDB_LOG_WARN("Handle TEvLocal::TEvTabletStatus, NodeId disconnected, reconnecting",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"nodeId", nodeId});
             node->SendReconnect(ev->Sender);
             return;
         }
@@ -509,7 +544,10 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
                     static_cast<TEvTablet::TEvTabletDead::EReason>(record.GetReason())
                 ));
     } else {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvLocal::TEvTabletStatus from node " << nodeId << ", TabletId: " << record.GetTabletID() << " not found");
+        YDB_LOG_WARN("Handle TEvLocal::TEvTabletStatus from node not found",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"nodeId", nodeId},
+            {"TabletId", record.GetTabletID()});
     }
 }
 
@@ -558,12 +596,11 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             ReportStoppedToWhiteboard(tablet);
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Report tablet " << tablet.ToString() << " as stopped to Whiteboard");
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"The tablet "
-                   << tablet.ToString()
-                   << " is not ready for anything State:"
-                   << ETabletStateName(tablet.State)
-                   << " VolatileState:"
-                   << TTabletInfo::EVolatileStateName(tablet.GetVolatileState()));
+            YDB_LOG_WARN("The tablet is not ready for anything",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tablet", tablet.ToString()},
+                {"State", ETabletStateName(tablet.State)},
+                {"VolatileState", TTabletInfo::EVolatileStateName(tablet.GetVolatileState())});
         }
         for (const auto& domain : tablet.NodeFilter.AllowedDomains) {
             SeenDomain(domain);
@@ -584,7 +621,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         if (!PrimaryDomainKey && Info()->TenantPathId) {
             //NOTE: Primary(Sub)DomainKey isn't set after loading everything from the local db --
             // -- this is first time boot or incomplete configuration.
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Primary(Sub)DomainKey is not set, setting it from TTabletStorageInfo::TenantPathId to " << Info()->TenantPathId);
+            YDB_LOG_INFO("Primary(Sub)DomainKey is not set, setting it from TTabletStorageInfo::TenantPathId to",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"TenantPathId", Info()->TenantPathId});
 
             auto msg = MakeHolder<TEvHive::TEvConfigureHive>(TSubDomainKey(Info()->TenantPathId.OwnerId, Info()->TenantPathId.LocalPathId));
             TEvHive::TEvConfigureHive::TPtr event((TEventHandle<TEvHive::TEvConfigureHive>*) new IEventHandle(
@@ -624,7 +663,8 @@ void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
     }
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_READY || MigrationState == NKikimrHive::EMigrationState::MIGRATION_COMPLETE) {
         if (ev->Get()->Record.GetMigrationFilter().GetFilterDomain().GetSchemeShard() == 0 && GetMySubDomainKey().GetSchemeShard() == 0) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Migration ignored - unknown domain");
+            YDB_LOG_ERROR("Migration ignored - unknown domain",
+                {"GetLogPrefix", GetLogPrefix()});
             Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
             return;
         }
@@ -660,7 +700,9 @@ void THive::OnDetach(const TActorContext&) {
 }
 
 void THive::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) {
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"OnTabletDead: " << TabletID());
+    YDB_LOG_INFO("",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"OnTabletDead", TabletID()});
     Cleanup();
     return PassAway();
 }
@@ -792,15 +834,22 @@ void THive::Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
     TNodeId nodeId = ev->Sender.NodeId();
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_TRACE("THive::Handle::TEvTabletMetrics, NodeId",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"nodeId", nodeId},
+        {"ShortDebugString", ev->Get()->Record.ShortDebugString()});
     if (UpdateTabletMetricsInProgress < MAX_UPDATE_TABLET_METRICS_IN_PROGRESS) {
         UpdateTabletMetricsInProgress++;
         if (UpdateTabletMetricsInProgress > (MAX_UPDATE_TABLET_METRICS_IN_PROGRESS / 2)) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " transactions in progress is over 50% of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS");
+            YDB_LOG_WARN("THive::Handle::TEvTabletMetrics, NodeId transactions in progress is over 50% of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"nodeId", nodeId});
         }
         Execute(CreateUpdateTabletMetrics(ev));
     } else {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle::TEvTabletMetrics, NodeId " << nodeId << " was skipped due to reaching of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS");
+        YDB_LOG_ERROR("THive::Handle::TEvTabletMetrics, NodeId was skipped due to reaching of MAX_UPDATE_TABLET_METRICS_IN_PROGRESS",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"nodeId", nodeId});
         Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);
     }
 }
@@ -808,17 +857,25 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
 void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
     if (ConnectedNodes.insert(nodeId).second) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvInterconnect::TEvNodeConnected, NodeId " << nodeId << " Cookie " << ev->Cookie);
+        YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeConnected, NodeId Cookie",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"nodeId", nodeId},
+            {"Cookie", ev->Cookie});
         UpdateCounterNodesConnected(+1);
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
     } else {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvInterconnect::TEvNodeConnected (duplicate), NodeId " << nodeId << " Cookie " << ev->Cookie);
+        YDB_LOG_TRACE("Handle TEvInterconnect::TEvNodeConnected (duplicate), NodeId Cookie",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"nodeId", nodeId},
+            {"Cookie", ev->Cookie});
     }
 }
 
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << nodeId);
+    YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeDisconnected, NodeId",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"nodeId", nodeId});
     RemoveFromPingInProgress(nodeId);
     if (ConnectedNodes.erase(nodeId)) {
        UpdateCounterNodesConnected(-1);
@@ -871,9 +928,9 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
     TFullTabletId tabletId(ev->Get()->TabletId);
     TTabletInfo* tablet = FindTablet(tabletId);
     if (tablet == nullptr) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle::TEvKickTablet" <<
-                   " TabletId=" << tabletId <<
-                   " tablet not found");
+        YDB_LOG_WARN("THive::Handle::TEvKickTablet tablet not found",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", tabletId});
         return;
     }
 
@@ -947,8 +1004,9 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
     case ETabletState::Unknown:
     case ETabletState::StoppingInGroupAssignment:
         // Subscribing in these states doesn't make sense, as it will never complete
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Requesting TabletStorageInfo with tablet State="
-                << ETabletStateName(tablet->State));
+        YDB_LOG_ERROR("Requesting TabletStorageInfo with tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"State", ETabletStateName(tablet->State)});
         Send(
             ev->Sender,
             new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet is in an unexpected state"),
@@ -971,7 +1029,10 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
 }
 
 void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::Handle::TEvUndelivered Sender=" << ev->Sender << ", Type=" << ev->Get()->SourceType );
+    YDB_LOG_WARN("THive::Handle::TEvUndelivered",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"Sender", ev->Sender},
+        {"Type", ev->Get()->SourceType});
     switch (ev->Get()->SourceType) {
     case TEvLocal::EvBootTablet: {
         // restart boot of the tablet (on different node)
@@ -1249,7 +1310,10 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
 
 THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Finding best node for tablet " << tablet.ToString());
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " family " << tablet.FamilyString());
+    YDB_LOG_TRACE("[FBN] Tablet family",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"tablet", tablet.ToString()},
+        {"FamilyString", tablet.FamilyString()});
 
     const TDomainInfo* domain = FindDomain(tablet.NodeFilter.ObjectDomain);
     if (domain && domain->Stopped) {
@@ -1260,10 +1324,16 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         TNodeInfo* node = FindNode(tablet.PreferredNodeId);
         if (node != nullptr) {
             if (node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " choose node " << node->Id << " because of preferred node");
+                YDB_LOG_TRACE("[FBN] Tablet choose node because of preferred node",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"tablet", tablet.ToString()},
+                    {"Id", node->Id});
                 return node;
             } else {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " preferred unavailable node " << node->Id);
+                YDB_LOG_TRACE("[FBN] Tablet preferred unavailable node",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"tablet", tablet.ToString()},
+                    {"Id", node->Id});
                 tablet.BootState = TStringBuilder() << "Preferred unavailable node " << node->Id;
                 return TNoNodeFound();
             }
@@ -1273,7 +1343,10 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     if (suggestedNodeId != 0) {
         TNodeInfo* node = FindNode(suggestedNodeId);
         if (node && node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " choose node " << node->Id << " because of suggested node");
+            YDB_LOG_TRACE("[FBN] Tablet choose node because of suggested node",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tablet", tablet.ToString()},
+                {"Id", node->Id});
             return node;
         }
     }
@@ -1284,7 +1357,11 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     if (tablet.IsAlive() && tablet.Node->IsAllowedToRunTablet(tablet) && !tablet.Node->IsOverloaded()) {
         bestNodeInfo = &(Nodes.find(tablet.Node->Id)->second);
         bestUsage = tablet.Node->GetNodeUsageForTablet(tablet);
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " starting with usage " << Sprintf("%.9f", bestUsage) << " of node " << bestNodeInfo->Id);
+        YDB_LOG_TRACE("[FBN] Tablet starting with usage of node",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"#_num_0", Sprintf("%.9f", bestUsage)},
+            {"Id", bestNodeInfo->Id});
     }
     */
 
@@ -1330,7 +1407,10 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
             }
         }
         if (!dataCentersGroups.empty()) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " using DC preference: " << dataCentersGroups);
+            YDB_LOG_TRACE("[FBN] Tablet using DC",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tablet", tablet.ToString()},
+                {"preference", dataCentersGroups});
         }
     }
 
@@ -1354,12 +1434,22 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                     if (nodeInfo.IsAbleToRunTablet(tablet, &debugState)) {
                         double usage = nodeInfo.GetNodeUsageForTablet(tablet);
                         selectedNodes.emplace_back(usage, &nodeInfo);
-                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " selected usage " << Sprintf("%.9f", usage) << " of node " << nodeInfo.Id);
+                        YDB_LOG_TRACE("[FBN] Tablet selected usage of node",
+                            {"GetLogPrefix", GetLogPrefix()},
+                            {"tablet", tablet.ToString()},
+                            {"#_num_0", Sprintf("%.9f", usage)},
+                            {"Id", nodeInfo.Id});
                     } else {
-                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo.Id << " is not able to run the tablet");
+                        YDB_LOG_TRACE("[FBN] Tablet node is not able to run the tablet",
+                            {"GetLogPrefix", GetLogPrefix()},
+                            {"tablet", tablet.ToString()},
+                            {"Id", nodeInfo.Id});
                     }
                 } else {
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo.Id << " is not able to schedule the tablet");
+                    YDB_LOG_TRACE("[FBN] Tablet node is not able to schedule the tablet",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tablet", tablet.ToString()},
+                        {"Id", nodeInfo.Id});
                     thereAreNodesWithManyStarts = true;
                     if (GetBootStrategy() == NKikimrConfig::THiveConfig::HIVE_BOOT_STRATEGY_BALANCED) {
                         tablet.BootState = BootStateTooManyStarting;
@@ -1367,29 +1457,42 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                     }
                 }
             } else {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Node " << nodeInfo.Id << " is not allowed"
-                            << " to run the tablet " << tablet.ToString()
-                            << " node domains " << nodeInfo.ServicedDomains
-                            << " tablet object domain " << tablet.GetLeader().ObjectDomain
-                            << " tablet allowed domains " << tablet.GetNodeFilter().AllowedDomains
-                            << " tablet effective allowed domains " << tablet.GetNodeFilter().GetEffectiveAllowedDomains());
+                YDB_LOG_TRACE("[FBN] Node is not allowed to run the tablet node domains tablet object domain tablet allowed domains tablet effective allowed domains",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Id", nodeInfo.Id},
+                    {"tablet", tablet.ToString()},
+                    {"ServicedDomains", nodeInfo.ServicedDomains},
+                    {"ObjectDomain", tablet.GetLeader().ObjectDomain},
+                    {"AllowedDomains", tablet.GetNodeFilter().AllowedDomains},
+                    {"GetEffectiveAllowedDomains", tablet.GetNodeFilter().GetEffectiveAllowedDomains()});
             }
         } else {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo.Id << " is not alive");
+            YDB_LOG_TRACE("[FBN] Tablet node is not alive",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tablet", tablet.ToString()},
+                {"Id", nodeInfo.Id});
             debugState.NodesDead++;
         }
     }
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " selected nodes count " << selectedNodes.size());
+    YDB_LOG_TRACE("[FBN] Tablet selected nodes count",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"tablet", tablet.ToString()},
+        {"size", selectedNodes.size()});
     if (selectedNodes.empty() && thereAreNodesWithManyStarts) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " all available nodes are booting too many tablets");
+        YDB_LOG_TRACE("[FBN] Tablet all available nodes are booting too many tablets",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()});
         return TTooManyTabletsStarting();
     }
 
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {
         selectedNodes = SelectMaxPriorityNodes(std::move(selectedNodes), tablet, dcPriority);
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " selected max priority nodes count " << selectedNodes.size());
+        YDB_LOG_TRACE("[FBN] Tablet selected max priority nodes count",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"size", selectedNodes.size()});
 
         switch (GetNodeSelectStrategy()) {
             case NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM:
@@ -1408,11 +1511,16 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
     }
     if (selectedNode != nullptr) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " selected node " << selectedNode->Id);
+        YDB_LOG_TRACE("[FBN] Tablet selected node",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"Id", selectedNode->Id});
         tablet.BootState = BootStateStarting;
         return selectedNode;
     } else {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[FBN] Tablet " << tablet.ToString() << " no node was selected");
+        YDB_LOG_TRACE("[FBN] Tablet no node was selected",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()});
 
         ui32 nodesLeft = Nodes.size();
 
@@ -1831,49 +1939,75 @@ TResourceNormalizedValues THive::GetStDevResourceValues() const {
 
 bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
     if (!tablet.IsAlive()) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " to " << node.Id
-                   << " is expedient because the tablet is not alive");
+        YDB_LOG_TRACE("[TME] Move of tablet to is expedient because the tablet is not alive",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"Id", node.Id});
         return true;
     }
     if (tablet.Node->Freeze) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is not expedient because the source node is freezed");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient because the source node is freezed",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return false;
     }
     if (node.Freeze) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is not expedient because the target node is freezed");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient because the target node is freezed",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return false;
     }
     if (tablet.Node->Down) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is expedient because the node is down");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient because the node is down",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return true;
     }
     if (!tablet.Node->IsAllowedToRunTablet(tablet)) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is expedient because the current node is unappropriate target for the tablet");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient because the current node is unappropriate target for the tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return true;
     }
     if (tablet.Node->Id == node.Id) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is not expedient because node is the same");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient because node is the same",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return false;
     }
     if (tablet.Node->IsOverloaded() && !node.IsOverloaded()) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is forcefully expedient because source node is overloaded");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is forcefully expedient because source node is overloaded",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return true;
     }
     if (GetSpreadNeighbours() && tablet.Node->GetTabletNeighboursCount(tablet) > node.GetTabletNeighboursCount(tablet)) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is expedient because it spreads neighbours");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient because it spreads neighbours",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return true;
     }
 
     if (!GetCheckMoveExpediency()) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is forcefully expedient because of the setting");
+        YDB_LOG_TRACE("[TME] Move of tablet from to is forcefully expedient because of the setting",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id});
         return true;
     }
 
@@ -1911,11 +2045,21 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
     double after = max(afterStDev);
     bool result = after < before;
     if (result) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is expedient, beforeStDev " << beforeStDev << " afterStDev " << afterStDev);
+        YDB_LOG_TRACE("[TME] Move of tablet from to is expedient, beforeStDev afterStDev",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id},
+            {"beforeStDev", beforeStDev},
+            {"afterStDev", afterStDev});
     } else {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
-                   << " is not expedient, beforeStDev " << beforeStDev << " afterStDev " << afterStDev);
+        YDB_LOG_TRACE("[TME] Move of tablet from to is not expedient, beforeStDev afterStDev",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tablet", tablet.ToString()},
+            {"NodeId", tablet.NodeId},
+            {"Id", node.Id},
+            {"beforeStDev", beforeStDev},
+            {"afterStDev", afterStDev});
     }
     return result;
 }
@@ -1989,7 +2133,8 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
 }
 
 void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Handle TEvRequestHiveInfo");
+    YDB_LOG_TRACE("Handle TEvRequestHiveInfo",
+        {"GetLogPrefix", GetLogPrefix()});
     const auto& record = ev->Get()->Record;
     TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
     if (record.HasTabletID()) {
@@ -2002,7 +2147,9 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
         if (tablet) {
             FillTabletInfo(response->Record, record.GetTabletID(), tablet, record);
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Can't find the tablet from RequestHiveInfo(TabletID=" << tabletId << ")");
+            YDB_LOG_WARN("Can't find the tablet",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"from_RequestHiveInfo(TabletID", tabletId});
         }
     } else {
         std::optional<TSubDomainKey> filterObjectDomain;
@@ -2307,7 +2454,9 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
 
     if (!tablet) {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet not found " << tabletId);
+        YDB_LOG_ERROR("Tablet not found",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         return;
     }
 
@@ -2315,13 +2464,17 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
         tablet->State == ETabletState::BlockStorage)
     {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER), 0, ev->Cookie);
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet waiting for group assignment " << tabletId);
+        YDB_LOG_WARN("Tablet waiting for group assignment",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         return;
     }
 
     if (!tablet->IsBootingSuppressed()) {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet " << tabletId << " is not expected to boot externally");
+        YDB_LOG_ERROR("Tablet is not expected to boot externally",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         return;
     }
 
@@ -2477,7 +2630,8 @@ void THive::EnqueueUpdateMetrics(TTabletInfo* tablet) {
 }
 
 void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received TEvProcessTabletBalancer while in StateInit");
+    YDB_LOG_WARN("Received TEvProcessTabletBalancer while in StateInit",
+        {"GetLogPrefix", GetLogPrefix()});
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessTabletBalancer());
 }
 
@@ -2586,8 +2740,11 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             std::vector<TNodeId> nodeIds;
             nodeIds.reserve(stats.Values.size());
             std::transform(nodes.begin(), nodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Scatter " << stats.ScatterByResource << " over limit "
-                       << GetMinScatterToBalance() << " - triggered balancer " << EBalancerTypeName(balancerType));
+            YDB_LOG_TRACE("Scatter over limit - triggered balancer",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"ScatterByResource", stats.ScatterByResource},
+                {"GetMinScatterToBalance", GetMinScatterToBalance()},
+                {"#_EBalancerTypeName(balancerType)", EBalancerTypeName(balancerType)});
             settings.emplace(TBalancerSettings{
                 .Type = balancerType,
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
@@ -3005,7 +3162,12 @@ void THive::UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& 
     ObjectDistributions.UpdateCountForTablet(tablet, node, diff);
     TabletCounters->Simple()[NHive::COUNTER_IMBALANCED_OBJECTS].Set(ObjectDistributions.GetImbalancedObjectsCount());
     TabletCounters->Simple()[NHive::COUNTER_WORST_OBJECT_VARIANCE].Set(ObjectDistributions.GetWorstObjectVariance());
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"UpdateObjectCount " << "for " << tablet.ObjectId << " on " << node.Id << " (" << diff << ") ~> Imbalance: " << ObjectDistributions.GetMaxImbalance());
+    YDB_LOG_TRACE("UpdateObjectCount for on ) ~>",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"ObjectId", tablet.ObjectId},
+        {"Id", node.Id},
+        {"diff", diff},
+        {"Imbalance", ObjectDistributions.GetMaxImbalance()});
 }
 
 ui64 THive::GetObjectImbalance(TFullObjectId object) {
@@ -3413,8 +3575,10 @@ STFUNC(THive::StateWork) {
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::StateWork unhandled event type: " << ev->GetTypeRewrite()
-                   << " event: " << ev->ToString());
+            YDB_LOG_WARN("THive::StateWork unhandled event",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
         }
         break;
     }
@@ -3440,7 +3604,11 @@ void THive::RequestFreeSequence() {
 
         if (PendingCreateTablets.size() > sequenceSize) {
             size_t newSequenceSize = ((PendingCreateTablets.size() / sequenceSize) + 1) * sequenceSize;
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Increasing sequence size from " << sequenceSize << " to " << newSequenceSize << " due to PendingCreateTablets.size() == " << PendingCreateTablets.size());
+            YDB_LOG_WARN("Increasing sequence size from to due to PendingCreateTablets.size()",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"sequenceSize", sequenceSize},
+                {"newSequenceSize", newSequenceSize},
+                {"size", PendingCreateTablets.size()});
             sequenceSize = newSequenceSize;
         }
 
@@ -3449,7 +3617,8 @@ void THive::RequestFreeSequence() {
         RequestingSequenceNow = true;
         RequestingSequenceIndex = sequenceIndex;
     } else {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"We ran out of tablet ids");
+        YDB_LOG_ERROR("We ran out of tablet ids",
+            {"GetLogPrefix", GetLogPrefix()});
     }
 }
 
@@ -3563,7 +3732,10 @@ bool THive::CheckForForwardTabletRequest(TTabletId tabletId, NKikimrHive::TForwa
             owner = RootHiveId;
         }
         if (owner != TSequencer::NO_OWNER && owner != TabletID()) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Forwarding TabletRequest(TabletID " << tabletId << ") to Hive " << owner);
+            YDB_LOG_NOTICE("Forwarding TabletRequest(TabletID ) to Hive",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tabletId", tabletId},
+                {"owner", owner});
             forwardRequest.SetHiveTabletId(owner);
             return true;
         }
@@ -3592,10 +3764,14 @@ TSubDomainKey THive::GetMySubDomainKey() const {
             objectDomains.insert(tablet.ObjectDomain);
         }
         if (objectDomains.size() == 1) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"GetMySubDomainKey() - guessed PrimaryDomainKey to " << *objectDomains.begin());
+            YDB_LOG_WARN("GetMySubDomainKey() - guessed PrimaryDomainKey to",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"begin", *objectDomains.begin()});
             return *objectDomains.begin();
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"GetMySubDomainKey() - couldn't guess PrimaryDomainKey: " << objectDomains.size() << " object domains found");
+            YDB_LOG_WARN("GetMySubDomainKey() - couldn't guess object domains found",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"PrimaryDomainKey", objectDomains.size()});
         }
     }
     return {};
@@ -3657,16 +3833,19 @@ void THive::Handle(TEvPrivate::TEvLogTabletMoves::TPtr&) {
         movesByTypeString << cnt << "x " << TTabletTypes::TypeToStr(type);
         movesCount += cnt;
     }
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Made " << movesCount <<
-           " tablet moves (" << movesByTypeString <<
-           ") since " << LogTabletMovesSchedulingTime <<
-           ", including:");
+    YDB_LOG_INFO("Made tablet moves ( ) since, including:",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"movesCount", movesCount},
+        {"movesByTypeString", movesByTypeString},
+        {"LogTabletMovesSchedulingTime", LogTabletMovesSchedulingTime});
     for (const auto& moveInfo : TabletMoveSamplesForLog) {
         auto tablet = FindTablet(moveInfo.Tablet);
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"tablet " << (tablet ? tablet->ToString() : ToString(moveInfo.Tablet)) <<
-               " from node " << moveInfo.From <<
-               " to node " << moveInfo.To <<
-               " at " << moveInfo.Timestamp);
+        YDB_LOG_INFO("tablet from node to node at",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"#_(tablet ? tablet->ToString() : ToString(moveInfo.Tablet))", (tablet ? tablet->ToString() : ToString(moveInfo.Tablet))},
+            {"From", moveInfo.From},
+            {"To", moveInfo.To},
+            {"Timestamp", moveInfo.Timestamp});
     }
     TabletMoveSamplesForLog.clear();
     TabletMovesByTypeForLog.clear();
@@ -3724,7 +3903,9 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
                 i64 neededCount = group.GetFollowerCountForDataCenter(dataCenterId);
                 i64 delta = neededCount - std::ssize(followers);
                 for (i64 i = 0; i < delta; ++i) {
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"UpdateDataCenterFollowers: Pending create follower for " << tabletId);
+                    YDB_LOG_TRACE("UpdateDataCenterFollowers: Pending create follower for",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tabletId", tabletId});
                     PendingFollowerUpdates.Create(tablet.GetFullTabletId(), group.Id, dataCenterId);
                 }
             }
@@ -3732,7 +3913,9 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     } else {
         for (auto& [group, followers] : dataCenter.Followers) {
             for (auto follower : followers) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"UpdateDataCenterFollowers: Pending delete follower for " << follower->GetFullTabletId());
+                YDB_LOG_TRACE("UpdateDataCenterFollowers: Pending delete follower for",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"GetFullTabletId", follower->GetFullTabletId()});
                 PendingFollowerUpdates.Delete(follower->GetFullTabletId(), group.second, dataCenterId);
             }
         }
@@ -3744,7 +3927,8 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
 }
 
 void THive::HandleInit(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Received TEvUpdateDataCenterFollowers while in StateInit");
+    YDB_LOG_WARN("Received TEvUpdateDataCenterFollowers while in StateInit",
+        {"GetLogPrefix", GetLogPrefix()});
     Schedule(TDuration::Seconds(1), ev->Release().Release());
 }
 
@@ -3800,7 +3984,8 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     if (pool.ConsoleVersion < record.GetVersion()) {
         pool.ConsoleVersion = record.GetVersion();
     } else {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Got outdated TEvShrinkStoragePool request");
+        YDB_LOG_WARN("Got outdated TEvShrinkStoragePool request",
+            {"GetLogPrefix", GetLogPrefix()});
         return;
     }
     if (AreWeRootHive()) {
@@ -3828,14 +4013,17 @@ void THive::MakeScaleRecommendation() {
     auto subdomainKey = GetMySubDomainKey();
     auto it = Domains.find(subdomainKey);
     if (it == Domains.end()) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Can't find domain " << subdomainKey);
+        YDB_LOG_ERROR("[MSR] Can't find domain",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"subdomainKey", subdomainKey});
         Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
         return;
     }
     auto& domain = it->second;
 
     if (domain.ScaleRecommenderPolicies.empty() && CurrentConfig.GetDryRunTargetTrackingCPU() == 0) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] No scaling policies configured, rescheduled");
+        YDB_LOG_TRACE("[MSR] No scaling policies configured, rescheduled",
+            {"GetLogPrefix", GetLogPrefix()});
         Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
         return;
     }
@@ -3844,22 +4032,31 @@ void THive::MakeScaleRecommendation() {
     ui32 readyNodesCount = 0;
     for (auto& [id, node] : Nodes) {
         if (!node.IsAlive()) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Skip node " << id << ", not alive");
+            YDB_LOG_TRACE("[MSR] Skip node, not alive",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"id", id});
             continue;
         }
 
         if (!node.AveragedNodeTotalCpuUsage.IsValueReady()) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Skip node " << id << ", no CPU usage value");
+            YDB_LOG_TRACE("[MSR] Skip node, no CPU usage value",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"id", id});
             continue;
         }
 
         if (node.GetServicedDomain() != subdomainKey) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Skip node " << id << ", serviced domain doesn't match");
+            YDB_LOG_TRACE("[MSR] Skip node, serviced domain doesn't match",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"id", id});
             continue;
         }
 
         double avgCpuUsage = node.AveragedNodeTotalCpuUsage.GetValue();
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Node " << id << " is ready, avg CPU usage: " << avgCpuUsage);
+        YDB_LOG_TRACE("[MSR] Node is ready, avg CPU",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"id", id},
+            {"usage", avgCpuUsage});
         ++readyNodesCount;
 
         cpuUsageSum += avgCpuUsage;
@@ -3867,7 +4064,10 @@ void THive::MakeScaleRecommendation() {
     }
 
     double avgCpuUsage = readyNodesCount != 0 ? cpuUsageSum / readyNodesCount : 0;
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Total avg CPU usage: " << avgCpuUsage << ", ready nodes: " << readyNodesCount);
+    YDB_LOG_TRACE("[MSR] Total avg CPU, ready",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"usage", avgCpuUsage},
+        {"nodes", readyNodesCount});
     TabletCounters->Simple()[NHive::COUNTER_AVG_CPU_UTILIZATION].Set(avgCpuUsage * 100);
 
     auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
@@ -3876,7 +4076,9 @@ void THive::MakeScaleRecommendation() {
     while (avgCpuUsageHistory.size() > maxHistorySize) {
         avgCpuUsageHistory.pop_front();
     }
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Avg CPU usage history: " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
+    YDB_LOG_TRACE("[MSR] Avg CPU usage history:",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"#_num_0", JoinSeq(", ", avgCpuUsageHistory)});
 
     if (!domain.ScaleRecommenderPolicies.empty()) {
         std::optional<ui32> recommendedNodes;
@@ -3890,9 +4092,13 @@ void THive::MakeScaleRecommendation() {
                 .Timestamp = TActivationContext::Now()
             };
             TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(*recommendedNodes);
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Recommended nodes: " << recommendedNodes << ", current nodes: " << readyNodesCount);
+            YDB_LOG_TRACE("[MSR] Recommended",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"nodes", recommendedNodes},
+                {"current_nodes", readyNodesCount});
         } else {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] No scaling action recommended");
+            YDB_LOG_TRACE("[MSR] No scaling action recommended",
+                {"GetLogPrefix", GetLogPrefix()});
         }
     }
 
@@ -3902,9 +4108,13 @@ void THive::MakeScaleRecommendation() {
 
         if (dryRunRecommendedNodes) {
             TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(*dryRunRecommendedNodes);
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] Dry run recommended nodes: " << *dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);
+            YDB_LOG_TRACE("[MSR] Dry run recommended",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"nodes", *dryRunRecommendedNodes},
+                {"current_nodes", readyNodesCount});
         } else {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"[MSR] No dry run scaling action recommended");
+            YDB_LOG_TRACE("[MSR] No dry run scaling action recommended",
+                {"GetLogPrefix", GetLogPrefix()});
         }
     }
 

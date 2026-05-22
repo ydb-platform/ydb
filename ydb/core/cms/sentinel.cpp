@@ -18,6 +18,9 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -554,8 +557,9 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     }
 
     void RequestBSConfig() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Request blobstorage config"
-            << ": attempt# " << SentinelState->ConfigUpdaterState.BSCAttempt);
+        YDB_LOG_DEBUG("[Sentinel] [ Request blobstorage config",
+            {"Name", Name()},
+            {"attempt", SentinelState->ConfigUpdaterState.BSCAttempt});
 
         if (!CmsState->BSControllerPipe) {
             CmsState->BSControllerPipe = this->Register(CreateBSControllerPipe(CmsState));
@@ -567,8 +571,9 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     }
 
     void RequestCMSClusterState() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Request CMS cluster state"
-            << ": attempt# " << SentinelState->ConfigUpdaterState.CMSAttempt);
+        YDB_LOG_DEBUG("[Sentinel] [ Request CMS cluster state",
+            {"Name", Name()},
+            {"attempt", SentinelState->ConfigUpdaterState.CMSAttempt});
         // We aren't tracking delivery due to invariant that CMS always kills sentinel when dies itself
         Send(CmsState->CmsActorId, new TEvCms::TEvClusterStateRequest());
     }
@@ -576,8 +581,9 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     void Handle(TEvCms::TEvClusterStateResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Handle TEvCms::TEvClusterStateResponse"
-            << ": response# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("[Sentinel] [ Handle TEvCms::TEvClusterStateResponse",
+            {"Name", Name()},
+            {"response", record.ShortDebugString()});
 
         if (!record.HasStatus() || !record.GetStatus().HasCode() || record.GetStatus().GetCode() != NKikimrCms::TStatus::OK) {
             TString error = "<no description>";
@@ -590,8 +596,9 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                 }
             }
 
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Unsuccesful response from CMS"
-                << ": error# " << error);
+            YDB_LOG_ERROR("[Sentinel] [ Unsuccesful response from CMS",
+                {"Name", Name()},
+                {"error", error});
             return RetryCMS();
         }
 
@@ -632,8 +639,9 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record.GetResponse();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Handle TEvBlobStorage::TEvControllerConfigResponse"
-            << ": response# " << response.ShortDebugString());
+        YDB_LOG_DEBUG("[Sentinel] [ Handle TEvBlobStorage::TEvControllerConfigResponse",
+            {"Name", Name()},
+            {"response", response.ShortDebugString()});
 
         if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
             TString error = "<no description>";
@@ -641,9 +649,10 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                 error = response.GetStatus(0).GetErrorDescription();
             }
 
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Unsuccesful response from BSC"
-                << ": size# " << response.StatusSize()
-                << ", error# " << error);
+            YDB_LOG_ERROR("[Sentinel] [ Unsuccesful response from BSC",
+                {"Name", Name()},
+                {"size", response.StatusSize()},
+                {"error", error});
             RetryBSC();
         } else {
             auto& pdisks = SentinelState->PDisks;
@@ -672,7 +681,8 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     }
 
     void OnPipeDisconnected() {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Pipe to BSC disconnected");
+        YDB_LOG_ERROR("[Sentinel] [ Pipe to BSC disconnected",
+            {"Name", Name()});
         RetryBSC();
     }
 
@@ -735,7 +745,9 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
             case NKikimrBlobStorage::TPDiskState::Stopped:
                 return state;
             default:
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " <<"Unknown pdisk state: " << (ui32)state);
+                YDB_LOG_CRIT("[Sentinel] [ Unknown pdisk",
+                    {"Name", Name()},
+                    {"state", (ui32)state});
                 return NKikimrBlobStorage::TPDiskState::Unknown;
         }
     }
@@ -798,9 +810,10 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         const TActorId wbId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
         const ui32 flags = IEventHandle::FlagTrackDelivery;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Request pdisks state"
-            << ": nodeId# " << nodeId
-            << ", wbId# " << wbId);
+        YDB_LOG_DEBUG("[Sentinel] [ Request pdisks state",
+            {"Name", Name()},
+            {"nodeId", nodeId},
+            {"wbId", wbId});
         Send(wbId, new TEvWhiteboard::TEvPDiskStateRequest(), flags, nodeId);
     }
 
@@ -808,21 +821,24 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         const ui32 nodeId = ev->Sender.NodeId();
         const auto& record = ev->Get()->Record;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Handle TEvWhiteboard::TEvPDiskStateResponse"
-            << ": nodeId# " << nodeId
-            << ", response# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("[Sentinel] [ Handle TEvWhiteboard::TEvPDiskStateResponse",
+            {"Name", Name()},
+            {"nodeId", nodeId},
+            {"response", record.ShortDebugString()});
 
         if (!AcceptNodeReply(nodeId)) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "PDisk info from unknown node"
-                << ": nodeId# " << nodeId);
+            YDB_LOG_WARN("[Sentinel] [ PDisk info from unknown node",
+                {"Name", Name()},
+                {"nodeId", nodeId});
             return;
         }
 
         MarkNode(nodeId, TNodeInfo::ENodeState::GOOD);
 
         if (!record.PDiskStateInfoSize()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "There is no pdisk info"
-                << ": nodeId# " << nodeId);
+            YDB_LOG_ERROR("[Sentinel] [ There is no pdisk info",
+                {"Name", Name()},
+                {"nodeId", nodeId});
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing);
         } else {
             const bool isNodeLocked = IsNodeLocked(nodeId);
@@ -833,10 +849,11 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
                 }
 
                 const auto safeState = SafePDiskState(info.GetState());
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "SafePDiskState"
-                    << ": pdiskId# " << it->first
-                    << ", original# " << (ui32)info.GetState()
-                    << ", safeState# " << safeState);
+                YDB_LOG_TRACE("[Sentinel] [ SafePDiskState",
+                    {"Name", Name()},
+                    {"pdiskId", it->first},
+                    {"original", (ui32)info.GetState()},
+                    {"safeState", safeState});
 
                 it->second->AddState(safeState, isNodeLocked);
             }
@@ -853,22 +870,25 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         const ui32 nodeId = ev->Cookie;
         const EReason reason = ev->Get()->Reason;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Handle TEvents::TEvUndelivered"
-            << ": nodeId# " << nodeId
-            << ", sourceType# " << ev->Get()->SourceType
-            << ", reason# " << reason);
+        YDB_LOG_DEBUG("[Sentinel] [ Handle TEvents::TEvUndelivered",
+            {"Name", Name()},
+            {"nodeId", nodeId},
+            {"sourceType", ev->Get()->SourceType},
+            {"reason", reason});
 
         if (!AcceptNodeReply(nodeId)) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Undelivered to unknown node"
-                << ": nodeId# " << nodeId);
+            YDB_LOG_WARN("[Sentinel] [ Undelivered to unknown node",
+                {"Name", Name()},
+                {"nodeId", nodeId});
             return;
         }
 
         MarkNode(nodeId, TNodeInfo::ENodeState::BAD);
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Cannot get pdisks state"
-            << ": nodeId# " << nodeId
-            << ", reason# " << reason);
+        YDB_LOG_ERROR("[Sentinel] [ Cannot get pdisks state",
+            {"Name", Name()},
+            {"nodeId", nodeId},
+            {"reason", reason});
 
         switch (reason) {
             case EReason::Disconnected:
@@ -884,8 +904,9 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
     }
 
     void TimedOut() {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Timed out"
-            << ": timeout# " << Config.UpdateStateTimeout);
+        YDB_LOG_ERROR("[Sentinel] [ Timed out",
+            {"Name", Name()},
+            {"timeout", Config.UpdateStateTimeout});
 
         while (SentinelState->StateUpdaterWaitNodes) {
             const ui32 nodeId = *SentinelState->StateUpdaterWaitNodes.begin();
@@ -1001,12 +1022,16 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     template <typename TUpdater>
     void StartUpdater(TUpdaterInfo& updater) {
         if (ConfigUpdater.Id || StateUpdater.Id) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " <<TUpdater::Name() << " was delayed");
+            YDB_LOG_INFO("[Sentinel] [ was delayed",
+                {"Name", Name()},
+                {"#_TUpdater::Name()", TUpdater::Name()});
             updater.Delayed = true;
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Start " << TUpdater::Name());
+        YDB_LOG_DEBUG("[Sentinel] [ Start",
+            {"Name", Name()},
+            {"#_TUpdater::Name()", TUpdater::Name()});
         updater.Start(RegisterWithSameMailbox(new TUpdater(SelfId(), CmsState, SentinelState)), Now());
     }
 
@@ -1061,12 +1086,15 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void UpdateConfig() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "UpdateConfig");
+        YDB_LOG_DEBUG("[Sentinel] [ UpdateConfig",
+            {"Name", Name()});
         StartUpdater<TConfigUpdater>(ConfigUpdater);
     }
 
     void OnConfigUpdated() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Config was updated in " << (Now() - ConfigUpdater.StartedAt));
+        YDB_LOG_DEBUG("[Sentinel] [ Config was updated in",
+            {"Name", Name()},
+            {"#_(Now() - ConfigUpdater.StartedAt)", (Now() - ConfigUpdater.StartedAt)});
 
         RemoveUntouched();
         *Counters->PDisksTotal = SentinelState->PDisks.size();
@@ -1077,17 +1105,21 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void UpdateState() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "UpdateState");
+        YDB_LOG_DEBUG("[Sentinel] [ UpdateState",
+            {"Name", Name()});
         StartUpdater<TStateUpdater>(StateUpdater);
     }
 
     void OnStateUpdated() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "State was updated in " << (Now() - StateUpdater.StartedAt));
+        YDB_LOG_DEBUG("[Sentinel] [ State was updated in",
+            {"Name", Name()},
+            {"#_(Now() - StateUpdater.StartedAt)", (Now() - StateUpdater.StartedAt)});
 
         EnsureAllTouched();
 
         if (SentinelState->Nodes.empty()) {
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " <<"Missing cluster info");
+            YDB_LOG_CRIT("[Sentinel] [ Missing cluster info",
+                {"Name", Name()});
             ScheduleUpdate<TEvSentinel::TEvUpdateState, TConfigUpdater>(
                 StateUpdater, Config.UpdateStateInterval, ConfigUpdater
             );
@@ -1105,8 +1137,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             auto it = SentinelState->Nodes.find(id.NodeId);
             if (it == SentinelState->Nodes.end()) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Missing node info"
-                    << ": pdiskId# " << id);
+                YDB_LOG_ERROR("[Sentinel] [ Missing node info",
+                    {"Name", Name()},
+                    {"pdiskId", id});
                 info.IgnoreReason = NKikimrCms::TPDiskInfo::MISSING_NODE;
                 continue;
             }
@@ -1158,12 +1191,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info->ApplyChanges(reason);
             const EPDiskStatus requiredStatus = info->GetStatus();
 
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "PDisk status changed"
-                << ": pdiskId# " << id
-                << ", status# " << status
-                << ", required status# " << requiredStatus
-                << ", reason# " << reason
-                << ", dry run# " << Config.DryRun);
+            YDB_LOG_NOTICE("[Sentinel] [ PDisk status changed, required, dry",
+                {"Name", Name()},
+                {"pdiskId", id},
+                {"status", status},
+                {"#_status", requiredStatus},
+                {"reason", reason},
+                {"run", Config.DryRun});
             LogStatusChange(id, status, requiredStatus, reason);
 
             if (!Config.DryRun) {
@@ -1182,7 +1216,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         if (issues) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " <<issues);
+            YDB_LOG_WARN("[Sentinel] [",
+                {"Name", Name()},
+                {"issues", issues});
         }
 
         ScheduleUpdate<TEvSentinel::TEvUpdateState, TConfigUpdater>(
@@ -1221,7 +1257,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             SentinelState->NeedSelfHealStateStorage = false;
             SentinelState->LastStateStorageSelfHeal = Now();
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Sending self heal request");
+            YDB_LOG_DEBUG("[Sentinel] [ Sending self heal request",
+                {"Name", Name()});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), std::move(request));
         }
     }
@@ -1235,8 +1272,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             CmsState->BSControllerPipe = Register(CreateBSControllerPipe(CmsState));
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Change pdisk status"
-            << ": requestsSize# " << SentinelState->ChangeRequests.size());
+        YDB_LOG_DEBUG("[Sentinel] [ Change pdisk status",
+            {"Name", Name()},
+            {"requestsSize", SentinelState->ChangeRequests.size()});
 
         auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
         for (const auto& [id, info] : SentinelState->ChangeRequests) {
@@ -1366,19 +1404,22 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record.GetResponse();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Handle TEvBlobStorage::TEvControllerConfigResponse"
-            << ": response# " << response.ShortDebugString()
-            << ", cookie# " << ev->Cookie);
+        YDB_LOG_DEBUG("[Sentinel] [ Handle TEvBlobStorage::TEvControllerConfigResponse",
+            {"Name", Name()},
+            {"response", response.ShortDebugString()},
+            {"cookie", ev->Cookie});
 
         if (ev->Cookie != SentinelState->ChangeRequestId) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Ignore TEvBlobStorage::TEvControllerConfigResponse"
-                << ": cookie# " << ev->Cookie
-                << ", expected# " << SentinelState->ChangeRequestId);
+            YDB_LOG_WARN("[Sentinel] [ Ignore TEvBlobStorage::TEvControllerConfigResponse",
+                {"Name", Name()},
+                {"cookie", ev->Cookie},
+                {"expected", SentinelState->ChangeRequestId});
             return;
         }
 
         if (SentinelState->ChangeRequests.empty()) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Ignore TEvBlobStorage::TEvControllerConfigResponse: empty queue");
+            YDB_LOG_WARN("[Sentinel] [ Ignore TEvBlobStorage::TEvControllerConfigResponse: empty queue",
+                {"Name", Name()});
             return;
         }
 
@@ -1391,8 +1432,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info.PrevStatusChangeAttempt = info.StatusChangeAttempt;
             info.StatusChangeAttempt = SentinelState->StatusChangeAttempt;
 
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "PDisk status has been changed"
-                << ": pdiskId# " << id);
+            YDB_LOG_NOTICE("[Sentinel] [ PDisk status has been changed",
+                {"Name", Name()},
+                {"pdiskId", id});
 
             (*Counters->PDisksChanged)++;
         };
@@ -1409,8 +1451,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             for (const auto& status : response.GetStatus()) {
                 if (!status.GetSuccess()) {
                     it->second->LastStatusChangeFailed = true;
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Unsuccesful response from BSC"
-                        << ": error# " << status.GetErrorDescription());
+                    YDB_LOG_ERROR("[Sentinel] [ Unsuccesful response from BSC",
+                        {"Name", Name()},
+                        {"error", status.GetErrorDescription()});
                 }
                 ++it;
             }
@@ -1427,8 +1470,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void OnRetry() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " << "Retrying"
-            << ": attempt# " << SentinelState->StatusChangeAttempt);
+        YDB_LOG_DEBUG("[Sentinel] [ Retrying",
+            {"Name", Name()},
+            {"attempt", SentinelState->StatusChangeAttempt});
         SendBSCRequests();
     }
 
@@ -1441,8 +1485,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             for (auto& kv : std::exchange(SentinelState->ChangeRequests, {})) {
                 kv.second->StatusChangeFailed = true;
 
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS, "[Sentinel] [" << Name() << "] " <<"PDisk status has NOT been changed"
-                    << ": pdiskId# " << kv.first);
+                YDB_LOG_CRIT("[Sentinel] [ PDisk status has NOT been changed",
+                    {"Name", Name()},
+                    {"pdiskId", kv.first});
 
                 (*Counters->PDisksNotChanged)++;
             }

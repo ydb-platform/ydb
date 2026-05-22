@@ -2,6 +2,9 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 #include "balancer.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -60,7 +63,8 @@ protected:
     }
 
     void PassAway() override {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer finished");
+        YDB_LOG_INFO("StorageBalancer finished",
+            {"GetLogPrefix", GetLogPrefix()});
         Stats.TotalRuns++;
         Stats.TotalMovements += Reassigns;
         Stats.LastRunMovements = Reassigns;
@@ -89,7 +93,9 @@ protected:
                 continue;
             }
             tablet->ActorsToNotifyOnRestart.emplace_back(SelfId());
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer initiating reassign for tablet " << NextReassign->first);
+            YDB_LOG_DEBUG("StorageBalancer initiating reassign for tablet",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"first", NextReassign->first});
             Send(Hive->SelfId(), NextReassign->second.release());
             ++ReassignInFlight;
         }
@@ -100,7 +106,10 @@ protected:
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
         auto tabletId = ev->Get()->TabletId;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer received " << ev->Get()->Status << " for tablet " << tabletId);
+        YDB_LOG_DEBUG("StorageBalancer received for tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"tabletId", tabletId});
         if (SkippedTablets.contains(tabletId)) {
             return;
         }
@@ -111,7 +120,9 @@ protected:
 
     void Handle(TEvPrivate::TEvRestartCancelled::TPtr& ev) {
         auto tabletId = ev->Get()->TabletId;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer received RestartCancelled for tablet " << tabletId);
+        YDB_LOG_DEBUG("StorageBalancer received RestartCancelled for tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         SkippedTablets.insert(tabletId);
         auto tablet = Hive->FindTablet(tabletId);
         if (tablet) {
@@ -157,7 +168,10 @@ public:
                 }
             }
         }
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"StorageBalancer for pool " << Settings.StoragePool << ": " << channels.size() << " tablet channels suitable for balancing");
+        YDB_LOG_DEBUG("StorageBalancer for pool tablet channels suitable for balancing",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"StoragePool", Settings.StoragePool},
+            {"size", channels.size()});
         auto metricToBalance = Hive->GetStorageBalanceStrategy();
         switch (Hive->GetChannelBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM:

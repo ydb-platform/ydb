@@ -4,6 +4,9 @@
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -68,10 +71,13 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
         const auto& kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{};
         KqpFillOutReadSets(op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), tabletId);
     } catch (const TNotReadyTabletException&) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD,"Unexpected TNotReadyTabletException exception at build out rs");
+        YDB_LOG_CTX_CRIT(ctx, "Unexpected TNotReadyTabletException exception at build out rs");
         return OnTabletNotReady(*writeOp, txc, ctx);
     } catch (const yexception& e) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD,"Exception while preparing out-readsets for KQP transaction " << *op << " at " << DataShard.TabletID() << ": " << e.what());
+        YDB_LOG_CTX_CRIT(ctx, "Exception while preparing out-readsets for KQP transaction at",
+            {"#_*op", *op},
+            {"TabletID", DataShard.TabletID()},
+            {"what", e.what()});
         if (op->IsImmediate()) {
             writeOp->ReleaseTxData(txc);
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Tx was terminated: " << e.what());
@@ -88,7 +94,9 @@ void TBuildWriteOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
 EExecutionStatus TBuildWriteOutRSUnit::OnTabletNotReady(TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx)
 {
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,"Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
+    YDB_LOG_CTX_TRACE(ctx, "Tablet is not ready for execution",
+        {"TabletID", DataShard.TabletID()},
+        {"writeOp", writeOp});
 
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 

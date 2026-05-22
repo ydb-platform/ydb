@@ -14,6 +14,9 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATESTORAGE
 
 
 namespace NKikimr {
@@ -173,7 +176,11 @@ protected:
         ui64 msgGeneration = msg->Record.GetClusterStateGeneration();
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Guardian TEvNodeWardenNotifyConfigMismatch: ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
+            YDB_LOG_DEBUG("Guardian TEvNodeWardenNotifyConfigMismatch:",
+                {"ClusterStateGeneration", ClusterStateGeneration},
+                {"msgGeneration", msgGeneration},
+                {"ClusterStateGuid", ClusterStateGuid},
+                {"msgGuid", msgGuid});
             this->Send(MakeBlobStorageNodeWardenID(selfId.NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
         }

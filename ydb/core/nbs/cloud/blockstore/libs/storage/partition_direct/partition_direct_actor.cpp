@@ -23,6 +23,9 @@
 
 #include <unistd.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
 
@@ -431,11 +434,9 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 {
     auto& cfg = ev->Get()->VChunkConfig;
 
-    LOG_DEBUG_S(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        LogTitle.GetWithTime().c_str()
-            << " Handle UpdateVChunkConfig, vChunkIndex: " << cfg.VChunkIndex);
+    YDB_LOG_CTX_DEBUG(ctx, "Handle UpdateVChunkConfig,",
+        {"c_str", LogTitle.GetWithTime().c_str()},
+        {"vChunkIndex", cfg.VChunkIndex});
 
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }

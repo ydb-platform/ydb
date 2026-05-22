@@ -8,6 +8,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -26,7 +29,9 @@ class TStreamConsumerRemover: public TActorBootstrapped<TStreamConsumerRemover> 
     }
 
     void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
-        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         DropStreamConsumer();
     }
 
@@ -47,21 +52,26 @@ class TStreamConsumerRemover: public TActorBootstrapped<TStreamConsumerRemover> 
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Retry");
+                YDB_LOG_DEBUG("Retry",
+                    {"LogPrefix", LogPrefix});
                 return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
             }
 
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error"
-                << ": status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Error",
+                {"LogPrefix", LogPrefix},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
         } else {
-            LOG_INFO_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Success"
-                << ": issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_INFO("Success",
+                {"LogPrefix", LogPrefix},
+                {"issues", result.GetIssues().ToOneLineString()});
         }
 
         Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(result)));

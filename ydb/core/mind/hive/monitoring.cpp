@@ -10,6 +10,9 @@
 #include "hive_log.h"
 #include "monitoring.h"
 #include "tx__set_down.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -2777,7 +2780,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown( )::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"NodeId", NodeId},
+            {"Response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2826,7 +2832,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze( )::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"NodeId", NodeId},
+            {"Response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2870,7 +2879,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode( )::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"NodeId", NodeId},
+            {"Response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };

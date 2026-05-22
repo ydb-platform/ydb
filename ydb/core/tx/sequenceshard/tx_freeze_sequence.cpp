@@ -1,4 +1,7 @@
 #include "sequenceshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
 
 namespace NKikimr {
 namespace NSequenceShard {
@@ -16,21 +19,24 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxFreezeSequence.Execute"
-                << " PathId# " << pathId);
+            YDB_LOG_TRACE("TTxFreezeSequence.Execute",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId});
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvFreezeSequenceResult::PIPE_OUTDATED);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxFreezeSequence.Execute PIPE_OUTDATED"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxFreezeSequence.Execute PIPE_OUTDATED",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvFreezeSequenceResult::SEQUENCE_NOT_FOUND);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxFreezeSequence.Execute SEQUENCE_NOT_FOUND"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxFreezeSequence.Execute SEQUENCE_NOT_FOUND",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
@@ -43,9 +49,10 @@ namespace NSequenceShard {
                 case Schema::ESequenceState::Moved: {
                     SetResult(NKikimrTxSequenceShard::TEvFreezeSequenceResult::SEQUENCE_MOVED);
                     Result->Record.SetMovedTo(sequence.MovedTo);
-                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxFreezeSequence.Execute SEQUENCE_MOVED"
-                        << " PathId# " << pathId
-                        << " MovedTo# " << sequence.MovedTo);
+                    YDB_LOG_TRACE("TTxFreezeSequence.Execute SEQUENCE_MOVED",
+                        {"LogPrefix", LogPrefix},
+                        {"PathId", pathId},
+                        {"MovedTo", sequence.MovedTo});
                     return true;
                 }
             }
@@ -64,13 +71,15 @@ namespace NSequenceShard {
             Result->Record.SetCache(sequence.Cache);
             Result->Record.SetIncrement(sequence.Increment);
             Result->Record.SetCycle(sequence.Cycle);
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxFreezeSequence.Execute SUCCESS"
-                << " PathId# " << pathId);
+            YDB_LOG_NOTICE("TTxFreezeSequence.Execute SUCCESS",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId});
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxFreezeSequence.Complete");
+            YDB_LOG_TRACE("TTxFreezeSequence.Complete",
+                {"LogPrefix", LogPrefix});
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

@@ -59,6 +59,9 @@
 
 #include <util/generic/intrlist.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SKELETON
 
 using namespace NKikimrServices;
 
@@ -1816,9 +1819,9 @@ namespace NKikimr {
             TEvDetectedPhantomBlob *msg = ev->Get();
 
             for (const TLogoBlobID& logoBlobId : msg->Phantoms) {
-                LOG_INFO_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                        << "adding DoNotKeep to phantom LogoBlobId# " << logoBlobId
-                        << " Marker# BSVS27");
+                YDB_LOG_CTX_INFO(ctx, "adding DoNotKeep to phantom Marker# BSVS27",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"LogoBlobId", logoBlobId});
             }
 
             TLsnSeg seg = Hull->AllocateLsnForPhantoms(msg->Phantoms);

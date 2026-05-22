@@ -1,4 +1,7 @@
 #include "sequenceshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
 
 namespace NKikimr {
 namespace NSequenceShard {
@@ -14,10 +17,11 @@ namespace NSequenceShard {
         TTxType GetTxType() const override { return TXTYPE_MARK_SCHEMESHARD_PIPE; }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxMarkSchemeShardPipe.Execute"
-                << " SchemeShardId# " << SchemeShardId
-                << " Generation# " << Generation
-                << " Round# " << Round);
+            YDB_LOG_TRACE("TTxMarkSchemeShardPipe.Execute",
+                {"LogPrefix", LogPrefix},
+                {"SchemeShardId", SchemeShardId},
+                {"Generation", Generation},
+                {"Round", Round});
 
             // Make sure actual value was updated before this tx executed
             auto savedValue = std::make_pair(Generation, Round);
@@ -32,7 +36,8 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext&) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxMarkSchemeShardPipe.Complete");
+            YDB_LOG_TRACE("TTxMarkSchemeShardPipe.Complete",
+                {"LogPrefix", LogPrefix});
         }
 
         const ui64 SchemeShardId;

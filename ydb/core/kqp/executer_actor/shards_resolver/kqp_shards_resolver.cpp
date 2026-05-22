@@ -8,6 +8,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/set.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 
 namespace NKikimr::NKqp {
@@ -37,8 +40,9 @@ public:
         Y_ASSERT(ShardIds.size() > 0);
 
         for (ui64 tabletId : ShardIds) {
-            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_TRACE, NKikimrServices::KQP_EXECUTER,
-                "[ShardsResolver] TxId: " << TxId << ". " << "Send request about tabletId: " << tabletId);
+            YDB_LOG(NActors::NLog::PRI_TRACE, "[ShardsResolver]. Send request about",
+                {"TxId", TxId},
+                {"tabletId", tabletId});
             bool sent = Send(TabletResolver, new TEvPipeCache::TEvGetTabletNode(tabletId));
             Y_DEBUG_ABORT_UNLESS(sent);
         }
@@ -52,8 +56,9 @@ private:
             hFunc(TEvPipeCache::TEvGetTabletNodeResult, HandleResolve);
             cFunc(TEvents::TSystem::Poison, PassAway);
             default: {
-                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_CRIT, NKikimrServices::KQP_EXECUTER,
-                    "[ShardsResolver] TxId: " << TxId << ". " << "Unexpected event: " << ev->GetTypeRewrite());
+                YDB_LOG(NActors::NLog::PRI_CRIT, "[ShardsResolver]. Unexpected",
+                    {"TxId", TxId},
+                    {"event", ev->GetTypeRewrite()});
                 ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event while resolving shards");
             }
         }
@@ -61,13 +66,16 @@ private:
 
     void HandleResolve(TEvPipeCache::TEvGetTabletNodeResult::TPtr& ev) {
         auto* msg = ev->Get();
-        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_TRACE, NKikimrServices::KQP_EXECUTER,
-            "[ShardsResolver] TxId: " << TxId << ". " << "Got resolve event for tabletId: " << msg->TabletId << ", nodeId: " << msg->NodeId);
+        YDB_LOG(NActors::NLog::PRI_TRACE, "[ShardsResolver]. Got resolve event for",
+            {"TxId", TxId},
+            {"tabletId", msg->TabletId},
+            {"nodeId", msg->NodeId});
         if (msg->NodeId != 0) {
             Result[msg->TabletId] = msg->NodeId;
             if (Result.size() == ShardIds.size()) {
-                LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER,
-                    "[ShardsResolver] TxId: " << TxId << ". " << "Shard resolve complete, resolved shards: " << Result.size());
+                YDB_LOG(NActors::NLog::PRI_DEBUG, "[ShardsResolver]. Shard resolve complete, resolved",
+                    {"TxId", TxId},
+                    {"shards", Result.size()});
                 return ReplyAndDie();
             }
 
@@ -77,8 +85,9 @@ private:
         ui32& retryCount = RetryCount[msg->TabletId];
         if (retryCount > MAX_RETRIES_COUNT) {
             TString reply = TStringBuilder() << "Failed to resolve tablet: " << msg->TabletId << " after several retries.";
-            LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::KQP_EXECUTER,
-                "[ShardsResolver] TxId: " << TxId << ". " << reply);
+            YDB_LOG(NActors::NLog::PRI_WARN, "[ShardsResolver] .",
+                {"TxId", TxId},
+                {"reply", reply});
             ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, std::move(reply));
             return;
         }

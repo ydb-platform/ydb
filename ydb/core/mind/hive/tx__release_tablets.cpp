@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -23,7 +26,9 @@ public:
         const NKikimrHive::TEvReleaseTablets& request(Request->Get()->Record);
         NKikimrHive::TEvReleaseTabletsReply& response(Response->Record);
         SideEffects.Reset(Self->SelfId());
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTablets::Execute " << request);
+        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"request", request});
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : request.GetTabletIDs()) {
             TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
@@ -78,7 +83,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTablets::Complete " << Request->Get()->Record << " SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"#_Request->Get()->Record", Request->Get()->Record},
+            {"SideEffects", SideEffects});
         SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
@@ -86,7 +94,8 @@ public:
         }
         ctx.Send(Request->Sender, Response.Release());
         if (NeedToProcessPendingOperations) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxReleaseTablets::Complete - retrying pending operations");
+            YDB_LOG_DEBUG("THive::TTxReleaseTablets::Complete - retrying pending operations",
+                {"GetLogPrefix", GetLogPrefix()});
             Self->ProcessPendingOperations();
         }
     }

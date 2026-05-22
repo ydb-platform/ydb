@@ -1,6 +1,9 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
@@ -18,7 +21,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan:",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"step", step});
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -39,7 +45,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -225,7 +233,11 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateStreamingQuery().GetName();
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateStreamingQuery Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateStreamingQuery Propose: /",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", parentPathStr},
+            {"name", name});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -251,11 +263,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateStreamingQuery AbortPropose: opId# " << OperationId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateStreamingQuery AbortPropose:",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TCreateStreamingQuery AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateStreamingQuery AbortUnsafe:",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", forceDropTxId});
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -285,7 +302,10 @@ bool SetName<NStreamingQuery::TTag>(NStreamingQuery::TTag, TTxTransaction& tx, c
 ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateStreamingQuery);
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CreateNewStreamingQuery, opId# " << id  << ", tx# " << tx.ShortDebugString());
+    YDB_LOG_CTX_INFO(context.Ctx, "CreateNewStreamingQuery,",
+        {"TabletID", context.SS->TabletID()},
+        {"opId", id},
+        {"tx", tx.ShortDebugString()});
 
     const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (const auto checks = NStreamingQuery::TCreateStreamingQuery::IsParentPathValid(parentPath); !checks) {

@@ -22,6 +22,9 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_RECOVERY
 
 
 namespace NKikimr::NTabletFlatExecutor::NRecovery {
@@ -441,7 +444,10 @@ public:
 
     void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Backup info" << " TotalBytes# " << TotalBytes << " DryRun# " << DryRun);
+        YDB_LOG_DEBUG("Backup info",
+            {"LogPrefix", LogPrefix()},
+            {"TotalBytes", TotalBytes},
+            {"DryRun", DryRun});
 
         if (DryRun) {
             auto* dryRunExec = new TDryRunExecutor(TabletID());
@@ -455,22 +461,31 @@ public:
     }
 
     void Handle(TEvSchemaData::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Uploading schema");
+        YDB_LOG_DEBUG("Uploading schema",
+            {"LogPrefix", LogPrefix()});
         Execute(CreateTxUploadSchema(ev));
     }
 
     void Handle(TEvSnapshotData::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Uploading snapshot" << " Table# " << ev->Get()->TableName);
+        YDB_LOG_DEBUG("Uploading snapshot",
+            {"LogPrefix", LogPrefix()},
+            {"Table", ev->Get()->TableName});
         Execute(CreateTxUploadSnapshot(ev));
     }
 
     void Handle(TEvChangelogData::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Uploading changelog" << " Lines# " << ev->Get()->Lines.size());
+        YDB_LOG_DEBUG("Uploading changelog",
+            {"LogPrefix", LogPrefix()},
+            {"Lines", ev->Get()->Lines.size()});
         Execute(CreateTxUploadChangelog(ev));
     }
 
     void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Starting restore" << " Path# " << backupPath << " SkipChecksum# " << skipChecksumValidation << " DryRun# " << dryRun);
+        YDB_LOG_NOTICE("Starting restore",
+            {"LogPrefix", LogPrefix()},
+            {"Path", backupPath},
+            {"SkipChecksum", skipChecksumValidation},
+            {"DryRun", dryRun});
         RestoreState = ERestoreState::InProgress;
         SkipChecksumValidation = skipChecksumValidation;
         DryRun = dryRun;
@@ -484,15 +499,20 @@ public:
     void CompleteRestore(bool success, const TString& error) {
         if (success) {
             if (error) {
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Restore completed with warning" << " Error# " << error);
+                YDB_LOG_NOTICE("Restore completed with warning",
+                    {"LogPrefix", LogPrefix()},
+                    {"Error", error});
                 RestoreState = ERestoreState::DoneWithWarning;
                 Error = error;
             } else {
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Restore completed");
+                YDB_LOG_NOTICE("Restore completed",
+                    {"LogPrefix", LogPrefix()});
                 RestoreState = ERestoreState::Done;
             }
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Restore failed" << " Error# " << error);
+            YDB_LOG_ERROR("Restore failed",
+                {"LogPrefix", LogPrefix()},
+                {"Error", error});
             RestoreState = ERestoreState::Error;
             Error = error;
         }
@@ -789,7 +809,9 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Schema upload failed" << " Error# " << Error);
+            YDB_LOG_ERROR("Schema upload failed",
+                {"LogPrefix", LogPrefix()},
+                {"Error", Error});
             Self->CompleteRestore(false, Error);
             ctx.Send(Schema->Sender, new TEvDataAck(false, Error));
         } else {
@@ -851,7 +873,9 @@ public:
 
         if (i < Snapshot->Get()->Lines.size()) {
             // Start new tx to upload the rest data
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Snapshot upload partial, continuing from" << " Line# " << i);
+            YDB_LOG_DEBUG("Snapshot upload partial, continuing from",
+                {"LogPrefix", LogPrefix()},
+                {"Line", i});
             Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -862,13 +886,17 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Snapshot chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
+            YDB_LOG_DEBUG("Snapshot chunk uploaded",
+                {"LogPrefix", LogPrefix()},
+                {"Bytes", Result.GetProcessedBytes()});
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Snapshot->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Snapshot upload failed" << " Error# " << Result.GetErrorMessage());
+            YDB_LOG_ERROR("Snapshot upload failed",
+                {"LogPrefix", LogPrefix()},
+                {"Error", Result.GetErrorMessage()});
             Self->CompleteRestore(false, Result.GetErrorMessage());
             ctx.Send(Snapshot->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -978,7 +1006,9 @@ public:
 
         if (i < Changelog->Get()->Lines.size()) {
             // Start new tx to upload the rest data
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Changelog upload partial, continuing from" << " Line# " << i);
+            YDB_LOG_DEBUG("Changelog upload partial, continuing from",
+                {"LogPrefix", LogPrefix()},
+                {"Line", i});
             Self->Execute(Self->CreateTxUploadChangelog(std::move(Changelog), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -989,13 +1019,17 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Changelog chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
+            YDB_LOG_DEBUG("Changelog chunk uploaded",
+                {"LogPrefix", LogPrefix()},
+                {"Bytes", Result.GetProcessedBytes()});
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Changelog->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Changelog upload failed" << " Error# " << Result.GetErrorMessage());
+            YDB_LOG_ERROR("Changelog upload failed",
+                {"LogPrefix", LogPrefix()},
+                {"Error", Result.GetErrorMessage()});
             Self->CompleteRestore(true, Result.GetErrorMessage()); // changelog errors are warnings
             ctx.Send(Changelog->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -1040,7 +1074,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Validating backup" << " Path# " << BackupPath);
+        YDB_LOG_NOTICE("Validating backup",
+            {"LogPrefix", LogPrefix()},
+            {"Path", BackupPath});
 
         if (!BackupPath.Exists()) {
             return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
@@ -1061,7 +1097,9 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Backup validated" << " TotalBytes# " << totalBytes);
+        YDB_LOG_NOTICE("Backup validated",
+            {"LogPrefix", LogPrefix()},
+            {"TotalBytes", totalBytes});
         Send(Owner, new TEvBackupInfo(totalBytes));
         Become(&TThis::StateWork);
     }
@@ -1075,7 +1113,8 @@ public:
     }
 
     void Handle(TEvReadBackup::TPtr&) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Sending schema data");
+        YDB_LOG_DEBUG("Sending schema data",
+            {"LogPrefix", LogPrefix()});
         try {
             TString schemaData = TFileInput(SchemaFilePath).ReadAll();
             Send(Owner, new TEvSchemaData(std::move(schemaData)));
@@ -1108,7 +1147,9 @@ public:
                         CurrentTableName = CurrentTableName.substr(0, CurrentTableName.size() - 5);
                     }
 
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Processing snapshot file" << " Path# " << CurrentFilePath);
+                    YDB_LOG_DEBUG("Processing snapshot file",
+                        {"LogPrefix", LogPrefix()},
+                        {"Path", CurrentFilePath});
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -1119,7 +1160,8 @@ public:
                     CurrentTableName.clear();
                     ChangelogProcessed = true;
 
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Processing changelog");
+                    YDB_LOG_DEBUG("Processing changelog",
+                        {"LogPrefix", LogPrefix()});
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -1127,7 +1169,8 @@ public:
                     }
                 } else {
                     // All files processed
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"All files processed");
+                    YDB_LOG_DEBUG("All files processed",
+                        {"LogPrefix", LogPrefix()});
                     return SendResultAndDie(true);
                 }
             }
@@ -1161,7 +1204,8 @@ public:
     }
 
     bool ValidateSnapshot() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Validating snapshot");
+        YDB_LOG_DEBUG("Validating snapshot",
+            {"LogPrefix", LogPrefix()});
         if (!SnapshotDirPath.Exists()) {
             SendResultAndDie(false, TStringBuilder() << "Snapshot dir doesn't exist: " << SnapshotDirPath);
             return false;
@@ -1309,7 +1353,9 @@ public:
                                              << ", got " << actualFileSha256);
                     return false;
                 }
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Checksum validated" << " File# " << name);
+                YDB_LOG_DEBUG("Checksum validated",
+                    {"LogPrefix", LogPrefix()},
+                    {"File", name});
             }
         }
 
@@ -1317,7 +1363,8 @@ public:
     }
 
     bool ValidateChangelog() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Validating changelog");
+        YDB_LOG_DEBUG("Validating changelog",
+            {"LogPrefix", LogPrefix()});
         if (!ChangelogFilePath.Exists()) {
             SendResultAndDie(false, TStringBuilder()
                 << "Changelog file doesn't exist: " << ChangelogFilePath);
@@ -1382,7 +1429,8 @@ public:
             return false;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Changelog validated");
+        YDB_LOG_DEBUG("Changelog validated",
+            {"LogPrefix", LogPrefix()});
         return true;
     }
 
@@ -1438,7 +1486,9 @@ public:
 
     void SendResultAndDie(bool success, const TString& error = "") {
         if (!success) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_RECOVERY, LogPrefix() <<"Failed" << " Error# " << error);
+            YDB_LOG_ERROR("Failed",
+                {"LogPrefix", LogPrefix()},
+                {"Error", error});
         }
         Send(Owner, new TEvBackupReaderResult(success, error));
         PassAway();

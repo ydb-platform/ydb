@@ -1,6 +1,9 @@
 #include "tablet_impl.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
 namespace NKikimr {
 
@@ -52,7 +55,8 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         case NKikimrProto::TIMEOUT:
         case NKikimrProto::NO_GROUP:
         case NKikimrProto::BLOCKED:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN,"Handle::TEvDiscoverResult, result status " << NKikimrProto::EReplyStatus_Name(msg->Status));
+            YDB_LOG_ERROR("Handle::TEvDiscoverResult, result status",
+                {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:
             Y_ABORT_UNLESS(false, "default case status %s", NKikimrProto::EReplyStatus_Name(msg->Status).c_str());

@@ -2,6 +2,7 @@
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include <util/string/escape.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NPQ {
 
@@ -11,12 +12,15 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     ui64& curOffset = parameters.CurOffset;
     ui64 poffset = p.Offset ? *p.Offset : curOffset;
 
-    LOG_TRACE_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Topic '" << TopicName() << "' partition " << Partition
-            << " process write for '" << EscapeC(p.Msg.SourceId) << "'"
-            << " DisableDeduplication=" << p.Msg.DisableDeduplication
-            << " SeqNo=" << p.Msg.SeqNo
-            << " InitialSeqNo=" << p.InitialSeqNo
-    );
+    YDB_LOG_CTX_COMP_TRACE(*NActors::TlsActivationContext, Service, "Topic ' ' partition process write for ' '",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()},
+        {"TopicName", TopicName()},
+        {"Partition", Partition},
+        {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+        {"DisableDeduplication", p.Msg.DisableDeduplication},
+        {"SeqNo", p.Msg.SeqNo},
+        {"InitialSeqNo", p.InitialSeqNo});
 
     AFL_ENSURE(poffset >= curOffset);
 
@@ -49,16 +53,23 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                                                  MaxBlobSize);
     }
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Topic '" << TopicName() << "' partition " << Partition
-            << " part blob processing sourceId '" << EscapeC(p.Msg.SourceId)
-            << "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo
-    );
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Topic ' ' partition part blob processing sourceId ' ' seqNo partNo",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()},
+        {"TopicName", TopicName()},
+        {"Partition", Partition},
+        {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+        {"SeqNo", p.Msg.SeqNo},
+        {"PartNo", p.Msg.PartNo});
 
     TString s;
     if (!CompactionBlobEncoder.PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Can't append message part (" << s << ")");
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Can't append message part (",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()},
+            {"s", s});
         ctx.Send(TabletActorId, new TEvents::TEvPoison());
         return false;
     }
@@ -81,13 +92,16 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     if (newWrite && !newWrite->Value.empty()) {
         AddCmdWrite(newWrite, request, blobCreationUnixTime, ctx, false);
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Topic '" << TopicName() <<
-                "' partition " << Partition <<
-                " part blob sourceId '" << EscapeC(p.Msg.SourceId) <<
-                "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo <<
-                " result is " << newWrite->Key.ToString() <<
-                " size " << newWrite->Value.size()
-        );
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Topic ' ' partition part blob sourceId ' ' seqNo partNo result is size",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TopicName", TopicName()},
+            {"Partition", Partition},
+            {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+            {"SeqNo", p.Msg.SeqNo},
+            {"PartNo", p.Msg.PartNo},
+            {"Key", newWrite->Key.ToString()},
+            {"size", newWrite->Value.size()});
 
         parameters.HeadCleared = true;
     }
@@ -126,11 +140,16 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
 
         AFL_ENSURE(countOfLastParts == 1);
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Topic '" << TopicName() << "' partition " << Partition
-                << " part blob complete sourceId '" << EscapeC(p.Msg.SourceId) << "' seqNo " << p.Msg.SeqNo
-                << " partNo " << p.Msg.PartNo << " FormedBlobsCount " << CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size()
-                << " NewHead: " << CompactionBlobEncoder.NewHead
-        );
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Topic ' ' partition part blob complete sourceId ' ' seqNo partNo FormedBlobsCount",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TopicName", TopicName()},
+            {"Partition", Partition},
+            {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+            {"SeqNo", p.Msg.SeqNo},
+            {"PartNo", p.Msg.PartNo},
+            {"size", CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size()},
+            {"NewHead", CompactionBlobEncoder.NewHead});
 
         ++curOffset;
         CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
@@ -156,28 +175,43 @@ ui64 TPartition::GetCompactedBlobSizeLowerBound() const
 
 void TPartition::DumpKeysForBlobsCompaction() const
 {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"==== keys for blobs compaction ====");
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "==== keys for blobs compaction ====",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()});
     for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
         const auto& k = BlobEncoder.DataKeysBody[i];
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size);
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()},
+            {"#_((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')", ((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')},
+            {"k.Key", k.Key.ToString()},
+            {"Size", k.Size});
     }
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"===================================");
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "===================================",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()});
 }
 
 void TPartition::TryRunCompaction(bool force)
 {
     if (StopCompaction) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Blobs compaction is stopped");
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Blobs compaction is stopped",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()});
         return;
     }
 
     if (CompactionInProgress) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Blobs compaction in progress");
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Blobs compaction in progress",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()});
         return;
     }
 
     if (BlobEncoder.DataKeysBody.empty()) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"No data for blobs compaction");
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "No data for blobs compaction",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()});
         return;
     }
 
@@ -187,7 +221,9 @@ void TPartition::TryRunCompaction(bool force)
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
 
     if ((BlobEncoder.DataKeysBody.size() < blobsKeyCountLimit) && (BlobEncoder.GetSize() < GetCumulativeSizeLimit()) && !force) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"No data for blobs compaction");
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "No data for blobs compaction",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()});
         return;
     }
 
@@ -202,13 +238,24 @@ void TPartition::TryRunCompaction(bool force)
                 blobsSize -= k.Size;
                 break;
             }
-            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Blob key for append " << k.Key.ToString() << " (" << k.Size << ")");
+            YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Blob key for append",
+                {"LogBuilder", LogBuilder()},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"k.Key", k.Key.ToString()},
+                {"Size", k.Size});
         } else {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Blob key for rename " << k.Key.ToString());
+            YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Blob key for rename",
+                {"LogBuilder", LogBuilder()},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"k.Key", k.Key.ToString()});
         }
     }
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes");
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "keys were taken away. Let's read bytes",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()},
+        {"blobsCount", blobsCount},
+        {"blobsSize", blobsSize});
 
     CompactionInProgress = true;
 
@@ -224,7 +271,10 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 {
     const ui64 blobsCount = ev->Get()->BlobsCount;
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Begin compaction for " << blobsCount << " blobs");
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Begin compaction for blobs",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()},
+        {"blobsCount", blobsCount});
 
     TVector<TRequestedBlob> blobs;
     TBlobKeyTokens tokens;
@@ -237,7 +287,10 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
             continue;
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Request blob key " << k.Key.ToString());
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Request blob key",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()},
+            {"k.Key", k.Key.ToString()});
 
         KeysForCompaction.emplace_back(k, blobs.size());
 
@@ -261,7 +314,10 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
                                                      std::move(blobs));
     Send(BlobCache, request.Release());
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Request " << CompactionBlobsCount << " blobs for compaction");
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Request blobs for compaction",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()},
+        {"CompactionBlobsCount", CompactionBlobsCount});
 }
 
 bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
@@ -272,7 +328,11 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                                       bool wasThePreviousBlobBig,
                                       bool& newHeadIsInitialized)
 {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"requestedBlob.Key=" << requestedBlob.Key.ToString() << ", parameters.CurOffset=" << parameters.CurOffset);
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()},
+        {"requestedBlob.Key", requestedBlob.Key.ToString()},
+        {"parameters.CurOffset", parameters.CurOffset});
 
     ui64 offset = requestedBlob.Key.GetOffset();
 
@@ -280,7 +340,12 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
     AFL_ENSURE(batches != nullptr);
     for (const auto& batch : *batches) {
         for (const auto& blob : batch.Blobs) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Try append part " << offset << "." << blob.GetPartNo() << "/" << blob.GetTotalParts());
+            YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Try append part. /",
+                {"LogBuilder", LogBuilder()},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"offset", offset},
+                {"GetPartNo", blob.GetPartNo()},
+                {"GetTotalParts", blob.GetTotalParts()});
 
             ui16 partNo = blob.GetPartNo();
             const auto offsetPartNo = std::make_pair(offset, partNo);
@@ -289,8 +354,13 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             }
 
             if (FirstCompactionPart && (offsetPartNo <= *FirstCompactionPart)) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Part " << offsetPartNo.first << ":" << offsetPartNo.second << " skipped" <<
-                      " (" << FirstCompactionPart->first << ":" << FirstCompactionPart->second << ")");
+                YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Part skipped",
+                    {"LogBuilder", LogBuilder()},
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"first", offsetPartNo.first},
+                    {"second", offsetPartNo.second},
+                    {"#_first", FirstCompactionPart->first},
+                    {"#_second", FirstCompactionPart->second});
                 continue;
             }
 
@@ -356,11 +426,19 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
 
             blobCreationUnixTime = std::max(blobCreationUnixTime, blob.WriteTimestamp);
             if (!ExecRequestForCompaction(msg, parameters, compactionRequest, blobCreationUnixTime)) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Part " << offsetPartNo.first << ":" << offsetPartNo.second << " not appended");
+                YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Part not appended",
+                    {"LogBuilder", LogBuilder()},
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"first", offsetPartNo.first},
+                    {"second", offsetPartNo.second});
                 return false;
             }
 
-            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Part " << offsetPartNo.first << ":" << offsetPartNo.second << " appended");
+            YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Part appended",
+                {"LogBuilder", LogBuilder()},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"first", offsetPartNo.first},
+                {"second", offsetPartNo.second});
         }
     }
 
@@ -438,8 +516,12 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 {
     const auto& ctx = ActorContext();
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Continue blobs compaction");
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix() <<"Begin blobs compaction");
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Continue blobs compaction",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()});
+    YDB_LOG_CTX_COMP_INFO(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, "Begin blobs compaction",
+        {"TabletId", TabletId},
+        {"GetLogPrefix", GetLogPrefix()});
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
@@ -470,16 +552,27 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
         auto& [k, pos] = KeysForCompaction[i];
         bool needToCompactHead = (parameters.CurOffset < k.Key.GetOffset());
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"key[" << i << "/" << KeysForCompaction.size() << "] " << k.Key.ToString());
+        YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "key[ /",
+            {"LogBuilder", LogBuilder()},
+            {"GetLogPrefix", GetLogPrefix()},
+            {"i", i},
+            {"size", KeysForCompaction.size()},
+            {"k.Key", k.Key.ToString()});
 
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
-            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix() <<"Rename key " << k.Key.ToString());
+            YDB_LOG_CTX_COMP_INFO(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, "Rename key",
+                {"TabletId", TabletId},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"k.Key", k.Key.ToString()});
 
             if (!WasTheLastBlobBig) {
                 needToCompactHead = true;
             }
-            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Need to compact head " << needToCompactHead);
+            YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Need to compact head",
+                {"LogBuilder", LogBuilder()},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"needToCompactHead", needToCompactHead});
 
             parameters.CurOffset = k.Key.GetOffset();
 
@@ -499,12 +592,21 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             FirstCompactionPart = Nothing();
         } else {
             // маленький блоб надо дописать
-            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix() <<"Append blob for key " << k.Key.ToString());
-            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Need to compact head " << needToCompactHead);
+            YDB_LOG_CTX_COMP_INFO(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, "Append blob for key",
+                {"TabletId", TabletId},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"k.Key", k.Key.ToString()});
+            YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Need to compact head",
+                {"LogBuilder", LogBuilder()},
+                {"GetLogPrefix", GetLogPrefix()},
+                {"needToCompactHead", needToCompactHead});
 
             const TRequestedBlob& requestedBlob = blobs[pos];
             if (!CompactRequestedBlob(requestedBlob, parameters, needToCompactHead, compactionRequest.Get(), blobCreationUnixTime, WasTheLastBlobBig, newHeadIsInitialized)) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Can't append blob for key " << k.Key.ToString());
+                YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Can't append blob for key",
+                    {"LogBuilder", LogBuilder()},
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"k.Key", k.Key.ToString()});
                 Y_FAIL("Something went wrong");
                 return;
             }
@@ -529,7 +631,9 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
         FirstCompactionPart = Nothing();
     }
 
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix() <<"Send request to KV");
+    YDB_LOG_CTX_COMP_INFO(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, "Send request to KV",
+        {"TabletId", TabletId},
+        {"GetLogPrefix", GetLogPrefix()});
     // for debugging purposes
     //DumpKeyValueRequest(compactionRequest->Record);
 
@@ -540,7 +644,9 @@ void TPartition::BlobsForCompactionWereWrite()
 {
     const auto& ctx = ActorContext();
 
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix() <<"Blobs compaction is completed");
+    YDB_LOG_CTX_COMP_INFO(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, "Blobs compaction is completed",
+        {"TabletId", TabletId},
+        {"GetLogPrefix", GetLogPrefix()});
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size());
@@ -623,12 +729,19 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
 
     AFL_ENSURE(!key.HasSuffix() || key.IsHead()); // body or head
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() <<"Add new write blob: topic '" << TopicName() << "' partition " << Partition
-            << " compactOffset " << key.GetOffset() << "," << key.GetCount()
-            << " HeadOffset " << CompactionBlobEncoder.Head.Offset << " endOffset " << CompactionBlobEncoder.EndOffset << " curOffset "
-            << CompactionBlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()
-            << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
-    );
+    YDB_LOG_CTX_COMP_DEBUG(*NActors::TlsActivationContext, Service, "Add new write blob: topic ' ' partition compactOffset HeadOffset endOffset curOffset size WTime",
+        {"LogBuilder", LogBuilder()},
+        {"GetLogPrefix", GetLogPrefix()},
+        {"TopicName", TopicName()},
+        {"Partition", Partition},
+        {"GetOffset", key.GetOffset()},
+        {"GetCount", key.GetCount()},
+        {"Offset", CompactionBlobEncoder.Head.Offset},
+        {"EndOffset", CompactionBlobEncoder.EndOffset},
+        {"GetNextOffset", CompactionBlobEncoder.NewHead.GetNextOffset()},
+        {"key", key.ToString()},
+        {"second", res.second},
+        {"MilliSeconds", ctx.Now().MilliSeconds()});
     AddNewCompactionWriteBlob(res, request, blobCreationUnixTime, ctx);
 
     CompactionBlobEncoder.HaveData = true;

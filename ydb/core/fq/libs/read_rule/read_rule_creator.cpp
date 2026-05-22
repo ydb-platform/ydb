@@ -13,6 +13,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STREAMS
 
 namespace NFq {
 namespace {
@@ -97,7 +100,10 @@ public:
     void StartRequest() {
         Y_ABORT_UNLESS(!RequestInFlight);
         RequestInFlight = true;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " <<"Make request for read rule creation for topic `" << TopicConsumer.topic_path() << "` [" << Index << "]");
+        YDB_LOG_DEBUG("Make request for read rule creation for topic ` ` [",
+            {"QueryId", QueryId},
+            {"topic_path", TopicConsumer.topic_path()},
+            {"Index", Index});
 
         const NYdb::NTopic::TAlterTopicSettings alterTopicSettings =
             NYdb::NTopic::TAlterTopicSettings()
@@ -135,7 +141,12 @@ public:
                 nextRetryDelay = Nothing(); // Not retryable
             }
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " <<"Failed to add read rule to `" << TopicConsumer.topic_path() << "`: " << status.GetIssues().ToOneLineString() << ". Status: " << status.GetStatus() << ". Retry after: " << nextRetryDelay);
+            YDB_LOG_DEBUG("Failed to add read rule to `.. Retry",
+                {"QueryId", QueryId},
+                {"topic_path", TopicConsumer.topic_path()},
+                {"`", status.GetIssues().ToOneLineString()},
+                {"Status", status.GetStatus()},
+                {"after", nextRetryDelay});
             if (!nextRetryDelay) { // Not retryable
                 Send(Owner, MakeHolder<TEvPrivate::TEvSingleReadRuleCreatorResult>(NYdb::NAdapters::ToYqlIssues(status.GetIssues())), 0, Index);
                 PassAway();
@@ -227,7 +238,10 @@ public:
         Children.reserve(TopicConsumers.size());
         Results.reserve(TopicConsumers.size());
         for (size_t i = 0; i < TopicConsumers.size(); ++i) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STREAMS, QueryId << ": " <<"Create read rule creation actor for `" << TopicConsumers[i].topic_path() << "` [" << i << "]");
+            YDB_LOG_DEBUG("Create read rule creation actor for ` ` [",
+                {"QueryId", QueryId},
+                {"topic_path", TopicConsumers[i].topic_path()},
+                {"i", i});
             Children.push_back(Register(new TSingleReadRuleCreator(SelfId(), QueryId, YdbDriver, PqGateway, TopicConsumers[i], Credentials[i], i)));
         }
     }

@@ -14,6 +14,9 @@
 #include <util/generic/ptr.h>
 
 #include <utility>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -143,7 +146,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Generation mismatch for TEvConfigSubscriptionResponse");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionResponse");
 
             return;
         }
@@ -193,7 +196,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Generation mismatch for TEvConfigSubscriptionNotification");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionNotification");
 
             return;
         }
@@ -201,7 +204,7 @@ public:
         Y_ABORT_UNLESS(Pipe);
 
         if (rec.GetOrder() != (LastOrder + 1)) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Order mismatch, will resubscribe");
+            YDB_LOG_INFO("Order mismatch, will resubscribe");
 
             Subscribe(ctx);
 
@@ -293,7 +296,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS,"Generation mismatch for TEvConfigSubscriptionCanceled");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionCanceled");
 
             return;
         }

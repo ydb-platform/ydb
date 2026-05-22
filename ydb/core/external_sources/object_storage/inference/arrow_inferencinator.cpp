@@ -17,6 +17,9 @@
 #include <util/string/join.h>
 
 #include <optional>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::OBJECT_STORAGE_INFERENCINATOR
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
@@ -286,7 +289,9 @@ public:
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, "TArrowInferencinator" << ": " << this->SelfId() << ". " << "HandleFileError: " << ev->Get()->Issues.ToOneLineString());
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "TArrowInferencinator .",
+            {"SelfId", this->SelfId()},
+            {"HandleFileError", ev->Get()->Issues.ToOneLineString()});
         ReplyAndReset(ctx, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }
 

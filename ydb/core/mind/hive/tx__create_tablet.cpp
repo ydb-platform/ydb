@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -169,8 +172,10 @@ public:
     }
 
     void ReplyToSender(NKikimrProto::EReplyStatus status) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute TabletId: " << TabletId <<
-            " Status: " << NKikimrProto::EReplyStatus_Name(status));
+        YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", TabletId},
+            {"Status", NKikimrProto::EReplyStatus_Name(status)});
         Y_ABORT_UNLESS(!!Sender);
         THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
         if (ForwardRequest.HasHiveTabletId()) {
@@ -197,7 +202,9 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute " << RequestData.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"ShortDebugString", RequestData.ShortDebugString()});
         SideEffects.Reset(Self->SelfId());
         ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN;
         for (const auto& domain : AllowedDomains) {
@@ -211,7 +218,9 @@ public:
             }
         }
         if (Self->BlockedOwners.count(OwnerId) != 0) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute Owner " << OwnerId << " is blocked");
+            YDB_LOG_WARN("THive::TTxCreateTablet::Execute Owner is blocked",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"OwnerId", OwnerId});
             ReplyToSender(NKikimrProto::BLOCKED);
             return true;
         }
@@ -229,18 +238,27 @@ public:
                     TabletId = tabletId;
                     if (existingTabletType != TabletType || tablet->SeizedByChild) {
                         if (tablet->SeizedByChild) {
-                            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " seized by child - operation postponed");
+                            YDB_LOG_WARN("THive::TTxCreateTablet::Execute Existing tablet seized by child - operation postponed",
+                                {"GetLogPrefix", GetLogPrefix()},
+                                {"tablet", tablet->ToString()});
                             PostponeCreateTablet();
                         } else {
-                            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has different type");
+                            YDB_LOG_ERROR("THive::TTxCreateTablet::Execute Existing tablet has different type",
+                                {"GetLogPrefix", GetLogPrefix()},
+                                {"tablet", tablet->ToString()});
                             ReplyToSender(NKikimrProto::ERROR);
                         }
                         return true;
                     }
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute TabletId: " << TabletId << " State: " << ETabletStateName(tablet->State));
+                    YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"TabletId", TabletId},
+                        {"State", ETabletStateName(tablet->State)});
 
                     if (!ValidateChannelsBinding(*tablet)) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has invalid channel bindings");
+                        YDB_LOG_ERROR("THive::TTxCreateTablet::Execute Existing tablet has invalid channel bindings",
+                            {"GetLogPrefix", GetLogPrefix()},
+                            {"tablet", tablet->ToString()});
                         ReplyToSender(NKikimrProto::ERROR);
                         return true;
                     }
@@ -319,7 +337,9 @@ public:
                     Self->CreateTabletFollowers(*tablet, db, SideEffects);
                     ProcessTablet(*tablet);
 
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has been successfully updated");
+                    YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute Existing tablet has been successfully updated",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tablet", tablet->ToString()});
                     ReplyToSender(NKikimrProto::OK);
                     return true;
                 }
@@ -335,7 +355,8 @@ public:
 
         switch((TTabletTypes::EType)TabletType) {
         case TTabletTypes::BSController:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute Cannot create such tablet");
+            YDB_LOG_ERROR("THive::TTxCreateTablet::Execute Cannot create such tablet",
+                {"GetLogPrefix", GetLogPrefix()});
             ReplyToSender(NKikimrProto::ERROR);
             return true;
         default:
@@ -345,13 +366,18 @@ public:
         std::vector<TSequencer::TOwnerType> modified;
         auto tabletIdIndex = Self->Sequencer.AllocateElement(modified);
         if (tabletIdIndex == TSequencer::NO_ELEMENT) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute CreateTablet Postponed");
+            YDB_LOG_WARN("THive::TTxCreateTablet::Execute CreateTablet Postponed",
+                {"GetLogPrefix", GetLogPrefix()});
             PostponeCreateTablet();
             RequestFreeSequence();
             return true;
         } else {
             TabletId = MakeTabletID(true, tabletIdIndex);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Hive " << Self->TabletID() << " allocated TabletId " << TabletId << " from TabletIdIndex " << tabletIdIndex);
+            YDB_LOG_DEBUG("Hive allocated TabletId from TabletIdIndex",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"TabletID", Self->TabletID()},
+                {"TabletId", TabletId},
+                {"tabletIdIndex", tabletIdIndex});
             Y_ABORT_UNLESS(Self->Tablets.count(TabletId) == 0);
             for (auto owner : modified) {
                 auto sequence = Self->Sequencer.GetSequence(owner);
@@ -443,14 +469,22 @@ public:
         NKikimrTabletBase::TMetrics resourceValues;
 
         Self->GetDefaultResourceValuesForTabletType(tablet.Type).ToProto(&resourceValues);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute; Default resources after merge for type " << tablet.Type << ": {" << resourceValues.ShortDebugString() << "}");
+        YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for type : {",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"Type", tablet.Type},
+            {"ShortDebugString", resourceValues.ShortDebugString()});
         if (IsValidObjectId(tablet.ObjectId)) {
             Self->GetDefaultResourceValuesForObject(tablet.ObjectId).ToProto(&resourceValues);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute; Default resources after merge for object " << tablet.ObjectId << ": {" << resourceValues.ShortDebugString() << "}");
+            YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for object : {",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"ObjectId", tablet.ObjectId},
+                {"ShortDebugString", resourceValues.ShortDebugString()});
         }
         // TODO: provide Hive with resource profile used by the tablet instead of default one.
         Self->GetDefaultResourceValuesForProfile(tablet.Type, "default").ToProto(&resourceValues);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Execute; Default resources after merge for profile 'default': {" << resourceValues.ShortDebugString() << "}");
+        YDB_LOG_DEBUG("THive::TTxCreateTablet::Execute; Default resources after merge for profile 'default': {",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"ShortDebugString", resourceValues.ShortDebugString()});
         if (resourceValues.ByteSize() == 0) {
             resourceValues.SetStorage(1ULL << 30); // 1 GB
             resourceValues.SetReadThroughput(10ULL << 20); // 10 MB/s
@@ -506,7 +540,11 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxCreateTablet::Complete " << ownerIdx << " TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxCreateTablet::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"ownerIdx", ownerIdx},
+            {"TabletId", TabletId},
+            {"SideEffects", SideEffects});
         SideEffects.Complete(ctx);
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());

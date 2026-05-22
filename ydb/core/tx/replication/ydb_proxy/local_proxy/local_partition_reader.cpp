@@ -6,6 +6,9 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
 
@@ -79,12 +82,16 @@ private:
     }
 
     void HandleInit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle on init " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle on init",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         RequestsQueue.emplace_back(ev->Sender, ev->Cookie, GetSkipCommit(ev));
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
     }
 
 private:
@@ -94,7 +101,9 @@ private:
     }
 
     void HandleOnInitOffset(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
@@ -158,7 +167,9 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         HandleInit(ev);
         Handle(RequestsQueue.front());
@@ -226,7 +237,9 @@ private:
     }
 
     void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
 
@@ -339,7 +352,9 @@ private:
 }; // TLocalTopicPartitionReaderActor
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::LOCAL_YDB_PROXY, LogPrefix <<"Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"LogPrefix", LogPrefix},
+        {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
     auto args = std::move(ev->Get()->GetArgs());
     auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);

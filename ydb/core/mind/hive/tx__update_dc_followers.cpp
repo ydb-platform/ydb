@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -16,7 +19,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_DC_FOLLOWERS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"TTxProcessUpdateFollowers::Execute()");
+        YDB_LOG_DEBUG("TTxProcessUpdateFollowers::Execute()",
+            {"GetLogPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
         for (size_t i = 0; !Self->PendingFollowerUpdates.Empty() && i < MAX_UPDATES_PROCESSED; ++i) {
@@ -49,7 +53,9 @@ public:
                     follower.BecomeStopped();
                     follower.InitiateBoot();
                     followers.push_back(std::prev(tablet->AsLeader().Followers.end()));
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessUpdateFollowers::Execute(): created follower " << follower.GetFullTabletId());
+                    YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute(): created follower",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"GetFullTabletId", follower.GetFullTabletId()});
                     break;
                 }
                 case TFollowerUpdates::EAction::Update:

@@ -23,6 +23,9 @@
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <queue>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -77,7 +80,13 @@ public:
     static constexpr char ActorName[] = "FQ_RESULT_SET_WRITER_ACTOR";
 
     void Start() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"ResultSetId: " << ResultSetId << " Start result set writer actor");
+        YDB_LOG_INFO("[ydb] [ResultWriter] Start result set writer actor",
+            {"CloudId", Params.CloudId},
+            {"Scope", Params.Scope.ToString()},
+            {"QueryId", Params.QueryId},
+            {"JobId", Params.JobId},
+            {"OperationId", OperationId.ToString()},
+            {"ResultSetId", ResultSetId});
         Become(&TResultSetWriterActor::StateFunc);
         SendFetchScriptResultRequest();
     }
@@ -90,20 +99,42 @@ public:
     void Handle(const TEvYdbCompute::TEvFetchScriptResultResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status == NYdb::EStatus::BAD_REQUEST && FetchRowsLimit == 0) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"ResultSetId: " << ResultSetId << " Got bad request: " << ev->Get()->Issues.ToOneLineString() << ", try to fallback to old behaviour");
+            YDB_LOG_WARN("[ydb] [ResultWriter] Got bad, try to fallback to old behaviour",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"ResultSetId", ResultSetId},
+                {"request", ev->Get()->Issues.ToOneLineString()});
             FetchRowsLimit = 1000;
             SendFetchScriptResultRequest();
             return;
         }
 
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"ResultSetId: " << ResultSetId << " Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ResultWriter] Can't fetch script",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"ResultSetId", ResultSetId},
+                {"result", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"ResultSetId: " << ResultSetId << " FetchToken: " << FetchToken << " Successfully fetched " << response.ResultSet->RowsCount() << " rows");
+        YDB_LOG_INFO("[ydb] [ResultWriter] Successfully fetched rows",
+            {"CloudId", Params.CloudId},
+            {"Scope", Params.Scope.ToString()},
+            {"QueryId", Params.QueryId},
+            {"JobId", Params.JobId},
+            {"OperationId", OperationId.ToString()},
+            {"ResultSetId", ResultSetId},
+            {"FetchToken", FetchToken},
+            {"RowsCount", response.ResultSet->RowsCount()});
         Truncated |= response.ResultSet->Truncated();
         FetchToken = response.NextFetchToken;
         auto emptyResultSet = response.ResultSet->RowsCount() == 0;
@@ -114,7 +145,14 @@ public:
             auto splittedResultSets = rowsSplitter.Split();
 
             if (!splittedResultSets.Success) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"ResultSetId: " << ResultSetId << " Can't split script result: " << splittedResultSets.Issues.ToOneLineString());
+                YDB_LOG_ERROR("[ydb] [ResultWriter] Can't split script",
+                    {"CloudId", Params.CloudId},
+                    {"Scope", Params.Scope.ToString()},
+                    {"QueryId", Params.QueryId},
+                    {"JobId", Params.JobId},
+                    {"OperationId", OperationId.ToString()},
+                    {"ResultSetId", ResultSetId},
+                    {"result", splittedResultSets.Issues.ToOneLineString()});
                 Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, splittedResultSets.Issues, NYdb::EStatus::INTERNAL_ERROR));
                 FailedAndPassAway();
                 return;
@@ -145,7 +183,13 @@ public:
         auto it = WriterInflight.find(cookie);
         if (it == WriterInflight.end()) {
             auto errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Internal error. Cookie wasn't found in case of write result reponse";
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<errorMsg);
+            YDB_LOG_ERROR("[ydb] [ResultWriter]",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"errorMsg", errorMsg});
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{errorMsg}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
@@ -157,7 +201,13 @@ public:
         if (!ev.Get()->Get()->Status.IsSuccess()) {
             writeResultCounters->Error->Inc();
             TString errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Error writing result for offset " << meta.Offset;
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<errorMsg);
+            YDB_LOG_ERROR("[ydb] [ResultWriter]",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"errorMsg", errorMsg});
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{errorMsg}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
@@ -166,7 +216,15 @@ public:
         TryStartResultWriters();
 
         writeResultCounters->Ok->Inc();
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Result successfully written for offset " << meta.Offset);
+        YDB_LOG_INFO("[ydb] [ResultWriter] Result successfully written for offset",
+            {"CloudId", Params.CloudId},
+            {"Scope", Params.Scope.ToString()},
+            {"QueryId", Params.QueryId},
+            {"JobId", Params.JobId},
+            {"OperationId", OperationId.ToString()},
+            {"ResultSetId", ResultSetId},
+            {"Cookie", cookie},
+            {"Offset", meta.Offset});
         if (FetchToken) {
             if (FetchToken != LastProcessedToken && (WriterInflight.size() + ResultChunks.size()) < 2 * MAX_WRITER_INFLIGHT) {
                 SendFetchScriptResultRequest();
@@ -273,7 +331,13 @@ public:
     static constexpr char ActorName[] = "FQ_RESULT_WRITER_ACTOR";
 
     void Start() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Start result writer actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        YDB_LOG_INFO("[ydb] [ResultWriter] Start result writer actor. Compute",
+            {"CloudId", Params.CloudId},
+            {"Scope", Params.Scope.ToString()},
+            {"QueryId", Params.QueryId},
+            {"JobId", Params.JobId},
+            {"OperationId", OperationId.ToString()},
+            {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         Become(&TResultWriterActor::StateFunc);
         SendGetOperation();
     }
@@ -305,14 +369,25 @@ public:
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (!OperationEntryExpected && response.Status == NYdb::EStatus::NOT_FOUND) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Operation has been already removed");
+            YDB_LOG_INFO("[ydb] [ResultWriter] Operation has been already removed",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
             return;
         }
 
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Can't get operation: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ResultWriter] Can't get",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"operation", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
@@ -336,12 +411,22 @@ public:
         pingCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"The result has been moved");
+            YDB_LOG_INFO("[ydb] [ResultWriter] The result has been moved",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Move result error");
+            YDB_LOG_ERROR("[ydb] [ResultWriter] Move result error",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Move result error. OperationId: " << OperationId.ToString()}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
@@ -350,13 +435,24 @@ public:
     void Handle(const TEvYdbCompute::TEvResultSetWriterResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [ResultWriter] Can't fetch script",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()},
+                {"result", ev->Get()->Issues.ToOneLineString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
         }
         if (response.ResultSetId >= static_cast<ui64>(PingTaskRequest.result_set_meta_size())) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " <<"Can't fetch script result: internal error");
+            YDB_LOG_ERROR("[ydb] [ResultWriter] Can't fetch script result: internal error",
+                {"CloudId", Params.CloudId},
+                {"Scope", Params.Scope.ToString()},
+                {"QueryId", Params.QueryId},
+                {"JobId", Params.JobId},
+                {"OperationId", OperationId.ToString()});
             Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;

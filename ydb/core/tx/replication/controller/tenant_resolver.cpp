@@ -6,6 +6,9 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -29,22 +32,26 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_TRACE_S (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()},
+            {"entry", entry.ToString()});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_WARN_S  (*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"LogPrefix", LogPrefix},
+                {"entry", entry.ToString()});
             return Reply(false);
         }
 
         if (!DomainKey) {
             if (!entry.DomainInfo) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Empty domain info"
-                    << ": entry# " << entry.ToString());
+                YDB_LOG_ERROR("Empty domain info",
+                    {"LogPrefix", LogPrefix},
+                    {"entry", entry.ToString()});
                 return Reply(false);
             }
 

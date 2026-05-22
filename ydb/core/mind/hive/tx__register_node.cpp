@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -18,7 +21,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REGISTER_NODE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxRegisterNode( )::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"NodeId", Local.NodeId()});
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
@@ -59,7 +64,9 @@ public:
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             if (node.BecomeUpOnRestart) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRegisterNode(" << Local.NodeId() << ")::Execute - node became up on restart");
+                YDB_LOG_TRACE("THive::TTxRegisterNode( )::Execute - node became up on restart",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"NodeId", Local.NodeId()});
                 node.SetDown(false);
                 node.BecomeUpOnRestart = false;
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
@@ -96,7 +103,9 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxRegisterNode(" << Local.NodeId() << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxRegisterNode( )::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"NodeId", Local.NodeId()});
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
             Self->NodePingsInProgress.erase(node->Id);

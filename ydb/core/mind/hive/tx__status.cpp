@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -19,7 +22,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(" << nodeId << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxStatus( )::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"nodeId", nodeId});
         TEvLocal::TEvStatus::EStatus status = (TEvLocal::TEvStatus::EStatus)Record.GetStatus();
         TNodeInfo& node = Self->GetNode(nodeId);
         if (status == TEvLocal::TEvStatus::StatusOk && node.BecomeConnected()) {
@@ -48,14 +53,19 @@ public:
             }
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(" << nodeId << ") - continuing node drain");
+                YDB_LOG_DEBUG("THive::TTxStatus( ) - continuing node drain",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"nodeId", nodeId});
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }
             Self->ObjectDistributions.AddNode(node);
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(status=" << static_cast<int>(status)
-                   << " node=" << TNodeInfo::EVolatileStateName(node.GetVolatileState()) << ") - killing node " << node.Id);
+            YDB_LOG_WARN(") - killing node",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"THive::TTxStatus(status", static_cast<int>(status)},
+                {"node", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
+                {"Id", node.Id});
             Self->KillNode(node.Id, Local);
         }
         return true;
@@ -63,7 +73,9 @@ public:
 
     void Complete(const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxStatus(" << nodeId << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxStatus( )::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"nodeId", nodeId});
     }
 };
 

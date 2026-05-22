@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -34,7 +37,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOCK_TABLET_EXECUTION; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLockTabletExecution::Execute TabletId: " << TabletId);
+        YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", TabletId});
 
         SideEffects.Reset(Self->SelfId());
 
@@ -116,9 +121,15 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Success) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+            YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Complete",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"TabletId", TabletId},
+                {"SideEffects", SideEffects});
         } else {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+            YDB_LOG_NOTICE("THive::TTxLockTabletExecution::Complete",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"TabletId", TabletId},
+                {"SideEffects", SideEffects});
         }
         SideEffects.Complete(ctx);
     }

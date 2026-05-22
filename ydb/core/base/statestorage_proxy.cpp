@@ -11,6 +11,9 @@
 
 #include <util/digest/city.h>
 #include <util/generic/xrange.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATESTORAGE
 
 namespace NKikimr {
 
@@ -222,7 +225,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
         if (Info->ClusterStateGeneration < clusterStateGeneration ||
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"StateStorageProxy TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " clusterStateGeneration=" << clusterStateGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " clusterStateGuid=" << clusterStateGuid);
+            YDB_LOG_DEBUG("StateStorageProxy TEvNodeWardenNotifyConfigMismatch:",
+                {"Info->ClusterStateGeneration", Info->ClusterStateGeneration},
+                {"clusterStateGeneration", clusterStateGeneration},
+                {"Info->ClusterStateGuid", Info->ClusterStateGuid},
+                {"clusterStateGuid", clusterStateGuid});
             if (NotifyRingGroupProxy) {
                 Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid), 0, SourceCookie);
             }
@@ -247,8 +254,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
 
         if (Signature.HasReplicaSignature(replicaId)) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"TStateStorageProxyRequest::MergeReply duplicated TEvReplicaInfo cookie:" << cookie
-                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            YDB_LOG_ERROR("TStateStorageProxyRequest::MergeReply duplicated TEvReplicaInfo",
+                {"cookie", cookie},
+                {"replica", replicaId},
+                {"signature", Signature.GetReplicaSignature(replicaId)},
+                {"ev", ev->ToString()});
             return;
         }
         UndeliveredReplicas.erase(replicaId);
@@ -360,7 +370,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
         TEvStateStorage::TEvLookup *msg = ev->Get();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleInit",
+            {"ringGroup", RingGroupIndex},
+            {"ev", msg->ToString()});
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
 
@@ -372,7 +384,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleInit(TEvStateStorage::TEvUpdate::TPtr &ev) {
         TEvStateStorage::TEvUpdate *msg = ev->Get();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleInit",
+            {"ringGroup", RingGroupIndex},
+            {"ev", msg->ToString()});
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
 
@@ -390,7 +404,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleInit(TEvStateStorage::TEvLock::TPtr &ev) {
         TEvStateStorage::TEvLock *msg = ev->Get();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleInit ringGroup:" << RingGroupIndex << " ev: " << msg->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleInit",
+            {"ringGroup", RingGroupIndex},
+            {"ev", msg->ToString()});
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
 
@@ -408,7 +424,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     // lookup handling
 
     void HandleLookupTimeout() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleLookupTimeout");
+        YDB_LOG_DEBUG("ProxyRequest::HandleLookupTimeout");
         switch (ReplyStatus) {
         case TStateStorageInfo::TSelection::StatusUnknown:
             ReplyAndDie(NKikimrProto::TIMEOUT);
@@ -459,20 +475,26 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleLookup(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleLookup",
+            {"ringGroup", RingGroupIndex},
+            {"ev", ev->Get()->ToString()});
         const ui32 node = ev->Get()->NodeId;
         MergeNodeError(node);
         CheckLookupReply();
     }
 
     void HandleLookup(TEvents::TEvUndelivered::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleLookup",
+            {"ringGroup", RingGroupIndex},
+            {"ev", ev->Get()->ToString()});
         MergeConnectionError(ev->Cookie);
         CheckLookupReply();
     }
 
     void HandleLookup(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleLookup",
+            {"ringGroup", RingGroupIndex},
+            {"ev", ev->Get()->ToString()});
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
         MergeReply(ev->Sender, msg);
         CheckLookupReply();
@@ -481,7 +503,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     // update handling
 
     void HandleUpdateTimeout() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdateTimeout ringGroup:" << RingGroupIndex);
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateTimeout",
+            {"ringGroup", RingGroupIndex});
         switch (ReplyStatus) {
         case TStateStorageInfo::TSelection::StatusUnknown:
             ReplyAndDie(NKikimrProto::TIMEOUT);
@@ -533,20 +556,26 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleUpdate(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdate",
+            {"ringGroup", RingGroupIndex},
+            {"ev", ev->Get()->ToString()});
         const ui32 node = ev->Get()->NodeId;
         MergeNodeError(node);
         CheckUpdateReply();
     }
 
     void HandleUpdate(TEvents::TEvUndelivered::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdate",
+            {"ringGroup", RingGroupIndex},
+            {"ev", ev->Get()->ToString()});
         MergeConnectionError(ev->Cookie);
         CheckUpdateReply();
     }
 
     void HandleUpdate(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdate",
+            {"ringGroup", RingGroupIndex},
+            {"ev", ev->Get()->ToString()});
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
         MergeReply(ev->Sender, msg);
         CheckUpdateReply();
@@ -584,13 +613,17 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleUpdateSig(TEvents::TEvUndelivered::TPtr &ev) {
         const ui64 cookie = ev->Cookie;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdateSig undelivered ringGroup:" << RingGroupIndex << " for: " << cookie);
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig undelivered",
+            {"ringGroup", RingGroupIndex},
+            {"for", cookie});
         return UpdateSigFor(cookie, Max<ui64>());
     }
 
     void HandleUpdateSig(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         const ui32 node = ev->Get()->NodeId;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdateSig ringGroup:" << RingGroupIndex << " node disconnected: " << node);
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig node",
+            {"ringGroup", RingGroupIndex},
+            {"disconnected", node});
         MergeSigNodeError(node);
 
         if (RepliesMerged + RepliesAfterReply == Replicas) {
@@ -600,7 +633,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleUpdateSig(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdateSig ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSig",
+            {"ringGroup", RingGroupIndex},
+            {"ev", ev->Get()->ToString()});
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
 
@@ -612,8 +647,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
         if (Signature.HasReplicaSignature(replicaId)) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"TStateStorageProxyRequest::HandleUpdateSig duplicated TEvReplicaInfo cookie:" << cookie
-                << " replica:" << replicaId << " signature:" << Signature.GetReplicaSignature(replicaId) << " ev: " << ev->ToString());
+            YDB_LOG_ERROR("TStateStorageProxyRequest::HandleUpdateSig duplicated TEvReplicaInfo",
+                {"cookie", cookie},
+                {"replica", replicaId},
+                {"signature", Signature.GetReplicaSignature(replicaId)},
+                {"ev", ev->ToString()});
             return;
         }
         UndeliveredReplicas.erase(replicaId);
@@ -621,7 +659,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void HandleUpdateSigTimeout() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::HandleUpdateSigTimeout ringGroup:" << RingGroupIndex << " RepliesAfterReply# " << (ui32)RepliesAfterReply);
+        YDB_LOG_DEBUG("ProxyRequest::HandleUpdateSigTimeout",
+            {"ringGroup", RingGroupIndex},
+            {"RepliesAfterReply", (ui32)RepliesAfterReply});
         if (RepliesAfterReply > 0)
             Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature), 0, SourceCookie);
         PassAway();
@@ -659,10 +699,9 @@ public:
             hFunc(TEvStateStorage::TEvUpdate, HandleInit);
             hFunc(TEvStateStorage::TEvLock, HandleInit);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::StateInit unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << ev->ToString());
+                YDB_LOG_WARN("ProxyRequest::StateInit unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 break;
         }
     }
@@ -677,10 +716,9 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleLookup);
             cFunc(TEvents::TSystem::Wakeup, HandleLookupTimeout);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::StateLookup unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << ev->ToString());
+                YDB_LOG_WARN("ProxyRequest::StateLookup unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 break;
         }
     }
@@ -694,10 +732,9 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleUpdate);
             cFunc(TEvents::TSystem::Wakeup, HandleUpdateTimeout);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::StateUpdate unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << ev->ToString());
+                YDB_LOG_WARN("ProxyRequest::StateUpdate unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 break;
         }
     }
@@ -711,10 +748,9 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleUpdateSig);
             cFunc(TEvents::TSystem::Wakeup, HandleUpdateSigTimeout);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"ProxyRequest::StateUpdateSig unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << ev->ToString());
+                YDB_LOG_WARN("ProxyRequest::StateUpdateSig unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 break;
         }
     }
@@ -749,7 +785,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
+        YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
+            {"ev", msg->ToString()});
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
             if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
@@ -767,7 +804,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         T *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
+        YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
+            {"ev", msg->ToString()});
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
             if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
@@ -823,7 +861,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             GetFollowersAsVector(Followers)
         );
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"RingGroupProxyRequest::Reply TEvInfo ev: " << msg->ToString());
+        YDB_LOG_DEBUG("RingGroupProxyRequest::Reply TEvInfo",
+            {"ev", msg->ToString()});
         Send(Source, msg, 0, SourceCookie);
         Replied = true;
     }
@@ -834,7 +873,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         }
         if (Replied) {
             auto* msg = new TEvStateStorage::TEvUpdateSignature(TabletID, Signature);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"RingGroupProxyRequest::Reply TEvUpdateSignature ev: " << msg->ToString());
+            YDB_LOG_DEBUG("RingGroupProxyRequest::Reply TEvUpdateSignature",
+                {"ev", msg->ToString()});
             Send(Source, msg, 0, SourceCookie);
         } else {
             Reply(status);
@@ -845,7 +885,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         TEvStateStorage::TEvInfo *msg = ev->Get();
         Replies.insert(ev->Sender);
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"RingGroupProxyRequest::HandleTEvInfo ev: " << msg->ToString());
+        YDB_LOG_DEBUG("RingGroupProxyRequest::HandleTEvInfo",
+            {"ev", msg->ToString()});
         MaybeReply(msg->Status);
     }
 
@@ -1221,8 +1262,9 @@ public:
     {}
 
     STATEFN(StateInit) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::STATESTORAGE,"Proxy::StateInit ev type# " << ev->GetTypeRewrite() << " event: "
-            << ev->ToString());
+        YDB_LOG_TRACE("Proxy::StateInit ev",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
 
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvRequestReplicasDumps, Handle);

@@ -49,6 +49,9 @@
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
 #include <util/random/random.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_BACKUP
 
 
 namespace NKikimr {
@@ -5186,7 +5189,8 @@ void TExecutor::StartNewBackup() {
     ui64 tabletId = Owner->TabletID();
 
     if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() <<"Tablet excluded from backup");
+        YDB_LOG_DEBUG("Tablet excluded from backup",
+            {"BackupLogPrefix", BackupLogPrefix()});
         return;
     }
 
@@ -5209,7 +5213,11 @@ void TExecutor::StartNewBackup() {
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() <<"Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
+        YDB_LOG_NOTICE("Starting new backup",
+            {"BackupLogPrefix", BackupLogPrefix()},
+            {"Type", tabletType},
+            {"Gen", Generation0},
+            {"Step", Step0});
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         const ui32 workBudgetPercent = std::clamp<ui32>(backupConfig.GetSnapshotWorkBudgetPercent(), 1, 100);
         for (const auto& [tableId, table] : tables) {
@@ -5226,7 +5234,8 @@ void TExecutor::StartNewBackup() {
         auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->SystemPoolId);
         CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor);
     } else {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() <<"Backup not configured");
+        YDB_LOG_DEBUG("Backup not configured",
+            {"BackupLogPrefix", BackupLogPrefix()});
     }
 }
 
@@ -5234,7 +5243,9 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     BackupSnapshotInProgress = false;
     Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() <<"Snapshot completed" << " Bytes# " << ev->Get()->WrittenBytes);
+        YDB_LOG_NOTICE("Snapshot completed",
+            {"BackupLogPrefix", BackupLogPrefix()},
+            {"Bytes", ev->Get()->WrittenBytes});
         Owner->BackupSnapshotComplete(OwnerCtx());
 
         if (CommitManager->BackupLogic.IsRunning()) {
@@ -5265,7 +5276,9 @@ void TExecutor::FailBackup(const TString& error) {
         Y_TABLET_ERROR(error);
     }
 
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() <<error);
+    YDB_LOG_ERROR("",
+        {"BackupLogPrefix", BackupLogPrefix()},
+        {"error", error});
     CommitManager->BackupLogic.Stop();
     ScheduleRetryBackup();
 }
@@ -5280,9 +5293,10 @@ void TExecutor::ScheduleRetryBackup() {
         }
 
         auto retryTimeout = BackupRetry->Next();
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() <<"Scheduling backup retry"
-            << " Timeout# " << retryTimeout
-            << " Attempt# " << BackupRetry->GetIteration());
+        YDB_LOG_NOTICE("Scheduling backup retry",
+            {"BackupLogPrefix", BackupLogPrefix()},
+            {"Timeout", retryTimeout},
+            {"Attempt", BackupRetry->GetIteration()});
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
     }
 }

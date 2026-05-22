@@ -6,6 +6,9 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 
 namespace NKikimr::NSchemeShard {
@@ -396,7 +399,11 @@ public:
         auto ev = CreateEvCreateTablet(path, shardIdx, context);
         auto rootHiveId = context.SS->GetGlobalHive();
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "Send CreateTablet event to Hive: " << rootHiveId << " msg:  "<< ev->Record.DebugString());
+        YDB_LOG_CTX_DEBUG(context.Ctx, "Send CreateTablet event",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"to_Hive", rootHiveId},
+            {"msg", ev->Record.DebugString()});
 
         context.OnComplete.BindMsgToPipe(OperationId, rootHiveId, shardIdx, ev.Release());
 
@@ -409,7 +416,9 @@ public:
 
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -438,7 +447,10 @@ public:
             SendCreateTabletEvent(txState->TargetPathId, shard.Idx, context);
 
         } else {
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState, ExtSubDomain hive already exist, tabletId: " << subdomainHiveTabletId);
+            YDB_LOG_CTX_INFO(context.Ctx, "ProgressState, ExtSubDomain hive already exist,",
+                {"TabletID", context.SS->TabletID()},
+                {"DebugHint", DebugHint()},
+                {"tabletId", subdomainHiveTabletId});
             SendPublishPathRequest(txState->TargetPathId, context);
         }
 
@@ -446,8 +458,13 @@ public:
     }
 
     bool HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvCreateTabletReply");
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvCreateTabletReply, msg: " << DebugReply(ev));
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvCreateTabletReply",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
+        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvCreateTabletReply,",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"msg", DebugReply(ev)});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -508,7 +525,10 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, rootHiveId, shardIdx);
         context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId());
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ExtSubDomain hive created, tabletId " << createdTabletId);
+        YDB_LOG_CTX_INFO(context.Ctx, "ExtSubDomain hive created, tabletId",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"createdTabletId", createdTabletId});
 
         // no need to configure new hive by a separate EvConfigureHive
         // as new hive is already configured to serve new subdomain at creation
@@ -524,8 +544,13 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvCompletePublication");
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvCompletePublication" << ", msg: " << DebugReply(ev));
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvCompletePublication",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
+        YDB_LOG_CTX_DEBUG(context.Ctx, "HandleReply TEvCompletePublication",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"msg", DebugReply(ev)});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -543,7 +568,10 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvPrivate:TEvCompleteBarrier, msg: " << ev->Get()->ToString());
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate:TEvCompleteBarrier,",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"msg", ev->Get()->ToString()});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -597,10 +625,10 @@ public:
 
         TPath path = TPath::Resolve(Transaction.GetWorkingDir(), context.SS).Dive(inputSettings.GetName());
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TAlterExtSubDomainCreateHive Propose"
-            << ", opId: " << OperationId
-            << ", path: " << path.PathString()
-        );
+        YDB_LOG_CTX_INFO(context.Ctx, "TAlterExtSubDomainCreateHive Propose",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", path.PathString()});
 
         // No need to check conditions on extsubdomain path: checked in CreateCompatibleAlterExtSubDomain() already
 
@@ -635,11 +663,11 @@ public:
         // Create subdomain alter
         TSubDomainInfo::TPtr alter = new TSubDomainInfo(*subdomainInfo, 0, 0, delta.StoragePoolsAdded);
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TAlterExtSubDomainCreateHive Propose"
-            << ", opId: " << OperationId
-            << ", subdomain ver " << subdomainInfo->GetVersion()
-            << ", alter ver " << alter->GetVersion()
-        );
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TAlterExtSubDomainCreateHive Propose, subdomain ver, alter ver",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"GetVersion", subdomainInfo->GetVersion()},
+            {"#_GetVersion", alter->GetVersion()});
 
         auto guard = context.DbGuard();
 
@@ -674,16 +702,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TAlterExtSubDomainCreateHive AbortPropose"
-            << ", opId " << OperationId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterExtSubDomainCreateHive AbortPropose, opId",
+            {"TabletID", context.SS->TabletID()},
+            {"OperationId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TAlterExtSubDomainCreateHive AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterExtSubDomainCreateHive AbortUnsafe",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId});
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -708,7 +736,10 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState, operation type",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"#_TTxState::TypeName(txState->TxType)", TTxState::TypeName(txState->TxType)});
 
         // Register barrier which this suboperation will wait on.
         // This is a sync point with TAlterExtSubDomainCreateHive suboperation.
@@ -718,7 +749,10 @@ public:
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvPrivate:TEvCompleteBarrier, msg: " << ev->Get()->ToString());
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvPrivate:TEvCompleteBarrier,",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"msg", ev->Get()->ToString()});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -752,7 +786,10 @@ public:
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState, NeedSyncHive: " << txState->NeedSyncHive);
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState,",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"NeedSyncHive", txState->NeedSyncHive});
 
         if (txState->NeedSyncHive) {
             const TPathId pathId = txState->TargetPathId;
@@ -770,9 +807,11 @@ public:
                 event->Record.SetServerlessComputeResourcesMode(*serverlessComputeResourcesMode);
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "ProgressState"
-                << ", Syncing hive: " << hiveToSync
-                << ", msg: {" << event->Record.ShortDebugString() << "}");
+            YDB_LOG_CTX_DEBUG(context.Ctx, "ProgressState, Syncing, msg: {",
+                {"TabletID", context.SS->TabletID()},
+                {"DebugHint", DebugHint()},
+                {"hive", hiveToSync},
+                {"ShortDebugString", event->Record.ShortDebugString()});
 
             context.OnComplete.BindMsgToPipe(OperationId, hiveToSync, pathId, event.Release());
             return false;
@@ -786,8 +825,10 @@ public:
     bool HandleReply(TEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
         const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin());
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<DebugHint() << "HandleReply TEvUpdateDomainReply"
-            << ", from hive: " << hive);
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvUpdateDomainReply",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"from_hive", hive});
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -849,10 +890,10 @@ public:
 
         TPath path = TPath::Resolve(Transaction.GetWorkingDir(), context.SS).Dive(inputSettings.GetName());
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TAlterExtSubDomain Propose"
-            << ", opId: " << OperationId
-            << ", path: " << path.PathString()
-        );
+        YDB_LOG_CTX_INFO(context.Ctx, "TAlterExtSubDomain Propose",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", path.PathString()});
 
         // No need to check conditions on extsubdomain path: checked in CreateCompatibleAlterExtSubDomain() already
 
@@ -947,11 +988,11 @@ public:
             alter->SetServerlessComputeResourcesMode(inputSettings.GetServerlessComputeResourcesMode());
         }
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TAlterExtSubDomain Propose"
-            << ", opId: " << OperationId
-            << ", subdomain ver " << subdomainInfo->GetVersion()
-            << ", alter ver " << alter->GetVersion()
-        );
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TAlterExtSubDomain Propose, subdomain ver, alter ver",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"GetVersion", subdomainInfo->GetVersion()},
+            {"#_GetVersion", alter->GetVersion()});
 
         auto guard = context.DbGuard();
 
@@ -1029,10 +1070,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"TAlterExtSubDomain AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TAlterExtSubDomain AbortUnsafe",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId});
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -1067,16 +1108,21 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     // This compatibility case should be upholded until Console records would be updated.
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain);
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CreateCompatibleAlterExtSubDomain, opId " << id
-        << ", feature flag EnableAlterDatabaseCreateHiveFirst " << context.SS->EnableAlterDatabaseCreateHiveFirst
-        << ", tx " << tx.ShortDebugString()
-    );
+    YDB_LOG_CTX_INFO(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId, feature flag EnableAlterDatabaseCreateHiveFirst, tx",
+        {"TabletID", context.SS->TabletID()},
+        {"id", id},
+        {"EnableAlterDatabaseCreateHiveFirst", context.SS->EnableAlterDatabaseCreateHiveFirst},
+        {"ShortDebugString", tx.ShortDebugString()});
 
     const TString& parentPathStr = tx.GetWorkingDir();
     const auto& inputSettings = tx.GetSubDomain();
     const TString& name = inputSettings.GetName();
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"CreateCompatibleAlterExtSubDomain, opId " << id << ", path " << parentPathStr << "/" << name);
+    YDB_LOG_CTX_INFO(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId, path /",
+        {"TabletID", context.SS->TabletID()},
+        {"id", id},
+        {"parentPathStr", parentPathStr},
+        {"name", name});
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
         return {CreateReject(id, status, TStringBuilder() << "Invalid AlterExtSubDomain request: " << msg)};

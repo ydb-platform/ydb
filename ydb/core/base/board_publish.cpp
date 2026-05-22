@@ -9,6 +9,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/map.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BOARD_PUBLISH
 
 namespace NKikimr {
 
@@ -143,7 +146,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     }
 
     void HandleUndelivered() {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_PUBLISH,"publish on unavailable statestorage board service");
+        YDB_LOG_ERROR("publish on unavailable statestorage board service");
         Become(&TThis::StateCalm);
     }
 
@@ -152,7 +155,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
 
         if (msg->ReplicaGroups.empty() || msg->ReplicaGroups[0].Replicas.empty()) {
             Y_ABORT_UNLESS(ReplicaPublishActors.empty());
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_PUBLISH,"publish on unconfigured statestorage board service");
+            YDB_LOG_ERROR("publish on unconfigured statestorage board service");
         } else {
             ClusterStateGeneration = msg->ClusterStateGeneration;
             ClusterStateGuid = msg->ClusterStateGuid;

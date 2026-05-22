@@ -12,6 +12,9 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <google/protobuf/util/time_util.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_NODES_MANAGER
 
 namespace NFq {
 
@@ -39,7 +42,7 @@ public:
     static constexpr char ActorName[] = "YQ_PRIVATE_NODES_HEALTH_CHECK";
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,"TNodesHealthCheckActor::OnUndelivered");
+        YDB_LOG_ERROR("TNodesHealthCheckActor::OnUndelivered");
         auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
         res->Status = Ydb::StatusIds::GENERIC_ERROR;
         res->Issues.AddIssue("UNDELIVERED");
@@ -55,9 +58,9 @@ public:
     void Fail(const TString& message, Ydb::StatusIds::StatusCode reqStatus = Ydb::StatusIds::INTERNAL_ERROR) {
         Issues.AddIssue(message);
         const auto codeStr = Ydb::StatusIds_StatusCode_Name(reqStatus);
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,TStringBuilder()
-            << "Failed with code: " << codeStr
-            << " Details: " << Issues.ToString());
+        YDB_LOG_ERROR("Failed with",
+            {"code", codeStr},
+            {"Details", Issues.ToString()});
         auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);

@@ -14,6 +14,9 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
 
 
 namespace NKikimr::NKqp::NRm {
@@ -43,8 +46,9 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, HandleWait);
             cFunc(TEvents::TSystem::Poison, PassAway);
             default:
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, "Unexpected event type: " << ev->GetTypeRewrite()
-                    << ", event: " << ev->GetTypeName());
+                YDB_LOG_CRIT("Unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->GetTypeName()});
         }
     }
 
@@ -55,17 +59,22 @@ public:
         TVector<NKikimrKqp::TKqpNodeResources> resources;
 
         if (event->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"WhiteBoard entries: " << event->InfoEntries.size());
+            YDB_LOG_INFO("WhiteBoard",
+                {"entries", event->InfoEntries.size()});
             resources.resize(event->InfoEntries.size());
 
             int i = 0;
             for (auto& [_, entry] : event->InfoEntries) {
                 Y_PROTOBUF_SUPPRESS_NODISCARD resources[i].ParseFromString(entry.Payload);
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"WhiteBoard [" << i << "]: " << resources[i].ShortDebugString());
+                YDB_LOG_DEBUG("WhiteBoard [",
+                    {"i", i},
+                    {"]", resources[i].ShortDebugString()});
                 i++;
             }
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"WhiteBoard error: " << (int) event->Status << ", path: " << event->Path);
+            YDB_LOG_ERROR("WhiteBoard",
+                {"error", (int) event->Status},
+                {"path", event->Path});
         }
 
         Callback(std::move(resources));

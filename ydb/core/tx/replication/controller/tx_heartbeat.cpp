@@ -1,6 +1,9 @@
 #include "controller_impl.h"
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -33,17 +36,20 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute"
-            << ": pending# " << Self->PendingHeartbeats.size());
+        YDB_LOG_CTX_DEBUG(ctx, "Execute",
+            {"LogPrefix", LogPrefix},
+            {"pending", Self->PendingHeartbeats.size()});
 
         if (Self->Workers.empty()) {
-            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"There are no workers");
+            YDB_LOG_CTX_WARN(ctx, "There are no workers",
+                {"LogPrefix", LogPrefix});
             return true;
         }
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Ambiguous replication instance");
+            YDB_LOG_CTX_ERROR(ctx, "Ambiguous replication instance",
+                {"LogPrefix", LogPrefix});
             return true;
         }
 
@@ -113,15 +119,17 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete"
-            << ": pending# " << Self->PendingHeartbeats.size());
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix},
+            {"pending", Self->PendingHeartbeats.size()});
 
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
 
         if (auto& ev = CommitProposal) {
-            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Propose commit"
-                << ": writeTxId# " << Self->CommittingTxId);
+            YDB_LOG_CTX_NOTICE(ctx, "Propose commit",
+                {"LogPrefix", LogPrefix},
+                {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
 
@@ -157,12 +165,14 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute"
-            << ": writeTxId# " << Self->CommittingTxId);
+        YDB_LOG_CTX_DEBUG(ctx, "Execute",
+            {"LogPrefix", LogPrefix},
+            {"writeTxId", Self->CommittingTxId});
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Ambiguous replication instance");
+            YDB_LOG_CTX_ERROR(ctx, "Ambiguous replication instance",
+                {"LogPrefix", LogPrefix});
             return true;
         }
 
@@ -173,9 +183,10 @@ public:
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
         if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Error committing changes"
-                << ": writeTxId# " << Self->CommittingTxId
-                << ", issues# " << NYql::IssuesFromMessageAsString(record.GetIssues()));
+            YDB_LOG_CTX_WARN(ctx, "Error committing changes",
+                {"LogPrefix", LogPrefix},
+                {"writeTxId", Self->CommittingTxId},
+                {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
             CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
@@ -203,13 +214,15 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
 
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
         if (auto& ev = CommitProposal) {
-            LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Propose commit"
-                << ": writeTxId# " << Self->CommittingTxId);
+            YDB_LOG_CTX_NOTICE(ctx, "Propose commit",
+                {"LogPrefix", LogPrefix},
+                {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
     }
@@ -217,12 +230,15 @@ public:
 }; // TTxCommitChanges
 
 void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-    LOG_TRACE_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Handle " << ev->Get()->ToString());
+    YDB_LOG_CTX_TRACE(ctx, "Handle",
+        {"LogPrefix", LogPrefix},
+        {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
     if (ev->Cookie != CommittingTxId) {
-        LOG_ERROR_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Cookie mismatch"
-            << ": expected# " << CommittingTxId
-            << ", got# " << ev->Cookie);
+        YDB_LOG_CTX_ERROR(ctx, "Cookie mismatch",
+            {"LogPrefix", LogPrefix},
+            {"expected", CommittingTxId},
+            {"got", ev->Cookie});
         return;
     }
 

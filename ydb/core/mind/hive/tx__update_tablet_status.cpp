@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -65,16 +68,13 @@ public:
         SideEffects.Reset(Self->SelfId());
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
         if (tablet != nullptr) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletStatus::Execute for tablet "
-                        << tablet->ToString()
-                        << " status "
-                        << GetStatus()
-                        << " generation "
-                        << Generation
-                        << " follower "
-                        << FollowerId
-                        << " from local "
-                        << Local);
+            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute for tablet status generation follower from local",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"tablet", tablet->ToString()},
+                {"GetStatus", GetStatus()},
+                {"Generation", Generation},
+                {"FollowerId", FollowerId},
+                {"Local", Local});
             NIceDb::TNiceDb db(txc.DB);
             TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
@@ -83,7 +83,10 @@ public:
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
-                        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Tablet " << tablet->GetFullTabletId() << " was starting for " << startTime.Seconds() << " seconds");
+                        YDB_LOG_WARN("Tablet was starting for seconds",
+                            {"GetLogPrefix", GetLogPrefix()},
+                            {"GetFullTabletId", tablet->GetFullTabletId()},
+                            {"Seconds", startTime.Seconds()});
                     }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
                     Self->UpdateCounterTabletsStarting(-1);
@@ -153,8 +156,10 @@ public:
                     if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                         if (IsGoodStatusForPenalties()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
-                            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
-                                << " postponed start until " << leader.PostponedStart);
+                            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute for tablet postponed start until",
+                                {"GetLogPrefix", GetLogPrefix()},
+                                {"tablet", tablet->ToString()},
+                                {"PostponedStart", leader.PostponedStart});
                         }
                     }
                 }
@@ -194,7 +199,9 @@ public:
 
                 case ETabletState::Stopped:
                     Self->ReportStoppedToWhiteboard(tablet->GetLeader());
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+                    YDB_LOG_DEBUG("Report tablet as stopped to Whiteboard",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"tablet", tablet->ToString()});
                     break;
                 case ETabletState::BlockStorage:
                     // do nothing - let the tablet die
@@ -210,7 +217,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", TabletId},
+            {"SideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };

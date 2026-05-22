@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr::NHive {
 
@@ -16,7 +19,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_CONFIGURE_SCALE_RECOMMENDER; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxConfigureScaleRecommender::Execute");
+        YDB_LOG_DEBUG("THive::TTxConfigureScaleRecommender::Execute",
+            {"GetLogPrefix", GetLogPrefix()});
         SideEffects.Reset(Self->SelfId());
 
         auto response = MakeHolder<TEvHive::TEvConfigureScaleRecommenderReply>();
@@ -48,7 +52,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxConfigureScaleRecommender::Complete");
+        YDB_LOG_DEBUG("THive::TTxConfigureScaleRecommender::Complete",
+            {"GetLogPrefix", GetLogPrefix()});
         SideEffects.Complete(ctx);
     }
 };

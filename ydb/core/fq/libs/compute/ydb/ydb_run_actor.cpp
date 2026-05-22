@@ -24,6 +24,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 
 namespace NFq {
@@ -48,7 +51,9 @@ public:
     static constexpr char ActorName[] = "YDB_RUN_ACTOR";
 
     void Bootstrap() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"Boostrap. " << Params);
+        YDB_LOG_INFO("[ydb] Boostrap.",
+            {"QueryId", Params.QueryId},
+            {"Params", Params});
         Pinger = Register(ActorFactory->CreatePinger(SelfId()).release());
         Connector = Register(ActorFactory->CreateConnector().release());
         Become(&TYdbRunActor::StateFunc);
@@ -69,25 +74,33 @@ public:
     void Handle(const TEvYdbCompute::TEvInitializerResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"InitializerResponse (failed). Issues: " << response.Issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] InitializerResponse (failed).",
+                {"QueryId", Params.QueryId},
+                {"Issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"InitializerResponse (success)");
+        YDB_LOG_INFO("[ydb] InitializerResponse (success)",
+            {"QueryId", Params.QueryId});
         Register(ActorFactory->CreateExecuter(SelfId(), Connector, Pinger).release());
     }
 
     void Handle(const TEvYdbCompute::TEvExecuterResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"ExecuterResponse (failed). Issues: " << response.Issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] ExecuterResponse (failed).",
+                {"QueryId", Params.QueryId},
+                {"Issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
         Params.ExecutionId = response.ExecutionId;
         Params.OperationId = response.OperationId;
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"ExecuterResponse (success). ExecutionId: " << Params.ExecutionId << " OperationId: " << Params.OperationId.ToString());
+        YDB_LOG_INFO("[ydb] ExecuterResponse (success).",
+            {"QueryId", Params.QueryId},
+            {"ExecutionId", Params.ExecutionId},
+            {"OperationId", Params.OperationId.ToString()});
         Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
     }
 
@@ -98,13 +111,19 @@ public:
 
         auto& response = *ev->Get();
         if (response.Status == NYdb::EStatus::NOT_FOUND) { // FAILING / ABORTING_BY_USER / ABORTING_BY_SYSTEM
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"StatusTrackerResponse (not found). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] StatusTrackerResponse (not found).",
+                {"QueryId", Params.QueryId},
+                {"Status", response.Status},
+                {"Issues", response.Issues.ToOneLineString()});
             CreateFinalizer(Params.Status);
             return;
         }
 
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"StatusTrackerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] StatusTrackerResponse (failed).",
+                {"QueryId", Params.QueryId},
+                {"Status", response.Status},
+                {"Issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
@@ -114,7 +133,11 @@ public:
             Params.Status = response.ComputeStatus;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"StatusTrackerResponse (success) " << response.Status << " ExecStatus: " << static_cast<int>(response.ExecStatus) << " Issues: " << response.Issues.ToOneLineString());
+        YDB_LOG_INFO("[ydb] StatusTrackerResponse (success)",
+            {"QueryId", Params.QueryId},
+            {"Status", response.Status},
+            {"ExecStatus", static_cast<int>(response.ExecStatus)},
+            {"Issues", response.Issues.ToOneLineString()});
         if (ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
             Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId, true).release());
         } else {
@@ -129,22 +152,34 @@ public:
 
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"ResultWriterResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] ResultWriterResponse (failed).",
+                {"QueryId", Params.QueryId},
+                {"Status", response.Status},
+                {"Issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"ResultWriterResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+        YDB_LOG_INFO("[ydb] ResultWriterResponse (success)",
+            {"QueryId", Params.QueryId},
+            {"Status", response.Status},
+            {"Issues", response.Issues.ToOneLineString()});
         CreateResourcesCleaner();
     }
 
     void Handle(const TEvYdbCompute::TEvResourcesCleanerResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::UNSUPPORTED) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"ResourcesCleanerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] ResourcesCleanerResponse (failed).",
+                {"QueryId", Params.QueryId},
+                {"Status", response.Status},
+                {"Issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"ResourcesCleanerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+        YDB_LOG_INFO("[ydb] ResourcesCleanerResponse (success)",
+            {"QueryId", Params.QueryId},
+            {"Status", response.Status},
+            {"Issues", response.Issues.ToOneLineString()});
         CreateFinalizer(IsAborted ? FederatedQuery::QueryMeta::ABORTING_BY_USER : Params.Status);
     }
 
@@ -152,12 +187,18 @@ public:
         // Pinger is no longer available at this place.
         // The query can be restarted only after the expiration of lease in case of error
         auto& response = *ev->Get();
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"FinalizerResponse ( " << (response.Status == NYdb::EStatus::SUCCESS ? "success" : "failed") << " ) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+        YDB_LOG_INFO("[ydb] FinalizerResponse (",
+            {"QueryId", Params.QueryId},
+            {"#_num_0", (response.Status == NYdb::EStatus::SUCCESS ? "success" : "failed")},
+            {"Status", response.Status},
+            {"Issues", response.Issues.ToOneLineString()});
         FinishAndPassAway();
     }
 
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"QueryActionResult: " << FederatedQuery::QueryAction_Name(ev->Get()->Action));
+        YDB_LOG_INFO("[ydb]",
+            {"QueryId", Params.QueryId},
+            {"QueryActionResult", FederatedQuery::QueryAction_Name(ev->Get()->Action)});
         // Start cancel operation only when StatusTracker or ResultWriter is running
         if (Params.OperationId.GetKind() != NKikimr::NOperationId::TOperationId::UNUSED && !IsAborted && !FinalizationStarted) {
             IsAborted = true;
@@ -168,11 +209,17 @@ public:
     void Handle(const TEvYdbCompute::TEvStopperResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"StopperResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] StopperResponse (failed).",
+                {"QueryId", Params.QueryId},
+                {"Status", response.Status},
+                {"Issues", response.Issues.ToOneLineString()});
             ResignAndPassAway(response.Issues);
             return;
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<"StopperResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
+        YDB_LOG_INFO("[ydb] StopperResponse (success)",
+            {"QueryId", Params.QueryId},
+            {"Status", response.Status},
+            {"Issues", response.Issues.ToOneLineString()});
         CreateResourcesCleaner();
     }
 
@@ -242,7 +289,9 @@ public:
             return false;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " <<stage << "Stop task execution, cancel operation now is running");
+        YDB_LOG_INFO("[ydb] Stop task execution, cancel operation now is running",
+            {"QueryId", Params.QueryId},
+            {"stage", stage});
         return true;
     }
 

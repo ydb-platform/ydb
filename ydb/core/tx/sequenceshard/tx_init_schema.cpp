@@ -1,4 +1,7 @@
 #include "sequenceshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
 
 namespace NKikimr {
 namespace NSequenceShard {
@@ -11,7 +14,8 @@ namespace NSequenceShard {
         TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxInitSchema.Execute");
+            YDB_LOG_TRACE("TTxInitSchema.Execute",
+                {"LogPrefix", LogPrefix});
             NIceDb::TNiceDb db(txc.DB);
             db.Materialize<Schema>();
             Self->RunTxInit(ctx);
@@ -19,7 +23,8 @@ namespace NSequenceShard {
         }
 
         void Complete(const TActorContext&) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxInitSchema.Complete");
+            YDB_LOG_TRACE("TTxInitSchema.Complete",
+                {"LogPrefix", LogPrefix});
         }
     };
 

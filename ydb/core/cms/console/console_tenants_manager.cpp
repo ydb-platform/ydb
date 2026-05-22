@@ -13,6 +13,9 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
@@ -74,7 +77,8 @@ public:
 
     void OnPipeDestroyed(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "pipe destroyed");
+        YDB_LOG_DEBUG("pipe destroyed",
+            {"LogPrefix", LogPrefix});
 
         if (BSControllerPipe) {
             NTabletPipe::CloseClient(ctx, BSControllerPipe);
@@ -106,7 +110,9 @@ public:
         read.SetBoxId(Pool->Config.GetBoxId());
         read.AddName(Pool->Config.GetName());
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "read pool state: " << request->Record.ShortDebugString());
+        YDB_LOG_DEBUG("read pool",
+            {"LogPrefix", LogPrefix},
+            {"state", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -120,7 +126,9 @@ public:
             pool->SetKind(Pool->Kind);
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "send pool request: " << request->Record.ShortDebugString());
+        YDB_LOG_DEBUG("send pool",
+            {"LogPrefix", LogPrefix},
+            {"request", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
@@ -128,7 +136,9 @@ public:
     void DeletePool(const TActorContext &ctx)
     {
         if (!PoolId) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot delete missing pool " << Pool->Config.GetName());
+            YDB_LOG_DEBUG("cannot delete missing pool",
+                {"LogPrefix", LogPrefix},
+                {"GetName", Pool->Config.GetName()});
             ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvPoolDeleted(Tenant, Pool));
             Die(ctx);
             return;
@@ -140,14 +150,17 @@ public:
         del.SetStoragePoolId(PoolId);
         del.SetItemConfigGeneration(Pool->Config.GetItemConfigGeneration());
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "send pool request: " << request->Record.ShortDebugString());
+        YDB_LOG_DEBUG("send pool",
+            {"LogPrefix", LogPrefix},
+            {"request", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, BSControllerPipe, request.Release());
     }
 
     void Bootstrap(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "Bootstrap");
+        YDB_LOG_DEBUG("Bootstrap",
+            {"LogPrefix", LogPrefix});
 
         Become(&TThis::StateRead);
 
@@ -157,7 +170,9 @@ public:
     void ReplyAndDie(IEventBase *resp,
                      const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "reply with " << resp->ToString());
+        YDB_LOG_DEBUG("reply with",
+            {"LogPrefix", LogPrefix},
+            {"resp", resp->ToString()});
         ctx.Send(OwnerId, resp);
         Die(ctx);
     }
@@ -187,7 +202,9 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got read response: " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("got read",
+            {"LogPrefix", LogPrefix},
+            {"response", rec.ShortDebugString()});
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -220,8 +237,11 @@ public:
             if (resp.StatusSize() && resp.GetStatus(0).GetErrorDescription())
                 error = resp.GetStatus(0).GetErrorDescription();
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot read pool '" << Pool->Config.GetName() << "' ("
-                        << Pool->Config.GetStoragePoolId() << "): " << error);
+            YDB_LOG_DEBUG("cannot read pool ' ' (",
+                {"LogPrefix", LogPrefix},
+                {"GetName", Pool->Config.GetName()},
+                {"GetStoragePoolId", Pool->Config.GetStoragePoolId()},
+                {")", error});
             Pool->Issue = error;
             return false;
         }
@@ -233,15 +253,20 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got config response: " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("got config",
+            {"LogPrefix", LogPrefix},
+            {"response", rec.ShortDebugString()});
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
             if (rec.StatusSize() && rec.GetStatus(0).GetErrorDescription())
                 error = rec.GetStatus(0).GetErrorDescription();
 
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot create pool '" << Pool->Config.GetName() << "' ("
-                        << Pool->Config.GetStoragePoolId() << "): " << error);
+            YDB_LOG_ERROR("cannot create pool ' ' (",
+                {"LogPrefix", LogPrefix},
+                {"GetName", Pool->Config.GetName()},
+                {"GetStoragePoolId", Pool->Config.GetStoragePoolId()},
+                {")", error});
             Pool->Issue = error;
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, error), ctx);
             return;
@@ -265,7 +290,9 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got check response: " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("got check",
+            {"LogPrefix", LogPrefix},
+            {"response", rec.ShortDebugString()});
 
         if (!CheckReadStatus(rec)) {
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
@@ -273,16 +300,18 @@ public:
         }
 
         if (rec.GetStatus(0).StoragePoolSize() == 0) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "check response misses pool status");
+            YDB_LOG_ERROR("check response misses pool status",
+                {"LogPrefix", LogPrefix});
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
             return;
         }
 
         const auto &scope = rec.GetStatus(0).GetStoragePool(0).GetScopeId();
         if (TTenantsManager::TDomainId(scope.GetX1(), scope.GetX2()) != Tenant->DomainId) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "scope id check failure "
-                        << Tenant->DomainId
-                        << " vs " << scope.ShortDebugString());
+            YDB_LOG_ERROR("scope id check failure vs",
+                {"LogPrefix", LogPrefix},
+                {"DomainId", Tenant->DomainId},
+                {"ShortDebugString", scope.ShortDebugString()});
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, Pool->Issue), ctx);
             return;
         }
@@ -295,16 +324,20 @@ public:
     {
         auto &rec = ev->Get()->Record.GetResponse();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "got config response: " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("got config",
+            {"LogPrefix", LogPrefix},
+            {"response", rec.ShortDebugString()});
 
         if (!rec.GetSuccess() || !rec.GetStatus(0).GetSuccess()) {
             TString error = rec.GetErrorDescription();
             if (rec.StatusSize() && rec.GetStatus(0).GetErrorDescription())
                 error = rec.GetStatus(0).GetErrorDescription();
 
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,LogPrefix << "cannot delete pool '"
-                        << Pool->Config.GetName() << "' ("
-                        << Pool->Config.GetStoragePoolId() << "): " << error);
+            YDB_LOG_ERROR("cannot delete pool ' ' (",
+                {"LogPrefix", LogPrefix},
+                {"GetName", Pool->Config.GetName()},
+                {"GetStoragePoolId", Pool->Config.GetStoragePoolId()},
+                {")", error});
             Pool->Issue = error;
             ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, error));
             Die(ctx);
@@ -545,7 +578,8 @@ public:
     }
 
     void AlterUserAttribute(const TActorContext &ctx) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
+        YDB_LOG_DEBUG("TSubDomainManip( ) alter user attribute",
+            {"Path", Tenant->Path});
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -556,15 +590,18 @@ public:
         tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
         tx.MutableAlterUserAttributes()->SetPathName(Subdomain.second);
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send alter user attribute cmd: "
-                    << request->ToString());
+        YDB_LOG_TRACE("TSubdomainManip( ) send alter user attribute",
+            {"Path", Tenant->Path},
+            {"cmd", request->ToString()});
 
         ctx.Send(MakeTxProxyID(), request.Release());
     }
 
     void AlterSubdomain(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") alter subdomain version " << Version);
+        YDB_LOG_DEBUG("TSubDomainManip( ) alter subdomain version",
+            {"Path", Tenant->Path},
+            {"Version", Version});
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -578,15 +615,17 @@ public:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSubDomain);
         }
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send alter subdomain cmd: "
-                    << request->ToString());
+        YDB_LOG_TRACE("TSubdomainManip( ) send alter subdomain",
+            {"Path", Tenant->Path},
+            {"cmd", request->ToString()});
 
         ctx.Send(MakeTxProxyID(), request.Release());
     }
 
     void CreateSubdomain(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") create subdomain");
+        YDB_LOG_DEBUG("TSubDomainManip( ) create subdomain",
+            {"Path", Tenant->Path});
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -603,8 +642,9 @@ public:
         if (Tenant->Attributes.UserAttributesSize())
             tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send subdomain creation cmd: "
-                    << request->ToString());
+        YDB_LOG_TRACE("TSubdomainManip( ) send subdomain creation",
+            {"Path", Tenant->Path},
+            {"cmd", request->ToString()});
 
         AuditLogBeginConfigureDatabase(
             Tenant->PeerName,
@@ -618,7 +658,8 @@ public:
 
     void DropSubdomain(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubDomainManip(" << Tenant->Path << ") drop subdomain");
+        YDB_LOG_DEBUG("TSubDomainManip( ) drop subdomain",
+            {"Path", Tenant->Path});
         auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -630,8 +671,9 @@ public:
         tx.SetWorkingDir(Subdomain.first);
         tx.MutableDrop()->SetName(Subdomain.second);
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send subdomain drop cmd: "
-                    << request->ToString());
+        YDB_LOG_TRACE("TSubdomainManip( ) send subdomain drop",
+            {"Path", Tenant->Path},
+            {"cmd", request->ToString()});
 
         AuditLogBeginRemoveDatabase(
             Tenant->PeerName,
@@ -648,7 +690,9 @@ public:
         auto *domain = AppData(ctx)->DomainsInfo->GetDomainByName(ExtractDomain(Tenant->Path));
         if (!domain) {
             TString error = "cannot find domain info";
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") " << error);
+            YDB_LOG_CRIT("TSubdomainManip(",
+                {"Path", Tenant->Path},
+                {"error", error});
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, error), ctx);
             return;
         }
@@ -674,7 +718,8 @@ public:
 
     void ReplyAndDie(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") done");
+        YDB_LOG_DEBUG("TSubdomainManip( ) done",
+            {"Path", Tenant->Path});
         if (Action == CREATE)
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainCreated(Tenant, SchemeshardId, PathId), ctx);
         else if (Action == CONFIGURE || Action == CONFIGURE_ATTR)
@@ -690,7 +735,9 @@ public:
     void ReplyAndDie(IEventBase *resp,
                      const TActorContext &ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") reply with " << resp->ToString());
+        YDB_LOG_DEBUG("TSubdomainManip( ) reply with",
+            {"Path", Tenant->Path},
+            {"resp", resp->ToString()});
 
         using TAuditFunc = decltype(AuditLogEndConfigureDatabase);
         auto audit = [&](TAuditFunc auditFunc) {
@@ -748,7 +795,9 @@ public:
         auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(TxId);
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") send notification request: " << request->ToString());
+        YDB_LOG_TRACE("TSubdomainManip( ) send notification",
+            {"Path", Tenant->Path},
+            {"request", request->ToString()});
 
         NTabletPipe::SendData(ctx, Pipe, request.Release());
     }
@@ -764,7 +813,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ")::Bootstrap");
+        YDB_LOG_DEBUG("TSubdomainManip( )::Bootstrap",
+            {"Path", Tenant->Path});
 
         if (Action == CREATE) {
             Become(&TThis::StateSubdomain);
@@ -783,13 +833,15 @@ public:
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionRegistered: "
-                    << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG("TSubdomainManip( ) got",
+            {"Path", Tenant->Path},
+            {"TEvNotifyTxCompletionRegistered", ev->Get()->Record.ShortDebugString()});
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionResult: "
-                    << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG("TSubdomainManip( ) got",
+            {"Path", Tenant->Path},
+            {"TEvNotifyTxCompletionResult", ev->Get()->Record.ShortDebugString()});
 
         if (Action == CONFIGURE && Tenant->Attributes.UserAttributesSize()) {
             AlterUserAttribute(ctx);
@@ -811,8 +863,9 @@ public:
 
     void HandleSubdomain(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got propose result: "
-                    << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG("TSubdomainManip( ) got propose",
+            {"Path", Tenant->Path},
+            {"result", ev->Get()->Record.ShortDebugString()});
 
         auto &rec = ev->Get()->Record;
         switch (rec.GetStatus()) {
@@ -842,7 +895,8 @@ public:
                 // Check if removal finished or in-progress.
                 if (rec.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist
                     || rec.GetSchemeShardStatus() == NKikimrScheme::StatusMultipleModifications) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") consider dubdomain is removed");
+                    YDB_LOG_DEBUG("TSubdomainManip( ) consider dubdomain is removed",
+                        {"Path", Tenant->Path});
                     ActionFinished(ctx);
                     break;
                 }
@@ -860,8 +914,9 @@ public:
     {
         const auto &rec = ev->Get()->GetRecord();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") got describe result: "
-                    << rec.ShortDebugString());
+        YDB_LOG_DEBUG("TSubdomainManip( ) got describe",
+            {"Path", Tenant->Path},
+            {"result", rec.ShortDebugString()});
 
         if (Action == REMOVE) {
             switch (rec.GetStatus()) {
@@ -880,11 +935,11 @@ public:
         }
 
         if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") "
-                        << "Receive TEvDescribeSchemeResult with bad status "
-                        << NKikimrScheme::EStatus_Name(rec.GetStatus()) <<
-                        " reason is <" << rec.GetReason() << ">" <<
-                        " while resolving subdomain " << Tenant->Path);
+            YDB_LOG_ERROR("TSubdomainManip( Receive TEvDescribeSchemeResult with bad status reason is < > while resolving subdomain",
+                {"Path", Tenant->Path},
+                {"#_NKikimrScheme::EStatus_Name(rec.GetStatus())", NKikimrScheme::EStatus_Name(rec.GetStatus())},
+                {"GetReason", rec.GetReason()},
+                {"#_Path", Tenant->Path});
 
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx);
             return;
@@ -893,11 +948,11 @@ public:
         auto pathType = rec.GetPathDescription().GetSelf().GetPathType();
         auto expectedPathType = Tenant->IsExternalSubdomain ? NKikimrSchemeOp::EPathTypeExtSubDomain : NKikimrSchemeOp::EPathTypeSubDomain;
         if (pathType != expectedPathType) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TSubdomainManip(" << Tenant->Path << ") "
-                        << "Resolve subdomain fail, tenant path "
-                        << Tenant->Path << " has invalid path type "
-                        << NKikimrSchemeOp::EPathType_Name(pathType)
-                        << " but expected " << NKikimrSchemeOp::EPathType_Name(expectedPathType));
+            YDB_LOG_ERROR("TSubdomainManip( Resolve subdomain fail, tenant path has invalid path type but expected",
+                {"Path", Tenant->Path},
+                {"#_Path", Tenant->Path},
+                {"#_NKikimrSchemeOp::EPathType_Name(pathType)", NKikimrSchemeOp::EPathType_Name(pathType)},
+                {"#_NKikimrSchemeOp::EPathType_Name(expectedPathType)", NKikimrSchemeOp::EPathType_Name(expectedPathType)});
 
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, "bad path type"), ctx);
             return;
@@ -967,7 +1022,8 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TScaleRecommenderManip(" << Tenant->Path << ")::Bootstrap");
+        YDB_LOG_DEBUG("TScaleRecommenderManip( )::Bootstrap",
+            {"Path", Tenant->Path});
 
         Become(&TThis::StateResolveHive);
         ResolveHive(ctx);
@@ -1598,7 +1654,7 @@ void TTenantsManager::ClearState()
 
 void TTenantsManager::Bootstrap(const TActorContext &ctx)
 {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"TTenantsManager::Bootstrap");
+    YDB_LOG_DEBUG("TTenantsManager::Bootstrap");
     Become(&TThis::StateWork);
     TxProcessor = Self.GetTxProcessor()->GetSubProcessor("tenants",
                                                          ctx,
@@ -1820,9 +1876,9 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
 
     if (Config.TotalComputationalUnitsQuota
         && Config.TotalComputationalUnitsQuota < stats.Total.Allocated) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Cluster computational units quota is exceeded ("
-                     << stats.Total.Allocated << "/"
-                     << Config.TotalComputationalUnitsQuota << ")");
+        YDB_LOG_NOTICE("Cluster computational units quota is exceeded ( /",
+            {"Allocated", stats.Total.Allocated},
+            {"TotalComputationalUnitsQuota", Config.TotalComputationalUnitsQuota});
         Counters.Inc(COUNTER_COMPUTATIONAL_QUOTA_EXCEEDED);
         code = Ydb::StatusIds::UNAVAILABLE;
         error = "Cluster computational units quota is exceeded";
@@ -1834,11 +1890,11 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
             ui64 cur = pr.second.Allocated * 100;
             ui64 quota = pr.second.Connected * Config.TotalComputationalUnitsLoadQuota;
             if (cur > quota) {
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Cluster computational units load quota ("
-                             << Config.TotalComputationalUnitsLoadQuota
-                             << "%) is exceeded for slots '"
-                             << pr.first << "' (" << pr.second.Allocated
-                             << "/" << pr.second.Connected << ")");
+                YDB_LOG_NOTICE("Cluster computational units load quota ( %) is exceeded for slots ' ' ( /",
+                    {"TotalComputationalUnitsLoadQuota", Config.TotalComputationalUnitsLoadQuota},
+                    {"first", pr.first},
+                    {"Allocated", pr.second.Allocated},
+                    {"Connected", pr.second.Connected});
                 Counters.Inc(COUNTER_COMPUTATIONAL_LOAD_QUOTA_EXCEEDED);
                 code = Ydb::StatusIds::UNAVAILABLE;
                 error = "Cluster computational units load quota is exceeded";
@@ -1849,10 +1905,10 @@ bool TTenantsManager::CheckComputationalUnitsQuota(const TUnitsCount &units,
         ui64 cur = stats.Total.Allocated * 100;
         ui64 quota = stats.Total.Connected * Config.TotalComputationalUnitsLoadQuota;
         if (cur > quota) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Cluster computational units load quota ("
-                         << Config.TotalComputationalUnitsLoadQuota
-                         << "%) is exceeded (" << stats.Total.Allocated
-                         << "/" << stats.Total.Connected << ")");
+            YDB_LOG_NOTICE("Cluster computational units load quota ( %) is exceeded ( /",
+                {"TotalComputationalUnitsLoadQuota", Config.TotalComputationalUnitsLoadQuota},
+                {"Allocated", stats.Total.Allocated},
+                {"Connected", stats.Total.Connected});
             Counters.Inc(COUNTER_COMPUTATIONAL_LOAD_QUOTA_EXCEEDED);
             code = Ydb::StatusIds::UNAVAILABLE;
             error = "Cluster computational units load quota is exceeded";
@@ -2046,9 +2102,9 @@ void TTenantsManager::DeleteTenantPools(TTenant::TPtr tenant, const TActorContex
         }
 
         if (pr.second->Borrowed) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_TENANTS,"Mark borrowed pool as deleted"
-                << ": tenant# " << tenant->Path
-                << ", pool# " << pr.second->Config.GetName());
+            YDB_LOG_DEBUG("Mark borrowed pool as deleted",
+                {"tenant", tenant->Path},
+                {"pool", pr.second->Config.GetName()});
 
             pr.second->Worker = SelfId();
             ctx.Send(SelfId(), new TTenantsManager::TEvPrivate::TEvPoolDeleted(tenant, pr.second));

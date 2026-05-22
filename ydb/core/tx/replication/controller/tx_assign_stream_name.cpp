@@ -1,6 +1,9 @@
 #include "controller_impl.h"
 
 #include <util/generic/guid.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -22,30 +25,35 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"LogPrefix", LogPrefix},
+            {"Execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown replication",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Unknown target"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown target",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
         if (!target->GetStreamName().empty()) {
-            LOG_WARN_S  (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Stream name already assigned"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_CTX_WARN(ctx, "Stream name already assigned",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
@@ -70,16 +78,18 @@ public:
             NIceDb::TUpdate<Schema::SrcStreams::ConsumerName>(target->GetStreamConsumerName())
         );
 
-        LOG_NOTICE_S(ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Stream name assigned"
-            << ": rid# " << rid
-            << ", tid# " << tid
-            << ", name# " << target->GetStreamName());
+        YDB_LOG_CTX_NOTICE(ctx, "Stream name assigned",
+            {"LogPrefix", LogPrefix},
+            {"rid", rid},
+            {"tid", tid},
+            {"name", target->GetStreamName()});
 
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S (ctx, NKikimrServices::REPLICATION_CONTROLLER, LogPrefix <<"Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

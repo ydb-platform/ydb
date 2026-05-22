@@ -7,6 +7,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/set.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SESSION
 
 
 namespace NKikimr::NKqp::NTopic {
@@ -525,10 +528,10 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                 TTopicPartition key{path, partition.GetPartitionId()};
 
                 if (auto p = Operations_.find(key); p != Operations_.end()) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION,TStringBuilder() << "(topic, partition, tablet): "
-                          << "'" << key.Topic_ << "'"
-                          << ", " << partition.GetPartitionId()
-                          << ", " << partition.GetTabletId());
+                    YDB_LOG_DEBUG("(topic, partition, tablet): ' '",
+                        {"Topic_", key.Topic_},
+                        {"GetPartitionId", partition.GetPartitionId()},
+                        {"GetTabletId", partition.GetTabletId()});
 
                     p->second.SetTabletId(partition.GetTabletId());
                 }

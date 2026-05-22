@@ -23,6 +23,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <contrib/libs/fmt/include/fmt/format.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -58,7 +61,8 @@ public:
     static constexpr char ActorName[] = "FQ_SYNCHRONIZE_SCOPE_ACTOR";
 
     void Bootstrap() {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start synchronization for the scope " << Scope);
+        YDB_LOG_INFO("[ydb] [SynchronizationService]: Start synchronization for the scope",
+            {"Scope", Scope});
         Client = CreateNewTableClient(ConnectionConfig,
                                       YqSharedResources,
                                       CredentialsProviderFactory);
@@ -68,7 +72,8 @@ public:
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle:
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start fetch connections stage for the scope (single) " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start fetch connections stage for the scope (single)",
+                {"Scope", Scope});
             SendListConnections();
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
@@ -87,32 +92,40 @@ public:
     void Handle(const TEvControlPlaneStorage::TEvDescribeDatabaseResponse::TPtr& ev) {
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"DescribeDatabaseResponse, scope = " << Scope << " (failed): " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: DescribeDatabaseResponse, scope",
+                {"Scope", Scope},
+                {"(failed)", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error describe a database at the synchronization stage");
             return;
         }
         ComputeDatabase = ev.Get()->Get()->Record;
         if (!ComputeDatabase.synchronized()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start fetch connections stage for the scope (cms or ydbcp) " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start fetch connections stage for the scope (cms or ydbcp)",
+                {"Scope", Scope});
             SendListConnections();
             return;
         }
 
         if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
             Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start creating resource pools for the scope (cms or ydbcp) " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope (cms or ydbcp)",
+                {"Scope", Scope});
             CreateResourcePools();
             return;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Synchronization has already completed for the scope " << Scope);
+        YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed for the scope",
+            {"Scope", Scope});
         ReplyAndPassAway();
     }
 
     void Handle(const TEvControlPlaneStorage::TEvListConnectionsResponse::TPtr& ev) {
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"ListConnectionsResponse, scope = " << Scope << " page token = " << PageToken << " (failed): " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: ListConnectionsResponse, scope page token",
+                {"Scope", Scope},
+                {"PageToken", PageToken},
+                {"(failed)", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error getting a list of connections at the synchronization stage");
             return;
         }
@@ -120,7 +133,10 @@ public:
         const auto& result = ev->Get()->Result;
         for (const auto& connection: result.connection()) {
             const auto& id = connection.meta().id();
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Received connection: scope = " << Scope << " , id = " << id << ", type = " << static_cast<int>(connection.content().setting().connection_case()));
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Received connection: scope, id, type",
+                {"Scope", Scope},
+                {"id", id},
+                {"#_static_cast<int>(connection.content().setting().connection_case())", static_cast<int>(connection.content().setting().connection_case())});
             Connections[id] = connection;
         }
 
@@ -129,7 +145,8 @@ public:
             PageToken = nextPageToken;
             SendListConnections();
         } else {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start fetch bindings stage for the scope " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start fetch bindings stage for the scope",
+                {"Scope", Scope});
             Become(&TSynchronizeScopeActor::StateFetchBindingsFunc);
             PageToken = {};
             SendListBindings();
@@ -145,7 +162,10 @@ public:
     void Handle(const TEvControlPlaneStorage::TEvListBindingsResponse::TPtr& ev) {
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"ListBindingsResponse, scope = " << Scope << " page token = " << PageToken << " (failed): " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: ListBindingsResponse, scope page token",
+                {"Scope", Scope},
+                {"PageToken", PageToken},
+                {"(failed)", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error getting a list of bindings at the synchronization stage");
             return;
         }
@@ -153,7 +173,10 @@ public:
         const auto& result = ev->Get()->Result;
         for (const auto& binding: result.binding()) {
             const auto& id = binding.meta().id();
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Received binding id: scope = " << Scope << " , id = " << id << ", type = " << FederatedQuery::BindingSetting::BindingType_Name(binding.type()));
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Received binding id: scope, id, type",
+                {"Scope", Scope},
+                {"id", id},
+                {"#_FederatedQuery::BindingSetting::BindingType_Name(binding.type())", FederatedQuery::BindingSetting::BindingType_Name(binding.type())});
 
             BindingIds.insert(binding.meta().id());
         }
@@ -163,7 +186,8 @@ public:
             PageToken = nextPageToken;
             SendListBindings();
         } else {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start describe bindings stage for the scope " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start describe bindings stage for the scope",
+                {"Scope", Scope});
             PageToken = {};
             SendDescribeBindings();
         }
@@ -174,15 +198,21 @@ public:
         const auto& result = ev->Get()->Result;
         const auto& id = result.binding().meta().id();
         if (issues) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"DescribeBindingResponse, scope = " << Scope << " (failed): " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: DescribeBindingResponse, scope",
+                {"Scope", Scope},
+                {"(failed)", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, TStringBuilder {} << "Error getting a description of a binding with id '" << id << "' at the synchronization stage");
             return;
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Received binding: scope = " << Scope << " , id = " << id << ", type = " << static_cast<int>(result.binding().content().setting().binding_case()));
+        YDB_LOG_INFO("[ydb] [SynchronizationService]: Received binding: scope, id, type",
+            {"Scope", Scope},
+            {"id", id},
+            {"#_static_cast<int>(result.binding().content().setting().binding_case())", static_cast<int>(result.binding().content().setting().binding_case())});
         Bindings[result.binding().meta().id()] = result.binding();
 
         if (BindingIds.size() == Bindings.size()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start create external data sources stage for the scope " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external data sources stage for the scope",
+                {"Scope", Scope});
             Become(&TSynchronizeScopeActor::StateCreateExternalDataSourcesFunc);
             CreateExternalDataSources();
         }
@@ -197,7 +227,8 @@ public:
     void ProcessCreateConnection() {
         ProcessedConnections++;
         if (ProcessedConnections == Connections.size()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start create external tables stage for the scope " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external tables stage for the scope",
+                {"Scope", Scope});
             Become(&TSynchronizeScopeActor::StateCreateExternalTablesFunc);
             CreateExternalTables();
         }
@@ -209,7 +240,10 @@ public:
     }
 
     void Handle(const TEvControlPlaneProxy::TEvCreateConnectionResponse::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Create external data source response (error): " << ProcessedConnections << " of " << Connections.size() << ", issues = " << ev.Get()->Get()->Issues.ToOneLineString());
+        YDB_LOG_ERROR("[ydb] [SynchronizationService]: Create external data source response of, issues",
+            {"(error)", ProcessedConnections},
+            {"size", Connections.size()},
+            {"ToOneLineString", ev.Get()->Get()->Issues.ToOneLineString()});
         ProcessCreateConnection();
         Issues.AddIssues(ev.Get()->Get()->Issues);
     }
@@ -233,7 +267,10 @@ public:
     }
 
     void Handle(const TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Create external table response (error): " << ProcessedBindings << " of " << Bindings.size() << ", issues = " << ev.Get()->Get()->Issues.ToOneLineString());
+        YDB_LOG_ERROR("[ydb] [SynchronizationService]: Create external table response of, issues",
+            {"(error)", ProcessedBindings},
+            {"size", Bindings.size()},
+            {"ToOneLineString", ev.Get()->Get()->Issues.ToOneLineString()});
 
         ProcessCreateBinding();
 
@@ -243,12 +280,15 @@ public:
     void Handle(const TEvControlPlaneStorage::TEvModifyDatabaseResponse::TPtr& ev) {
         const auto& issues = ev->Get()->Issues;
         if (ev->Get()->Issues) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"ModifyDatabaseResponse, scope = " << Scope << " (failed): " << issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: ModifyDatabaseResponse, scope",
+                {"Scope", Scope},
+                {"(failed)", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues, "Error modify a database at the synchronization stage");
             return;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Synchronization has already completed for the scope (cms or ydbcp) " << Scope);
+        YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed for the scope (cms or ydbcp)",
+            {"Scope", Scope});
         ReplyAndPassAway();
     }
 
@@ -272,7 +312,10 @@ public:
             }
         }
         if (!status.IsSuccess()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Create resource pool response (error): " << ProcessedResourcePools << " of " << WorkloadManagerConfig.ResourcePoolSize() << ", issues = " << status.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: Create resource pool response of, issues",
+                {"(error)", ProcessedResourcePools},
+                {"ResourcePoolSize", WorkloadManagerConfig.ResourcePoolSize()},
+                {"ToOneLineString", status.GetIssues().ToOneLineString()});
             Issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
             ProcessCreateResourcePool();
             return;
@@ -344,7 +387,10 @@ private:
             const auto& content = connection.content();
             const auto& setting = content.setting();
             if (!ComputeConfig.IsConnectionCaseEnabled(setting.connection_case())) {
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Exclude connection by type: scope = " << Scope << " , id = " << meta.id() << ", type = " << static_cast<int>(setting.connection_case()));
+                YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude connection by type: scope, id, type",
+                    {"Scope", Scope},
+                    {"id", meta.id()},
+                    {"#_static_cast<int>(setting.connection_case())", static_cast<int>(setting.connection_case())});
                 excludeIds.push_back(meta.id());
                 continue;
             }
@@ -356,7 +402,10 @@ private:
                 case FederatedQuery::Acl::PRIVATE:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MAX_SENTINEL_DO_NOT_USE_:
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Exclude connection by visibility: scope = " << Scope << " , id = " << meta.id() << ", visibility = " << FederatedQuery::Acl::Visibility_Name(content.acl().visibility()));
+                YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude connection by visibility: scope, id, visibility",
+                    {"Scope", Scope},
+                    {"id", meta.id()},
+                    {"#_FederatedQuery::Acl::Visibility_Name(content.acl().visibility())", FederatedQuery::Acl::Visibility_Name(content.acl().visibility())});
                 excludeIds.push_back(meta.id());
                 continue;
             }
@@ -369,7 +418,10 @@ private:
                 case FederatedQuery::IamAuth::kCurrentIam:
                 case FederatedQuery::IamAuth::kToken:
                 case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Exclude connection by auth: scope = " << Scope << " , id = " << meta.id() << ", auth = " << static_cast<int>(authCase));
+                YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude connection by auth: scope, id, auth",
+                    {"Scope", Scope},
+                    {"id", meta.id()},
+                    {"#_static_cast<int>(authCase)", static_cast<int>(authCase)});
                 excludeIds.push_back(meta.id());
             }
         }
@@ -386,13 +438,19 @@ private:
             const auto& setting = content.setting();
             const auto& connectionId = content.connection_id();
             if (!Connections.contains(connectionId)) {
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Exclude binding because connection is filtered out: scope = " << Scope << " , id = " << meta.id() << ", connection id = " << connectionId);
+                YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude binding because connection is filtered out: scope, id, connection id",
+                    {"Scope", Scope},
+                    {"id", meta.id()},
+                    {"connectionId", connectionId});
                 excludeIds.push_back(meta.id());
                 continue;
             }
 
             if (!ComputeConfig.IsBindingCaseEnabled(setting.binding_case())) {
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Exclude binding by type: scope = " << Scope << " , id = " << meta.id() << ", type = " << static_cast<int>(setting.binding_case()));
+                YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude binding by type: scope, id, type",
+                    {"Scope", Scope},
+                    {"id", meta.id()},
+                    {"#_static_cast<int>(setting.binding_case())", static_cast<int>(setting.binding_case())});
                 excludeIds.push_back(meta.id());
                 continue;
             }
@@ -404,7 +462,10 @@ private:
                 case FederatedQuery::Acl::PRIVATE:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MAX_SENTINEL_DO_NOT_USE_:
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Exclude binding by visibility: scope = " << Scope << " , id = " << meta.id() << ", visibility = " << FederatedQuery::Acl::Visibility_Name(content.acl().visibility()));
+                YDB_LOG_INFO("[ydb] [SynchronizationService]: Exclude binding by visibility: scope, id, visibility",
+                    {"Scope", Scope},
+                    {"id", meta.id()},
+                    {"#_FederatedQuery::Acl::Visibility_Name(content.acl().visibility())", FederatedQuery::Acl::Visibility_Name(content.acl().visibility())});
                 excludeIds.push_back(meta.id());
             }
         }
@@ -419,7 +480,9 @@ private:
         ExcludeUnsupportedExternalTables();
         auto issues = ValidateSources();
         if (issues) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Validate sources (error): scope = " << Scope << " " << issues.ToOneLineString());
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Validate sources (error): scope",
+                {"Scope", Scope},
+                {"ToOneLineString", issues.ToOneLineString()});
             ReplyErrorAndPassAway(issues);
             return;
         }
@@ -507,7 +570,9 @@ private:
     }
 
     void SendListConnections() const {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Send list connections: scope = " << Scope << ", page token = " << PageToken);
+        YDB_LOG_TRACE("[ydb] [SynchronizationService]: Send list connections: scope, page token",
+            {"Scope", Scope},
+            {"PageToken", PageToken});
         auto request = CreateListRequest<FederatedQuery::ListConnectionsRequest>(PageToken);
         TPermissions permissions = CreateSuperUserPermissions();
         std::unique_ptr<TEvControlPlaneStorage::TEvListConnectionsRequest> event{new TEvControlPlaneStorage::TEvListConnectionsRequest{
@@ -519,7 +584,9 @@ private:
     }
 
     void SendListBindings() const {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Send list bindings: scope = " << Scope << ", page token = " << PageToken);
+        YDB_LOG_TRACE("[ydb] [SynchronizationService]: Send list bindings: scope, page token",
+            {"Scope", Scope},
+            {"PageToken", PageToken});
         auto request = CreateListRequest<FederatedQuery::ListBindingsRequest>(PageToken);
         TPermissions permissions = CreateSuperUserPermissions();
         std::unique_ptr<TEvControlPlaneStorage::TEvListBindingsRequest> event{new TEvControlPlaneStorage::TEvListBindingsRequest{
@@ -536,14 +603,17 @@ private:
         }
 
         if (BindingIds.empty()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start create external data sources stage for the scope (bindigns list is empty) " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start create external data sources stage for the scope (bindigns list is empty)",
+                {"Scope", Scope});
             Become(&TSynchronizeScopeActor::StateCreateExternalDataSourcesFunc);
             CreateExternalDataSources();
         }
     }
 
     void SendDescribeBinding(const TString& bindingId) const {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Send describe binding: scope = " << Scope << ", binding id = " << bindingId);
+        YDB_LOG_TRACE("[ydb] [SynchronizationService]: Send describe binding: scope, binding id",
+            {"Scope", Scope},
+            {"bindingId", bindingId});
         FederatedQuery::DescribeBindingRequest request;
         request.set_binding_id(bindingId);
         TPermissions permissions = CreateSuperUserPermissions();
@@ -558,7 +628,8 @@ private:
     void FinishExternalSourcesSynchronization() {
         if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
             Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Start creating resource pools for the scope (cms or ydbcp) " << Scope << " after external sources synchronization");
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope (cms or ydbcp) after external sources synchronization",
+                {"Scope", Scope});
             CreateResourcePools();
             return;
         }
@@ -567,7 +638,8 @@ private:
 
     void SendFinalModifyDatabase() {
         if (Issues) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Synchronization has already completed with errors for scope: " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed with errors for",
+                {"scope", Scope});
             Issues.AddIssue(TStringBuilder{} << "Connections created " << SuccessfullyCreatedConnections << " of " << ProcessedConnections);
             Issues.AddIssue(TStringBuilder{} << "Bindings created " << SuccessfullyCreatedBindings << " of " << ProcessedBindings);
             if (WorkloadManagerConfig.GetEnable()) {
@@ -585,7 +657,8 @@ private:
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle:
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Synchronization has already completed for the scope (single) " << Scope);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Synchronization has already completed for the scope (single)",
+                {"Scope", Scope});
             ReplyAndPassAway();
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
@@ -651,7 +724,9 @@ private:
     bool AlterResourcePool(size_t index) {
         using namespace fmt::literals;
         if (index >= WorkloadManagerConfig.ResourcePoolSize()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Alter resource pool has been failed. Invalid index: " << index << " of " << WorkloadManagerConfig.ResourcePoolSize());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: Alter resource pool has been failed. Invalid of",
+                {"index", index},
+                {"ResourcePoolSize", WorkloadManagerConfig.ResourcePoolSize()});
             Issues.AddIssue(TStringBuilder{} << "Alter resource pool has been failed. Invalid index: " << index << " of " << WorkloadManagerConfig.ResourcePoolSize());
             return false;
         }
@@ -832,7 +907,8 @@ public:
     void Handle(TEvYdbCompute::TEvSynchronizeResponse::TPtr& ev) {
         auto it = Cache.find(ev->Get()->Scope);
         if (it == Cache.end()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Response: not found for scope " << ev->Get()->Scope);
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: Response: not found for scope",
+                {"#_ev->Get()->Scope", ev->Get()->Scope});
             return;
         }
 
@@ -843,14 +919,18 @@ public:
         it->second.Requests.clear();
 
         if (ev->Get()->Status == NYdb::EStatus::SUCCESS && ev->Get()->Issues) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Synchronization failed (skipped some bindings and connections) for " << ev->Get()->Scope << " with issues " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: Synchronization failed (skipped some bindings and connections) for with issues",
+                {"#_ev->Get()->Scope", ev->Get()->Scope},
+                {"ToOneLineString", ev->Get()->Issues.ToOneLineString()});
             Counters.IncFailed(ev->Get()->Scope);
             it->second.Status = EScopeStatus::SYNCHRONIZED;
         } else if (ev->Get()->Status == NYdb::EStatus::SUCCESS) {
             Counters.IncOk(ev->Get()->Scope);
             it->second.Status = EScopeStatus::SYNCHRONIZED;
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " <<"Synchronization failed for " << ev->Get()->Scope << " with issues " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: Synchronization failed for with issues",
+                {"#_ev->Get()->Scope", ev->Get()->Scope},
+                {"ToOneLineString", ev->Get()->Issues.ToOneLineString()});
             Counters.IncFailed(ev->Get()->Scope);
             Cache.erase(it);
         }

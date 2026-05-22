@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -15,7 +18,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_BOOT_QUEUE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessBootQueue()::Execute");
+        YDB_LOG_DEBUG("THive::TTxProcessBootQueue()::Execute",
+            {"GetLogPrefix", GetLogPrefix()});
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         Self->ExecuteProcessBootQueue(db, SideEffects);
@@ -23,7 +27,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"THive::TTxProcessBootQueue()::Complete");
+        YDB_LOG_DEBUG("THive::TTxProcessBootQueue()::Complete",
+            {"GetLogPrefix", GetLogPrefix()});
         SideEffects.Complete(ctx);
     }
 };

@@ -1,4 +1,7 @@
 #include "sequenceshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
 
 namespace NKikimr {
 namespace NSequenceShard {
@@ -16,21 +19,24 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute"
-                << " PathId# " << pathId);
+            YDB_LOG_TRACE("TTxDropSequence.Execute",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId});
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::PIPE_OUTDATED);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute PIPE_OUTDATED"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxDropSequence.Execute PIPE_OUTDATED",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::SEQUENCE_NOT_FOUND);
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute SEQUENCE_NOT_FOUND"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxDropSequence.Execute SEQUENCE_NOT_FOUND",
+                    {"LogPrefix", LogPrefix},
+                    {"PathId", pathId});
                 return true;
             }
 
@@ -39,13 +45,15 @@ namespace NSequenceShard {
             Self->Sequences.erase(it);
 
             SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::SUCCESS);
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Execute SUCCESS"
-                << " PathId# " << pathId);
+            YDB_LOG_NOTICE("TTxDropSequence.Execute SUCCESS",
+                {"LogPrefix", LogPrefix},
+                {"PathId", pathId});
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::SEQUENCESHARD, LogPrefix <<"TTxDropSequence.Complete");
+            YDB_LOG_TRACE("TTxDropSequence.Complete",
+                {"LogPrefix", LogPrefix});
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

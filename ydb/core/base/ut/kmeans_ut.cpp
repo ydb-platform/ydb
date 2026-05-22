@@ -239,13 +239,13 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         // L=1, T=10, N=1, P=1: C = sqrt(10) ≈ 3.16 → 3
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 1, 1.0), 3);
 
-        // L=5, T=10, N=1, P=1: very small, clamped to MinClusters(2)
+        // L=5, T=10, N=1, P=1: very small, clamped to 2u(2)
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(5, 10, 1, 1.0), 2);
 
         // Clamped to MaxClusters(2048) when result > 2048
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 1000000000, 1.0), 2048);
 
-        // rowCount = 0: division by zero gives 0 → clamped to MinClusters
+        // rowCount = 0: division by zero gives 0 → clamped to 2u
         UNIT_ASSERT_VALUES_EQUAL(ComputeOptimalClusters(1, 10, 0, 1.0), 2);
     }
 
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
         settings.mutable_settings()->set_vector_dimension(4);
 
-        // rowCount < 100 → levels=1, clusters=MinClusters(2)
+        // rowCount < 100 → levels=1, clusters=2u(2)
         AutoSelectKMeansSettings(settings, 50);
         UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 2);
@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(ValidateSettings(settings, error));
     }
 
-    Y_UNIT_TEST(AutoSelectKMeansClampNeverBelowMinClusters) {
+    Y_UNIT_TEST(AutoSelectKMeansClampNeverBelow2u) {
         Ydb::Table::KMeansTreeSettings settings;
         TString error;
         settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         // Bit vector with dimension 1: extremely small per-dimension constraint
         settings.mutable_settings()->set_vector_dimension(1);
 
-        // Both missing → clamp should not dip below MinClusters
+        // Both missing → clamp should not dip below 2u
         AutoSelectKMeansSettings(settings, 100);
         UNIT_ASSERT(settings.clusters() >= 2);
         UNIT_ASSERT(ValidateSettings(settings, error));
@@ -510,6 +510,72 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 500);
         // But ValidateSettings will catch the violation
         UNIT_ASSERT(!ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKSmallPrefix) {
+        // Small prefix (< 100 rows) should return 2u
+        UNIT_ASSERT_VALUES_EQUAL(ComputeAdaptiveK(10, 1, 1, 100), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ComputeAdaptiveK(50, 2, 1, 500), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(ComputeAdaptiveK(99, 1, 1, 100), 2u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKModeratePrefix) {
+        // Moderate prefix should return K between 2u and maxK
+        ui32 k = ComputeAdaptiveK(10000, 1, 1, 500);
+        UNIT_ASSERT_GE(k, 2u);
+        UNIT_ASSERT_LE(k, 500u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKLargePrefix) {
+        // Large prefix should return larger K
+        ui32 kSmall = ComputeAdaptiveK(1000, 1, 1, 500);
+        ui32 kLarge = ComputeAdaptiveK(1000000, 1, 1, 500);
+        UNIT_ASSERT_GE(kLarge, kSmall);
+        UNIT_ASSERT_LE(kLarge, 500u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKRespectsMaxClusters) {
+        // Result should never exceed maxClusters
+        ui32 k = ComputeAdaptiveK(10000000, 1, 1, 10);
+        UNIT_ASSERT_LE(k, 10u);
+        UNIT_ASSERT_GE(k, 2u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKNeverBelow2u) {
+        // Result should never go below 2u (when maxK >= 2u)
+        ui32 k = ComputeAdaptiveK(100, 1, 1, 500);
+        UNIT_ASSERT_GE(k, 2u);
+    }
+
+    Y_UNIT_TEST(ComputeAdaptiveKWithOverlap) {
+        // With overlap_clusters > 1, search width changes
+        ui32 kNoOverlap = ComputeAdaptiveK(100000, 2, 1, 500);
+        ui32 kOverlap = ComputeAdaptiveK(100000, 2, 4, 500);
+        // Both should be valid
+        UNIT_ASSERT_GE(kNoOverlap, 2u);
+        UNIT_ASSERT_GE(kOverlap, 2u);
+        UNIT_ASSERT_LE(kNoOverlap, 500u);
+        UNIT_ASSERT_LE(kOverlap, 500u);
+    }
+
+    Y_UNIT_TEST(FillSettingAdaptiveClusters) {
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+
+        UNIT_ASSERT(FillSetting(settings, "adaptive_clusters", "true", error));
+        UNIT_ASSERT(settings.adaptive_clusters());
+
+        settings.Clear();
+        UNIT_ASSERT(FillSetting(settings, "adaptive_clusters", "false", error));
+        UNIT_ASSERT(!settings.adaptive_clusters());
+
+        settings.Clear();
+        UNIT_ASSERT(FillSetting(settings, "adaptive_clusters", "1", error));
+        UNIT_ASSERT(settings.adaptive_clusters());
+
+        settings.Clear();
+        UNIT_ASSERT(!FillSetting(settings, "adaptive_clusters", "maybe", error));
+        UNIT_ASSERT(!error.empty());
     }
 }
 

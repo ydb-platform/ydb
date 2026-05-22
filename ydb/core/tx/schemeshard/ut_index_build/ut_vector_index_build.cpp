@@ -2259,4 +2259,105 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         NKikimr::ShutdownAwsAPI();
     }
 
+    Y_UNIT_TEST(AdaptivePrefixedVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write 200 rows: prefix = key % 17, giving 17 prefixes with ~12 rows each
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build non-adaptive index first (K=4, each prefix gets 4 clusters)
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB",
+            "/MyRoot/ServerLessDB/Table", "index_fixed", {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto fixedLevelRows = CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_fixed/indexImplLevelTable");
+        Cerr << "... fixed level table contains " << fixedLevelRows << " rows" << Endl;
+
+        // Build adaptive index (K=4 as max, but small prefixes get K=2)
+        buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index_adaptive", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"prefix", "embedding"}, {}, {}
+            });
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->mutable_vector_settings()->set_adaptive_clusters(true);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        auto adaptiveLevelRows = CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_adaptive/indexImplLevelTable");
+        Cerr << "... adaptive level table contains " << adaptiveLevelRows << " rows" << Endl;
+
+        // Verify posting tables have all rows
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_fixed/indexImplPostingTable"), 200);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tenantSchemeShard,
+            "/MyRoot/ServerLessDB/Table/index_adaptive/indexImplPostingTable"), 200);
+
+        // With adaptive mode, small prefixes (~12 rows < 100) get K=2 instead of K=4,
+        // so the adaptive level table should have fewer cluster rows
+        Cerr << "... fixed clusters: " << fixedLevelRows << ", adaptive clusters: " << adaptiveLevelRows << Endl;
+        UNIT_ASSERT_C(adaptiveLevelRows < fixedLevelRows,
+            "Adaptive index should have fewer clusters than fixed: "
+            << adaptiveLevelRows << " >= " << fixedLevelRows);
+
+        // Read the adaptive level table and count clusters per parent to verify
+        // that some prefixes got K=2 (adaptive minimum for small prefixes)
+        {
+            const TString levelTable = "/MyRoot/ServerLessDB/Table/index_adaptive/indexImplLevelTable";
+            auto tableDesc = DescribePath(runtime, tenantSchemeShard, levelTable, true, false, true);
+            const auto& pathDesc = tableDesc.GetPathDescription();
+
+            THashMap<ui64, ui32> clustersPerParent;
+            for (const auto& part : pathDesc.GetTablePartitions()) {
+                auto result = ReadTable(runtime, part.GetDatashardId(), pathDesc.GetSelf().GetName(),
+                    {"__ydb_parent", "__ydb_id"}, {"__ydb_parent"});
+                auto value = NClient::TValue::Create(result);
+                auto list = value["Result"]["List"];
+                for (size_t i = 0; i < list.Size(); ++i) {
+                    ui64 parent = list[i]["__ydb_parent"];
+                    clustersPerParent[parent]++;
+                }
+            }
+
+            ui32 prefixesWithK2 = 0;
+            for (const auto& [parent, count] : clustersPerParent) {
+                Cerr << "... parent " << parent << " has " << count << " clusters" << Endl;
+                if (count == 2) {
+                    prefixesWithK2++;
+                }
+            }
+            Cerr << "... prefixes with K=2: " << prefixesWithK2 << Endl;
+            UNIT_ASSERT_C(prefixesWithK2 > 0,
+                "At least some prefixes should have K=2 clusters in adaptive mode");
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
 }

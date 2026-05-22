@@ -1904,6 +1904,9 @@ message TEvPrefixKMeansRequest {
     optional bool OverlapOutForeign = 23;
 
     optional NKikimrTx.TKeyRange KeyRange = 24;
+
+    optional bool Adaptive = 25;
+    optional uint32 Levels = 26;
 }
 
 message TEvPrefixKMeansResponse {

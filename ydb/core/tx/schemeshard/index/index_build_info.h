@@ -173,6 +173,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 OverlapClusters = 0;
         double OverlapRatio = 0;
         bool IsPrefixed = false;
+        bool Adaptive = false;
 
         // progress
         enum EState : ui32 {
@@ -603,6 +604,7 @@ public:
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
+                    indexInfo->KMeans.Adaptive = desc.settings().adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
                         ? desc.settings().overlap_clusters()

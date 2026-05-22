@@ -4,6 +4,7 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -88,19 +89,17 @@ private:
     const ui64 MinBytes;
 
     ui64 Rows = 0;
-    ui64 GroupRows = 0;
     ui64 BytesRead = 0;
 
-    TVector<ui32> Tags;
     NBackup::IChecksum::TPtr Checksum;
     std::shared_ptr<parquet::WriterProperties> WriteProperties;
 
     TString ErrorString;
 
-    std::unordered_map<ui32, std::shared_ptr<IArrayBuilder>> ArrayBuilders;
     std::shared_ptr<arrow::Schema> Schema;
     std::shared_ptr<ICheckpointOutputStream> OutStream;
     std::unique_ptr<parquet::arrow::FileWriter> ArrowWriter;
+    NArrow::TArrowBatchBuilder BatchBuilder;
 
     static constexpr TStringBuf LogPrefix() { return "parquet"sv; }
 }; // TS3ParquetExportBuffer
@@ -143,67 +142,48 @@ NBackup::IChecksum *TS3ParquetExportBuffer::CreateChecksum(const TMaybe<TS3Expor
 void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32> &tags) {
     Y_ENSURE(tags.size() == Columns.size());
 
-    Tags = tags;
-
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    ArrayBuilders.clear();
-    for (const auto& tag : Tags) {
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> ydbColumns;
+    std::set<std::string> notNullColumns;
+    for (const auto& tag : tags) {
         auto it = Columns.find(tag);
         Y_ENSURE(it != Columns.end());
         auto column = it->second;
 
-        auto typeId = column.Type.GetTypeId();
-        fields.push_back(arrow::field(column.Name, ArrowDataType(typeId)));
-
-        auto arrayBuilder = CreateArrayBuilder(typeId);
-        ArrayBuilders.insert({tag, std::move(arrayBuilder)});
+        ydbColumns.push_back({column.Name, column.Type});
+        if (column.NotNull) {
+            notNullColumns.insert(column.Name);
+        }
     }
-    Schema = std::make_shared<arrow::Schema>(fields);
+
+    arrow::Status status;
+    if (!(status = BatchBuilder.Start(ydbColumns)).ok()) {
+        ErrorString = (std::ostringstream() << "Failed to start batch builder: " << status.message()).str();
+        return;
+    }
+
+    auto schemaRes = NArrow::MakeArrowSchema(ydbColumns, notNullColumns);
+    if (!schemaRes.ok()) {
+        ErrorString = (std::ostringstream() << "Failed to make arrow schema: " << schemaRes.status().message()).str();
+        return;
+    }
+    Schema.swap(schemaRes.ValueOrDie());
+
     ArrowWriter.reset();
 }
 
 bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow &row) {
-    arrow::Status status;
-
-    Y_ENSURE((*row).size() == Tags.size());
-    for (size_t idx = 0; idx < Tags.size(); idx++) {
-        auto tag = Tags[idx];
-        auto builderIt = ArrayBuilders.find(tag);
-        Y_ENSURE(builderIt != ArrayBuilders.end());
-
-        std::shared_ptr<IArrayBuilder> builder = builderIt->second;
-        if (!builder) {
-            if (ErrorString.empty()) {
-                ErrorString = "Array builder is null";
-            }
-            return false;
-        }
-
-        const auto &cell = (*row)[idx];
-        BytesRead += cell.Size();
-        if (cell.IsNull()) {
-            if (!(status = builder->AppendNull()).ok()) {
-                ErrorString =
-                    (std::ostringstream()
-                        << "Failed to append null to array builder: " << status.message())
-                    .str();
-                return false;
-            }
-            continue;
-        }
-        if (!(status = builder->Append(cell)).ok()) {
-            ErrorString =
-                (std::ostringstream()
-                    << "Failed to append value to array builder: " << status.message())
-                .str();
-            return false;
-        }
+    if (!ErrorString.empty()) {
+        return false;
     }
 
-    Rows++;
-    GroupRows++;
+    arrow::Status status;
 
-    if (GroupRows >= RowGroupSize) {
+    auto bytesBefore = BatchBuilder.Bytes();
+    BatchBuilder.AddRow(*row);
+    BytesRead += BatchBuilder.Bytes() - bytesBefore;
+    Rows++;
+
+    if (BatchBuilder.Rows() >= RowGroupSize) {
         return Flush(false);
     }
 
@@ -211,10 +191,13 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow &row) {
 }
 
 IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats &stats) {
+    // std::cerr << "PrepareEvent; last=" << last << "; rows=" << Rows << "; bytes=" << BytesRead << std::endl;
+
     stats.Rows = Rows;
     stats.BytesRead = BytesRead;
 
     if (!Flush(last)) {
+        // std::cerr << "PrepareEvent; failed" << std::endl;
         return nullptr;
     }
 
@@ -228,13 +211,17 @@ IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer
     BytesRead = 0;
 
     if (Checksum && last) {
+        // std::cerr << "PrepareEvent; checksum" << std::endl;
         return new TEvExportScan::TEvBuffer<TBuffer>(std::move(buffer), last, Checksum->Finalize());
     } else {
+        // std::cerr << "PrepareEvent; no checksum" << std::endl;
         return new TEvExportScan::TEvBuffer<TBuffer>(std::move(buffer), last);
     }
 }
 
 bool TS3ParquetExportBuffer::Flush(bool last) {
+    // std::cerr << "Flush; batchRows=" << BatchBuilder.Rows() << "; totalRows=" << Rows << "; bytes=" << BytesRead << std::endl;
+
     arrow::Status status;
 
     if (!ArrowWriter) {
@@ -255,22 +242,20 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
         }
     }
 
-    if (GroupRows != 0) {
-        std::vector<std::shared_ptr<arrow::Array>> arrays(Columns.size());
+    if (BatchBuilder.Rows() != 0) {
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        auto batch = BatchBuilder.FlushBatch(true, false);
+        batches.push_back(batch);
+        auto tableResult = arrow::Table::FromRecordBatches(batches);
+        if (!tableResult.ok()) {
+            ErrorString =
+                (std::ostringstream()
+                    << "Failed to make table from batches: " << tableResult.status().message())
+                .str();
+            return false;
+        };
 
-        for (size_t idx = 0; idx < Tags.size(); idx++) {
-            auto tag = Tags[idx];
-            auto builderIt = ArrayBuilders.find(tag);
-            if (builderIt == ArrayBuilders.end()) {
-                ErrorString = "Failed to find column builder";
-                return false;
-            }
-            auto builder = builderIt->second;
-            auto arr = builder->Finish();
-            arrays[idx] = arr;
-        }
-
-        auto table = arrow::Table::Make(Schema, arrays);
+        auto table = tableResult.ValueOrDie();
         if (!(status = ArrowWriter->WriteTable(*table, table->num_rows())).ok()) {
             ErrorString =
                 (std::ostringstream()
@@ -290,18 +275,12 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
         }
     }
 
-    GroupRows = 0;
-
     return true;
 }
 
 void TS3ParquetExportBuffer::Clear() {
     Rows = 0;
-    GroupRows = 0;
     BytesRead = 0;
-    for (auto &builder : ArrayBuilders) {
-        builder.second->Reset();
-    }
 }
 
 bool TS3ParquetExportBuffer::IsFilled() const {
@@ -311,159 +290,159 @@ bool TS3ParquetExportBuffer::IsFilled() const {
 
 TString TS3ParquetExportBuffer::GetError() const { return ErrorString; }
 
-template <typename T, typename B> class TAsValueBuilder : public IArrayBuilder {
-public:
-    TAsValueBuilder() : builder_(std::make_shared<B>()) {}
+// template <typename T, typename B> class TAsValueBuilder : public IArrayBuilder {
+// public:
+//     TAsValueBuilder() : builder_(std::make_shared<B>()) {}
 
-    arrow::Status Append(const TCell &cell) override {
-        return builder_->Append(cell.AsValue<T>());
-    }
+//     arrow::Status Append(const TCell &cell) override {
+//         return builder_->Append(cell.AsValue<T>());
+//     }
 
-    arrow::Status AppendNull() override { return builder_->AppendNull(); }
+//     arrow::Status AppendNull() override { return builder_->AppendNull(); }
 
-    std::shared_ptr<arrow::Array> Finish() override {
-        auto result = builder_->Finish().ValueOrDie();
-        builder_->Reset();
-        return result;
-    }
+//     std::shared_ptr<arrow::Array> Finish() override {
+//         auto result = builder_->Finish().ValueOrDie();
+//         builder_->Reset();
+//         return result;
+//     }
 
-    void Reset() override { builder_->Reset(); }
+//     void Reset() override { builder_->Reset(); }
 
-private:
-    std::shared_ptr<B> builder_;
-};
+// private:
+//     std::shared_ptr<B> builder_;
+// };
 
-using TInt8Builder = TAsValueBuilder<i8, arrow::Int8Builder>;
-using TUInt8Builder = TAsValueBuilder<ui8, arrow::UInt8Builder>;
-using TInt16Builder = TAsValueBuilder<i16, arrow::Int16Builder>;
-using TUInt16Builder = TAsValueBuilder<ui16, arrow::UInt16Builder>;
-using TInt32Builder = TAsValueBuilder<i32, arrow::Int32Builder>;
-using TUInt32Builder = TAsValueBuilder<ui32, arrow::UInt32Builder>;
-using TInt64Builder = TAsValueBuilder<i64, arrow::Int64Builder>;
-using TUInt64Builder = TAsValueBuilder<ui64, arrow::UInt64Builder>;
-using TFloatBuilder = TAsValueBuilder<float, arrow::FloatBuilder>;
-using TDoubleBuilder = TAsValueBuilder<double, arrow::DoubleBuilder>;
-using TBoolBuilder = TAsValueBuilder<bool, arrow::BooleanBuilder>;
+// using TInt8Builder = TAsValueBuilder<i8, arrow::Int8Builder>;
+// using TUInt8Builder = TAsValueBuilder<ui8, arrow::UInt8Builder>;
+// using TInt16Builder = TAsValueBuilder<i16, arrow::Int16Builder>;
+// using TUInt16Builder = TAsValueBuilder<ui16, arrow::UInt16Builder>;
+// using TInt32Builder = TAsValueBuilder<i32, arrow::Int32Builder>;
+// using TUInt32Builder = TAsValueBuilder<ui32, arrow::UInt32Builder>;
+// using TInt64Builder = TAsValueBuilder<i64, arrow::Int64Builder>;
+// using TUInt64Builder = TAsValueBuilder<ui64, arrow::UInt64Builder>;
+// using TFloatBuilder = TAsValueBuilder<float, arrow::FloatBuilder>;
+// using TDoubleBuilder = TAsValueBuilder<double, arrow::DoubleBuilder>;
+// using TBoolBuilder = TAsValueBuilder<bool, arrow::BooleanBuilder>;
 
-template <typename B> class TAsBufBuilder : public IArrayBuilder {
-public:
-    TAsBufBuilder() : builder_(std::make_shared<B>()) {}
+// template <typename B> class TAsBufBuilder : public IArrayBuilder {
+// public:
+//     TAsBufBuilder() : builder_(std::make_shared<B>()) {}
 
-    arrow::Status Append(const TCell &cell) override {
-        const auto buf = cell.AsBuf();
-        return builder_->Append(arrow::util::string_view{buf.data(), buf.size()});
-    }
+//     arrow::Status Append(const TCell &cell) override {
+//         const auto buf = cell.AsBuf();
+//         return builder_->Append(arrow::util::string_view{buf.data(), buf.size()});
+//     }
 
-    arrow::Status AppendNull() override { return builder_->AppendNull(); }
+//     arrow::Status AppendNull() override { return builder_->AppendNull(); }
 
-    std::shared_ptr<arrow::Array> Finish() override {
-        auto result = builder_->Finish().ValueOrDie();
-        builder_->Reset();
-        return result;
-    }
+//     std::shared_ptr<arrow::Array> Finish() override {
+//         auto result = builder_->Finish().ValueOrDie();
+//         builder_->Reset();
+//         return result;
+//     }
 
-    void Reset() override { builder_->Reset(); }
+//     void Reset() override { builder_->Reset(); }
 
-private:
-    std::shared_ptr<B> builder_;
-};
+// private:
+//     std::shared_ptr<B> builder_;
+// };
 
-using TStringBuilder = TAsBufBuilder<arrow::StringBuilder>;
+// using TStringBuilder = TAsBufBuilder<arrow::StringBuilder>;
 
-std::shared_ptr<IArrayBuilder> TS3ParquetExportBuffer::CreateArrayBuilder(NScheme::TTypeId typeId) {
-    switch (typeId) {
-    case NScheme::NTypeIds::Int8:
-        return std::make_shared<TInt8Builder>();
-    case NScheme::NTypeIds::Uint8:
-        return std::make_shared<TUInt8Builder>();
-    case NScheme::NTypeIds::Int16:
-        return std::make_shared<TInt16Builder>();
-    case NScheme::NTypeIds::Uint16:
-    case NScheme::NTypeIds::Date:
-        return std::make_shared<TUInt16Builder>();
-    case NScheme::NTypeIds::Int32:
-        return std::make_shared<TInt32Builder>();
-    case NScheme::NTypeIds::Uint32:
-    case NScheme::NTypeIds::Datetime:
-    case NScheme::NTypeIds::Date32:
-        return std::make_shared<TUInt32Builder>();
-    case NScheme::NTypeIds::Int64:
-    case NScheme::NTypeIds::Datetime64:
-    case NScheme::NTypeIds::Timestamp64:
-    case NScheme::NTypeIds::Interval:
-    case NScheme::NTypeIds::Interval64:
-        return std::make_shared<TInt64Builder>();
-    case NScheme::NTypeIds::Uint64:
-    case NScheme::NTypeIds::Timestamp:
-        return std::make_shared<TUInt64Builder>();
-    case NScheme::NTypeIds::Float:
-        return std::make_shared<TFloatBuilder>();
-    case NScheme::NTypeIds::Double:
-        return std::make_shared<TDoubleBuilder>();
-    case NScheme::NTypeIds::Bool:
-        return std::make_shared<TBoolBuilder>();
-    case NScheme::NTypeIds::String:
-    case NScheme::NTypeIds::String4k:
-    case NScheme::NTypeIds::String2m:
-    case NScheme::NTypeIds::Utf8:
-    case NScheme::NTypeIds::Json:
-    case NScheme::NTypeIds::Yson:
-        return std::make_shared<TStringBuilder>();
-    // TODO(diseaz): JsonDocument, Pg, Uuid, DyNumber, Decimal
-    }
+// std::shared_ptr<IArrayBuilder> TS3ParquetExportBuffer::CreateArrayBuilder(NScheme::TTypeId typeId) {
+//     switch (typeId) {
+//     case NScheme::NTypeIds::Int8:
+//         return std::make_shared<TInt8Builder>();
+//     case NScheme::NTypeIds::Uint8:
+//         return std::make_shared<TUInt8Builder>();
+//     case NScheme::NTypeIds::Int16:
+//         return std::make_shared<TInt16Builder>();
+//     case NScheme::NTypeIds::Uint16:
+//     case NScheme::NTypeIds::Date:
+//         return std::make_shared<TUInt16Builder>();
+//     case NScheme::NTypeIds::Int32:
+//         return std::make_shared<TInt32Builder>();
+//     case NScheme::NTypeIds::Uint32:
+//     case NScheme::NTypeIds::Datetime:
+//     case NScheme::NTypeIds::Date32:
+//         return std::make_shared<TUInt32Builder>();
+//     case NScheme::NTypeIds::Int64:
+//     case NScheme::NTypeIds::Datetime64:
+//     case NScheme::NTypeIds::Timestamp64:
+//     case NScheme::NTypeIds::Interval:
+//     case NScheme::NTypeIds::Interval64:
+//         return std::make_shared<TInt64Builder>();
+//     case NScheme::NTypeIds::Uint64:
+//     case NScheme::NTypeIds::Timestamp:
+//         return std::make_shared<TUInt64Builder>();
+//     case NScheme::NTypeIds::Float:
+//         return std::make_shared<TFloatBuilder>();
+//     case NScheme::NTypeIds::Double:
+//         return std::make_shared<TDoubleBuilder>();
+//     case NScheme::NTypeIds::Bool:
+//         return std::make_shared<TBoolBuilder>();
+//     case NScheme::NTypeIds::String:
+//     case NScheme::NTypeIds::String4k:
+//     case NScheme::NTypeIds::String2m:
+//     case NScheme::NTypeIds::Utf8:
+//     case NScheme::NTypeIds::Json:
+//     case NScheme::NTypeIds::Yson:
+//         return std::make_shared<TStringBuilder>();
+//     // TODO(diseaz): JsonDocument, Pg, Uuid, DyNumber, Decimal
+//     }
 
-    ErrorString = "Unsupported type";
-    return nullptr;
-}
+//     ErrorString = "Unsupported type";
+//     return nullptr;
+// }
 
-std::shared_ptr<arrow::DataType> TS3ParquetExportBuffer::ArrowDataType(NScheme::TTypeId typeId) {
-    switch (typeId) {
-    case NScheme::NTypeIds::Int8:
-        return arrow::int8();
-    case NScheme::NTypeIds::Uint8:
-        return arrow::uint8();
-    case NScheme::NTypeIds::Int16:
-        return arrow::int16();
-    case NScheme::NTypeIds::Uint16:
-    case NScheme::NTypeIds::Date:
-        return arrow::uint16();
-    case NScheme::NTypeIds::Int32:
-        return arrow::int32();
-    case NScheme::NTypeIds::Uint32:
-    case NScheme::NTypeIds::Date32:
-    case NScheme::NTypeIds::Datetime:
-        return arrow::uint32();
-    case NScheme::NTypeIds::Int64:
-        return arrow::int64();
-    case NScheme::NTypeIds::Uint64:
-        return arrow::uint64();
-    case NScheme::NTypeIds::Interval:
-    case NScheme::NTypeIds::Interval64:
-        return arrow::duration(arrow::TimeUnit::MICRO);
-    case NScheme::NTypeIds::Datetime64:
-        return arrow::timestamp(arrow::TimeUnit::SECOND);
-    case NScheme::NTypeIds::Timestamp:
-    case NScheme::NTypeIds::Timestamp64:
-        return arrow::timestamp(arrow::TimeUnit::MICRO);
-    case NScheme::NTypeIds::Float:
-        return arrow::float32();
-    case NScheme::NTypeIds::Double:
-        return arrow::float64();
-    case NScheme::NTypeIds::Bool:
-        return arrow::boolean();
-    case NScheme::NTypeIds::String:
-    case NScheme::NTypeIds::String4k:
-    case NScheme::NTypeIds::String2m:
-    case NScheme::NTypeIds::Utf8:
-    case NScheme::NTypeIds::Json:
-    case NScheme::NTypeIds::Yson:
-        return arrow::utf8();
-    // TODO(diseaz): JsonDocument, Pg, Uuid, DyNumber, Decimal
-    }
+// std::shared_ptr<arrow::DataType> TS3ParquetExportBuffer::ArrowDataType(NScheme::TTypeId typeId) {
+//     switch (typeId) {
+//     case NScheme::NTypeIds::Int8:
+//         return arrow::int8();
+//     case NScheme::NTypeIds::Uint8:
+//         return arrow::uint8();
+//     case NScheme::NTypeIds::Int16:
+//         return arrow::int16();
+//     case NScheme::NTypeIds::Uint16:
+//     case NScheme::NTypeIds::Date:
+//         return arrow::uint16();
+//     case NScheme::NTypeIds::Int32:
+//         return arrow::int32();
+//     case NScheme::NTypeIds::Uint32:
+//     case NScheme::NTypeIds::Date32:
+//     case NScheme::NTypeIds::Datetime:
+//         return arrow::uint32();
+//     case NScheme::NTypeIds::Int64:
+//         return arrow::int64();
+//     case NScheme::NTypeIds::Uint64:
+//         return arrow::uint64();
+//     case NScheme::NTypeIds::Interval:
+//     case NScheme::NTypeIds::Interval64:
+//         return arrow::duration(arrow::TimeUnit::MICRO);
+//     case NScheme::NTypeIds::Datetime64:
+//         return arrow::timestamp(arrow::TimeUnit::SECOND);
+//     case NScheme::NTypeIds::Timestamp:
+//     case NScheme::NTypeIds::Timestamp64:
+//         return arrow::timestamp(arrow::TimeUnit::MICRO);
+//     case NScheme::NTypeIds::Float:
+//         return arrow::float32();
+//     case NScheme::NTypeIds::Double:
+//         return arrow::float64();
+//     case NScheme::NTypeIds::Bool:
+//         return arrow::boolean();
+//     case NScheme::NTypeIds::String:
+//     case NScheme::NTypeIds::String4k:
+//     case NScheme::NTypeIds::String2m:
+//     case NScheme::NTypeIds::Utf8:
+//     case NScheme::NTypeIds::Json:
+//     case NScheme::NTypeIds::Yson:
+//         return arrow::utf8();
+//     // TODO(diseaz): JsonDocument, Pg, Uuid, DyNumber, Decimal
+//     }
 
-    ErrorString = "Unsupported type";
-    return nullptr;
-}
+//     ErrorString = "Unsupported type";
+//     return nullptr;
+// }
 
 class CheckpointOutputStream : public ICheckpointOutputStream {
 public:

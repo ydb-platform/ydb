@@ -176,11 +176,8 @@ After running this command, the source file `/tmp/config.yaml` is no longer used
   Start the {{ ydb-short-name }} storage service on each static cluster node:
 
   ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
+  sudo -u ydb bash -c 'cd /opt/ydb && export LD_LIBRARY_PATH=/opt/ydb/lib && /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml \
+      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static &'
   ```
 
 * Using systemd
@@ -238,11 +235,11 @@ After starting the static nodes, verify they are working via the {{ ydb-short-na
 
 The cluster initialization operation configures the set of static nodes listed in the cluster configuration file for {{ ydb-short-name }} data storage.
 
-You will need the Certificate Authority (CA) certificate file `ca.crt` for cluster initialization; its path must be specified when running the relevant commands. Before running these commands, copy the `ca.crt` file to the server where they will be executed.
+You will need the `ca.crt`, `node.crt`, and `node.key` files for cluster initialization; their paths must be specified when running the relevant commands. Before running these commands, copy these files to the server where they will be executed.
 
 On one of the storage servers in the cluster, run the commands:
 
-Initialize the cluster using the obtained token
+Initialize the cluster
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
@@ -258,7 +255,7 @@ After initializing the cluster, you must obtain an authentication token before r
 
 ```bash
 /opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file ca.crt \
---user root --no-password auth get-token --force > auth_token
+--user root --no-password auth get-token --force > token-file
 ```
 
 If the cluster initialization completes successfully, the command exit code should be zero.
@@ -275,7 +272,7 @@ On one of the storage servers in the cluster, run the commands:
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f token-file \
     admin database /Root/testdb create ssd:8
 echo $?
 ```
@@ -297,19 +294,16 @@ The example commands above use the following parameters:
   Start the {{ ydb-short-name }} dynamic node for the `/Root/testdb` database:
 
   ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+  sudo -u ydb bash -c 'cd /opt/ydb && export LD_LIBRARY_PATH=/opt/ydb/lib && /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --yaml-config  /opt/ydb/cfg/config.yaml \
+      --yaml-config /opt/ydb/cfg/config.yaml \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
       --grpc-key /opt/ydb/certs/node.key \
       --node-broker grpcs://<ydb-static-node1>:2135 \
       --node-broker grpcs://<ydb-static-node2>:2135 \
-      --node-broker grpcs://<ydb-static-node3>:2135
+      --node-broker grpcs://<ydb-static-node3>:2135 &'
   ```
 
   In the example above, `<ydb-static-node1>`, `<ydb-static-node2>`, and `<ydb-static-node3>` are the FQDNs of any three servers running static cluster nodes.
@@ -373,7 +367,7 @@ Start additional dynamic nodes on other servers to scale and ensure database fau
 1. Set a password for the `root` account using the token obtained earlier:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file token-file \
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 

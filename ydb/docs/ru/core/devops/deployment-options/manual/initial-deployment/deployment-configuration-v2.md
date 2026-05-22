@@ -178,11 +178,8 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir /opt/ydb/cfg --from-co
   Запустите сервис хранения данных {{ ydb-short-name }} на каждом статическом узле кластера:
 
   ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --kafka-port 9092 --mon-cert /opt/ydb/certs/web.pem --node static
+  sudo -u ydb bash -c 'cd /opt/ydb && export LD_LIBRARY_PATH=/opt/ydb/lib && /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml \
+      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --kafka-port 9092 --mon-cert /opt/ydb/certs/web.pem --node static &'
   ```
 
 * С использованием systemd
@@ -240,11 +237,11 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir /opt/ydb/cfg --from-co
 
 Операция инициализации кластера осуществляет настройку набора статических узлов, перечисленных в конфигурационном файле кластера, для хранения данных {{ ydb-short-name }}.
 
-Для инициализации кластера потребуется файл сертификата центра регистрации `ca.crt`, путь к которому должен быть указан при выполнении соответствующих команд. Перед выполнением соответствующих команд скопируйте файл `ca.crt` на сервер, на котором эти команды будут выполняться.
+Для инициализации кластера потребуются файлы `ca.crt`, `node.crt` и `node.key`, пути к которым должны быть указаны при выполнении соответствующих команд. Перед выполнением соответствующих команд скопируйте эти файлы на сервер, на котором эти команды будут выполняться.
 
 На одном из серверов хранения в составе кластера выполните команды:
 
-Инициализируйте кластер используя полученный токен
+Инициализируйте кластер
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
@@ -277,7 +274,7 @@ echo $?
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f token-file \
     admin database /Root/testdb create ssd:8
 echo $?
 ```
@@ -299,20 +296,17 @@ echo $?
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
   ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
+  sudo -u ydb bash -c 'cd /opt/ydb && export LD_LIBRARY_PATH=/opt/ydb/lib && /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
       --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
       --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
       --kafka-port 9093 \
-      --yaml-config  /opt/ydb/cfg/config.yaml \
+      --yaml-config /opt/ydb/cfg/config.yaml \
       --tenant /Root/testdb \
       --grpc-cert /opt/ydb/certs/node.crt \
       --grpc-key /opt/ydb/certs/node.key \
       --node-broker grpcs://<ydb-static-node1>:2135 \
       --node-broker grpcs://<ydb-static-node2>:2135 \
-      --node-broker grpcs://<ydb-static-node3>:2135
+      --node-broker grpcs://<ydb-static-node3>:2135 &'
   ```
 
   В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
@@ -377,7 +371,7 @@ echo $?
 1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file auth_token \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file token-file \
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 

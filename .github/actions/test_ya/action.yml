@@ -383,6 +383,10 @@ runs:
         YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
+        CLEANUP_DAEMON_LOG="$PUBLIC_DIR/cleanup_daemon.log"
+        CLEANUP_DAEMON_LOG_URL="$PUBLIC_DIR_URL/cleanup_daemon.log"
+        echo "21 [Cleanup daemon log]($CLEANUP_DAEMON_LOG_URL)" >> $SUMMARY_LINKS
+
         BUILD_FAILED=0
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
@@ -432,19 +436,26 @@ runs:
           cleanup_orphaned_processes() {
               set +x
               local ya_make_pid=$1
-              local log_file="$TMP_DIR/cleanup_daemon.log"
-              
+              local log_file="$CLEANUP_DAEMON_LOG"
+
               echo "[$(date)] Cleanup daemon started, monitoring ya make PID: $ya_make_pid" > "$log_file"
-              
+
+              dump_process_tree() {
+                  echo "[$(date)] Process tree snapshot:" >> "$log_file"
+                  ps -eo pid,ppid,user,etime,rss,pmem,args --sort=-rss | awk 'NR==1{print "PID PPID USER ELAPSED RSS_GiB %MEM CMD"; next}NR<=260{printf "%s %s %s %s %.3f %s %s\n", $1, $2, $3, $4, $5/1024/1024, $6, substr($0, index($0,$7))}' >> "$log_file"
+                  echo "" >> "$log_file"
+              }
+
               # Track processes we've already killed to avoid killing them multiple times
               declare -A killed_pids
-              
+
               while kill -0 "$ya_make_pid" 2>/dev/null; do
                   local killed_count=0
-                  
+                  local tree_dumped=0
+
                   # Find the single ya-bin child process (first generation)
                   local ya_bin_pid=$(pgrep -P "$ya_make_pid" "ya-bin" 2>/dev/null | head -1)
-                  
+
                   if [[ -n "$ya_bin_pid" ]]; then
                       # Get all child processes of ya-bin (second generation)
                       for child_pid in $(pgrep -P "$ya_bin_pid" "" 2>/dev/null); do
@@ -453,6 +464,10 @@ runs:
                               local cmd=$(ps -p "$child_pid" -o command= 2>/dev/null | awk '{print $1}')
                               if [[ "$cmd" != *"ya-bin"* ]]; then
                                   local full_cmd=$(ps -p "$child_pid" -o command= 2>/dev/null | head -c 100)
+                                  if [[ $tree_dumped -eq 0 ]]; then
+                                      dump_process_tree
+                                      tree_dumped=1
+                                  fi
                                   echo "[$(date)] Killing orphaned process PID: $child_pid (cmd: $full_cmd)" >> "$log_file"
                                   kill -9 "$child_pid" 2>/dev/null && ((killed_count++))
                                   killed_pids[$child_pid]=1
@@ -462,14 +477,14 @@ runs:
                           fi
                       done
                   fi
-                  
+
                   if [[ $killed_count -gt 0 ]]; then
                       echo "[$(date)] Killed $killed_count orphaned processes in this cycle" >> "$log_file"
                   fi
-                  
+
                   sleep 10
               done
-              
+
               echo "[$(date)] Cleanup daemon finished - ya make has exited" >> "$log_file"
           }
 

@@ -37,14 +37,11 @@ public:
     template <class TResponseType>
     TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, const std::vector<NYdb::EStatus>& status, const TString& comments = {}, TDuration timeout = DEFAULT_OPERATION_WAIT_TIME) {
         if (res.Ready()) {
-            std::cerr << "WaitOp ready status=" << (TStringBuilder() << res.Status().GetStatus()) << std::endl;
-
             UNIT_ASSERT_C(IsIn(status, res.Status().GetStatus()), comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
             return res;
         } else {
             TMaybe<NYdb::TOperation> op = res;
             WaitOp<TResponseType>(op, timeout);
-            std::cerr << "WaitOp status=" << (TStringBuilder() << op->Status().GetStatus()) << std::endl;
             UNIT_ASSERT_C(IsIn(status, op->Status().GetStatus()), comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
             return op;
         }

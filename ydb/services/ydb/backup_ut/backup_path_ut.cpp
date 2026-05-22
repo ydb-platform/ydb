@@ -474,95 +474,90 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
         auto res = traits.Export(f, exportSettings);
         f.WaitOpSuccess(res);
 
-        traits.ValidateFileList(
-            f,
-            {
-                prefix + "metadata.json",
-                prefix + "SchemaMapping/metadata.json",
-                prefix + "SchemaMapping/mapping.json",
-                prefix + "RecursiveFolderProcessing/Table0/metadata.json",
-                prefix + "RecursiveFolderProcessing/Table0/scheme.pb",
-                prefix + "RecursiveFolderProcessing/Table0/permissions.pb",
-                prefix + "RecursiveFolderProcessing/Table0/data_00.parquet",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet",
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json",
+            prefix + "SchemaMapping/mapping.json",
+            prefix + "RecursiveFolderProcessing/Table0/metadata.json",
+            prefix + "RecursiveFolderProcessing/Table0/scheme.pb",
+            prefix + "RecursiveFolderProcessing/Table0/permissions.pb",
+            prefix + "RecursiveFolderProcessing/Table0/data_00.parquet",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet",
 
-                prefix + "metadata.json.sha256",
-                prefix + "SchemaMapping/metadata.json.sha256",
-                prefix + "SchemaMapping/mapping.json.sha256",
-                prefix + "RecursiveFolderProcessing/Table0/metadata.json.sha256",
-                prefix + "RecursiveFolderProcessing/Table0/scheme.pb.sha256",
-                prefix + "RecursiveFolderProcessing/Table0/permissions.pb.sha256",
-                prefix + "RecursiveFolderProcessing/Table0/data_00.parquet.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
-                prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet.sha256",
-            });
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/Table0/data_00.parquet.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_00.parquet.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet.sha256",
+        });
     }
 
-    // {
-    //     auto path = prefix + "RecursiveFolderProcessing/Table0/data_00.parquet";
-    //     auto s3Data = f.GetS3Data();
-    //     auto dataIt = s3Data.find(path);
-    //     UNIT_ASSERT_C(dataIt != s3Data.end(), "data_00.parquet not found");
+    {
+        auto path = prefix + "RecursiveFolderProcessing/Table0/data_00.parquet";
+        auto s3Data = f.GetS3Data();
+        auto dataIt = s3Data.find(path);
+        UNIT_ASSERT_C(dataIt != s3Data.end(), "data_00.parquet not found");
 
-    //     auto value = dataIt->second;
-    //     auto input = std::make_shared<arrow::io::BufferReader>(
-    //         (const uint8_t *)(value.data()), int64_t(value.size()));
+        auto value = dataIt->second;
+        auto input = std::make_shared<arrow::io::BufferReader>(
+            (const uint8_t *)(value.data()), int64_t(value.size()));
 
-    //     parquet::arrow::FileReaderBuilder reader_builder;
-    //     arrow::Status status;
-    //     status = reader_builder.Open(input);
-    //     UNIT_ASSERT_C(status.ok(), status.message());
+        parquet::arrow::FileReaderBuilder reader_builder;
+        arrow::Status status;
+        status = reader_builder.Open(input);
+        UNIT_ASSERT_C(status.ok(), status.message());
 
-    //     std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-    //     status = reader_builder.Build(&arrow_reader);
-    //     UNIT_ASSERT_C(status.ok(), status.message());
+        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+        status = reader_builder.Build(&arrow_reader);
+        UNIT_ASSERT_C(status.ok(), status.message());
 
-    //     std::shared_ptr<arrow::Table> table;
-    //     status = arrow_reader->ReadTable(&table);
-    //     UNIT_ASSERT_C(status.ok(), status.message());
-    //     UNIT_ASSERT_EQUAL(3, table->num_rows());
+        std::shared_ptr<arrow::Table> table;
+        status = arrow_reader->ReadTable(&table);
+        UNIT_ASSERT_C(status.ok(), status.message());
+        UNIT_ASSERT_EQUAL(3, table->num_rows());
 
-    //     auto schema = arrow::schema({
-    //         arrow::field("key", arrow::int64()),
-    //         arrow::field("value", arrow::binary()),
-    //     });
+        auto schema = arrow::schema({
+            arrow::field("key", arrow::int64(), isOlap),
+            arrow::field("value", arrow::binary()),
+        });
 
-    //     auto kBuilder = arrow::Int64Builder();
-    //     status = kBuilder.AppendValues({1, 2, 3});
-    //     UNIT_ASSERT_C(status.ok(), status.message());
+        auto kBuilder = arrow::Int64Builder();
+        status = kBuilder.AppendValues({1, 2, 3});
+        UNIT_ASSERT_C(status.ok(), status.message());
 
-    //     std::vector<std::string> values = {"rhl8q6u2", "yah6v01e", "3i91khlz"};
-    //     auto vBuilder = arrow::BinaryBuilder();
-    //     for (const auto& v : values) {
-    //         status = vBuilder.Append(v.data(), v.size());
-    //         UNIT_ASSERT_C(status.ok(), status.message());
-    //     }
+        std::vector<std::string> values = {"rhl8q6u2", "yah6v01e", "3i91khlz"};
+        auto vBuilder = arrow::BinaryBuilder();
+        for (const auto& v : values) {
+            status = vBuilder.Append(v.data(), v.size());
+            UNIT_ASSERT_C(status.ok(), status.message());
+        }
 
-    //     auto expectedTable =
-    //         arrow::Table::Make(schema, {kBuilder.Finish().ValueOrDie(),
-    //                                     vBuilder.Finish().ValueOrDie()});
+        auto expectedTable =
+            arrow::Table::Make(schema, {kBuilder.Finish().ValueOrDie(),
+                                        vBuilder.Finish().ValueOrDie()});
 
-    //     std::cerr << "table schema:\n" << table->schema()->ToString() << std::endl;
-    //     std::cerr << "expected table schema:\n" << expectedTable->schema()->ToString() << std::endl;
+        std::cerr << "table:\n" << table->ToString() << std::endl;
+        std::cerr << "expected table:\n" << expectedTable->ToString() << std::endl;
 
-    //     std::cerr << "table:\n" << table->ToString() << std::endl;
-    //     std::cerr << "expected table:\n" << expectedTable->ToString() << std::endl;
-
-    //     UNIT_ASSERT(expectedTable->Equals(*table));
-    // }
+        UNIT_ASSERT(expectedTable->Equals(*table));
+    }
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>

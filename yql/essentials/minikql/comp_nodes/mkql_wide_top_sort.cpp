@@ -720,7 +720,8 @@ private:
     };
 
     bool ResetFields() {
-        if (CanSpill() && !HasMemoryForProcessing() || HasEnoughRowsToSpill()) {
+        const bool hasData = !Storage.empty();
+        if (hasData && ((CanSpill() && !HasMemoryForProcessing()) && HasEnoughRowsToSpill())) {
             SwitchMode(EOperatingMode::Spilling);
             return false;
         }
@@ -778,7 +779,9 @@ public:
                 if (!SpillState()) {
                     return false;
                 }
-                ResetFields();
+                if (!ResetFields()) {
+                    return IsReadyToContinue();
+                }
                 SwitchMode(ChooseNextMode());
                 return IsReadyToContinue();
             }
@@ -1067,7 +1070,10 @@ private:
             }
 
             auto writeOp = target.Write(row.data(), Indexes.size());
-            if (writeOp || !iteratorReady) {
+            if (writeOp) {
+                return false;
+            }
+            if (!iteratorReady && !iteratorFinished) {
                 return false;
             }
         }

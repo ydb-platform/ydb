@@ -229,6 +229,116 @@ private:
         WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &TStorageStatsCoroCalculatorImpl::ProcessUnexpectedEvent);
     }
 
+<<<<<<< HEAD
+=======
+    TStats CalculateStats(
+            TBlobStorageGroupType erasureType,
+            ui32 currentGroupsCreated,
+            const TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter>& filters,
+            const std::vector<const TPDiskEntry*>& pdisks,
+            bool considerDriveStatus,
+            bool considerDecommitStatus,
+            bool considerMaintenanceStatus) {
+        TGroupMapper mapper(TGroupGeometryInfo(erasureType, NKikimrBlobStorage::TGroupGeometry())); // default geometry
+
+        for (const auto& kv : pdisks) {
+            const auto& [pdiskId, pdisk] = *kv;
+            for (const auto& filter : filters) {
+                const auto sharedWithOs = pdisk.HasSharedWithOs() ? MakeMaybe(pdisk.GetSharedWithOs()) : Nothing();
+                const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
+                if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
+                    const TNodeLocation& location = HostRecordMap->GetLocation(pdiskId.NodeId);
+                    const bool usable = (!considerDriveStatus || !pdisk.HasStatusV2() || pdisk.GetStatusV2() == "ACTIVE") &&
+                            (!considerDecommitStatus || !pdisk.HasDecommitStatus() || pdisk.GetDecommitStatus() == "DECOMMIT_NONE") &&
+                            (!considerMaintenanceStatus || !pdisk.HasMaintenanceStatus() || pdisk.GetMaintenanceStatus() == "NO_REQUEST");
+                    const bool ok = mapper.RegisterPDisk({
+                        .PDiskId = pdiskId,
+                        .Location = location,
+                        .Usable = usable,
+                        .NumSlots = pdisk.GetNumActiveSlots(),
+                        .MaxSlots = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
+                        .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
+                        .Groups = {},
+                        .SpaceAvailable = 0,
+                        .Operational = true,
+                        .Decommitted = false, // this flag applies only to group reconfiguration
+                    });
+                    Y_ABORT_UNLESS(ok);
+                    break;
+                }
+            }
+        }
+
+        // calculate number of groups we can create without accounting reserve
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        std::deque<ui64> groupSizes;
+        while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 1u, 0, false, {}, error)) {
+            std::vector<TGroupDiskInfo> disks;
+            std::deque<NKikimrBlobStorage::TPDiskMetrics> pdiskMetrics;
+            std::deque<NKikimrBlobStorage::TVDiskMetrics> vdiskMetrics;
+
+            for (const auto& realm : group) {
+                for (const auto& domain : realm) {
+                    for (const auto& pdiskId : domain) {
+                        if (const auto it = SystemViewsState.PDisks.find(pdiskId); it != SystemViewsState.PDisks.end()) {
+                            const NKikimrSysView::TPDiskInfo& pdisk = it->second;
+                            auto& pm = *pdiskMetrics.emplace(pdiskMetrics.end());
+                            auto& vm = *vdiskMetrics.emplace(vdiskMetrics.end());
+                            if (pdisk.HasTotalSize()) {
+                                pm.SetTotalSize(pdisk.GetTotalSize());
+                            }
+                            if (pdisk.HasEnforcedDynamicSlotSize()) {
+                                pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
+                            }
+                            if (pdisk.HasSlotSizeInUnits()) {
+                                pm.SetSlotSizeInUnits(pdisk.GetSlotSizeInUnits());
+                            }
+                            vm.SetAllocatedSize(0);
+                            disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
+                        }
+                    }
+                }
+            }
+
+            NKikimrSysView::TGroupInfo groupInfo;
+            CalculateGroupUsageStats(&groupInfo, disks, erasureType, 1u);
+            groupSizes.push_back(groupInfo.GetAvailableSize());
+
+            group.clear();
+
+            Yield();
+        }
+
+        std::sort(groupSizes.begin(), groupSizes.end());
+
+        // adjust it according to reserve
+        const ui32 total = static_cast<ui32>(groupSizes.size()) + currentGroupsCreated;
+        ui32 reserve = GroupReserveMin;
+        while (reserve < groupSizes.size() && (reserve - GroupReserveMin) * 1000000 / total < GroupReservePart) {
+            ++reserve;
+        }
+        reserve = Min<ui32>(reserve, groupSizes.size());
+
+        // cut sizes
+        while (reserve >= 2) {
+            groupSizes.pop_front();
+            groupSizes.pop_back();
+            reserve -= 2;
+        }
+
+        if (reserve) {
+            groupSizes.pop_front();
+        }
+
+        return TStats{
+            .GroupsToCreate = static_cast<ui32>(groupSizes.size()),
+            .SizeToCreate = std::accumulate(groupSizes.begin(), groupSizes.end(),
+                    static_cast<ui64>(0))
+        };
+    }
+
+>>>>>>> 534e0ce7da0 (Fix sysview GroupUsageStats to account GroupSizeInUnits (#40758))
 private:
     TControllerSystemViewsState SystemViewsState;
     THostRecordMap HostRecordMap;

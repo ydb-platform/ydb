@@ -1409,8 +1409,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 select t1.b, count(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                 PRAGMA YqlSelect = 'force';
-                 select max(t1.b) maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
+                PRAGMA YqlSelect = 'force';
+                select max(t1.b) maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -1594,12 +1594,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestAggregation(ColumnStore);
     }
 
-    Y_UNIT_TEST(BasicJoins) {
+    void BasicHashJoinTest(bool useBlockHashJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(useBlockHashJoin);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -1671,48 +1671,44 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         db = kikimr.GetTableClient();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
+        const std::string queryPrefix =
+            R"(
+                PRAGMA ydb.CostBasedOptimizationLevel='0';
+                PRAGMA ydb.HashJoinMode='grace';
+            )";
+
         std::vector<std::string> queries = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a order by t1.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a order by t1.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 PRAGMA AnsiImplicitCrossJoin;
                 SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1, `/Root/t2` as t2, `/Root/t3` as t3 where t1.a = t2.a and t2.a = t3.a order by t1.a, t2.a, t3.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 PRAGMA AnsiImplicitCrossJoin;
                 SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1, `/Root/t2` as t2, `/Root/t3` as t3 where t1.a = t2.a order by t1.a, t2.a, t3.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 PRAGMA AnsiImplicitCrossJoin;
                 SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1, `/Root/t2` as t2, `/Root/t3` as t3 order by t1.a, t2.a, t3.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a and t2.b > 2 order by t1.a, t2.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a and t2.b = 2 order by t1.a, t2.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a and t1.b = 2 order by t1.a, t2.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a inner join `/Root/t3` as t3 on t2.a = t3.a and t3.b = 2 order by t1.a, t2.a, t3.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a left join `/Root/t3` as t3 on t2.a = t3.a and t3.b = 2 order by t1.a, t2.a, t3.b;
             )",
         };
@@ -1730,13 +1726,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[0;[0];#];[1;[1];[1]];[2;[2];#];[3;#;#]])",
         };
 
+        const std::string joinAlgo = useBlockHashJoin ? "BlockHashJoinCore" : "GraceJoinCore";
+        auto queryClient = kikimr.GetQueryClient();
         for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
-            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            const auto query = queryPrefix + "\n" + queries[i];
+
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            const auto isCrossJoin = query.find("AnsiImplicitCrossJoin") != std::string::npos;
+            UNIT_ASSERT_C(isCrossJoin || ast.find(joinAlgo) != std::string::npos, TStringBuilder() << "Wrong join algo. Expected: " << joinAlgo);
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+    }
+
+    Y_UNIT_TEST_TWIN(BasicHashJoin, UseBlockHashJoin) {
+        BasicHashJoinTest(UseBlockHashJoin);
     }
 
     Y_UNIT_TEST(JoinFilters) {
@@ -2142,6 +2155,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+
+
     void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
@@ -2471,8 +2486,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
-        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2501,38 +2514,45 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             InsertIntoSchema0(db, table, rowsNum);
         }
 
-        std::vector<std::string> queries = {
+        const std::string queryPrefix = 
             R"(
-                PRAGMA YqlSelect = 'force';
                 PRAGMA ydb.HashJoinMode='map';
                 PRAGMA ydb.CostBasedOptimizationLevel='0';
+            )";
+
+        const std::vector<std::string> queries = {
+            R"(
                 SELECT t1.a, t2.c FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.c order by t1.a, t2.c;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
-                PRAGMA ydb.HashJoinMode='map';
-                PRAGMA ydb.CostBasedOptimizationLevel='0';
                 SELECT t1.a, t2.c FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.c order by t1.a, t2.c;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
-                PRAGMA ydb.HashJoinMode='map';
-                PRAGMA ydb.CostBasedOptimizationLevel='0';
                 SELECT t1.a FROM `/Root/t1` as t1 where t1.a in (select t2.c from `/Root/t2` as t2) order by t1.a;
             )",
         };
 
-        std::vector<std::string> results = {
+        const std::vector<std::string> results = {
             R"([[1;[1]];[2;[2]];[3;[3]];[4;[4]]])",
             R"([[0;#];[1;[1]];[2;[2]];[3;[3]];[4;[4]];[5;#]])",
             R"([[1];[2];[3];[4]])",
         };
 
+        auto queryClient = kikimr.GetQueryClient();
         for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
-            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            const auto query = queryPrefix + "\n" + queries[i];
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("MapJoinCore") != std::string::npos, TStringBuilder() << "Wrong join algo. Expected: " << "MapJoinCore");
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }

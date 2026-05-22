@@ -394,6 +394,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         }
     }
 
+
     // Priority 1 Test 3: Consistent copy of column table with local bloom indexes
     Y_UNIT_TEST(ConsistentCopyColumnTableWithLocalBloomIndexes) {
         TTestBasicRuntime runtime;
@@ -401,8 +402,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         ui64 txId = 100;
 
         SetupLogging(runtime);
-
-        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+          untime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
 
         // 1. Create column table with local bloom indexes
@@ -419,8 +419,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-
         // 3. Verify the copied table and both bloom indexes are ready scheme objects
         NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy");
+    }
+}
+    // After a real vector index build, the transient 'indexImplPostingTable<N>build' intermediates are dropped
+    // but their entries linger in the parent index's Children map.
+    // CreateConsistentCopyTables should not fail on these stale references.
+    Y_UNIT_TEST(ConsistentCopyTableAfterVectorIndexBuild) {
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableCopy"
+
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
+            {NLs::PathExist, NLs::IsTable, NLs::IndexesCount(1)});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableCopy/index1", true, true), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+
     }
 }

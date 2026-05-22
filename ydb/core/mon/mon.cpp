@@ -74,20 +74,6 @@ TString GetDatabase(NHttp::THttpIncomingRequest* request) {
     return {};
 }
 
-IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
-    return new NActors::IEventHandle(
-        NGRpcService::CreateGRpcRequestProxyId(),
-        owner,
-        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
-            database,
-            ticket ? TMaybe<TString>(ticket) : Nothing(),
-            owner,
-            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-            std::move(peerName)),
-        IEventHandle::FlagTrackDelivery
-    );
-}
-
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
     std::queue<TIssueInfo> issuesQueue;
     ui32 minimalSeverity = std::numeric_limits<ui32>::max();
@@ -123,6 +109,20 @@ const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::Repeate
 
 } // namespace
 
+IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
+    return new NActors::IEventHandle(
+        NGRpcService::CreateGRpcRequestProxyId(),
+        owner,
+        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+            database,
+            ticket ? TMaybe<TString>(ticket) : Nothing(),
+            owner,
+            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+            std::move(peerName)),
+        IEventHandle::FlagTrackDelivery
+    );
+}
+
 NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
     NHttp::THeaders headers(request->Headers);
     NHttp::TCookies cookies(headers["Cookie"]);
@@ -135,7 +135,7 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     } else if (!request->MTlsClientCertificate.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return nullptr;
     }
 }
 
@@ -203,7 +203,12 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
 }
 
 NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
-    return SelectAuthorizationScheme(owner, request);
+    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
+    if (eventHandle != nullptr) {
+        return eventHandle;
+    }
+
+    return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
 }
 
 // compatibility layer

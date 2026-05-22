@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
+#include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -239,5 +240,22 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
     }
     Y_UNIT_TEST(CornerCase256WithNulls) {
         RunCornerCaseVariants(256, true, arrow::Type::UINT16); // 257 variants -> uint16
+    }
+
+    Y_UNIT_TEST(DeserializeLegacyPlainBlobWithoutMetadata) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "a");
+        builder.AddRecord(1, "b");
+        builder.AddRecord(2, "a");
+        auto arr = builder.Finish(3);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        const auto expectedDict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+
+        const TString plainBlob = NPlain::TConstructor().SerializeToString(arr, info);
+        auto parsed = std::static_pointer_cast<TDictionaryArray>(
+            NDictionary::TConstructor().DeserializeFromString(plainBlob, info).DetachResult());
+
+        AFL_VERIFY(PrepareToCompare(parsed->GetChunkedArray()->ToString()) == PrepareToCompare(expectedDict->GetChunkedArray()->ToString()));
     }
 };

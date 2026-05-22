@@ -1,12 +1,19 @@
 #include "batch_slice.h"
 
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
+#include <ydb/core/tx/columnshard/engines/scheme/column/info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
+#include <ydb/core/tx/columnshard/splitter/chunks.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 
 #include <ydb/library/formats/arrow/simple_builder/array.h>
@@ -270,5 +277,67 @@ Y_UNIT_TEST_SUITE(Splitter) {
 
         TSplitTester().SetExpectBlobsCount(72).SetExpectSlicesCount(8).SetExpectedInternalSplitsCount(0).SetExpectPortionsCount(8).Execute(
             batch);
+    }
+
+    namespace {
+    std::shared_ptr<NKikimr::NArrow::NAccessor::TColumnLoader> MakeDictionaryLoader(const std::shared_ptr<arrow::Field>& field) {
+        auto dictConstructor = std::make_shared<NKikimr::NArrow::NAccessor::NDictionary::TConstructor>();
+        NKikimr::NArrow::NAccessor::TConstructorContainer accessor(dictConstructor);
+        return std::make_shared<NKikimr::NArrow::NAccessor::TColumnLoader>(
+            NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(), accessor, field, nullptr, 1);
+    }
+
+    NKikimr::NOlap::TSimpleColumnInfo MakeUtf8ColumnInfo() {
+        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
+        return NKikimr::NOlap::TSimpleColumnInfo(
+            1, field, NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(), false, false, true, nullptr, std::nullopt);
+    }
+    }   // namespace
+
+    Y_UNIT_TEST(ChunkedColumnReaderDictionaryBlobWithMetadata) {
+        using namespace NKikimr::NArrow::NAccessor;
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "a");
+        builder.AddRecord(1, "b");
+        builder.AddRecord(2, "a");
+        auto arr = builder.Finish(3);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
+        const auto colInfo = MakeUtf8ColumnInfo();
+        auto chunk = std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(
+            blobAndMeta.Blob, dict, NKikimr::NOlap::TChunkAddress(1, 0), colInfo, std::move(blobAndMeta.Meta));
+
+        NKikimr::NOlap::TChunkedColumnReader reader({ chunk }, MakeDictionaryLoader(field));
+        UNIT_ASSERT(reader.IsCorrect());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "a");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "b");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(2)->ToString(), "a");
+        UNIT_ASSERT(!reader.ReadNext());
+    }
+
+    Y_UNIT_TEST(ChunkedColumnReaderLegacyPlainBlobWithDictionaryLoader) {
+        using namespace NKikimr::NArrow::NAccessor;
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "legacy");
+        builder.AddRecord(1, "plain");
+        auto arr = builder.Finish(2);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        const TString plainBlob = NPlain::TConstructor().SerializeToString(arr, info);
+        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
+        const auto colInfo = MakeUtf8ColumnInfo();
+        auto chunk = std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(plainBlob, arr, NKikimr::NOlap::TChunkAddress(1, 0), colInfo);
+
+        NKikimr::NOlap::TChunkedColumnReader reader({ chunk }, MakeDictionaryLoader(field));
+        UNIT_ASSERT(reader.IsCorrect());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "legacy");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "plain");
+        UNIT_ASSERT(!reader.ReadNext());
     }
 };

@@ -1538,6 +1538,75 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptActualizeDictAfterCompressionChange)).Execute(GetDictionarySettings());
     }
 
+    TString scriptAlterDictOnExistingPlainWithoutActualization = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            message Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (1u, 'a'),
+            (2u, 'b'),
+            (3u, 'a');
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (4u, 'c'),
+            (5u, NULL);
+        ------
+        ONE_COMPACTION
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `message` SET ENCODING(DICT);
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;["a"]];[2u;["b"]];[3u;["a"]];[4u;["c"]];[5u;#]]
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (6u, 'd'),
+            (7u, 'a');
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, message) VALUES
+            (8u, 'e');
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT pk, message FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;["a"]];[2u;["b"]];[3u;["a"]];[4u;["c"]];[5u;#];[6u;["d"]];[7u;["a"]];[8u;["e"]]]
+        ------
+        READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'message';
+              $Ok = SELECT SUM(CASE
+                    WHEN CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.positions_blob_size") AS Uint64) > 0u
+                     AND CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.dictionary_blob_size") AS Uint64) > 0u
+                     AND CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.positions_blob_size") AS Uint64)
+                       + CAST(JSON_VALUE(CAST(ChunkDetails AS JsonDocument), "$.dictionary_blob_size") AS Uint64)
+                       == CAST(BlobRangeSize AS Uint64)
+                    THEN 1 ELSE 0 END) AS ok
+                  FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'message';
+              SELECT ($All > 0u) AND ($All == $Ok);
+        EXPECTED: [[[%true]]]
+    )";
+    Y_UNIT_TEST(AlterDictOnExistingPlainWithoutActualization) {
+        Variator::ToExecutor(Variator::SingleScript(scriptAlterDictOnExistingPlainWithoutActualization)).Execute(GetDictionarySettings());
+    }
+
     // One table with a column per supported (comparable) type; set DICTIONARY on each, insert one row, read back.
     // Supported for dictionary: Bool, Int*, Uint*, Float, Double, String/Utf8, Date, Datetime, Timestamp. (Bytes omitted: X'...' literal not supported in script.)
     TString scriptDictionarySupportedTypes = R"(

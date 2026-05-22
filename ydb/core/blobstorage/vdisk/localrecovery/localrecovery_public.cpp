@@ -107,7 +107,8 @@ namespace NKikimr {
             Y_ABORT_UNLESS(!LocalRecoveryTokenRequested);
             ctx.Send(MakeBlobStorageLocalRecoveryBrokerID(),
                 new TEvAcquireVDiskOperationToken(MakeBlobStorageVDiskID(
-                    SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId)),
+                    SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId),
+                    Config->BaseInfo.PDiskId),
                 IEventHandle::FlagTrackDelivery);
             LocalRecoveryTokenRequested = true;
         }
@@ -116,7 +117,8 @@ namespace NKikimr {
             if (LocalRecoveryTokenRequested) {
                 ctx.Send(MakeBlobStorageLocalRecoveryBrokerID(),
                     new TEvReleaseVDiskOperationToken(MakeBlobStorageVDiskID(
-                        SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId)));
+                        SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId),
+                        Config->BaseInfo.PDiskId));
                 LocalRecoveryTokenRequested = false;
             }
         }
@@ -778,6 +780,8 @@ namespace NKikimr {
         void HandleBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
                 // No localrecovery broker service. Continue without it.
+                LOG_WARN(ctx, BS_LOCALRECOVERY,
+                    VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery broker is not available, continuing without it"));
                 LocalRecoveryTokenRequested = false;
                 ContinueYardInit(ctx);
             }

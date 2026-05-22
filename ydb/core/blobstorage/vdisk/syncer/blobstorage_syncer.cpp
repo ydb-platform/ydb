@@ -204,7 +204,7 @@ namespace NKikimr {
         void QueryStartupDataSyncToken(const TActorContext& ctx) {
             Y_ABORT_UNLESS(!StartupDataSyncTokenRequested);
             ctx.Send(MakeBlobStorageStartupDataSyncBrokerID(),
-                new TEvAcquireVDiskOperationToken(GetVDiskServiceId()),
+                new TEvAcquireVDiskOperationToken(GetVDiskServiceId(), SyncerCtx->Config->BaseInfo.PDiskId),
                 IEventHandle::FlagTrackDelivery);
             StartupDataSyncTokenRequested = true;
         }
@@ -212,7 +212,7 @@ namespace NKikimr {
         void ReleaseStartupDataSyncToken(const TActorContext& ctx) {
             if (StartupDataSyncTokenRequested) {
                 ctx.Send(MakeBlobStorageStartupDataSyncBrokerID(),
-                    new TEvReleaseVDiskOperationToken(GetVDiskServiceId()));
+                    new TEvReleaseVDiskOperationToken(GetVDiskServiceId(), SyncerCtx->Config->BaseInfo.PDiskId));
                 StartupDataSyncTokenRequested = false;
             }
         }
@@ -402,6 +402,8 @@ namespace NKikimr {
         void HandleStartupDataSyncBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
                 // No startup data sync broker service. Continue without it.
+                LOG_WARN(ctx, BS_SYNCER,
+                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "Startup data sync broker is not available, continuing without it"));
                 StartupDataSyncTokenRequested = false;
                 Become(&TThis::StandardModeStateFunc);
                 StartScheduler(ctx);

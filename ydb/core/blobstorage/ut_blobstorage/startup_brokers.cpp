@@ -116,15 +116,21 @@ namespace {
     void SendBrokerAcquire(TEnvironmentSetup& env, const TActorId& ownerActorId,
             const TActorId& brokerServiceId, const TActorId& vdiskServiceId)
     {
+        const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdiskServiceId);
+        Y_UNUSED(nodeId);
+        Y_UNUSED(vslotId);
         env.Runtime->Send(new IEventHandle(brokerServiceId, ownerActorId,
-            new TEvAcquireVDiskOperationToken(vdiskServiceId)), ownerActorId.NodeId());
+            new TEvAcquireVDiskOperationToken(vdiskServiceId, pdiskId)), ownerActorId.NodeId());
     }
 
     void SendBrokerRelease(TEnvironmentSetup& env, const TActorId& ownerActorId,
             const TActorId& brokerServiceId, const TActorId& vdiskServiceId)
     {
+        const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdiskServiceId);
+        Y_UNUSED(nodeId);
+        Y_UNUSED(vslotId);
         env.Runtime->Send(new IEventHandle(brokerServiceId, ownerActorId,
-            new TEvReleaseVDiskOperationToken(vdiskServiceId)), ownerActorId.NodeId());
+            new TEvReleaseVDiskOperationToken(vdiskServiceId, pdiskId)), ownerActorId.NodeId());
     }
 
     void WaitForBrokerToken(TEnvironmentSetup& env, const TActorId& ownerActorId, TStringBuf message) {
@@ -470,10 +476,7 @@ namespace {
                         break;
                     }
                     auto* msg = ev->Get<TEvAcquireVDiskOperationToken>();
-                    const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(msg->VDiskServiceId);
-                    Y_UNUSED(nodeId);
-                    Y_UNUSED(vslotId);
-                    OnQuery(ev->Sender, msg->VDiskServiceId, pdiskId);
+                    OnQuery(ev->Sender, msg->VDiskServiceId, msg->PDiskId);
                     break;
                 }
 
@@ -489,10 +492,7 @@ namespace {
                         break;
                     }
                     auto* msg = ev->Get<TEvReleaseVDiskOperationToken>();
-                    const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(msg->VDiskServiceId);
-                    Y_UNUSED(nodeId);
-                    Y_UNUSED(vslotId);
-                    OnRelease(msg->VDiskServiceId, pdiskId);
+                    OnRelease(msg->VDiskServiceId, msg->PDiskId);
                     break;
                 }
             }

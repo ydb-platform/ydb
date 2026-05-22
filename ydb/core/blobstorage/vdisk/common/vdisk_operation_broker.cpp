@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <list>
+#include <optional>
 #include <unordered_map>
 
 namespace NKikimr {
@@ -78,9 +79,34 @@ namespace NKikimr {
                 return 0;
             }
 
-            bool CanActivate(ui32 pdiskId) const {
+            TString BuildLogString(
+                    const TActorId& vdiskServiceId = TActorId(),
+                    std::optional<ui32> pdiskId = std::nullopt,
+                    const TActorId& senderActorId = TActorId()) const {
+                TStringBuilder str;
+                str << "broker service id: " << this->SelfId()
+                    << ", active: " << Active.size()
+                    << ", waiting: " << WaitQueue.size();
+                if (vdiskServiceId != TActorId()) {
+                    str << ", VDisk service id: " << vdiskServiceId;
+                }
+                if (pdiskId) {
+                    str << ", PDiskId: " << *pdiskId
+                        << ", active on PDisk: " << GetActiveOnPDisk(*pdiskId);
+                }
+                if (senderActorId != TActorId()) {
+                    str << ", sender actor id: " << senderActorId;
+                }
+                return str;
+            }
+
+            bool HasNodeCapacity() const {
                 const ui64 nodeLimit = GetNodeLimit();
-                if (nodeLimit && Active.size() >= nodeLimit) {
+                return !nodeLimit || Active.size() < nodeLimit;
+            }
+
+            bool CanActivate(ui32 pdiskId) const {
+                if (!HasNodeCapacity()) {
                     return false;
                 }
 
@@ -136,21 +162,14 @@ namespace NKikimr {
             }
 
             void ProcessQueue() {
-                const ui64 nodeLimit = GetNodeLimit();
-
-                bool progress = true;
-                while (progress && (!nodeLimit || Active.size() < nodeLimit)) {
-                    progress = false;
-                    for (auto it = WaitQueue.begin(); it != WaitQueue.end() && (!nodeLimit || Active.size() < nodeLimit); ) {
-                        if (CanActivate(it->PDiskId)) {
-                            auto next = std::next(it);
-                            auto entry = DequeueWaiting(it);
-                            it = next;
-                            Activate(std::move(entry));
-                            progress = true;
-                        } else {
-                            ++it;
-                        }
+                for (auto it = WaitQueue.begin(); it != WaitQueue.end() && HasNodeCapacity(); ) {
+                    if (CanActivate(it->PDiskId)) {
+                        auto next = std::next(it);
+                        auto entry = DequeueWaiting(it);
+                        it = next;
+                        Activate(std::move(entry));
+                    } else {
+                        ++it;
                     }
                 }
             }
@@ -165,10 +184,8 @@ namespace NKikimr {
 
                 LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                     "GrantAllWaitingOnce"
-                    << ", broker service id: " << this->SelfId()
-                    << ", granted waiting VDisks: " << numGranted
-                    << ", active: " << Active.size()
-                    << ", waiting: " << WaitQueue.size());
+                    << ", " << BuildLogString()
+                    << ", granted waiting VDisks: " << numGranted);
                 return numGranted;
             }
 
@@ -204,9 +221,7 @@ namespace NKikimr {
 
             void Handle(TEvAcquireVDiskOperationToken::TPtr& ev) {
                 const auto vdiskServiceId = ev->Get()->VDiskServiceId;
-                const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdiskServiceId);
-                Y_UNUSED(nodeId);
-                Y_UNUSED(vslotId);
+                const ui32 pdiskId = ev->Get()->PDiskId;
                 const auto actorId = ev->Sender;
 
                 if (const auto it = Active.find(vdiskServiceId); it != Active.end()) {
@@ -214,9 +229,7 @@ namespace NKikimr {
                     if (it->second.OwnerActorId != actorId) {
                         LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                             "TEvAcquireVDiskOperationToken"
-                            << ", broker service id: " << this->SelfId()
-                            << ", VDisk service id: " << vdiskServiceId
-                            << ", PDiskId: " << pdiskId
+                            << ", " << BuildLogString(vdiskServiceId, pdiskId)
                             << ", stale active owner actor id: " << it->second.OwnerActorId
                             << ", new owner actor id: " << actorId
                             << ", action: update active owner");
@@ -226,13 +239,8 @@ namespace NKikimr {
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvAcquireVDiskOperationToken"
-                        << ", broker service id: " << this->SelfId()
-                        << ", VDisk service id: " << vdiskServiceId
-                        << ", PDiskId: " << pdiskId
-                        << ", actor id: " << actorId
-                        << ", token sent, active: " << Active.size()
-                        << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                        << ", waiting: " << WaitQueue.size());
+                        << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
+                        << ", token sent");
                     return;
                 }
 
@@ -241,9 +249,7 @@ namespace NKikimr {
                     if (it->OwnerActorId != actorId) {
                         LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                             "TEvAcquireVDiskOperationToken"
-                            << ", broker service id: " << this->SelfId()
-                            << ", VDisk service id: " << vdiskServiceId
-                            << ", PDiskId: " << pdiskId
+                            << ", " << BuildLogString(vdiskServiceId, pdiskId)
                             << ", stale waiting owner actor id: " << it->OwnerActorId
                             << ", new owner actor id: " << actorId
                             << ", action: update waiting owner");
@@ -256,25 +262,15 @@ namespace NKikimr {
 
                         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                             "TEvAcquireVDiskOperationToken"
-                            << ", broker service id: " << this->SelfId()
-                            << ", VDisk service id: " << vdiskServiceId
-                            << ", PDiskId: " << pdiskId
-                            << ", actor id: " << actorId
-                            << ", token sent from queue, active: " << Active.size()
-                            << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                            << ", waiting: " << WaitQueue.size());
+                            << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
+                            << ", queued request activated");
                         return;
                     }
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvAcquireVDiskOperationToken"
-                        << ", broker service id: " << this->SelfId()
-                        << ", VDisk service id: " << vdiskServiceId
-                        << ", PDiskId: " << pdiskId
-                        << ", actor id: " << actorId
-                        << ", enqueued, active: " << Active.size()
-                        << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                        << ", waiting: " << WaitQueue.size());
+                        << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
+                        << ", queued request still waiting");
                     ScheduleProcessQueueWakeup();
                     return;
                 }
@@ -285,13 +281,8 @@ namespace NKikimr {
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvAcquireVDiskOperationToken"
-                        << ", broker service id: " << this->SelfId()
-                        << ", VDisk service id: " << vdiskServiceId
-                        << ", PDiskId: " << pdiskId
-                        << ", actor id: " << actorId
-                        << ", token sent, active: " << Active.size()
-                        << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                        << ", waiting: " << WaitQueue.size());
+                        << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
+                        << ", token sent");
                     return;
                 }
 
@@ -299,21 +290,14 @@ namespace NKikimr {
 
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                     "TEvAcquireVDiskOperationToken"
-                    << ", broker service id: " << this->SelfId()
-                    << ", VDisk service id: " << vdiskServiceId
-                    << ", PDiskId: " << pdiskId
-                    << ", actor id: " << actorId
-                    << ", enqueued, active: " << Active.size()
-                    << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                    << ", waiting: " << WaitQueue.size());
+                    << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
+                    << ", enqueued");
                 ScheduleProcessQueueWakeup();
             }
 
             void Handle(TEvReleaseVDiskOperationToken::TPtr& ev) {
                 const auto vdiskServiceId = ev->Get()->VDiskServiceId;
-                const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdiskServiceId);
-                Y_UNUSED(nodeId);
-                Y_UNUSED(vslotId);
+                const ui32 pdiskId = ev->Get()->PDiskId;
                 const auto actorId = ev->Sender;
 
                 if (const auto it = Active.find(vdiskServiceId); it != Active.end()) {
@@ -321,9 +305,7 @@ namespace NKikimr {
                     if (it->second.OwnerActorId != actorId) {
                         LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                             "TEvReleaseVDiskOperationToken"
-                            << ", broker service id: " << this->SelfId()
-                            << ", VDisk service id: " << vdiskServiceId
-                            << ", PDiskId: " << pdiskId
+                            << ", " << BuildLogString(vdiskServiceId, pdiskId)
                             << ", stale active owner actor id: " << actorId
                             << ", current owner actor id: " << it->second.OwnerActorId
                             << ", action: ignore stale release");
@@ -335,13 +317,8 @@ namespace NKikimr {
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvReleaseVDiskOperationToken"
-                        << ", broker service id: " << this->SelfId()
-                        << ", VDisk service id: " << vdiskServiceId
-                        << ", PDiskId: " << pdiskId
-                        << ", actor id: " << actorId
-                        << ", token released, active: " << Active.size()
-                        << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                        << ", waiting: " << WaitQueue.size());
+                        << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
+                        << ", token released");
                     return;
                 }
 
@@ -350,9 +327,7 @@ namespace NKikimr {
                     if (it->OwnerActorId != actorId) {
                         LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                             "TEvReleaseVDiskOperationToken"
-                            << ", broker service id: " << this->SelfId()
-                            << ", VDisk service id: " << vdiskServiceId
-                            << ", PDiskId: " << pdiskId
+                            << ", " << BuildLogString(vdiskServiceId, pdiskId)
                             << ", stale waiting owner actor id: " << actorId
                             << ", current queued owner actor id: " << it->OwnerActorId
                             << ", action: ignore stale release");
@@ -362,22 +337,14 @@ namespace NKikimr {
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                         "TEvReleaseVDiskOperationToken"
-                        << ", broker service id: " << this->SelfId()
-                        << ", VDisk service id: " << vdiskServiceId
-                        << ", PDiskId: " << pdiskId
-                        << ", actor id: " << actorId
-                        << ", removed from queue, active: " << Active.size()
-                        << ", active on PDisk: " << GetActiveOnPDisk(pdiskId)
-                        << ", waiting: " << WaitQueue.size());
+                        << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
+                        << ", removed from queue");
                     return;
                 }
 
                 LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                     "TEvReleaseVDiskOperationToken"
-                    << ", broker service id: " << this->SelfId()
-                    << ", VDisk service id: " << vdiskServiceId
-                    << ", PDiskId: " << pdiskId
-                    << ", actor id: " << actorId
+                    << ", " << BuildLogString(vdiskServiceId, pdiskId, actorId)
                     << ", action: ignore release for unknown VDisk");
             }
 
@@ -391,9 +358,7 @@ namespace NKikimr {
                     if (it->second.OwnerActorId == actorId) {
                         LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_NODE,
                             "TEvUndelivered"
-                            << ", broker service id: " << this->SelfId()
-                            << ", VDisk service id: " << it->second.VDiskServiceId
-                            << ", PDiskId: " << it->second.PDiskId
+                            << ", " << BuildLogString(it->second.VDiskServiceId, it->second.PDiskId)
                             << ", owner actor id: " << actorId
                             << ", source type: " << ev->Get()->SourceType
                             << ", reason: " << ev->Get()->Reason

@@ -8,9 +8,11 @@ namespace NKikimr {
         : public TEventLocal<TEvAcquireVDiskOperationToken, TEvBlobStorage::EvAcquireVDiskOperationToken>
     {
         TActorId VDiskServiceId;
+        ui32 PDiskId = 0;
 
-        explicit TEvAcquireVDiskOperationToken(const TActorId& vdiskServiceId)
+        TEvAcquireVDiskOperationToken(const TActorId& vdiskServiceId, ui32 pdiskId)
             : VDiskServiceId(vdiskServiceId)
+            , PDiskId(pdiskId)
         {}
     };
 
@@ -22,9 +24,11 @@ namespace NKikimr {
         : public TEventLocal<TEvReleaseVDiskOperationToken, TEvBlobStorage::EvReleaseVDiskOperationToken>
     {
         TActorId VDiskServiceId;
+        ui32 PDiskId = 0;
 
-        explicit TEvReleaseVDiskOperationToken(const TActorId& vdiskServiceId)
+        TEvReleaseVDiskOperationToken(const TActorId& vdiskServiceId, ui32 pdiskId)
             : VDiskServiceId(vdiskServiceId)
+            , PDiskId(pdiskId)
         {}
     };
 

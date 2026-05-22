@@ -654,7 +654,6 @@ private:
         // way as for grpc API
         AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_);
 
-        GrpcRequestBaseCtx_->FinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
         PassAway();
     }

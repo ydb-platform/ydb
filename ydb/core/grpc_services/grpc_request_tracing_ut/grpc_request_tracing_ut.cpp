@@ -522,6 +522,25 @@ void AssertGrpcRequestProxySpanSentAfter(TTestActorRuntime& runtime, const NWils
     AssertGrpcRequestProxySpanSentOnce(uploader);
 }
 
+class TAuthAndCheckReplyActor : public TActorBootstrapped<TAuthAndCheckReplyActor> {
+public:
+    TAuthAndCheckReplyActor(
+        std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> request,
+        Ydb::StatusIds::StatusCode status)
+        : Request_(std::move(request))
+        , Status_(status)
+    {}
+
+    void Bootstrap() {
+        Request_->ReplyWithYdbStatus(Status_);
+        PassAway();
+    }
+
+private:
+    std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> Request_;
+    Ydb::StatusIds::StatusCode Status_;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TGrpcRequestCheckActorTracing) {
@@ -561,6 +580,32 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckRequest) {
     auto* result = setup.GetRuntime()->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    DispatchUntilSpanCount(*setup.GetRuntime(), *uploader, GrpcRequestProxySpanName, 1);
+
+    AssertGrpcRequestProxySpanSentOnce(*uploader);
+}
+
+Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
+    TTestSetup setup("user1", "/Root/db");
+    auto* uploader = SetupFakeWilsonUploader(*setup.GetRuntime());
+
+    std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
+        setup.DbPath,
+        Nothing(),
+        setup.FakeMonActor,
+        NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+        "192.168.0.101");
+    ev->StartTracing(MakeGrpcRequestProxySpan(*setup.GetRuntime()));
+    AssertGrpcRequestProxySpanNotSent(*uploader);
+
+    setup.GetRuntime()->Register(new TAuthAndCheckReplyActor(
+        std::move(ev),
+        Ydb::StatusIds::UNAUTHORIZED));
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = setup.GetRuntime()->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::UNAUTHORIZED);
     DispatchUntilSpanCount(*setup.GetRuntime(), *uploader, GrpcRequestProxySpanName, 1);
 
     AssertGrpcRequestProxySpanSentOnce(*uploader);

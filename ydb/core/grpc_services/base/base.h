@@ -1919,6 +1919,7 @@ public:
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         const NActors::TActorContext& ctx = NActors::TActivationContext::AsActorContext();
+        FinishSpan();
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(

@@ -2,8 +2,7 @@
 
 #include "dq_channel_service.h"
 
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/core/mon.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
@@ -1014,14 +1013,6 @@ public:
     {}
 
     void Bootstrap() {
-
-        NActors::TMon* mon = NKikimr::AppData()->Mon;
-        if (mon) {
-            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "kqp_channels", "KQP Channels", false,
-                NActors::TActivationContext::ActorSystem(), SelfId());
-        }
-
         Become(&TChannelServiceActor::StateFunc);
     }
 

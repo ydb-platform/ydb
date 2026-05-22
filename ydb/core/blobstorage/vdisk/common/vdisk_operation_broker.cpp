@@ -105,13 +105,13 @@ namespace NKikimr {
                 return !nodeLimit || Active.size() < nodeLimit;
             }
 
-            bool CanActivate(ui32 pdiskId) const {
-                if (!HasNodeCapacity()) {
-                    return false;
-                }
-
+            bool HasPDiskCapacity(ui32 pdiskId) const {
                 const ui64 perPDiskLimit = GetPerPDiskLimit();
                 return !perPDiskLimit || GetActiveOnPDisk(pdiskId) < perPDiskLimit;
+            }
+
+            bool CanActivate(ui32 pdiskId) const {
+                return HasNodeCapacity() && HasPDiskCapacity(pdiskId);
             }
 
             auto FindWaiting(const TActorId& vdiskServiceId) {
@@ -162,11 +162,11 @@ namespace NKikimr {
             }
 
             void ProcessQueue() {
-                for (auto it = WaitQueue.begin(); it != WaitQueue.end() && HasNodeCapacity(); ) {
-                    if (CanActivate(it->PDiskId)) {
-                        auto next = std::next(it);
-                        auto entry = DequeueWaiting(it);
-                        it = next;
+                auto it = WaitQueue.begin();
+                while (it != WaitQueue.end() && HasNodeCapacity()) {
+                    if (HasPDiskCapacity(it->PDiskId)) {
+                        auto current = it++;
+                        auto entry = DequeueWaiting(current);
                         Activate(std::move(entry));
                     } else {
                         ++it;

@@ -148,10 +148,38 @@ namespace {
         env.Runtime->DestroyActor(edge);
     }
 
-    void WaitForVDisksToGetRunning(TEnvironmentSetup& env, const TVector<TTargetVDisk>& targets) {
-        for (const auto& target : targets) {
-            env.WaitForVDiskToGetRunning(target.VDiskId, target.VDiskActorId);
+    bool IsVDiskRunning(TEnvironmentSetup& env, const TTargetVDisk& target) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(target.VDiskActorId.NodeId(), __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(
+            target.VDiskActorId,
+            edge,
+            new TEvBlobStorage::TEvVStatus(target.VDiskId),
+            IEventHandle::FlagTrackDelivery),
+            edge.NodeId());
+
+        auto res = env.Runtime->WaitForEdgeActorEvent({edge});
+        env.Runtime->DestroyActor(edge);
+        if (auto* msg = res->CastAsLocal<TEvBlobStorage::TEvVStatusResult>()) {
+            const auto& record = msg->Record;
+            return record.GetStatus() == NKikimrProto::OK && record.GetJoinedGroup() && record.GetReplicated();
+        } else if (auto* msg = res->CastAsLocal<TEvents::TEvUndelivered>()) {
+            Y_ABORT_UNLESS(msg->SourceType == TEvBlobStorage::EvVStatus);
+            return false;
+        } else {
+            Y_ABORT();
         }
+    }
+
+    void WaitForVDisksToGetRunning(TEnvironmentSetup& env, const TVector<TTargetVDisk>& targets) {
+        THashSet<TActorId> running;
+        WaitUntil(env, [&] {
+            for (const auto& target : targets) {
+                if (!running.contains(target.VDiskActorId) && IsVDiskRunning(env, target)) {
+                    running.insert(target.VDiskActorId);
+                }
+            }
+            return running.size() == targets.size();
+        }, "expected VDisks to get running");
     }
 
     struct TRestartScenario {
@@ -693,8 +721,9 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
     // After the initial local-recovery wave is drained, later VDisk restarts still respect broker limits.
     Y_UNIT_TEST(LocalRecoveryBrokerSerializesLateVDiskStartsAfterInitialStartup) {
         TRestartScenario scenario;
-        RestartNodeForBrokerTest(scenario, {.MaxInProgressLocalRecoveryCount = 1});
+        RestartNodeForBrokerTest(scenario, {});
         WaitForVDisksToGetRunning(scenario.Env, scenario.RestartedNodeVDisks);
+        ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 1, 0, 0, 0);
 
         TLocalRecoveryCapture capture;
         TScopedCaptureFilter guard(scenario.Env, capture);
@@ -722,8 +751,9 @@ Y_UNIT_TEST_SUITE(VDiskStartupBrokers) {
     // After the initial startup data sync wave is drained, later VDisk restarts still respect broker limits.
     Y_UNIT_TEST(StartupDataSyncBrokerSerializesLateVDiskStartsAfterInitialStartup) {
         TRestartScenario scenario;
-        RestartNodeForBrokerTest(scenario, {.MaxInProgressStartupDataSyncCount = 1}, &scenario.StartupTargets);
+        RestartNodeForBrokerTest(scenario, {}, &scenario.StartupTargets);
         WaitForVDisksToGetRunning(scenario.Env, scenario.RestartedNodeVDisks);
+        ConfigureBrokerControls(scenario.Env, scenario.RestartedNodeId, 0, 0, 1, 0);
 
         TStartupDataSyncCapture capture;
         TScopedCaptureFilter guard(scenario.Env, capture);

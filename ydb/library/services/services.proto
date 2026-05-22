@@ -1172,5 +1172,6 @@ message TActivity {
         BS_PHANTOM_FLAG_STORAGE_WRITER = 688;
         BS_LOAD_NBS_DBG_LIKE = 689;
         BS_LOAD_NBS_DBG_LIKE_TABLET = 690;
+        BLOB_DEPOT_S3_ROUTER = 691;
     };
 };

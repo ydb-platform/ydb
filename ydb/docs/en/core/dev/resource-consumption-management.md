@@ -179,6 +179,7 @@ In the example above, two resource pools are created: `olap` for the analytics t
   - There are no limits on running queries when the database is overloaded.
 
 A weight of 80 for `the_ceo` effectively means that when competing for resources, the `the_ceo` pool will receive 4 times more priority than the `olap` pool. If queries are received in both pools, the system will recalculate the limits, and for `olap`, the `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` limit will be reduced to 20%, and for `the_ceo` — increased to 80%. This redistribution of resources is based on weights, as described [above](#resources_weight).
+
 ## Explicit Selection of a Resource Pool for a Query
 
 If necessary, a user can explicitly specify in which resource pool a given query should be executed. Currently, this can be done in the following ways:
@@ -188,9 +189,13 @@ If necessary, a user can explicitly specify in which resource pool a given query
 - **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — [by the command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
 - **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
 - **YDB GO SDK** — in the `ExecuteOption` query launch settings via the [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool) call.
+
 {% note warning %}
-The current version of **YDB Python SDK** does not allow defining the resource pool in which the query should be executed.
+
+The current version of **YDB Python SDK** does not allow defining the resource pool in which the query must be executed.
+
 {% endnote %}
+
 ## Diagnostics
 
 ### Query Plan

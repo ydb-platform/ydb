@@ -319,9 +319,7 @@ public:
         }
         if (needToIncreaseGeneration) {
             tablet->IncreaseGeneration();
-            const TInstant now = TActivationContext::Now();
-            tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
-            tablet->ActualizeTabletStatistics(now);
+            tablet->AddRestartTimestamp(TActivationContext::Now());
             db.Table<Schema::Tablet>().Key(tablet->Id).Update(NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration),
                                                               NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
         }

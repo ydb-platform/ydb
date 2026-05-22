@@ -42,10 +42,7 @@ public:
                 tablet->LastNodeId = 0;
             }
 
-            // update statistics
-            const TInstant now = TActivationContext::Now();
-            tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
-            tablet->ActualizeTabletStatistics(now);
+            tablet->AddRestartTimestamp(TActivationContext::Now());
 
             // increase generation
             if (tablet->IsLeader()) {

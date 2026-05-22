@@ -381,7 +381,7 @@ private:
             .SetNodeCount(Settings_.NodeCount)
             .SetDataCenterCount(Settings_.DcCount)
             .SetPqGateway(Settings_.PqGateway)
-            .SetDataShardExportFactory(Settings_.DataShardExportFactory.get());
+            .SetDataShardExportFactory(Settings_.DataShardExportFactory);
 
         serverSettings.StoragePoolTypes.clear();
         serverSettings.AddStoragePool("test", TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << ":test", Settings_.StorageGroupCount);

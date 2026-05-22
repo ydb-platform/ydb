@@ -180,7 +180,7 @@ namespace Tests {
         NYql::IYtGateway::TPtr YtGateway;
         NYql::IPqGateway::TPtr PqGateway;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
-        NKikimr::NDataShard::IExportFactory* DataShardExportFactory = nullptr;
+        std::shared_ptr<NKikimr::NDataShard::IExportFactory> DataShardExportFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
         bool Verbose = false;
@@ -247,7 +247,7 @@ namespace Tests {
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
-        TServerSettings& SetDataShardExportFactory(NKikimr::NDataShard::IExportFactory* factory) { DataShardExportFactory = factory; return *this; }
+        TServerSettings& SetDataShardExportFactory(std::shared_ptr<NKikimr::NDataShard::IExportFactory> factory) { DataShardExportFactory = factory; return *this; }
         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }

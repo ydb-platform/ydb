@@ -118,26 +118,4 @@ void RegisterParentPathDependencies(const TOperationId& operationId, const TOper
     }
 }
 
-void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db) {
-    context.SS->ChangeTxState(db, operationId, TTxState::Propose);
-    context.OnComplete.ActivateTx(operationId);
-}
-
-void PersistResourcePool(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) {
-    const auto& resourcePoolPathId = resourcePoolPath->PathId;
-
-    if (!context.SS->ResourcePools.contains(resourcePoolPathId)) {
-        context.SS->IncrementPathDbRefCount(resourcePoolPathId);
-    }
-    context.SS->ResourcePools[resourcePoolPathId] = resourcePoolInfo;
-
-    if (!acl.empty()) {
-        resourcePoolPath->ApplyACL(acl);
-    }
-
-    context.SS->PersistPath(db, resourcePoolPathId);
-    context.SS->PersistResourcePool(db, resourcePoolPathId, resourcePoolInfo);
-    context.SS->PersistTxState(db, operationId);
-}
-
 }  // namespace NKikimr::NSchemeShard::NResourcePool

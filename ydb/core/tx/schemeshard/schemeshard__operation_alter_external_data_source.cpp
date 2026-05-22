@@ -146,14 +146,6 @@ class TAlterExternalDataSource : public TSubOperation {
         return externalDataSource;
     }
 
-    void CreateTransaction(const TOperationContext& context,
-                           const TPathId& externalDataSourcePathId) const {
-        TTxState& txState = context.SS->CreateTx(OperationId,
-                                                 TTxState::TxAlterExternalDataSource,
-                                                 externalDataSourcePathId);
-        txState.Shards.clear();
-    }
-
     void RegisterParentPathDependencies(const TOperationContext& context,
                                         const TPath& parentPath) const {
         if (parentPath.Base()->HasActiveChanges()) {
@@ -162,29 +154,6 @@ class TAlterExternalDataSource : public TSubOperation {
                                          : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
-    }
-
-    void AdvanceTransactionStateToPropose(const TOperationContext& context,
-                                          NIceDb::TNiceDb& db) const {
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-    }
-
-    void PersistExternalDataSource(
-        const TOperationContext& context,
-        NIceDb::TNiceDb& db,
-        const TPathElement::TPtr& externalDataSourcePath,
-        const TExternalDataSourceInfo::TPtr& externalDataSourceInfo) const {
-        const auto& externalDataSourcePathId = externalDataSourcePath->PathId;
-
-        context.SS->ExternalDataSources[externalDataSourcePathId] = externalDataSourceInfo;
-
-        context.SS->PersistPath(db, externalDataSourcePathId);
-
-        context.SS->PersistExternalDataSource(db,
-                                              externalDataSourcePathId,
-                                              externalDataSourceInfo);
-        context.SS->PersistTxState(db, OperationId);
     }
 
 public:
@@ -255,15 +224,27 @@ public:
 
         AddPathInSchemeShard(result, dstPath);
         const TPathElement::TPtr externalDataSource = ReplaceExternalDataSourcePathElement(dstPath);
-        CreateTransaction(context, externalDataSource->PathId);
 
-        NIceDb::TNiceDb db(context.GetDB());
+        auto guard = context.DbGuard();
+
+        context.MemChanges.GrabPath(context.SS, externalDataSource->PathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, externalDataSource->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(externalDataSource->PathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistExternalDataSource(externalDataSource->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        context.SS->ExternalDataSources[externalDataSource->PathId] = externalDataSourceInfo;
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExternalDataSource, externalDataSource->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
 
         RegisterParentPathDependencies(context, parentPath);
-
-        AdvanceTransactionStateToPropose(context, db);
-
-        PersistExternalDataSource(context, db, externalDataSource, externalDataSourceInfo);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,
@@ -277,7 +258,6 @@ public:
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TAlterExternalDataSource AbortPropose"
               << ": opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterExternalDataSource");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

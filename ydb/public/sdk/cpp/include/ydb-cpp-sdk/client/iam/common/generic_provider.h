@@ -192,18 +192,28 @@ private:
 
         void FillContext(std::unique_lock<std::mutex>& guard) {
             auto& context = Context_.emplace();
-            auto deadline = gpr_time_add(
+            const auto deadline = gpr_time_add(
                 gpr_now(GPR_CLOCK_MONOTONIC),
                 gpr_time_from_micros(IamEndpoint_.RequestTimeout.MicroSeconds(), GPR_TIMESPAN));
 
             context.set_deadline(deadline);
 
-            if (AuthTokenProvider_) {
-                guard.unlock();
-                auto token = AuthTokenProvider_->GetAuthInfo();
-                guard.lock();
+            if (!AuthTokenProvider_) {
+                return;
+            }
 
-                context.AddMetadata("authorization", "Bearer " + token);
+            guard.unlock();
+            try {
+                const auto token = AuthTokenProvider_->GetAuthInfo();
+                guard.lock();
+                if (!Context_.has_value()) {
+                    return;
+                }
+                Context_->AddMetadata("authorization", "Bearer " + token);
+            } catch (...) {
+                guard.lock();
+                ResetContextImpl();
+                throw;
             }
         }
 
@@ -230,6 +240,7 @@ private:
                 }
                 FillContext(guard);
                 if (NeedStop_) {
+                    ResetContextImpl();
                     return false;
                 }
             }

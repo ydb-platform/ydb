@@ -39,8 +39,6 @@
    }
    ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -95,5 +93,4 @@
   }
   ```
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}

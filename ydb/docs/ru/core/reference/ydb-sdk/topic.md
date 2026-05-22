@@ -2152,9 +2152,6 @@
               await session_pool.retry_tx_async(callee)
   ```
 
-<<<<<<< HEAD
-- Java (sync)
-=======
   {% endcut %}
 
   ```python
@@ -2170,7 +2167,6 @@
   ```
 
 - Java
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 
   {% list tabs %}
 

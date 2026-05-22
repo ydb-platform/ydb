@@ -37,8 +37,7 @@ Table of contents:
 
   - [Enable logging](debug-logs.md)
   - [Enable metrics in Prometheus](debug-prometheus.md)
-  - [Enable tracing in Jaeger](debug-jaeger.md)
-  - [Enable tracing in OpenTelemetry](debug-otel.md)
+  - [Tracing with OpenTelemetry](debug-otel.md)
 
 See also:
 

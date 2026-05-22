@@ -166,7 +166,11 @@ private:
                     .ResponseCode = Aws::Http::HttpResponseCode::INSUFFICIENT_STORAGE,
                 };
             case EWOULDBLOCK:
+#if EAGAIN != EWOULDBLOCK
+            case EAGAIN:
+#endif
                 return TReplyErrorOpts{
+                    .ErrorMessage = "File is locked by another process",
                     .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
                     .Retryable = true,
                     .ExceptionName = "FsFileLocked",
@@ -180,7 +184,9 @@ private:
     template<typename TEvResponse, typename... TCtorArgs>
     void ReplyFsSystemError(const NActors::TActorId& sender, const TSystemError& ex, TCtorArgs&&... ctorArgs) {
         auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
-        opts.ErrorMessage = ex.what();
+        if (opts.ErrorMessage.empty()) {
+            opts.ErrorMessage = ex.what();
+        }
         ReplyError<TEvResponse>(sender, std::move(opts), std::forward<TCtorArgs>(ctorArgs)...);
     }
 

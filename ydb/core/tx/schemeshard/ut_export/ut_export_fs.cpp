@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
         TestExport(runtime, ++txId, "/MyRoot", R"(
             ExportToFsSettings {
-              base_path: "/nonexistent_dir_that_does_not_exist/exports"
+              base_path: "/nonexistent_dir/exports"
               number_of_retries: 10
               items {
                 source_path: "/MyRoot/Table"

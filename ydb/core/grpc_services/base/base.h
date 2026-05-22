@@ -1416,22 +1416,22 @@ public:
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
         auto data = MakeByteBufferFromSerializedResult(std::move(in));
-        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
-            FinishSpan();
-        }
         if (flag == IRequestCtx::EStreamCtrl::FINISH) {
             AuditLogRequestEnd(status);
+        }
+        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
+            FinishSpan();
         }
         Ctx_->Reply(&data, status, flag);
     }
 
     void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
         auto data = MakeByteBufferFromSerializedResult(std::move(in));
-        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
-            FinishSpan();
-        }
         if (flag == IRequestCtx::EStreamCtrl::FINISH) {
             AuditLogRequestEnd(status);
+        }
+        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
+            FinishSpan();
         }
         Ctx_->Reply(&data, status, flag);
     }

@@ -53,6 +53,6 @@ struct TGroupDiskInfo {
     ui32 ExpectedSlotCount;
 };
 
-void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type);
+void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type, ui32 groupSizeInUnits);
 
 } // NKikimr::NBsController

@@ -3676,12 +3676,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     class TKikimrRunnerWithPauseIndexBuild : public TKikimrRunner {
     public:
-        static TKikimrSettings MakeSettings(bool onlineUnique = false) {
+        static TKikimrSettings MakeSettings(bool onlineUnique = false, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
             NKikimrConfig::TFeatureFlags featureFlags;
             featureFlags.SetEnableAddUniqueIndex(true);
             featureFlags.SetEnableOnlineAddUniqueIndex(onlineUnique);
 
-            TKikimrSettings settings;
+            NKikimrConfig::TAppConfig app;
+            if (enableIndexStreamWrite) {
+                app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+            }
+
+            TKikimrSettings settings(app);
             settings
                 .SetFeatureFlags(featureFlags)
                 .SetUseRealThreads(false);
@@ -3689,8 +3694,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return settings;
         }
 
-        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false, bool onlineUnique = false)
-            : TKikimrRunner(MakeSettings(onlineUnique))
+        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false, bool onlineUnique = false, std::optional<bool> enableIndexStreamWrite = std::nullopt)
+            : TKikimrRunner(MakeSettings(onlineUnique, enableIndexStreamWrite))
             , BuildIndexRequestPromise(NThreading::NewPromise<void>())
             , BuildIndexRequest(BuildIndexRequestPromise.GetFuture())
             , ValidateIndexRequestPromise(NThreading::NewPromise<void>())
@@ -3749,8 +3754,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         bool ValidateIndexEventIsIntercepted = false;
     };
 
-    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface, bool onlineBuild) {
-        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */, onlineBuild);
+    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface, bool onlineBuild, std::optional<bool> enableIndexStreamWrite) {
+        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */, onlineBuild, enableIndexStreamWrite);
         kikimr.RunCall([&]
         {
             auto db = kikimr.GetTableClient();
@@ -3898,20 +3903,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         });
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsPublicApi) {
-        BuildingUniqIndexAllowsTableModifications(false, false);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexDeniesTableModificationsPublicApi, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(false, false, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsSql) {
-        BuildingUniqIndexAllowsTableModifications(true, false);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexDeniesTableModificationsSql, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(true, false, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsPublicApi) {
-        BuildingUniqIndexAllowsTableModifications(false, true);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexAllowsTableModificationsPublicApi, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(false, true, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsSql) {
-        BuildingUniqIndexAllowsTableModifications(true, true);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexAllowsTableModificationsSql, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(true, true, EnableIndexStreamWrite);
     }
 
     void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {

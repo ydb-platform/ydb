@@ -357,6 +357,8 @@ Default value: `1s`
 Together with the `min_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
 
 Default value: `1m`
+    ||
+|#
 
 ## Node registration token configuration {#node-registration-token}
 

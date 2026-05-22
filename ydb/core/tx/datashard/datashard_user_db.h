@@ -266,10 +266,6 @@ private:
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 
-    void InsertFulltextSegment(const TTableId& tableId, ui64 localTableId, ui32 addedTag, ui32 segmentTag,
-        TIntrusivePtr<NACLib::TUserContext> userCtx, const TRawTypeValue& token, ui64 maxId, ui64 gen,
-        bool added, NFulltext::IDeltaReader& reader, ui64 maxSegmentDocs, bool withRelevance);
-
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
     void IncreaseSelectCounters(const TArrayRef<const TRawTypeValue> key);
     void IncreaseSelectCounters(const TArrayRef<const TCell> key);

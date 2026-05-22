@@ -79,9 +79,9 @@ Y_UNIT_TEST_SUITE(DataShardFulltext) {
         {
             auto tableState = ReadTable(server, shards, tableId);
             Cerr << "Data: " << tableState << "\n";
-            TString expectedState = "__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\1\\1\\1\n"
-                "__ydb_token = red, __ydb_max_id = 203, __ydb_generation = 18446744073709551608, __ydb_added = true, __ydb_segment = \\n\\n\\n\n"
-                "__ydb_token = red, __ydb_max_id = 203, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = dd\\1\\2\n";
+            TString expectedState = "__ydb_token = red, __ydb_max_id = 18446744073709551615, __ydb_generation = 18446744073709551600, __ydb_added = true, __ydb_segment = \\n\\n\\n\n"
+                "__ydb_token = red, __ydb_max_id = 18446744073709551615, __ydb_generation = 18446744073709551607, __ydb_added = true, __ydb_segment = dd\\1\\2\n"
+                "__ydb_token = red, __ydb_max_id = 18446744073709551615, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\1\\1\\1\n";
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedState);
         }
 
@@ -91,8 +91,11 @@ Y_UNIT_TEST_SUITE(DataShardFulltext) {
             gFulltextMaxSegment = 3;
 
             // del 100, 200
+            // list becomes: 1 2 3 10 20 30 201 203
+            // -> split into 1 2 3 + 10 20 30 + 201 203
             // add 50, 60
-            // max_id 203 should become: 10 20 30 50 60 201 203 -> split in 3 parts
+            // added as a new segment
+            // -> 1 2 3 [max=9] + 10 20 30 [max=200] + 50 60 [max=200] + 201 203 [max=UINT64_MAX]
             ExecSQL(server, sender, Q_(R"(
                 INSERT INTO `/Root/table/ft_idx/indexImplTable`
                 (__ydb_token, __ydb_max_id, __ydb_generation, __ydb_added, __ydb_segment) VALUES
@@ -108,10 +111,10 @@ Y_UNIT_TEST_SUITE(DataShardFulltext) {
         {
             auto tableState = ReadTable(server, shards, tableId);
             Cerr << "Data: " << tableState << "\n";
-            TString expectedState = "__ydb_token = red, __ydb_max_id = 3, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\1\\1\\1\n"
-                "__ydb_token = red, __ydb_max_id = 30, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\n\\n\\n\n"
-                "__ydb_token = red, __ydb_max_id = 201, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = 2\\n\\x8D\\1\n"
-                "__ydb_token = red, __ydb_max_id = 203, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\xCB\\1\n";
+            TString expectedState = "__ydb_token = red, __ydb_max_id = 9, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\1\\1\\1\n"
+                "__ydb_token = red, __ydb_max_id = 200, __ydb_generation = 18446744073709551609, __ydb_added = true, __ydb_segment = 2\\n\n"
+                "__ydb_token = red, __ydb_max_id = 200, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\n\\n\\n\n"
+                "__ydb_token = red, __ydb_max_id = 18446744073709551615, __ydb_generation = 18446744073709551615, __ydb_added = true, __ydb_segment = \\xC9\\1\\2\n";
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedState);
         }
     }

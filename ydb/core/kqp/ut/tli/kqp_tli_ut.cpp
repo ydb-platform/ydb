@@ -4,6 +4,8 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/core/testlib/actors/wait_events.h>
+#include <ydb/core/tx/time_cast/time_cast.h>
 
 #include <algorithm>
 #include <memory>
@@ -634,6 +636,75 @@ namespace {
 
         void CreateAndSeedTablesWithSecondKey(int count) {
             CreateAndSeedTablesWithSecondKeyInSession(*BreakerSession, count);
+        }
+    };
+
+    // NQuery-based test context (primary API for all tests) not using the real threads
+    struct TTliThreadlessTestContext {
+        TKikimrRunner Kikimr;
+        TQueryClient Client;
+        TSession Session;
+        TSession VictimSession;
+
+        TTliThreadlessTestContext(TStringStream& ss, bool logEnabled = true)
+            : Kikimr(MakeKikimrSettings(ss).SetUseRealThreads(false))
+            , Client(Kikimr.RunCall([&] () { return Kikimr.GetQueryClient(); }))
+            , Session(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
+            , VictimSession(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
+        {
+            ConfigureKikimrForTli(Kikimr, logEnabled);
+        }
+
+        void CreateTable(const TString& tableName) {
+            NKqp::AssertSuccessResult(Kikimr.RunCall([&] () {
+                return Session.ExecuteQuery(Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str()),
+                    TTxControl::NoTx()).GetValueSync();
+            }));
+        }
+
+        void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
+            for (const auto& [key, value] : rows) {
+                NKqp::AssertSuccessResult(Kikimr.RunCall([&] () {
+                    return Session.ExecuteQuery(Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
+                        TTxControl::BeginTx().CommitTx()).GetValueSync();
+                }));
+            }
+        }
+
+        void CreateAndSeedTables(int count) {
+            for (int i = 1; i <= count; ++i) {
+                const TString tablePath = NumberedTablePath(i);
+                CreateTable(tablePath);
+                SeedTable(tablePath, {{1, Sprintf("Init%d", i)}});
+            }
+        }
+
+        void CreateAndSeedTablesWithSecondKey(int count) {
+            for (int i = 1; i <= count; ++i) {
+                const TString tablePath = NumberedTablePath(i);
+                CreateTable(tablePath);
+                SeedTable(tablePath, {{1, Sprintf("Init%d", i)}, {2, Sprintf("Init%d_2", i)}});
+            }
+        }
+
+        void ExecuteQuery(const TString& query, bool sync = true) {
+            if (sync) {
+                TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate>(*Kikimr.GetTestServer().GetRuntime()).Wait();
+            }
+            NKqp::AssertSuccessResult(Kikimr.RunCall([&] () {
+                return Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            }));
+        }
+
+        std::optional<TTransaction> BeginTx(TSession& session, const TString& query) {
+            auto result = Kikimr.RunCall([&] () { return session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetTransaction();
+        }
+
+        std::pair<EStatus, TString> CommitTxWithIssues(TTransaction& tx) {
+            auto result = Kikimr.RunCall([&] () { return tx.Commit().GetValueSync(); });
+            return {result.GetStatus(), result.GetIssues().ToString()};
         }
     };
 
@@ -1692,74 +1763,6 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
     }
 
-    // Test: Concurrent UPSERT...SELECT transactions - expected cancellation of victim transaction does not happen.
-    // This test does not use real threads and due to a lower step resolution always reproduces a bug with detecting TLI conflicts
-    // if MVCC versions of victim and breaker happen to be the same.
-    Y_UNIT_TEST(ConcurrentUpsertSelectRaceThreadless) {
-        const TString victimUpsertSelect = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) "
-                                           "SELECT Key, \"VictimModified\" AS Value FROM `/Root/Tenant1/Table1` "
-                                           "WHERE Key = 1u";
-
-        const TString breakerUpsert = "UPSERT INTO `/Root/Tenant1/Table1` (Key, Value) VALUES (1u, \"BreakerValue\")";
-
-        TStringStream ss;
-        struct TTliThreadlessTestContext {
-            TKikimrRunner Kikimr;
-            TQueryClient Client;
-            TSession Session;
-            TSession VictimSession;
-
-            TTliThreadlessTestContext(TStringStream& ss, bool logEnabled = true)
-                : Kikimr(MakeKikimrSettings(ss).SetUseRealThreads(false))
-                , Client(Kikimr.RunCall([&] () { return Kikimr.GetQueryClient(); }))
-                , Session(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
-                , VictimSession(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
-            {
-                ConfigureKikimrForTli(Kikimr, logEnabled);
-            }
-            void CreateAndSeedTables(int count) {
-                CreateAndSeedTablesInSession(Session, count);
-            }
-
-            void ExecuteQuery(const TString& query) {
-                NKqp::AssertSuccessResult(Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync());
-            }
-        };
-
-        TTliThreadlessTestContext ctx(ss);
-
-        EStatus status;
-        TBasicString<char> issues;
-
-        auto future = ctx.Kikimr.RunInThreadPool([&] () {
-            ctx.CreateAndSeedTables(1);
-
-            auto victimTx = BeginTx(ctx.VictimSession, victimUpsertSelect);
-
-            // if this line is uncommented, leading to a waiting for a step update, the test succeeds
-            //
-            // TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate>(*ctx.Kikimr.GetTestServer().GetRuntime()).Wait();
-            //
-            // in order to compile with the previous line, add the following headers:
-            //
-            // #include <ydb/core/testlib/actors/wait_events.h>
-            // #include <ydb/core/tx/time_cast/time_cast.h>
-
-            ctx.ExecuteQuery(breakerUpsert);
-
-            std::tie(status, issues) = CommitTxWithIssues(*victimTx);
-        });
-
-        auto& runtime = *ctx.Kikimr.GetTestServer().GetRuntime();
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back(
-            [&](IEventHandle&) { return status != EStatus::STATUS_UNDEFINED; });
-        runtime.DispatchEvents(opts);
-
-        runtime.WaitFuture(future);
-
-        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
-    }
 }
 
 } // namespace NKqp

@@ -7,6 +7,9 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
@@ -198,8 +201,10 @@ public:
             if (isStrictCheck) { \
                 Y_ENSURE(str.empty(), #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : \n" << str.Str()); \
             } else if (!str.empty()) { \
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, \
-                     #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : " << str.Str()); \
+                YDB_LOG_CTX_ERROR(ctx, "", \
+                    {"Table", #table " table is not empty when starting Split at tablet "}, \
+                    {"TabletID", Self->TabletID()}, \
+                    {"Str", str.Str()}); \
             } \
         }
 

@@ -15,6 +15,9 @@
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
 
@@ -740,8 +743,9 @@ private:
             YDB_LOG(NActors::NLog::PRI_DEBUG, "Update already in flight, skipping snapshot collection",
                 {"LogPrefix", LogPrefix});
         }
-        LOG_LOG_S(*TlsActivationContext, NActors::NLog::PRI_DEBUG, NKikimrServices::LONG_TX_SERVICE, LogPrefix << "Scheduling next TEvRemoteSnapshotsUpdate in "
-            << AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds() << " seconds");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Scheduling next TEvRemoteSnapshotsUpdate in seconds",
+            {"LogPrefix", LogPrefix},
+            {"GetSnapshotsExchangeIntervalSeconds", AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds()});
         Schedule(
             TDuration::Seconds(AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds()),
             new TEvPrivate::TEvRemoteSnapshotsUpdate());

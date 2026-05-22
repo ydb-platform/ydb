@@ -8,6 +8,9 @@
 
 #include <util/string/builder.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METERING_WRITER
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METERING_WRITER
 
@@ -98,9 +101,9 @@ void TMeteringWriteActor::HandleWriteMeteringJson(
 
 void TMeteringWriteActor::HandleUnexpectedEvent(STFUNC_SIG)
 {
-    LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::METERING_WRITER,"TMeteringWriteActor:"
-          << " unhandled event type: " << ev->GetTypeRewrite()
-          << " event: " << ev->ToString());
+    YDB_LOG_WARN("TMeteringWriteActor: unhandled event",
+        {"type", ev->GetTypeRewrite()},
+        {"event", ev->ToString()});
 }
 
 }   // namespace

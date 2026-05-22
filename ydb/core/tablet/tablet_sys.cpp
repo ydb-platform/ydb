@@ -14,6 +14,9 @@
 #include <util/generic/set.h>
 #include <util/stream/str.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
@@ -1518,7 +1521,10 @@ void TTablet::GcLogChannel(ui32 step) {
         return;
     }
 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " <<"GcCollect 0 channel, tablet:gen:step => " << gen << ":" << step << " Marker# " << "TSYS28");
+    YDB_LOG_DEBUG("GcCollect 0 channel, tablet:gen:step => Marker# TSYS28",
+        {"Tablet", TabletID()},
+        {"gen", gen},
+        {"step", step});
 
     const TTabletChannelInfo *channelInfo = Info->ChannelInfo(0);
     if (GcCounter == 0) {

@@ -6,6 +6,9 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
 #include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -272,7 +275,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                                      TOperationContext& context) {
             YDB_LOG_CTX_INFO(context.Ctx, "SyncIndexSchemaVersions: Starting schema version sync for restored indexes",
                 {"TabletID", context.SS->TabletID()});
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " <<"SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
+            YDB_LOG_CTX_INFO(context.Ctx, "SyncIndexSchemaVersions: Processing target table paths",
+                {"TabletID", context.SS->TabletID()},
+                {"size", finalize.GetTargetTablePaths().size()});
             
             NIceDb::TNiceDb db(context.GetDB());
             THashSet<TPathId> publishedMainTables;

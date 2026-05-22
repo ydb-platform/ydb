@@ -1,23 +1,17 @@
-# Workload Manager — resource consumption management
+# Workload Manager — Resource Consumption Management
 
-[Resource pools](../concepts/glossary.md#) allow you to isolate [database](../concepts/glossary.md#database ) resources between running queries or configure resource allocation strategies in case of oversubscription (allocating more resources than are available in system). All resource pools are equal, without any hierarchy, and influence each other only when there is a general shortage of resources.
+[Resource pools](../concepts/glossary.md#resource-pool) allow you to isolate database resources between running queries or configure resource allocation strategies in case of oversubscription (requesting more resources than are available in the system). All resource pools are equal, without any hierarchy, and affect each other only in case of a general resource shortage.
 
-For example, one typical resource isolation scenario is to separate two classes of consumers (customer/client/user):
+For example, one of the typical resource isolation scenarios is to separate two classes of consumers:
 
 1. A regular robotic process that generates a report once a day.
-
-2. Analysts who perform ad hoc queries.
-
+2. Analysts who run ad hoc queries.
 {% note warning %}
-
-The presented functionality for managing resource consumption is in the Preview stage
-
+The presented functionality for managing resource consumption is in the Preview stage.
 {% endnote %}
+## Creating a resource pool
 
-## Creating a resource-pool
-
-The example below shows the syntax for creating a separate resource-pool named "olap" on which to run analytics queries:
-
+The example below shows the syntax for creating a separate resource pool named "olap" that will be used to run analytical queries:
 ```yql
 CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=10,
@@ -28,68 +22,60 @@ CREATE RESOURCE POOL olap WITH (
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
 )
 ```
-
-For a complete list of resource pool parameters, see the help for (link). Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT` , `QUEUE_SIZE` , `DATABASE_LOAD_CPU_THRESHOLD` ), while others apply only to one compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE` , `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` , `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE` ). CPU can be shared between all pools in case of oversubscription on one compute node using `RESOURCES_WEIGHT` .
+You can find a complete list of resource pool parameters in the reference [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters). Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), while others apply only to a single compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE`). CPU can be shared among all pools in case of over-subscription on a single compute node using `RESOURCES_WEIGHT`.
 
 ![resource_pools](../_assets/resource_pool.png)
 
-Let's look at the example above what these parameters actually mean and how they will affect resource allocation. Let's say the database {{ ydb-short-name }} has $10$ nodes allocated for $10 vCPU$. In total, such a database contains $100 vCPU$. Then on each node for a resource pool named `olap` the following will be allocated:
+Let's look at the example above to understand what these parameters actually mean and how they will affect resource allocation. Suppose that {{ ydb-short-name }} database has 10 nodes with 10 vCPU each. In total, such a database has 100 vCPU. Then, for each node, the resource pool named `olap` will be allocated:
 
 $\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 = 7 vCPU$
 
-In total, with an even distribution of resources across the entire database, the resource pool will be allocated:
+In total, with uniform resource distribution across the entire database, the resource pool will be allocated:
 
 $7 vCPU \cdot 10 \text{ (nodes)} = 70 vCPU$
 
-For one query in this resource pool the following will be allocated:
+For a single query in this resource pool, the following will be allocated:
 
 $\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} \cdot \frac{QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 \cdot 0.5 = 3.5 vCPU$
 
-### How CONCURRENT_QUERY_LIMIT и QUEUE_SIZE {#concurrent_query_limit} works
+### How CONCURRENT_QUERY_LIMIT and QUEUE_SIZE work {#concurrent_query_limit}
 
-Let's say there are already 9 querys running in the `olap` resource pool . When a new query arrives, its execution will immediately start in parallel with the other 9 queries. Now there will be 10 querys running in the pool. If the 11th query arrives in the pool, it will not start executing, but will be placed in a waiting queue. When at least one of the 10 running querys completes, the 11th query will be removed from the queue and begin executing.
+Suppose that there are already 9 queries running in the `olap` resource pool. When a new query arrives, it will immediately start running in parallel with the other 9 queries. Now there will be 10 queries running in the pool. If the 11th query arrives in the pool, it will not start running but will be placed in the waiting queue. When at least one of the 10 running queries completes, the 11th query will be removed from the queue and will start running.
 
-If there are already $QUEUE\_SIZE = 1000$ querys in the queue , then when sending the 1001st query, the client will immediately receive an error in response, and this query will not be executed. Error example:
-
+If there are already $QUEUE\_SIZE = 1000$ queries in the queue, then when the 1001st query is sent, the client will immediately receive an error in response, and this query will not be executed. Example of an error:
 ```text
 Issues:
-<main>: Error: Request was rejected, number of local pending querys is 20, number of global delayed/running querys is 0, sum of them is larger than allowed limit 1 (including concurrent query limit 1) for pool olap
+<main>: Error: Request was rejected, number of local pending requests is 20, number of global delayed/running requests is 0, sum of them is larger than allowed limit 1 (including concurrent query limit 1) for pool olap
 <main>: Error: Query failed during adding/waiting in workload pool olap
 ```
+The number of concurrently executed queries is affected not only by `CONCURRENT_QUERY_LIMIT`, but also by `DATABASE_LOAD_CPU_THRESHOLD`.
 
-The number of concurrently executed queries is affected not only by `CONCURRENT_QUERY_LIMIT` , but also by `DATABASE_LOAD_CPU_THRESHOLD` .
+### How DATABASE_LOAD_CPU_THRESHOLD works {#database_load_cpu_threshold}
 
-### How works DATABASE_LOAD_CPU_THRESHOLD {#database_load_cpu_threshold}
+When a query arrives at a resource pool with `DATABASE_LOAD_CPU_THRESHOLD` set, 10% of the available CPU on the node is immediately reserved, based on the assumption that the query will require at least this amount of resources. Then, every 10 seconds, the consumption of resources across the entire database is recalculated, which allows refining the initial 10% estimate. This means that if more than 10 queries arrive at the cluster node simultaneously, no more than 10 queries will be started for execution, and the rest will wait for the actual CPU consumption to be clarified.
 
-When a query enters a resource pool that has `DATABASE_LOAD_CPU_THRESHOLD` set, 10% of the available CPU on the node is immediately reserved, based on the assumption that the query will at least require that amount of resources. Then, every 10 seconds, resource consumption across the entire database is recalculated, allowing the initial 10% estimate to be refined. This means that if more than 10 querys simultaneously arrive at a cluster node, then no more than 10 querys will be launched for execution, and the rest will wait for clarification of the actual CPU consumption.
+As with `CONCURRENT_QUERY_LIMIT`, if the specified load threshold is exceeded, queries are sent to the waiting queue.
 
-As with `CONCURRENT_QUERY_LIMIT` , when the specified load threshold is exceeded, querys are sent to a waiting queue.
-
-### Resource allocation according to RESOURCES_WEIGHT {#resources_weight}
+### Resource distribution according to RESOURCES_WEIGHT {#resources_weight}
 
 ![resource_pools](../_assets/resources_weight.png)
 
-The `RESOURCES_WEIGHT` parameter starts working only in case of oversubscription and if there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` only affects the allocation of `vCPU` resources. When querys appear in the resource pool, it begins to participate in resource allocation. To do this, the limits in the pools are recalculated according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The redistribution of resources itself is performed on each computing node individually, as shown in the figure above.
+The `RESOURCES_WEIGHT` parameter starts working only in case of oversubscription and when there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` affects only the distribution of `vCPU` resources. When queries appear in a resource pool, it begins to participate in resource distribution. For this, the pools recalculate limits according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The redistribution of resources itself is performed individually on each compute node, as shown in the figure above.
 
-Let's say we have a node on the system with $10 vCPU$ available. Limitations are set to:
+Let's assume we have a node in the system with $10 vCPU$ available. The following restrictions are set:
 
 - $TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 30$,
 - $QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 50$.
 
-In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per query in that pool (Figure *a*). If there are 4 such pools on the system and they are all trying to use the maximum resources, that would be $12 vCPU$, which is more than the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCES_WEIGHT` comes into effect, and each pool will be allocated $2.5 vCPU$ (Figure *b*).
+In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per query in this pool (figure *a*). If there are 4 such pools in the system and they all try to use maximum resources, this will amount to $12 vCPU$, which exceeds the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCES_WEIGHT` comes into effect, and each pool will be allocated $2.5 vCPU$ (figure *b*).
 
-If you need to increase the allocated resources for a particular pool, you can change its weight, for example, to 200. Then this pool will receive $3 vCPU$, and the other pools will equally share the remaining $7 vCPU$, which will be $\frac{7}{3} vCPU$ per pool (Figure *c*).
-
+If you need to increase the allocated resources for a specific pool, you can change its weight, for example, to 200. Then this pool will receive $3 vCPU$, and the remaining pools will share the remaining $7 vCPU$ equally, which will amount to $\frac{7}{3} vCPU$ per pool (figure *c*).
 {% note warning %}
-
-The current resource allocation algorithm may change in the future without maintaining backward compatibility.
-
+The current resource allocation algorithm may be changed in the future without backward compatibility support.
 {% endnote %}
-
 ## Default resource pool
 
-Even if no resource pool has been created, there is always a `default` resource pool in the system that cannot be deleted. Any query running in the system always belongs to some pool - there is no situation where a query is not tied to any resource pool. By default, the `default` resource pool settings look like this:
-
+Even if no resource pools have been created, the system always has a `default` resource pool, which cannot be deleted. Any request running in the system always belongs to some pool — there are no situations where a request is not associated with any resource pool. By default, the settings of the `default` resource pool look like this:
 ```yql
 CREATE RESOURCE POOL default WITH (
     CONCURRENT_QUERY_LIMIT=-1,
@@ -101,21 +87,26 @@ CREATE RESOURCE POOL default WITH (
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=-1
 )
 ```
+This means that no restrictions are applied in the `default` resource pool: it operates independently of other pools and has no limits on the resources it consumes. In the `default` resource pool, you can change parameters using the [{#T}](../yql/reference/syntax/alter-resource-pool.md) request, with the exception of the `CONCURRENT_QUERY_LIMIT`, `DATABASE_LOAD_CPU_THRESHOLD`, and `QUEUE_SIZE` parameters. This restriction is intentional to minimize the risks associated with incorrect configuration of the default resource pool.
+## Resource Pool ACL Management
 
-This means that the `default` resource pool does not have any restrictions applied: it operates independently of other pools and has no restrictions on the resources it can consume. In the `default` resource pool , you can change parameters using the query (link), with the exception of the parameters `CONCURRENT_QUERY_LIMIT`, `DATABASE_LOAD_CPU_THRESHOLD` and `QUEUE_SIZE` . This limitation is intentional to minimize the risks associated with incorrectly configuring the default resource pool.
+### Permissions for Creating, Modifying, and Deleting a Resource Pool
 
-## Resource pool ACL management
-
-Access rights must be granted according to the permissions described in the reference for (link) to create, modify, or delete a resource pool. For example, to create resource pools, you need to have `CREATE TABLE` permission to the `.metadata/workload_manager/pools` directory , which can be issued with a query like this:
-
+To create, modify, or delete a resource pool, you need to grant access rights in accordance with the permissions described in the reference [{#T}](../yql/reference/syntax/create-resource-pool.md). For example, to create resource pools, you need to have `CREATE TABLE` permission on the `.metadata/workload_manager/pools` directory, which can be granted with a query of the following type:
 ```yql
 GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
 ```
+### Permissions to Execute a Query in a Resource Pool {#run-access}
 
-## Creating a resource pool classifier
+To execute a query in a pool, a user must have [access permission](../yql/reference/syntax/grant.md#permissions-list) `SELECT` for this pool. Example of granting permissions:
+```yql
+GRANT SELECT
+    ON `.metadata/workload_manager/pools/olap`
+    TO `user1@domain`;
+```
+## Creating a Resource Pool Classifier
 
-[Resorce pool classifier](../concepts/glossary.md#resource-pool-classifier) allows you to set rules by which querys will be distributed between resource pools. The example below is a resource pool qualifier that sends querys from all users to a resource pool named `olap`:
-
+[Resource pool classifiers](../concepts/glossary.md#resource-pool-classifier) allow you to set rules for distributing queries among resource pools. The example below shows a resource pool classifier that sends queries from all users to the resource pool named `olap`:
 ```yql
 CREATE RESOURCE POOL CLASSIFIER olap_classifier
 WITH (
@@ -123,22 +114,19 @@ WITH (
     MEMBER_NAME = 'all-users@well-known'
 );
 ```
+- `RESOURCE_POOL` — the name of the resource pool to which the request that meets the requirements specified in the resource pool classifier will be sent.
+- `MEMBER_NAME` — a user group or user whose requests will be sent to the specified resource pool.
+## Managing ACL of the Resource Pool Classifier
 
-- `RESOURCE_POOL` - the name of the resource pool to which a query that satisfies the requirements specified in the resource pool classifier will be sent.
-- `MEMBER_NAME` — a group of users or user whose querys will be sent to the specified resource pool.
-
-## Resource pool classifier ACL management
-
-There are no restrictions on the use of the resource pool classifier - they are global for the entire database and available to all users. To create, delete, or modify a resource pool classifier, you must have `ALL` permission on the entire database, which can be issued with a query like:
-
+Resource pool classifiers are global for the entire database and apply to all users. To create, delete, or modify a resource pool classifier, you need to have [access rights](../yql/reference/syntax/grant.md#permissions-list) `USE` for the entire database, which can be granted with a query of the following form:
 ```yql
-GRANT ALL ON `/my_db` TO user1;
+GRANT USE ON `/my_db` TO user1;
 ```
 
-To use a resource pool classifier, the user must have access to the resource pool that the classifier refers to.
-
-## How to select a resource pool classifier in case of conflicts
-
+{% note warning %}
+To use the classifier, the user must have [access to the resource pool](#run-access) that this classifier refers to. If there is no such access, the classifier is skipped and the next one is checked. In future versions, this behavior may change, so do not use the lack of access rights to the pool as a mechanism for controlling which classifier is triggered.
+{% endnote %}
+## The order of selecting a resource pool classifier in case of conflicts
 ```yql
 CREATE RESOURCE POOL CLASSIFIER olap1_classifier
 WITH (
@@ -152,17 +140,14 @@ WITH (
     MEMBER_NAME = 'user1@domain'
 );
 ```
+Suppose there are two resource pool classifiers with conflicting conditions, and the user `user1@domain` meets the criteria for both resource pools: `olap1` and `olap2`. If no classifiers existed in the system before, then `RANK=1000` is set for `olap1`, and `RANK=2000` for `olap2`. Resource pool classifiers with a lower `RANK` value have higher priority. In this example, since `olap1` has a higher-priority `RANK` than `olap2`, `olap1` will be selected.
 
-Let's say there are two resource pool classifiers with conflicting conditions, and the user `user1@domain` matches both resource pools: `olap1` and `olap2` . If no classifier existed in the system before, then `RANK=1000` is set for `olap1` , and `RANK =2000` for `olap2` . Resource pool classifiers with lower `RANK` values ​​have higher priority. In this example, since `olap1` has a higher priority `RANK` than `olap2` , it will be selected.
+You can also set `RANK` for resource pool classifiers yourself during creation using the syntax construct [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md), or change `RANK` for existing resource pool classifiers using [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
 
-You can also independently set `RANK` for resource pool classifiers when creating using the syntactic construction (link), or change `RANK` for existing resource pool classifiers using (link).
+The system cannot have two classifiers with the same `RANK` value, which allows unambiguously determining which resource pool will be selected in case of conflicting conditions.
+## Example of a Priority Resource Pool
 
-There cannot be two classifiers with the same `RANK` value in the system , which makes it possible to unambiguously determine which resource pool will be selected in the event of conflicting conditions.
-
-## Example of a priority resource pool
-
-Let's consider an example of a resource allocation problem between a team of analysts and a fictitious director (CEO). It is important for the CEO to have priority over computing resources that are used for analytical tasks, but it is useful to ensure that the analytics team can utilize more cluster resources during periods of time when the CEO is not using resources. The configuration for this scenario might look like this:
-
+Let's consider an example of the task of distributing resources between an analytics team and a hypothetical CEO. For the CEO, it is important to have priority over the computing resources used for analytical tasks, but it is also useful to provide the analytics team with the opportunity to utilize more cluster resources during periods of time when the CEO is not using the resources. The configuration for this scenario might look like this:
 ```yql
 CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=20,
@@ -181,31 +166,40 @@ CREATE RESOURCE POOL the_ceo WITH (
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=100
 );
 ```
+In the example above, two resource pools are created: `olap` for the analytics team and `the_ceo` for the CEO.
 
-In the example above, two resource pools are created: `olap` for the analyst team and `the_ceo` for the CEO.
+- **Resource pool `olap`**:
 
-- **Resource pool 'olap'**:
+  - Has a weight of 20.
+  - The limit on running queries when the database is overloaded is 80% of the available resources.
 
-    - Has a weight of 20.
-    - The limit on queries that can be run when the database is overloaded is 80% of available resources.
+- **Resource pool `the_ceo`**:
 
-- **Resource pool 'the_ceo'**:
+  - Has a greater weight — 80.
+  - There are no limits on running queries when the database is overloaded.
 
-    - Has more weight - 80.
-    - Has no restrictions on queries that can be launched when overloaded.
+A weight of 80 for `the_ceo` effectively means that when competing for resources, the `the_ceo` pool will receive 4 times more priority than the `olap` pool. If queries are received in both pools, the system will recalculate the limits, and for `olap`, the `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` limit will be reduced to 20%, and for `the_ceo`, it will be increased to 80%. This resource redistribution is based on weights, as described [above](#resources_weight).
+## Explicit Selection of a Resource Pool for a Query
 
+If necessary, a user can explicitly specify in which resource pool a given query should be executed. Currently, this can be done in the following ways:
+
+- **Embedded UI** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
+- **YDB CLI** — in the [`ydb sql`](../reference/ydb-cli/sql.md) command with the `--resource-pool` parameter, for example, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
+- **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — [by the command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
+- **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
+- **YDB GO SDK** — in the `ExecuteOption` query launch settings via the [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool) call.
+{% note warning %}
+The current version of **YDB Python SDK** does not allow defining the resource pool in which the query should be executed.
+{% endnote %}
 ## Diagnostics
 
-### Query plan
+### Query Plan
 
-Detailed information about query plans can be found on the page [ structure of query plans ]( ../yql/query_plans.md ). To get information about the resource pool used, you need to run a command to obtain statistics in the `json-unicode` format . Example command:
-
+Detailed information about query plans can be found on the page [query plan structure](../yql/query_plans.md). To get information about the resource pool being used, you need to run a command to get statistics in `json-unicode` format. Example of a command:
 ```bash
 ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
 ```
-
-In the body of the query plan obtained using the above command, you can find useful attributes for diagnosing work with the resource pool. An example of such information:
-
+In the request plan body obtained using the command provided above, you can find useful attributes for diagnosing work with the resource pool. An example of such information:
 ```json
 "Node Type" : "Query",
 "Stats" : {
@@ -221,26 +215,51 @@ In the body of the query plan obtained using the above command, you can find use
 },
 "PlanNodeType" : "Query"
 ```
-
 Useful attributes:
 
-- `TotalDurationUs` — total query execution time, including queue time;
-- `ResourcePoolId` — the name of the resource pool to which the query was bound;
-- `QueuedTimeUs` — total time the query waited in the queue.
+- `TotalDurationUs` — total request execution time, including queue waiting time.
+- `ResourcePoolId` — the name of the resource pool to which the request was assigned.
+- `QueuedTimeUs` — total time the request spent in the queue.
 
+### Status of an executing request
+
+Information about how a request is processed in Workload Manager can be obtained from the system view [`.sys/query_sessions`](system-views.md#query-sessions). This view includes the following fields:
+
+- `WmPoolId` `(Utf8)` — the ID of the pool in which the request is being executed.
+- `WmState` `(Utf8)` — the status of the request in WM.
+- `WmEnterTime` `(Timestamp)` — the time when the request entered the PENDING or DELAYED status.
+- `WmExitTime` `(Timestamp)` — the time when the request was sent for execution.
+
+Possible values of the WmState field:
+
+- `NONE` — Not being processed.
+- `PENDING` — Being processed (in the process of classification/routing).
+- `DELAYED` — In the queue.
+- `EXITED` — Sent for execution.
+
+The following query outputs information about all active requests in the system:
+```yql
+select
+    Query,
+    WmPoolId,       -- Pool identifier
+    WmState,        -- Request status in WM
+    WmEnterTime,    -- The time when the request entered the PENDING or DELAYED status
+    WmExitTime      -- The time when the request is submitted for execution
+from `.sys/query_sessions`
+where State = 'EXECUTING'
+```
 ### Metrics
 
-Information about resource pool metrics can be found in [metrics reference](../reference/observability/metrics/index.md#resource_pools).
+Information about resource pool metrics can be found in the [metrics reference](../reference/observability/metrics/index.md#resource_pools).
 
 ### System Views
 
-Information about system views related to resource pools and resource pool qualifiers can be found at (link).
+Information about system views related to resource pools and resource pool classifiers can be found on the page [{#T}](system-views.md#resource_pools).
+## See also
 
-### See also
-
-* (create-resource-pool.md)
-* (alter-resource-pool.md)
-* (drop-resource-pool.md)
-* (create-resource-pool-classifier.md)
-* (alter-resource-pool-classifier.md)
-* (drop-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

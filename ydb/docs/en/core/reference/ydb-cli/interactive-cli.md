@@ -1,123 +1,111 @@
 # Interactive query execution mode
+## General Description
 
-## Overview
+After executing the `{{ ydb-cli }}` command without subcommands, the interactive query execution mode is launched. After that, you can enter queries directly into the console or terminal. When you enter a line break character, the query is considered complete and begins to be executed. The query text can be either a YQL query or a [special command](#spec-commands).
 
-Executing the `{{ ydb-cli }}` command without subcommands launches the interactive query execution mode. After that, you can enter queries directly into the console or terminal. When you enter a newline character, the query text is considered complete, and query execution begins. The query text can be either a [YQL query](../../yql/reference/index.md)  or a [special command](#spec-commands).
-
-General format of the command:
-
+The general form of the command:
 ```bash
 {{ ydb-cli }} [global options...]
 ```
-
-* `global options` — [global parameters](commands/global-options.md).
-
+* `global options` — [global options](commands/global-options.md).
 {% note info %}
-
-Note that the command still requires [connection parameters](./connect.md) to be set. You can supply them by having the default profile, via an explicitly specified profile, or by passing a set of connection parameters.
-
+Please note that to run the commands, [connection parameters](./connect.md) must be specified. It can be a default profile, an explicitly specified profile, and/or a set of connection parameters.
 {% endnote %}
-
-Example usage:
+Example of use:
 
 ![Example](_assets/general-example.gif)
 
-The interactive query execution mode in {{ ydb-short-name }} CLI offers the following features:
+The interactive mode for executing queries in {{ ydb-short-name }} CLI provides the following features:
 
 * [Syntax highlighting](#syntax-highlighting)
 * [Hotkeys](#hotkeys)
 * [Query history](#query-history)
-* [Auto completion](#auto-completion)
+* [Autocompletion](#auto-completion)
 * [Special commands](#spec-commands)
+## Syntax Highlighting {#syntax-highlighting}
 
-## Syntax highlighting {#syntax-highlighting}
+![Syntax Highlighting](_assets/highlighting.jpg)
 
-![Syntax highlighting](_assets/highlighting.jpg)
+The interactive mode supports syntax highlighting for YQL, which helps to better understand the structure of queries. The following groups of elements are highlighted in different colors:
 
-Interactive mode supports YQL syntax highlighting, which helps to better understand the query structure. Different colors are used for the following groups of elements:
-
-* YQL keywords (`SELECT`, `FROM`, `WHERE`, `INSERT`, `UPDATE`, and others)
+* YQL keywords (SELECT, FROM, WHERE, INSERT, UPDATE, and others)
 * Table and column names
 * String literals (text in quotes)
 * Numeric literals
-* Operators (`=`, `<`, `>`, `+`, `-`, and others)
-* Special characters (brackets, commas, dots)
+* Operators (=, <, >, +, - and others)
+* Special characters (parentheses, commas, dots)
 * Comments
+## Hot Keys {#hotkeys}
 
-## Hotkeys {#hotkeys}
+You can use these hot keys when working in interactive mode:
 
-You can use these hotkeys while working in the interactive mode:
+Hot key | Description
+---|---
+`Up arrow` | Displays the previous query from history.
+`Down arrow` | Displays the next query from history.
+`TAB` | Completes the current word based on YQL syntax.
+`CTRL + R` | Searches for a query in history by the entered substring.
+`CTRL + D` | Exits interactive mode.
+## Query History {#query-history}
 
-| Hotkey        | Description                                                               |
-|---------------|---------------------------------------------------------------------------|
-| `Up arrow`    | Shows the previous query from history.                                    |
-| `Down arrow`  | Shows the next query from history.                                        |
-| `TAB`         | Completes the current word based on YQL syntax.                           |
-| `CTRL + R`    | Searches for a query in history containing a specified substring.         |
-| `CTRL + D`    | Exits interactive mode.                                                   |
-
-## Query history {#query-history}
-
-You can navigate through the query history using the up and down arrow keys:
+The up and down arrow keys allow you to navigate through the query history:
 
 ![History](_assets/history.gif)
 
-History is stored locally and persists between CLI launches.
+The history is saved locally and is available between CLI launches.
 
-A query search function (`CTRL + R`) is also supported:
+The search function for queries is also supported (CTRL + R):
 
 ![Search](_assets/history-search.gif)
+## Auto-completion {#auto-completion}
 
-## Auto completion {#auto-completion}
-
-Auto completion helps you write queries more efficiently. While typing, it suggests possible completions for the current word based on YQL syntax.
+Auto-completion helps to write queries more efficiently. As you type, possible options for completing the current word based on YQL syntax are suggested.
 
 It also searches for schema object names in the database where possible.
 
-There are two types of suggestions: auto completion by pressing the `TAB` key and interactive hints.
+There are two types of hints: auto-completion by pressing the `TAB` key and interactive hints.
 
-### Auto completion by pressing the `TAB` key {#auto-completion-tab}
+### Auto-completion by pressing the TAB key {#auto-completion-tab}
 
-While in interactive mode, pressing the `TAB` key shows a list of suggestions for completing the current word according to the YQL syntax.
+In interactive mode, pressing the `TAB` key displays a list of options for completing the current word in accordance with YQL syntax.
 
-![Auto completion](_assets/candidates.gif)
+![Auto-completion](_assets/candidates.gif)
 
-Continue typing to narrow down the list of suitable candidates.
+Continue typing to reduce the number of matching options.
 
-If there is only one available option, pressing `TAB` will automatically complete the current word.
+If only one option is available, pressing `TAB` will automatically complete the current word with it.
 
-If all available options share a common prefix, pressing `TAB` will automatically insert it.
+If all available options have a common prefix, pressing `TAB` will automatically insert it.
 
 ### Interactive hints {#interactive-hints}
 
-While typing in interactive mode, a list of hints appears under the cursor, showing the first four suggestions for completing the current word according to the YQL grammar.
+As you type in interactive mode, a list of hints appears under the cursor, showing the first 4 options for completing the current word according to YQL grammar.
 
 ![Interactive hints](_assets/hints.gif)
 
-This feature provides quick guidance without overwhelming you with all possible options, helping you stay on track while writing queries.
-
+This feature provides quick hints without overwhelming you with all possible options, helping to adhere to the correct syntax when writing queries.
 ## Special commands {#spec-commands}
 
-Special commands are CLI-specific commands and are not part of the YQL syntax. Their purpose is to perform various functions that cannot be accomplished through a YQL query.
+Special commands are specific to the CLI and are not part of the YQL syntax. They are designed to perform various functions that cannot be executed via a YQL query.
 
-| Command                  | Description                                                                                                                                                                      |
-|--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `SET param = value`      | Sets the value of the [internal variable](#internal-vars) `param` to `value`.                                                                                                    |
-| `EXPLAIN query-text`     | Outputs the query plan for `query-text`. Equivalent to the command [ydb table query explain](commands/explain-plan.md#explain-plan).                                             |
-| `EXPLAIN AST query-text` | Outputs the query plan for `query-text` along with the [AST](commands/explain-plan.md). Equivalent to the command [ydb table query explain --ast](commands/explain-plan.md#ast). |
+Command | Description
+---|---
+`SET param = value` | Sets the value of the [internal variable](#internal-vars) `param` to `value`.
+`EXPLAIN query-text` | Displays the execution plan for the `query-text` query. Equivalent to the [ydb sql --explain](sql.md) command.
+`EXPLAIN AST query-text` | Displays the execution plan for the `query-text` query along with the [AST](commands/explain-plan.md). Equivalent to the [ydb sql --explain-ast](sql.md) command.
 
 ### List of internal variables {#internal-vars}
 
-Internal variables determine the behavior of commands and are set using the [special command](#spec-commands) `SET`.
+Internal variables set the behavior of commands and are set using the [special command](#spec-commands) `SET`.
 
-| Variable | Description |
-|----------|---|
-| `stats`  | The statistics collection mode for subsequent queries.<br/>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
+Variable | Description
+---|---
+`stats` | Statistics collection mode for subsequent queries.<br/>Possible values:<ul><li>`none` (default) — do not collect;</li><li>`basic` — collect statistics;</li><li>`full` — collect statistics and the query plan.</li></ul>
+`resource_pool` | Defines the resource pool for executing subsequent queries. Expects the name of the pool as a value.
 
-### Example {#examples}
+### Examples {#examples}
 
-Executing a query in the `full` statistics collection mode:
-
+Executing a query in `full` statistics collection mode:
 ```bash
 $ ydb
 ydb> SET stats = full
@@ -168,4 +156,17 @@ ResultSet
          TotalOutputBytes: 16
          TotalDurationMs: 0
          TotalOutputRows: 1
+```
+Executing a query in the `default` resource pool:
+```bash
+$ ydb
+ydb> SET resource_pool = default
+Resource pool set to "default".
+
+ydb> select 1;
+┌─────────┐
+│ column0 │
+├─────────┤
+│ 1       │
+└─────────┘
 ```

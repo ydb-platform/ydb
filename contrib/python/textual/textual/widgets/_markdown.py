@@ -38,7 +38,7 @@ The triples encode the level, the label, and the optional block id of each headi
 
 
 class MarkdownStream:
-    """An object to manager streaming markdown.
+    """An object to manage streaming markdown.
 
     This will accumulate markdown fragments if they can't be rendered fast enough.
 
@@ -649,7 +649,7 @@ class MarkdownTableContent(Widget):
     def pre_layout(self, layout: Layout) -> None:
         assert isinstance(layout, GridLayout)
         layout.auto_minimum = True
-        layout.expand = True
+        layout.expand = not self.query_ancestor(MarkdownTable).styles.is_auto_width
         layout.shrink = True
         layout.stretch_height = True
 
@@ -870,12 +870,13 @@ class MarkdownFence(MarkdownBlock):
         self.lexer = token.info
         self._highlighted_code = self.highlight(self.code, self.lexer)
 
+    @property
     def allow_horizontal_scroll(self) -> bool:
         return True
 
     @classmethod
     def highlight(cls, code: str, language: str) -> Content:
-        return highlight(code, language=language)
+        return highlight(code, language=language or None)
 
     def _copy_context(self, block: MarkdownBlock) -> None:
         if isinstance(block, MarkdownFence):

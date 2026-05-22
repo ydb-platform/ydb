@@ -23,7 +23,7 @@ class VerticalLayout(Layout):
         parent.pre_layout(self)
         placements: list[WidgetPlacement] = []
         add_placement = placements.append
-        viewport = parent.app.size
+        viewport = parent.app.viewport_size
 
         child_styles = [child.styles for child in children]
         box_margins: list[Spacing] = [
@@ -105,7 +105,6 @@ class VerticalLayout(Layout):
                 content_width.__floor__(),
                 next_y.__floor__() - y.__floor__(),
             )
-
             absolute = styles.has_rule("position") and styles.position == "absolute"
             add_placement(
                 _WidgetPlacement(

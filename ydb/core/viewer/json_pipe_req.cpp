@@ -214,7 +214,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     : Viewer(viewer)
     , HttpEvent(ev)
 {
-    Params = CgiParametersFromViewerHttpUrl(HttpEvent->Get()->Request->URL);
+    Params = TCgiParameters(HttpEvent->Get()->Request->URL.After('?'));
     NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
         BuildParamsFromJson(HttpEvent->Get()->Request->Body);

@@ -581,7 +581,7 @@
     },
     "test.TestViewer.test_security": {
         "cluster_nodes_database": {
-            "status_code": 403,
+            "status_code": 400,
             "text": "`database` is required for /viewer/nodes"
         },
         "cluster_nodes_monitoring": {
@@ -4660,7 +4660,7 @@
             "TotalNodes": "1"
         },
         "database_nodes_missing_database_database": {
-            "status_code": 403,
+            "status_code": 400,
             "text": "`database` is required for /viewer/nodes"
         },
         "database_nodes_monitoring": {

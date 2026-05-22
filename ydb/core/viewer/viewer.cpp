@@ -4,7 +4,6 @@
 #include "json_handlers.h"
 #include "log.h"
 #include "viewer_request.h"
-#include "json_pipe_req.h"
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -309,9 +308,7 @@ public:
                 JsonHandlers.JsonHandlersIndex[TString(aliasPath)] = JsonHandlers.JsonHandlersIndex[TString(canonicalPath)];
                 const auto it = EndpointAccess.find(canonicalPath);
                 if (it != EndpointAccess.end()) {
-                    EndpointAccess[TString(aliasPath)] = TEndpointAccessSettings{
-                        .AccessType = it->second.AccessType,
-                    };
+                    EndpointAccess[TString(aliasPath)] = it->second;
                 }
             };
 
@@ -622,7 +619,6 @@ private:
                     || IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
             case EViewerEndpointAccessType::Database:
             default:
-                Y_ENSURE(false, "Database-level access must not be checked by TViewer::CheckEndpointAccess");
                 return false;
         }
     }
@@ -881,7 +877,7 @@ private:
             TString scopeError;
             switch (ValidateDatabaseScopedRequest(path, msg->Request.GetParams(), msg->UserToken, scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
-                    Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
                     return;
                 case EDatabaseScopedRequestValidationResult::Ok:
                     break;
@@ -971,14 +967,14 @@ private:
             Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
             return;
         }
-        const TCgiParameters proxyParams = CgiParametersFromViewerHttpUrl(ev->Get()->Request->URL);
+        const TCgiParameters proxyParams(ev->Get()->Request->URL.After('?'));
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
             TString scopeError;
             switch (ValidateDatabaseScopedRequest(path, proxyParams, ev->Get()->UserToken, scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
                     Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
-                        ev->Get()->Request->CreateResponseString(GETHTTPACCESSDENIED(ev->Get(), "text/plain", scopeError))));
+                        ev->Get()->Request->CreateResponseString(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError))));
                     return;
                 case EDatabaseScopedRequestValidationResult::Ok:
                     break;

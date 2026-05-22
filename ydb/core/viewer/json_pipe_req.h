@@ -16,7 +16,6 @@
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-#include <library/cpp/cgiparam/cgiparam.h>
 
 namespace NKikimr::NViewer {
 
@@ -404,13 +403,5 @@ protected:
     void HandleTimeout();
     void PassAway() override;
 };
-
-inline TCgiParameters CgiParametersFromViewerHttpUrl(TStringBuf url) {
-    TStringBuf before, after;
-    if (!url.TrySplit('?', before, after)) {
-        return {};
-    }
-    return TCgiParameters(after);
-}
 
 }

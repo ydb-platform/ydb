@@ -112,11 +112,10 @@ private:
             Aws::S3::S3Error(std::move(awsError)));
     }
 
-    template<typename TEvResponse, typename... TCtorArgs>
-    void ReplyError(const NActors::TActorId& sender, TReplyErrorOpts opts, TCtorArgs&&... ctorArgs) {
+    template<typename TEvResponse, typename... Args>
+    void ReplyError(const NActors::TActorId& sender, TReplyErrorOpts opts, Args&&... args) {
         auto outcome = CreateOutcome<TEvResponse>(opts);
-        auto response = std::make_unique<TEvResponse>(
-            std::forward<TCtorArgs>(ctorArgs)..., std::move(outcome));
+        auto response = std::make_unique<TEvResponse>(std::forward<Args>(args)..., std::move(outcome));
         this->Send(sender, response.release());
     }
 
@@ -183,11 +182,11 @@ private:
 
     template<typename TEvResponse, typename... TCtorArgs>
     void ReplyFsSystemError(const NActors::TActorId& sender, const TSystemError& ex, TCtorArgs&&... ctorArgs) {
+    template<typename TEvResponse, typename... Args>
+    void ReplyFsSystemError(const NActors::TActorId& sender, const TSystemError& ex, Args&&... args) {
         auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
-        if (opts.ErrorMessage.empty()) {
-            opts.ErrorMessage = ex.what();
-        }
-        ReplyError<TEvResponse>(sender, std::move(opts), std::forward<TCtorArgs>(ctorArgs)...);
+        opts.ErrorMessage = ex.what();
+        ReplyError<TEvResponse>(sender, std::move(opts), std::forward<Args>(args)...);
     }
 
 public:

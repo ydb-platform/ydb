@@ -894,6 +894,13 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
         }
     }
 
+    if (cf.TenantName) {
+        auto domain = ExtractDomain(cf.TenantName.GetRef());
+        if (!domain.empty()) {
+            return ToString(domain);
+        }
+    }
+
     return "";
 }
 

@@ -490,6 +490,7 @@ TESTCASES = [
     # 9
     (
         R'''
+            PRAGMA dq.MaxTasksPerStage = "3";
             $input = SELECT * FROM myyds.`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
@@ -538,10 +539,14 @@ TESTCASES = [
                 ),
             ]
         ),
+        'ShuffleMode',
+        'Map',
     ),
     # 10
     (
         R'''
+            PRAGMA dq.MaxTasksPerStage = "1";
+
             $input = SELECT * FROM myyds.`{input_topic}`;
 
             $enriched = select
@@ -571,6 +576,8 @@ TESTCASES = [
         * 10,
         'MultiGet',
         'true',
+        'ShuffleMode',
+        'Map',
     ),
     # 11
     (

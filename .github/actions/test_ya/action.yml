@@ -555,6 +555,7 @@ runs:
               --comment_text_file summary_text.txt \
               $PR_ARG \
               --workflow_run_id "${{ github.run_id }}" \
+              --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
           fi
 

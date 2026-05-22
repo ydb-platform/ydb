@@ -87,6 +87,12 @@ TDirectBlockGroup::TDirectBlockGroup(
     , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
+    , LogTitle(GetCycleCount(),
+          TLogTitle::TDirectBlockGroup{
+            .TabletId = TabletId,
+            .Generation = generation,
+              .DirectBlockGroupIndex = DirectBlockGroupIndex,
+            })
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
     , Oracle(StorageConfig, this, HostStatistics, HostStates)
@@ -165,6 +171,7 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroup::CreateChildSpan(
 void TDirectBlockGroup::Run(IPartitionDirectService* service)
 {
     Service = service;
+    LogTitle.SetDiskId(Service->GetVolumeConfig()->DiskId);
 
     ScheduleOracleThinking();
 

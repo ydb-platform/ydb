@@ -6,6 +6,7 @@ RECURSE(
     driver
     endpoints
     iam
+    iam_private
     oauth2_token_exchange
     params
     result

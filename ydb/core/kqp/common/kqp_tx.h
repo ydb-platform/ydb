@@ -203,6 +203,7 @@ public:
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
                     EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                    IsSnapshotROConvertedFromOnlineRO = true;
                 } else {
                     EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
                         ? NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO
@@ -314,6 +315,7 @@ public:
     bool HasOltpTable = false;
     bool HasTableWrite = false;
     bool HasTableRead = false;
+    bool IsSnapshotROConvertedFromOnlineRO = false;
 
     std::optional<bool> EnableOlapSink;
     std::optional<bool> EnableHtapTx;

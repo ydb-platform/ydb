@@ -380,6 +380,10 @@ namespace NKikimr::NDDisk {
                 UpdateFreeSpaceInfo();
                 break;
             }
+            case EWakeupTag::WakeupCollectPbStats: {
+                CollectPbStatsSnapshot();
+                break;
+            }
         }
     }
 

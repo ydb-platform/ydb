@@ -45,15 +45,39 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
 }
 
 TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
-    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
-        return node;
-    }
     auto maybeReturning = node.Maybe<TKqlReturningList>();
     if (!maybeReturning) {
         return node;
     }
 
     auto returning = maybeReturning.Cast();
+
+    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        if (auto maybeList = returning.Update().Maybe<TExprList>()) {
+            const auto list = maybeList.Cast();
+            AFL_ENSURE(list.Size() > 0);
+            const auto tablePath = returning.Table().Path().Value();
+            for (auto&& effect : list) {
+                if (auto upsert = effect.Maybe<TKqlUpsertRows>()) {
+                    if (upsert.Cast().Table().Path().Value() == tablePath
+                            && !upsert.Cast().ReturningColumns().Empty()) {
+                        return TExprBase(ctx.ChangeChild(*returning.Raw(),
+                            TKqlReturningList::idx_Update, effect.Ptr()));
+                    }
+                }
+                if (auto del = effect.Maybe<TKqlDeleteRows>()) {
+                    if (del.Cast().Table().Path().Value() == tablePath
+                            && !del.Cast().ReturningColumns().Empty()) {
+                        return TExprBase(ctx.ChangeChild(*returning.Raw(),
+                            TKqlReturningList::idx_Update, effect.Ptr()));
+                    }
+                }
+            }
+            AFL_ENSURE(false); // Must have returning effect
+        }
+        return node;
+    }
+
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returning.Table().Path());
 
     auto buildReturningRows = [&](TExprBase rows, TCoAtomList columns, TCoAtomList returningColumns, const bool needToCheckIfExists) -> TExprBase {

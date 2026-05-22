@@ -105,6 +105,7 @@
 /ydb/tools/stress_tool @ydb-platform/blobstorage
 /ydb/core/load_test @ydb-platform/blobstorage
 /ydb/tests/stress/reconfig_state_storage_workload @ydb-platform/blobstorage
+/ydb/tests/functional/blobstorage @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core

@@ -55,4 +55,4 @@ The recommended export format is `parquet`; import and export paths are optimize
 
 {% endnote %}
 
-To export all tables under a given directory in the data schema, plus metadata about tables, directories, and table indexes, to S3-compatible storage, use the {{ ydb-short-name }} CLI. For details, see [{#T}](../../../../reference/ydb-cli/export-import/export-s3.md).
+To export all tables under a given directory in the data schema, plus metadata about tables, directories, and table indexes, to S3-compatible storage, use the {{ ydb-short-name }} CLI. For details, see [Exporting data to S3-compatible storage](../../../../reference/ydb-cli/export-import/export-s3.md).

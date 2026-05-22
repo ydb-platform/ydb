@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/local_indexes/min_max/const.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -380,6 +381,15 @@ inline bool ConvertCreationConfigToRequested(
             for (const auto& colName : config.GetKeyColumnNames()) {
                 ng->SetColumnName(colName);
                 break; // Only one column for ngram filter
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax: {
+            requested.SetClassName(NLocalIndex::NMinMax::kMinMaxClassName);
+            auto* min_max = requested.MutableMinMaxIndex();
+            for (const auto& colName : config.GetKeyColumnNames()) {
+                min_max->SetColumnName(colName);
+                break; // Only one column for min_max index
             }
             return true;
         }

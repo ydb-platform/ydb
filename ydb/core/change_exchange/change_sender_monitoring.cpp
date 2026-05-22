@@ -17,9 +17,6 @@ TStringBuf TabletAppRelativePath(ETabletAppPath tabletAppPath) {
         case ETabletAppPath::Secure:
             return TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
     }
-
-    // Unreachable: adding a new ETabletAppPath value must update this switch.
-    return "";
 }
 
 } // namespace

@@ -511,7 +511,8 @@ namespace NKikimr::NDDisk {
             const ui64 cookie = NextCookie++;
             inflightRecord->second.OperationCookies.insert(cookie);
             auto zeroingData = TRcBuf::Uninitialized(SectorSize);
-            *zeroingData.GetDataMut() = 0;
+            memset(zeroingData.GetDataMut(), 0, SectorSize);
+
 
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkWriteRaw(
                 PDiskParams->Owner,
@@ -603,7 +604,7 @@ namespace NKikimr::NDDisk {
 
         const ui64 cookie = NextCookie++;
         auto zeroingData = TRcBuf::Uninitialized(SectorSize);
-        *zeroingData.GetDataMut() = 0;
+        memset(zeroingData.GetDataMut(), 0, SectorSize);
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkWriteRaw(
             PDiskParams->Owner,

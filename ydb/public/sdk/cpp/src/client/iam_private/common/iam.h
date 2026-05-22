@@ -31,8 +31,11 @@ public:
         : Params_(params) 
     {}
 
+    // Deprecated. Kept for backward compatibility — see comment on TIamJwtCredentialsProviderFactory.
     TCredentialsProviderPtr CreateProvider() const override final {
-        ythrow yexception() << "Not supported";
+        auto facility = CreateSimpleCoreFacility();
+        auto inner = std::make_shared<TCredentialsProvider>(Params_, std::weak_ptr<ICoreFacility>(facility));
+        return std::make_shared<TOwningFacilityCredentialsProvider>(std::move(facility), std::move(inner));
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {

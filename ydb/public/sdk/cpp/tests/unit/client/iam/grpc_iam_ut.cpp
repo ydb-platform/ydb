@@ -153,3 +153,38 @@ TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletes) {
     iamService.Release();
     server.Stop();
 }
+
+// Regression test for backward compatibility of the deprecated no-arg
+// ICredentialsProviderFactory::CreateProvider() entry point on IAM factories. After commit
+// 0140ad8 ("fix sdk: fixed self thread join in iam cred provider") this entry point was
+// throwing "Not supported" and broke all out-of-tree callers that didn't yet plumb an
+// ICoreFacility. The factory must spin up a private facility transparently.
+TEST(GrpcIamCredentialsProvider, NoArgCreateProviderBackwardCompat) {
+    TBlockingIamTokenService iamService;
+    TIamGrpcServer server(&iamService);
+    ASSERT_TRUE(server.Start());
+
+    iamService.Release();
+
+    TIamOAuth params;
+    params.Endpoint = server.Endpoint();
+    params.OAuthToken = "unit-test-oauth-token";
+    params.EnableSsl = false;
+    params.RefreshPeriod = TDuration::Hours(1);
+    params.RequestTimeout = TDuration::Seconds(5);
+
+    auto factory = std::make_shared<TIamOAuthCredentialsProviderFactory<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(params);
+
+    auto work = [&factory]() -> std::string {
+        auto provider = factory->CreateProvider();
+        return provider->GetAuthInfo();
+    };
+
+    std::future<std::string> done = std::async(std::launch::async, work);
+    ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
+        << "no-arg CreateProvider() path must produce a token and tear down cleanly";
+    EXPECT_EQ(done.get(), "released-token");
+
+    server.Stop();
+}

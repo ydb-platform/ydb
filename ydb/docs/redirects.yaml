@@ -125,7 +125,7 @@ common:
     to: /devops/backup-and-recovery/index.md
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
-
+    
   # Redirects for Deployment Options
   - from: /devops/(ansible|kubernetes|manual)/(.*)$
     to: /devops/deployment-options/$1/$2

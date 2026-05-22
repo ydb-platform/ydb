@@ -3395,6 +3395,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
+            case EIndexTypeLocalMinMax:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

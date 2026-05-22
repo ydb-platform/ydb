@@ -1812,10 +1812,6 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& tablePath, const TS
         }
     }
 
-    Stream << "ALTER OBJECT ";
-    EscapeName(fullPath, Stream);
-    Stream << " (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=";
-    Stream << indexDesc.GetName();
     switch (indexDesc.GetImplementationCase()) {
         case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
             const auto& bloomFilter = indexDesc.GetBloomFilter();

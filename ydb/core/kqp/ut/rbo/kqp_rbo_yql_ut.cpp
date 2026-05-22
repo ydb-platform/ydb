@@ -1373,103 +1373,78 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t2.b, sum(t2.d), sum(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t2.b, min(t2.d), max(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t2.b, count(t2.d), count(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t2.b, avg(t2.d), avg(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t1.b, min(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t1.b, max(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t1.b, count(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
-                select max(t1.b) maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
+                select max(t1.b) as maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select sum(t1.a) as suma from `/Root/t1` as t1 group by t1.b, t1.c order by suma;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select sum(t1.c), t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select max(t1.a) as maxa, min(t1.a), min(t1.b) as min_b from `/Root/t1` as t1 order by maxa;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from `/Root/t1` as t1 group by t1.b order by sumExpr0;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select sum(distinct t1.b) as sum, t1.a from `/Root/t1` as t1 group by t1.a order by sum, t1.a;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select sum(t1.a) + 1, t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select count(distinct t1.a), t1.b from `/Root/t1` as t1 group by t1.b, t1.c order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select avg(t1.b) from `/Root/t1` as t1;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select avg(t1.a) as avgA, avg(t1.c) as avgC from `/Root/t1` as t1 group by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select sum(t1.b) as sumb from `/Root/t1` as t1 group by t1.b order by sumb;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select count(*), sum(t1.a) as result from `/Root/t1` as t1 order by result;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select count(*) as result from `/Root/t1` as t1 order by result;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select t1.b, count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 select
                        sum(case when t1.b > 0
                             then 1
@@ -1479,19 +1454,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                             else 0 end) count2 from `/Root/t1` as t1 group by t1.b order by count1, count2;
             )",
             R"(
-                 PRAGMA YqlSelect = 'force';
                  select max(t1.a), min(t1.a) from `/Root/t1` as t1;
             )",
             R"(
-                 PRAGMA YqlSelect = 'force';
                  select max(t1.a), min(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                 PRAGMA YqlSelect = 'force';
                  select max(t1.a), min(t1.a) from `/Root/t1` as t1 group by t1.a order by t1.a;
             )",
             R"(
-                 PRAGMA YqlSelect = 'force';
                  select max(t1.a) from `/Root/t1` as t1 group by t1.b, t1.a order by t1.a, t1.b;
             )",
             /* NOT SUPPORTED IN YQLSELECT
@@ -1582,7 +1553,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
-            //Cout << query << Endl;
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;

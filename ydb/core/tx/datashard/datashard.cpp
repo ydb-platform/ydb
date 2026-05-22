@@ -401,10 +401,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
-
-        // Get factory from KQP Scheduler and schedule delayed empty response as fail-safe measure
-        ctx.Send(NKqp::MakeKqpSchedulerServiceId(ctx.SelfID.NodeId()), new NKqp::NScheduler::TEvGetReadFactory, IEventHandle::FlagTrackDelivery);
-        ctx.Schedule(TDuration::Seconds(1), new NKqp::NScheduler::TEvReadFactoryResponse);
+        SchedulableReadFactory = std::make_unique<NKqp::NScheduler::TSchedulableReadFactory>(AppData()->KqpComputeScheduler);
     } else {
         SyncConfig();
         State = TShardState::Readonly;
@@ -2858,10 +2855,6 @@ bool TDataShard::NeedMediatorStateRestored() const {
 }
 
 void TDataShard::CheckMediatorStateRestored() {
-    if (!SchedulableReadFactory) {
-        return;
-    }
-
     if (!MediatorStateWaiting ||
         !RegistrationSended ||
         !MediatorTimeCastEntry ||
@@ -4962,20 +4955,6 @@ void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &c
         // Make sure older versions restore mediator state in that case
         PersistUnprotectedReadsEnabled(txc);
         SendRegistrationRequestTimeCast(ctx);
-    }
-}
-
-void TDataShard::Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev) {
-    if (!SchedulableReadFactory) {
-        SchedulableReadFactory = std::move(ev->Get()->Factory);
-    }
-    CheckMediatorStateRestored();
-}
-
-void TDataShard::HandleInactive(TEvents::TEvUndelivered::TPtr& ev) {
-    if (ev->Get()->SourceType == NKqp::NScheduler::TEvGetReadFactory::EventType) {
-        SchedulableReadFactory = nullptr;
-        CheckMediatorStateRestored();
     }
 }
 

@@ -1481,10 +1481,6 @@ class TDataShard
 
     void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev);
-
-    void HandleInactive(TEvents::TEvUndelivered::TPtr& ev);
-
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -3312,8 +3308,6 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
-            hFunc(NKqp::NScheduler::TEvReadFactoryResponse, Handle);
-            hFunc(TEvents::TEvUndelivered, HandleInactive);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -3462,7 +3456,6 @@ protected:
             HFunc(TEvPrivate::TEvStatisticsScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvDataShard::TEvVacuum, Handle);
-            IgnoreFunc(NKqp::NScheduler::TEvReadFactoryResponse); // ignore self-scheduled fail-safe response from previous stage
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());

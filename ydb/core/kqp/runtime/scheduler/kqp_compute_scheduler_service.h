@@ -114,14 +114,6 @@ struct TEvQueryResponse : public TEventLocal<TEvQueryResponse, TEvents::EvQueryR
     NHdrf::NDynamic::TQueryPtr Query;
 };
 
-struct TEvGetReadFactory : public TEventLocal<TEvGetReadFactory, TEvents::EvGetReadFactory> {
-    // TODO: datashard id?
-};
-
-struct TEvReadFactoryResponse : public TEventLocal<TEvReadFactoryResponse, TEvents::EvReadFactoryResponse> {
-    TSchedulableReadFactoryPtr Factory;
-};
-
 } // namespace NKikimr::NKqp::NScheduler
 
 namespace NKikimrConfig {

@@ -92,7 +92,9 @@ TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
 
 TSchedulableReadFactory::TSchedulableReadFactory(TComputeSchedulerPtr scheduler)
     : Scheduler(std::move(scheduler))
-{}
+{
+    Y_ENSURE(Scheduler);
+}
 
 TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
     const auto databaseAndPoolId = std::make_pair(databaseId, poolId);

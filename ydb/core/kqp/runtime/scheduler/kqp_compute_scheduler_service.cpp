@@ -1,6 +1,5 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "kqp_schedulable_read.h"
 #include "log.h"
 #include "tree/dynamic.h"
 
@@ -31,7 +30,6 @@ public:
 
     void Bootstrap() {
         Scheduler = AppData()->KqpComputeScheduler;
-
         Y_ENSURE(Scheduler);
 
         Send(
@@ -66,8 +64,6 @@ public:
             hFunc(TEvRemoveQuery, Handle);
 
             hFunc(NActors::TEvents::TEvWakeup, Handle);
-
-            hFunc(TEvGetReadFactory, Handle);
 
             default:
                 LOG_E("Unexpected event: " << ev->GetTypeRewrite());
@@ -218,12 +214,6 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         Scheduler->UpdateFairShare();
         Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
-    }
-
-    void Handle(TEvGetReadFactory::TPtr& ev) {
-        auto response = MakeHolder<TEvReadFactoryResponse>();
-        response->Factory = std::make_unique<TSchedulableReadFactory>(Scheduler);
-        Send(ev->Sender, response.Release(), 0, 0);
     }
 
 private:

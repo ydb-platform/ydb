@@ -375,12 +375,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     // Test that vector index queries work when selecting only non-PK columns
-    Y_UNIT_TEST_TWIN(VectorIndexSelectWithoutPkColumns, Overlap) {
+    Y_UNIT_TEST_QUAD(VectorIndexSelectWithoutPkColumns, Overlap, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -407,12 +408,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    void DoTestOrderByCosine(ui32 indexLevels, int flags) {
+    void DoTestOrderByCosine(ui32 indexLevels, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -486,8 +490,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
     }
 
-    Y_UNIT_TEST_TWIN(OrderByCosineLevel2WithCover, Nullable) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING);
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithCover, Nullable, EnableIndexStreamWrite) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING, EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithOverlap, Nullable, Covered) {
@@ -532,20 +536,21 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session, 0);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
-        DoTestOrderByCosine(3, 0);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3, EnableIndexStreamWrite) {
+        DoTestOrderByCosine(3, 0, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3WithOverlap) {
-        DoTestOrderByCosine(3, F_OVERLAP);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3WithOverlap, EnableIndexStreamWrite) {
+        DoTestOrderByCosine(3, F_OVERLAP, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(BadFormat, OnBuild) {
+    Y_UNIT_TEST_QUAD(BadFormat, OnBuild, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -644,12 +649,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(OrderByNoUnwrap) {
+    Y_UNIT_TEST_TWIN(OrderByNoUnwrap, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -690,12 +696,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(BuildIndexTimesAndUser) {
+    Y_UNIT_TEST_TWIN(BuildIndexTimesAndUser, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
 
@@ -733,12 +740,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(VectorIndexNoBulkUpsert) {
+    Y_UNIT_TEST_TWIN(VectorIndexNoBulkUpsert, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -770,13 +778,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
     }
 
-    void DoTestVectorIndexDelete(const TString& deleteQuery, int flags) {
+    void DoTestVectorIndexDelete(const TString& deleteQuery, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -812,14 +822,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteFilter, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteFilter, Covered, EnableIndexStreamWrite) {
         // DELETE WHERE with non-PK filter from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteOn, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteOn, Covered, EnableIndexStreamWrite) {
         // DELETE ON from the table with index should succeed too (it uses a different code path)
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexDeletePkReturning, Covered, Overlap) {
@@ -828,14 +838,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteFilterReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteFilterReturning, Covered, EnableIndexStreamWrite) {
         // DELETE WHERE with non-PK filter from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteOnReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteOnReturning, Covered, EnableIndexStreamWrite) {
         // DELETE ON from the table with index should succeed too (it uses a different code path)
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     void DoTestVectorIndexInsert(int flags) {
@@ -902,12 +912,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestVectorIndexInsert(F_OVERLAP | (Returning ? F_RETURNING : 0) | (Covered ? F_COVERING : 0));
     }
 
-    void DoTestVectorIndexUpdateNoChange(int flags) {
+    void DoTestVectorIndexUpdateNoChange(int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -937,17 +950,17 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoChange, Overlap) {
-        DoTestVectorIndexUpdateNoChange((Overlap ? F_OVERLAP : 0));
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateNoChange, Overlap, EnableIndexStreamWrite) {
+        DoTestVectorIndexUpdateNoChange((Overlap ? F_OVERLAP : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoChangeCovered, Overlap) {
-        DoTestVectorIndexUpdateNoChange(F_COVERING | (Overlap ? F_OVERLAP : 0));
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateNoChangeCovered, Overlap, EnableIndexStreamWrite) {
+        DoTestVectorIndexUpdateNoChange(F_COVERING | (Overlap ? F_OVERLAP : 0), EnableIndexStreamWrite);
     }
 
     // Similar to VectorIndexUpdateNoChange, but data column is named ___data to make it appear before __ydb_parent in struct types
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateColumnOrder, Overlap) {
-        DoTestVectorIndexUpdateNoChange(F_COVERING | F_UNDERSCORE_DATA | (Overlap ? F_OVERLAP : 0));
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateColumnOrder, Overlap, EnableIndexStreamWrite) {
+        DoTestVectorIndexUpdateNoChange(F_COVERING | F_UNDERSCORE_DATA | (Overlap ? F_OVERLAP : 0), EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexUpdateNoClusterChange, Covered, Overlap) {
@@ -1008,13 +1021,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, int flags) {
+    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -1056,14 +1071,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChange, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateFilterClusterChange, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9";)"),
-            (Covered ? F_COVERING : 0));
+            (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChange, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpsertClusterChange, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9");)"),
-            (Covered ? F_COVERING : 0));
+            (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexUpdatePkClusterChangeReturning, Covered, Overlap) {
@@ -1071,14 +1086,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChangeReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateFilterClusterChangeReturning, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"),
-            F_RETURNING | (Covered ? F_COVERING : 0));
+            F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChangeReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpsertClusterChangeReturning, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9") RETURNING `data`, `emb`, `pk`;)"),
-            F_RETURNING | (Covered ? F_COVERING : 0));
+            F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
@@ -1231,12 +1246,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         CheckTableReads(session, mainTableName, true, false);
     }
 
-    Y_UNIT_TEST(OrderByReject) {
+    Y_UNIT_TEST_TWIN(OrderByReject, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -1283,7 +1299,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(VectorResolveDuplicateEvent) {
+    Y_UNIT_TEST_TWIN(VectorResolveDuplicateEvent, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -1291,6 +1307,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -1484,10 +1501,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    void DoTestCustomParallel(const TString& createIndex) {
+    void DoTestCustomParallel(const TString& createIndex, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         auto serverSettings = TKikimrSettings()
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false);
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
 
         TKikimrRunner kikimr(serverSettings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -1511,23 +1531,23 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
     }
 
-    Y_UNIT_TEST(VectorIndexBuildCustomParallel) {
+    Y_UNIT_TEST_TWIN(VectorIndexBuildCustomParallel, EnableIndexStreamWrite) {
         DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`
                 ADD INDEX index1
                 GLOBAL USING vector_kmeans_tree
                 ON (emb)
                 WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2);
-        )");
+        )", EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(SecondaryIndexBuildCustomParallel) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexBuildCustomParallel, EnableIndexStreamWrite) {
         DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`
                 ADD INDEX index1
                 GLOBAL ON (emb)
                 WITH (parallel=2);
-        )");
+        )", EnableIndexStreamWrite);
     }
 }
 

@@ -62,14 +62,14 @@ public:
 
                 if (leader.IsStarting() || BootingSuppressed && External) {
                     leader.IncreaseGeneration();
+                    db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute Tablet " << leader.ToString() << " (" << leader.StateString() << ") skipped generation increment " << (ui64)leader.State);
                 }
 
-                db.Table<Schema::Tablet>().Key(leader.Id).Update(NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(leader.KnownGeneration),
-                                                                 NIceDb::TUpdate<Schema::Tablet::Statistics>(leader.Statistics));
+                db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::Statistics>(leader.Statistics);
             } else {
-                db.Table<Schema::TabletFollowerTablet>().Key(TabletId.first, TabletId.second).Update(NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
+                db.Table<Schema::TabletFollowerTablet>().Key(TabletId.first, TabletId.second).Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
             }
             // reset usage impact estimate on each tablet restart
             tablet->UsageImpact = 0;

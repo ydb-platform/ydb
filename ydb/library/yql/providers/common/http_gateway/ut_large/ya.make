@@ -60,6 +60,7 @@ PEERDIR(
     library/cpp/testing/unittest
     library/cpp/threading/future
     ydb/core/util
+    ydb/library/aws_init
     ydb/library/yql/providers/common/http_gateway
     yql/essentials/sql/pg_dummy
     yql/essentials/utils

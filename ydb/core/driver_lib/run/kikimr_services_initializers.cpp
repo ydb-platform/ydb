@@ -182,12 +182,13 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 
-#include <ydb/core/util/aws.h>
 #include <ydb/core/util/failure_injection.h>
 #include <ydb/core/util/memory_tracker.h>
 #include <ydb/core/util/sig.h>
 
 #include <ydb/core/viewer/viewer.h>
+
+#include <ydb/library/aws_init/aws.h>
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 

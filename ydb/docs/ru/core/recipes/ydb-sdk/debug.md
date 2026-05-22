@@ -9,3 +9,4 @@
 - [Включить логирование](debug-logs.md)
 - [Подключить метрики в Prometheus](debug-prometheus.md)
 - [Трассировка с OpenTelemetry](debug-otel.md)
+- [Подключить трассировку в Jaeger](debug-jaeger.md)

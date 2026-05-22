@@ -37,7 +37,11 @@
 
   - [Включить логирование](debug-logs.md)
   - [Подключить метрики в Prometheus](debug-prometheus.md)
+<<<<<<< HEAD
   - [Подключить трассировку в Jaeger](debug-jaeger.md)
+=======
+  - [Трассировка с OpenTelemetry](debug-otel.md)
+>>>>>>> d581d8d587 (feat: added otel tracing documentation (#39667))
 
 Смотрите также:
 

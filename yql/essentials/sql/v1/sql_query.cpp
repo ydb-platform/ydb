@@ -2120,8 +2120,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
             }
             YQL_ENSURE(!type.empty(),
-                "Unsupported SHOW CREATE statement type, expected one of TABLE, VIEW, EXTERNAL DATA SOURCE; got: "
-                << block.DebugString());
+                       "Unsupported SHOW CREATE statement type, expected one of TABLE, VIEW, EXTERNAL DATA SOURCE; got: "
+                           << block.DebugString());
 
             AddStatementToBlocks(blocks, BuildShowCreate(Ctx_.Pos(), tr, type, Ctx_.Scoped));
             break;

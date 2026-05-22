@@ -2,6 +2,8 @@
 
 #include "schemeshard_impl.h"
 
+#include <util/generic/scope.h>
+
 namespace NKikimr::NSchemeShard {
 
 void TSchemeShard::AddForcedCompaction(
@@ -175,6 +177,13 @@ void TSchemeShard::RetryForcedCompactionForShard(const TShardIdx& shardIdx, cons
 }
 
 void TSchemeShard::ProcessForcedCompactionQueues() {
+    // Skip the nested call: the outer loop will continue with consistent state.
+    if (InProcessForcedCompactionQueues) {
+        return;
+    }
+    InProcessForcedCompactionQueues = true;
+    Y_DEFER { InProcessForcedCompactionQueues = false; };
+
     // try enqueue shards from multiple tables fairly
     auto initialQueueSize = ForcedCompactionTablesQueue.Size();
     THashSet<TPathId> tablesWithoutCandidates;
@@ -184,10 +193,10 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
         auto* shards = ForcedCompactionShardsByTable.FindPtr(tablePathId);
         if (shards && !shards->Empty() && compaction->MaxShardsInFlight > compaction->ShardsInFlight.size()) {
             const auto& shardIdx = shards->Front();
-            EnqueueForcedCompaction(shardIdx);
-            compaction->ShardsInFlight.insert(shardIdx);
             shards->PopFront();
             --ForcedCompactionTotalInQueues;
+            compaction->ShardsInFlight.insert(shardIdx);
+            EnqueueForcedCompaction(shardIdx);
         }
         if (!shards || shards->Empty()) {
             tablesWithoutCandidates.insert(tablePathId);

@@ -1,7 +1,7 @@
 # Interactive query execution mode
 ## General Description
 
-After executing the `{{ ydb-cli }}` command without subcommands, the interactive query execution mode is launched. After that, you can enter queries directly into the console or terminal. When you enter a line break character, the query is considered complete and begins to be executed. The query text can be either a YQL query or a [special command](#spec-commands).
+After executing the `{{ ydb-cli }}` command without subcommands, the interactive query execution mode is launched. After that, you can enter queries directly into the console or terminal. When you enter a newline character, the query is considered complete and begins to be executed. The query text can be either a YQL query or a [special command](#spec-commands).
 
 The general form of the command:
 ```bash
@@ -9,7 +9,7 @@ The general form of the command:
 ```
 * `global options` — [global options](commands/global-options.md).
 {% note info %}
-Please note that to run the commands, [connection parameters](./connect.md) must be specified. It can be a default profile, an explicitly specified profile, and/or a set of connection parameters.
+Please note that to run the commands, [connection parameters](./connect.md) must be specified. This can be a default profile, an explicitly specified profile, and/or a set of connection parameters.
 {% endnote %}
 Example of use:
 
@@ -26,14 +26,14 @@ The interactive mode for executing queries in {{ ydb-short-name }} CLI provides 
 
 ![Syntax Highlighting](_assets/highlighting.jpg)
 
-The interactive mode supports syntax highlighting for YQL, which helps to better understand the structure of queries. The following groups of elements are highlighted in different colors:
+The interactive mode supports syntax highlighting for YQL, which helps to better perceive the structure of queries. The following groups of elements are highlighted in different colors:
 
 * YQL keywords (SELECT, FROM, WHERE, INSERT, UPDATE, and others)
 * Table and column names
 * String literals (text in quotes)
 * Numeric literals
 * Operators (=, <, >, +, - and others)
-* Special characters (parentheses, commas, dots)
+* Special characters (brackets, commas, dots)
 * Comments
 ## Hot Keys {#hotkeys}
 
@@ -41,8 +41,8 @@ You can use these hot keys when working in interactive mode:
 
 Hot key | Description
 ---|---
-`Up arrow` | Displays the previous query from history.
-`Down arrow` | Displays the next query from history.
+`Up arrow` | Shows the previous query from history.
+`Down arrow` | Shows the next query from history.
 `TAB` | Completes the current word based on YQL syntax.
 `CTRL + R` | Searches for a query in history by the entered substring.
 `CTRL + D` | Exits interactive mode.

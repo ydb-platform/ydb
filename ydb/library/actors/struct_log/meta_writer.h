@@ -8,8 +8,6 @@
 
 namespace NActors::NStructuredLog {
 
-class TStructuredMessage;
-
 class TMetaWriter {
     friend class TBaseMessageWriter<TMetaWriter>;
 

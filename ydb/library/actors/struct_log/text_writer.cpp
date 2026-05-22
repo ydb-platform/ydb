@@ -1,5 +1,7 @@
 #include "text_writer.h"
 
+#include <util/string/subst.h>
+
 namespace NActors::NStructuredLog {
 
 bool TTextWriter::Write(TStringBuilder& outputText, const TStructuredMessage& message) {
@@ -32,16 +34,12 @@ void TTextWriter::TValueWriter::operator()(const TString& value) const {
         } else {
             outputText << ".";
         }
-        auto str = keyItem.ToString();
-        for (auto& ch: str) {
-            if (ch == '\n') {
-                ch = ' ';
-            }
-        }
-        outputText << str;
+        outputText << keyItem.ToString();
     }
     outputText << "=";
-    outputText << TTypesMapping::ToString(value);
+    auto str = TTypesMapping::ToString(value);
+    SubstGlobal(str, "\n", " ");
+    outputText << str;
 }
 
 }  // namespace NActors::NStructuredLog

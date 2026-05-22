@@ -113,8 +113,9 @@ Internal variables determine the behavior of commands and are set using the [spe
 | Variable | Description |
 |----------|---|
 | `stats`  | The statistics collection mode for subsequent queries.<br/>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
+| `resource_pool` | Determines the resource pool for executing subsequent queries. Expects the name of the pool as a value. |
 
-### Example {#examples}
+### Examples {#examples}
 
 Executing a query in the `full` statistics collection mode:
 
@@ -168,4 +169,19 @@ ResultSet
          TotalOutputBytes: 16
          TotalDurationMs: 0
          TotalOutputRows: 1
+```
+
+Executing a query in the `default` resource pool:
+
+```bash
+$ ydb
+ydb> SET resource_pool = default
+Resource pool set to "default".
+
+ydb> select 1;
+┌─────────┐
+│ column0 │
+├─────────┤
+│ 1       │
+└─────────┘
 ```

@@ -90,8 +90,6 @@ public:
 
     TInserter GetInserter();
 
-    size_t GetSize() const;
-    size_t GetCapacity() const;
     void SetCapacity(size_t capacity);
 
     bool IsHead(const TIntrusivePtr<TLookupTable>& head) const;

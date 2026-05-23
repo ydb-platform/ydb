@@ -12,7 +12,7 @@ SELECT
   Decimal("1.23", 5, 2), -- up to 5 decimal places, of which 2 are after the decimal point
   DyNumber("1"),
   String("foo"),
-  Utf8("Hello"),
+  Utf8("hello"),
   Yson("<a=1>[3;%false]"),
   Json(@@{"a":1,"b":null}@@),
   Date("2017-11-27"),

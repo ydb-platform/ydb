@@ -85,6 +85,7 @@ ydb/tests/compatibility test_compact.py.TestCompactMixedCluster.test_compact_mix
 ydb/tests/compatibility test_compact.py.TestCompactRolling.test_compact_rolling[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_nullable[restart_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_set_default[restart_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_example.py.TestExampleMixedClusterFixture.test_example[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[rolling_stable-26-2-1_to_prestable-26-3]

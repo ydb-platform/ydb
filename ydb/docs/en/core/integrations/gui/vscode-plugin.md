@@ -97,7 +97,7 @@ In managed installations of {{ ydb-name }}, authentication via login and passwor
 Authentication using [IAM-](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token) or [OAuth token](https://yandex.cloud/en/docs/iam/concepts/authorization/oauth-token). Enter the token in the **Token** field. The token is passed in the header of each request.
 {% note warning %}
 
-The IAM token has a limited lifespan — no more than 12 hours (https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token#lifetime) — after which it must be obtained again and updated in the connection settings. For long-lived connections, use authentication via a [service account](#auth-service-account) or [metadata service](#auth-metadata).
+The IAM token has a limited [lifespan — no more than 12 hours](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token#lifetime) — after which it must be obtained again and updated in the connection settings. For long-lived connections, use authentication via a [service account](#auth-service-account) or [metadata service](#auth-metadata).
 
 {% endnote %}
 ### Service Account Key File {#auth-service-account}
@@ -245,7 +245,7 @@ The `--scope user` flag saves the configuration globally — the server will be 
 | `ydb_describe_table` | `connection`, `path` | Get the table schema (columns, primary key) |
 | `ydb_list_directory` | `connection`, `path?` | List of objects in the database directory |
 | `ydb_list_all` | `connection`, `path?`, `limit?`, `offset?` | Recursive list of all objects |
-| `ydb_yql_help` | `query`, `connection?` | Search YQL documentation (requires RAG enabled [#rag]()) |
+| `ydb_yql_help` | `query`, `connection?` | Search YQL documentation (requires [RAG](#rag) enabled) |
 The `connection` parameter is the name of the connection as it appears in the **Connections** panel.
 ## YQL documentation search (RAG) {#rag}
 

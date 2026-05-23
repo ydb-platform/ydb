@@ -435,10 +435,11 @@ runs:
 
           cleanup_orphaned_processes() {
               set +x
-              local ya_make_pid=$1
+              local pipeline_pid=$1   # PID of the backgrounded pipeline (cat); lifecycle indicator
+              local script_pid=$2     # PID of this composite-action script ($$); ancestor of ya-bin
               local log_file="$CLEANUP_DAEMON_LOG"
 
-              echo "[$(date)] Cleanup daemon started, monitoring ya make PID: $ya_make_pid" > "$log_file"
+              echo "[$(date)] Cleanup daemon started. pipeline_pid=$pipeline_pid script_pid=$script_pid" > "$log_file"
 
               dump_process_tree() {
                   echo "[$(date)] Process tree snapshot:" >> "$log_file"
@@ -446,16 +447,33 @@ runs:
                   echo "" >> "$log_file"
               }
 
+              # Find the ya-bin process: it is a "ya-bin" process whose ancestry chain
+              # includes our script PID. This is robust regardless of how many subshells
+              # are between our script and ya-bin, and regardless of which command in the
+              # pipeline $! pointed at.
+              find_ya_bin_pid() {
+                  local candidate p
+                  for candidate in $(pgrep -x ya-bin 2>/dev/null); do
+                      p=$candidate
+                      while [[ -n "$p" && "$p" != "0" && "$p" != "1" ]]; do
+                          if [[ "$p" == "$script_pid" ]]; then
+                              echo "$candidate"
+                              return 0
+                          fi
+                          p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+                      done
+                  done
+                  return 1
+              }
+
               # Track processes we've already killed to avoid killing them multiple times
               declare -A killed_pids
 
-              while kill -0 "$ya_make_pid" 2>/dev/null; do
+              while kill -0 "$pipeline_pid" 2>/dev/null; do
                   local killed_count=0
                   local tree_dumped=0
 
-                  # Find the ya-bin process by full command line (it is a descendant of $ya_make_pid
-                  # subshell, but not a direct child, so $! does not point to it).
-                  local ya_bin_pid=$(pgrep -f "ya-bin make" 2>/dev/null | head -1)
+                  local ya_bin_pid=$(find_ya_bin_pid)
 
                   if [[ -n "$ya_bin_pid" ]]; then
                       # Get all child processes of ya-bin (second generation)
@@ -505,8 +523,9 @@ runs:
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT &
           YA_MAKE_PID=$!
           
-          # Start cleanup daemon with ya make PID
-          cleanup_orphaned_processes $YA_MAKE_PID &
+          # Start cleanup daemon. Pass the pipeline PID (lifecycle indicator) and our
+          # own script PID (ancestor of ya-bin, used to locate ya-bin reliably).
+          cleanup_orphaned_processes $YA_MAKE_PID $$ &
           CLEANUP_PID=$!
           
           # Wait for ya make to complete

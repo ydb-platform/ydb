@@ -13,6 +13,7 @@ ENDIF()
 
 PEERDIR(
     ydb/library/actors/interconnect
+    ydb/library/actors/struct_log
     ydb/library/actors/testlib
 )
 
@@ -37,6 +38,7 @@ SRCS(
     mon_ut.cpp
     scheduler_actor_ut.cpp
     mailbox_lockfree_ut.cpp
+    struct_log_ut.cpp
 )
 
 END()

@@ -340,6 +340,12 @@ public:
         TActivationContext::ActorSystem()->RegisterLocalService(
             NYql::NDq::MakeChannelServiceActorID(SelfId().NodeId()), channelServiceActorId);
 
+        if (NActors::TMon* mon = AppData()->Mon) {
+            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actorsMonPage, "kqp_channels", "KQP Channels", false,
+                TActivationContext::ActorSystem(), channelServiceActorId);
+        }
+
         ResourceManager_ = GetKqpResourceManager();
         CaFactory_ = NComputeActor::MakeKqpCaFactory(
             TableServiceConfig.GetResourceManager(), ResourceManager_, AsyncIoFactory, FederatedQuerySetup, ChannelService);

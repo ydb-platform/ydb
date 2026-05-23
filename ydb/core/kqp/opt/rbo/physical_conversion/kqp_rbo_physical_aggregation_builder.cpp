@@ -616,30 +616,6 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVec
     return Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(lambdaArgs)), std::move(lambdaResults));
 }
 
-TExprNode::TPtr TPhysicalAggregationBuilder::BuildExpandMapForPhysicalAggregationInput(TExprNode::TPtr input, const TVector<TString>& inputColumns) {
-    // clang-format off
-    return Ctx.Builder(Pos)
-        .Callable("ExpandMap")
-            .Callable(0, "ToFlow")
-                .Add(0, input)
-            .Seal()
-            .Lambda(1)
-                .Param("narrow_input_param")
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                    for (ui32 i = 0; i < inputColumns.size(); ++i) {
-                        parent
-                            .Callable(i, "Member")
-                                .Arg(0, "narrow_input_param")
-                                .Atom(1, inputColumns[i])
-                            .Seal();
-                    }
-                    return parent;
-                })
-            .Seal()
-        .Seal().Build();
-    // clang-format on
-}
-
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregationOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
                                                                                         const TVector<TPhysicalAggregationTraits>& aggTraitsList,
                                                                                         const THashMap<TString, TString>& renameMap, bool distinctAll,

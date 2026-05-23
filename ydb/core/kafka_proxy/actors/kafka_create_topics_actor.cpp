@@ -150,7 +150,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         ctx.RegisterWithSameMailbox(NKikimr::NPQ::NSchema::CreateCreateTopicActor(SelfId(), NKikimr::NPQ::NSchema::TCreateTopicSettings{
             .Database = Context->DatabasePath,
-            .Request = request,
+            .Request = std::move(request),
             .UserToken = Context->UserToken,
         }));
 
@@ -166,11 +166,15 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
-    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status));
+    auto status = eventPtr->Status;
+    if (status == Ydb::StatusIds::SCHEME_ERROR) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+    }
+    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(status));
 
     auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
     response->TopicPath = eventPtr->Path;
-    response->Status = ConvertErrorCode(eventPtr->Status);
+    response->Status = ConvertErrorCode(status);
     response->Message = std::move(eventPtr->ErrorMessage);
 
     TopicNamesToResponses[eventPtr->Path] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(response.Release());

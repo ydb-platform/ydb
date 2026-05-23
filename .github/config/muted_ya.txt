@@ -1,3 +1,4 @@
+ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusErrorWith_1_2_VdiskErrors
 ydb/core/blobstorage/ut_blobstorage Defragmentation.DefragCompactionRace
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk

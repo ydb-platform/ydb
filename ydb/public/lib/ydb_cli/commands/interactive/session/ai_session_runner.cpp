@@ -84,6 +84,7 @@ public:
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
                 Cerr << Colors.Red() << "Failed to setup AI model session: " << e.what() << Colors.OldColor() << Endl;
+                YDB_CLI_LOG(Debug, "Exception call stack:\n" << TBackTrace::FromCurrentException().PrintToString());
                 return;
             }
         }

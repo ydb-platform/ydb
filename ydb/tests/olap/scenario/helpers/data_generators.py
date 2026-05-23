@@ -278,7 +278,7 @@ class DataGeneratorPerColumn(ScenarioTestHelper.IDataGenerator):
         DataGeneratorPerColumn(
             schema, 10,
             ColumnValueGeneratorDefault(init_value=10)
-        ).with_column('not_level', ColumnValueGeneratorRandom(0.3)
+        ).with_column('not_level', ColumnValueGeneratorRandom(0.3))
     """
 
     def __init__(

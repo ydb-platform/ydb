@@ -313,18 +313,18 @@ private:
             return CheckShardRetriesExeededImpl(failedLock.ShardId);
         }
 
-        TDuration CalcDelayForShardImpl(ui64 shardId, bool allowInstantRetry) {
+        TDuration CalcDelayForShardImpl(ui64 shardId, bool allowInstantRetry, bool incrementAttempts) {
             auto& shardState = ShardsState[shardId];
-            ++shardState.RetryAttempts;
+            shardState.RetryAttempts += incrementAttempts;
             return CalcDelay(shardState.RetryAttempts, allowInstantRetry);
         }
 
-        TDuration CalcDelayForShard(TReadState& failedRead, bool allowInstantRetry) {
-            return CalcDelayForShardImpl(failedRead.ShardId, allowInstantRetry);
+        TDuration CalcDelayForShard(TReadState& failedRead, bool allowInstantRetry, bool isThrottled) {
+            return CalcDelayForShardImpl(failedRead.ShardId, allowInstantRetry, !isThrottled);
         }
 
         TDuration CalcDelayForShardLock(const TLockState& failedLock, bool allowInstantRetry) {
-            return CalcDelayForShardImpl(failedLock.ShardId, allowInstantRetry);
+            return CalcDelayForShardImpl(failedLock.ShardId, allowInstantRetry, true);
         }
 
         void eraseRead(TReadState& read) {
@@ -1178,7 +1178,7 @@ private:
             }
         }
 
-        auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
+        auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry, isThrottled);
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
             StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, OperationId);

@@ -374,28 +374,28 @@ In {{ydb-full-name}}, working with externally compressed Parquet files, such as 
 
 A table of all supported types when reading from S3 in the [query schema](external_data_source.md#schema):
 |Type|csv|csv_with_names|tsv_with_names|json_list|json_each_row|json_as_string|parquet|raw|
-|---|---|--------------|--------------|---------|-------------|--------------|-------|---|
+|-------------------------------------|---|--------------|--------------|---------|-------------|--------------|-------|---|
 |`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓|✓||✓||
-|`DyNumber`| | | |✓| | | | |
-|`String`, `Utf8`, `Json`|✓|✓|✓|✓|✓|✓|✓|✓|
-|`JsonDocument`| | | | | | |✓| |
-|`Yson`| | | |✓| | |✓|✓|
-|`Uuid`|✓|✓|✓| |✓| | | |
-|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓|✓||✓| |✓| |
-|`Interval`|✓|✓|✓| |✓| |✓| |
-|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|||||||✓| |
-|`Optional<T>`|✓|✓|✓|✓|✓|✓|✓|✓|
+|`DyNumber`                           |   |             |                |✓       |             |              |      |    |
+|`String`, `Utf8`, `Json`             |✓ |✓            |✓              |✓       |✓            |✓             |✓     |✓  |
+|`JsonDocument`                       |   |             |               |         |             |              |✓     |     |
+|`Yson`                               |   |             |               |✓        |             |              |✓     |✓   |
+|`Uuid`                               |✓ |✓            |✓              |         |✓            |              |     |     |
+|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓|✓||✓          |              |✓    |     |
+|`Interval`                           |✓ |✓            |✓              |         |✓            |              |✓    |     |
+|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|||||||✓   |    |
+|`Optional<T>`                        |✓ |✓            |✓              |✓       |✓            |✓             |✓     |✓   |
 The table of all supported types for writing to S3:
 |Type|csv_with_names|tsv_with_names|json_list|json_each_row|parquet|raw|
-|---|---|---|---|---|---|---|
+|-------------------------------------|--------------|--------------|---------|-------------|-------|---|
 |`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓|✓|✓||
-|`DyNumber`| | |✓| | | |
-|`String`, `Utf8`, `Json`|✓|✓|✓|✓|✓|✓|
-|`JsonDocument`| | | | | | |
-|`Yson`|||✓|||✓|
-|`Uuid`|✓|✓||✓|||
-|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓||✓|✓||
-|`Interval`|||||||
+|`DyNumber`                           |             |                |✓       |             |      |   |
+|`String`, `Utf8`, `Json`             |✓            |✓              |✓       |✓            |✓     |✓  |
+|`JsonDocument`                       |             |               |         |             |       |   |
+|`Yson`                               |             |               |✓        |             |       |✓  |
+|`Uuid`                               |✓            |✓              |         |✓           |       |    |
+|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓|✓||✓         |✓      |   |
+|`Interval`                           |              |               |        |             |       |    |
 |`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|||||||
-|`Optional<T>`|✓|✓|✓|✓|✓||
+|`Optional<T>`                        |✓            |✓              |✓       |✓            |✓     |    |
 For all S3 read and write formats, except `json_list`, the `Optional<T>` type can be used only if `T` is a [primitive YQL type](../../../../yql/reference/types/primitive.md). For more information about optional types, see the article [{#T}](../../../../yql/reference/types/optional.md).

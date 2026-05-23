@@ -154,7 +154,34 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "runner": ClusterRollingRestartNemesis(),
         "schedule": 200,
         "ui_group": _UI_GROUP,
-        "planner_factory": lambda nemesis_type_key: RollingRestartNemesisPlanner(),
+        "planner_factory": lambda nemesis_type_key, params=None: RollingRestartNemesisPlanner(
+            **(params or {})
+        ),
+        "params": [
+            {
+                "name": "nodes_per_step",
+                "label": "Nodes per step",
+                "type": "int",
+                "default": 2,
+                "min": 1,
+                "description": "Max nodes restarted per scheduled tick.",
+            },
+            {
+                "name": "use_storage_nodes",
+                "label": "Use storage nodes",
+                "type": "bool",
+                "default": False,
+                "description": "If checked, restart storage nodes; otherwise compute nodes.",
+            },
+            {
+                "name": "node_downtime_sec",
+                "label": "Node downtime (sec)",
+                "type": "int",
+                "default": 60,
+                "min": 1,
+                "description": "How long the agent keeps each node down.",
+            },
+        ],
     }
     out["TimeSkewNemesis"] = {
         "runner": TimeSkewNemesis(),

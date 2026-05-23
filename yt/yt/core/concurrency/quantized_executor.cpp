@@ -19,7 +19,7 @@ class TQuantizedExecutor
 {
 public:
     TQuantizedExecutor(
-        TString name,
+        std::string name,
         ICallbackProviderPtr callbackProvider,
         const TQuantizedExecutorOptions& options)
         : Name_(std::move(name))
@@ -50,7 +50,7 @@ public:
     }
 
 private:
-    const TString Name_;
+    const std::string Name_;
     const ICallbackProviderPtr CallbackProvider_;
     const TQuantizedExecutorOptions Options_;
 
@@ -257,7 +257,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 IQuantizedExecutorPtr CreateQuantizedExecutor(
-    TString name,
+    std::string name,
     ICallbackProviderPtr callbackProvider,
     TQuantizedExecutorOptions options)
 {

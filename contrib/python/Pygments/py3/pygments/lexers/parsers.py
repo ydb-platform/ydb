@@ -4,7 +4,7 @@
 
     Lexers for parser generators.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -33,11 +33,11 @@ __all__ = ['RagelLexer', 'RagelEmbeddedLexer', 'RagelCLexer', 'RagelDLexer',
 
 
 class RagelLexer(RegexLexer):
-    """A pure `Ragel <www.colm.net/open-source/ragel>`_ lexer.  Use this
-    for fragments of Ragel.  For ``.rl`` files, use
-    :class:`RagelEmbeddedLexer` instead (or one of the
-    language-specific subclasses).
+    """A pure `Ragel <www.colm.net/open-source/ragel>`_ lexer.
 
+    Use this for fragments of Ragel.  For ``.rl`` files, use
+    :class:`RagelEmbeddedLexer` instead (or one of the language-specific
+    subclasses).
     """
 
     name = 'Ragel'

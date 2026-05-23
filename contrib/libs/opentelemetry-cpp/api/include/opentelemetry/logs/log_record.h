@@ -28,7 +28,12 @@ enum class Severity : uint8_t;
 class LogRecord
 {
 public:
-  virtual ~LogRecord() = default;
+  LogRecord()                                 = default;
+  LogRecord(const LogRecord &)                = default;
+  LogRecord(LogRecord &&) noexcept            = default;
+  LogRecord &operator=(const LogRecord &)     = default;
+  LogRecord &operator=(LogRecord &&) noexcept = default;
+  virtual ~LogRecord()                        = default;
 
   /**
    * Set the timestamp for this log.

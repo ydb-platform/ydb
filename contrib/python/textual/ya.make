@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.12.0)
+VERSION(8.2.5)
 
 LICENSE(MIT)
 
@@ -35,6 +35,7 @@ PY_SRCS(
     textual/_ansi_sequences.py
     textual/_ansi_theme.py
     textual/_arrange.py
+    textual/_auto_scroll.py
     textual/_binary_encode.py
     textual/_border.py
     textual/_box_drawing.py

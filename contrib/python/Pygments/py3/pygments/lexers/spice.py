@@ -4,7 +4,7 @@
 
     Lexers for the Spice programming language.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -40,7 +40,7 @@ class SpiceLexer(RegexLexer):
             (r'(f|p|type|struct|interface|enum|alias|operator)\b', Keyword.Declaration),
             (words(('if', 'else', 'switch', 'case', 'default', 'for', 'foreach', 'do',
                     'while', 'break', 'continue', 'fallthrough', 'return', 'assert',
-                    'unsafe', 'ext'), suffix=r'\b'), Keyword),
+                    'unsafe', 'ext', 'cast'), suffix=r'\b'), Keyword),
             (words(('const', 'signed', 'unsigned', 'inline', 'public', 'heap', 'compose'),
                    suffix=r'\b'), Keyword.Pseudo),
             (words(('new', 'yield', 'stash', 'pick', 'sync', 'class'), suffix=r'\b'),

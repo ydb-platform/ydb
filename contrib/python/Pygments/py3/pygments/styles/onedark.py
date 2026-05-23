@@ -7,13 +7,13 @@
     Inspired by one-dark-ui for the code editor Atom
     (https://atom.io/themes/one-dark-ui).
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
 from pygments.style import Style
 from pygments.token import Comment, Keyword, Name, Number, Operator, \
-    Punctuation, String, Token
+    Punctuation, String, Token, Generic
 
 
 __all__ = ['OneDarkStyle']
@@ -59,5 +59,15 @@ class OneDarkStyle(Style):
 
         Operator:               '#56B6C2',
 
-        Comment:                '#7F848E'
+        Comment:                '#7F848E',
+
+        Generic.Heading:        'bold #ABB2BF',
+        Generic.Subheading:     'bold #ABB2BF',
+        Generic.Deleted:        '#E06C75',
+        Generic.Inserted:       '#98C379',
+        Generic.Error:          '#E06C75',
+        Generic.Emph:           'italic',
+        Generic.Strong:         'bold',
+        Generic.Output:         '#E06C75',
+        Generic.Traceback:      '#E06C75',
     }

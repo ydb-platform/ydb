@@ -10100,11 +10100,18 @@
             "uri": "https://{canondata_backend}/1942525/e20b628f919c38aabdbb37b6f67f0541495a8fc5/resource.tar.gz#test_sql2yql.test_select_yql-window_fn_rownumber_0_desc_/sql.yql"
         }
     ],
-    "test_sql2yql.test[select_yql-window_frame]": [
+    "test_sql2yql.test[select_yql-window_order_by_range_frame]": [
         {
-            "checksum": "da3b99ec74b8c7db99cb5f71d1be5ae2",
-            "size": 8150,
-            "uri": "https://{canondata_backend}/1881367/3620f00662dba64d30bf3c93837b76b97c3a5f1f/resource.tar.gz#test_sql2yql.test_select_yql-window_frame_/sql.yql"
+            "checksum": "8bb7b70177da928537c33577641da90e",
+            "size": 13099,
+            "uri": "https://{canondata_backend}/1773845/e7a7cc669a6454b75022f11843967126ae2e0bca/resource.tar.gz#test_sql2yql.test_select_yql-window_order_by_range_frame_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-window_order_by_rows_frame]": [
+        {
+            "checksum": "47838b00d58d248462e6c2555d022560",
+            "size": 13589,
+            "uri": "https://{canondata_backend}/1773845/e7a7cc669a6454b75022f11843967126ae2e0bca/resource.tar.gz#test_sql2yql.test_select_yql-window_order_by_rows_frame_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-window_pg_tutorial_1]": [
@@ -17719,9 +17726,14 @@
             "uri": "file://test_sql_format.test_select_yql-window_fn_rownumber_0_desc_/formatted.sql"
         }
     ],
-    "test_sql_format.test[select_yql-window_frame]": [
+    "test_sql_format.test[select_yql-window_order_by_range_frame]": [
         {
-            "uri": "file://test_sql_format.test_select_yql-window_frame_/formatted.sql"
+            "uri": "file://test_sql_format.test_select_yql-window_order_by_range_frame_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-window_order_by_rows_frame]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-window_order_by_rows_frame_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-window_pg_tutorial_1]": [

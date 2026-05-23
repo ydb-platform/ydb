@@ -472,12 +472,6 @@ private:
             setItem.Windows[name] = std::move(*window);
         }
 
-        if (setItem.Source && 1 < setItem.Source->Sources.size() &&
-            std::holds_alternative<TPlainAsterisk>(setItem.Projection))
-        {
-            return Unsupported("JOIN with an asterisk projection");
-        }
-
         select.SetItems = {std::move(setItem)};
         select.SetOps = {EYqlSetOp::Push};
 

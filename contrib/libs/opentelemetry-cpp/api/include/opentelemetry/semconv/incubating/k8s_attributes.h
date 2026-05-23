@@ -347,9 +347,116 @@ static constexpr const char *kK8sNodeLabel = "k8s.node.label";
 static constexpr const char *kK8sNodeName = "k8s.node.name";
 
 /**
+  The name of the system container running on the K8s Node.
+ */
+static constexpr const char *kK8sNodeSystemContainerName = "k8s.node.system_container.name";
+
+/**
   The UID of the Node.
  */
 static constexpr const char *kK8sNodeUid = "k8s.node.uid";
+
+/**
+  The annotation placed on the PersistentVolume, the @code <key> @endcode being the annotation name,
+  the value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An
+  annotation @code pv.kubernetes.io/provisioned-by @endcode with value @code kubernetes.io/aws-ebs
+  @endcode SHOULD be recorded as the @code
+  k8s.persistentvolume.annotation.pv.kubernetes.io/provisioned-by @endcode attribute with value
+  @code "kubernetes.io/aws-ebs" @endcode.</li> <li>An annotation @code data @endcode with empty
+  string value SHOULD be recorded as the @code k8s.persistentvolume.annotation.data @endcode
+  attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeAnnotation = "k8s.persistentvolume.annotation";
+
+/**
+  The label placed on the PersistentVolume, the @code <key> @endcode being the label name, the value
+  being the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code type
+  @endcode with value @code ssd @endcode SHOULD be recorded as the @code
+  k8s.persistentvolume.label.type @endcode attribute with value @code "ssd" @endcode.</li> <li>A
+  label @code data @endcode with empty string value SHOULD be recorded as the @code
+  k8s.persistentvolume.label.data @endcode attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeLabel = "k8s.persistentvolume.label";
+
+/**
+  The name of the PersistentVolume.
+ */
+static constexpr const char *kK8sPersistentvolumeName = "k8s.persistentvolume.name";
+
+/**
+  The reclaim policy of the PersistentVolume.
+  <p>
+  This attribute aligns with the @code persistentVolumeReclaimPolicy @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-v1/#PersistentVolumeSpec">K8s
+  PersistentVolumeSpec</a>.
+ */
+static constexpr const char *kK8sPersistentvolumeReclaimPolicy =
+    "k8s.persistentvolume.reclaim_policy";
+
+/**
+  The phase of the PersistentVolume.
+  <p>
+  This attribute aligns with the @code phase @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-v1/#PersistentVolumeStatus">K8s
+  PersistentVolumeStatus</a>.
+ */
+static constexpr const char *kK8sPersistentvolumeStatusPhase = "k8s.persistentvolume.status.phase";
+
+/**
+  The UID of the PersistentVolume.
+ */
+static constexpr const char *kK8sPersistentvolumeUid = "k8s.persistentvolume.uid";
+
+/**
+  The annotation placed on the PersistentVolumeClaim, the @code <key> @endcode being the annotation
+  name, the value being the annotation value, even if the value is empty. <p> Examples: <ul> <li>An
+  annotation @code volume.beta.kubernetes.io/storage-provisioner @endcode with value @code
+  kubernetes.io/aws-ebs @endcode SHOULD be recorded as the @code
+  k8s.persistentvolumeclaim.annotation.volume.beta.kubernetes.io/storage-provisioner @endcode
+  attribute with value @code "kubernetes.io/aws-ebs" @endcode.</li> <li>An annotation @code data
+  @endcode with empty string value SHOULD be recorded as the @code
+  k8s.persistentvolumeclaim.annotation.data @endcode attribute with value @code "" @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeclaimAnnotation =
+    "k8s.persistentvolumeclaim.annotation";
+
+/**
+  The label placed on the PersistentVolumeClaim, the @code <key> @endcode being the label name, the
+  value being the label value, even if the value is empty. <p> Examples: <ul> <li>A label @code app
+  @endcode with value @code my-app @endcode SHOULD be recorded as the @code
+  k8s.persistentvolumeclaim.label.app @endcode attribute with value @code "my-app" @endcode.</li>
+    <li>A label @code data @endcode with empty string value SHOULD be recorded as
+  the @code k8s.persistentvolumeclaim.label.data @endcode attribute with value @code ""
+  @endcode.</li>
+  </ul>
+ */
+static constexpr const char *kK8sPersistentvolumeclaimLabel = "k8s.persistentvolumeclaim.label";
+
+/**
+  The name of the PersistentVolumeClaim.
+ */
+static constexpr const char *kK8sPersistentvolumeclaimName = "k8s.persistentvolumeclaim.name";
+
+/**
+  The phase of the PersistentVolumeClaim.
+  <p>
+  This attribute aligns with the @code phase @endcode field of the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaimStatus">K8s
+  PersistentVolumeClaimStatus</a>.
+ */
+static constexpr const char *kK8sPersistentvolumeclaimStatusPhase =
+    "k8s.persistentvolumeclaim.status.phase";
+
+/**
+  The UID of the PersistentVolumeClaim.
+ */
+static constexpr const char *kK8sPersistentvolumeclaimUid = "k8s.persistentvolumeclaim.uid";
 
 /**
   The annotation placed on the Pod, the @code <key> @endcode being the annotation name, the value
@@ -802,6 +909,73 @@ static constexpr const char *kPidPressure = "PIDPressure";
 static constexpr const char *kNetworkUnavailable = "NetworkUnavailable";
 
 }  // namespace K8sNodeConditionTypeValues
+
+namespace K8sPersistentvolumeReclaimPolicyValues
+{
+/**
+  The volume will be deleted when released from its claim.
+ */
+static constexpr const char *kDelete = "Delete";
+
+/**
+  The volume will be recycled (basic scrub) when released from its claim.
+ */
+static constexpr const char *kRecycle = "Recycle";
+
+/**
+  The volume will be retained when released from its claim.
+ */
+static constexpr const char *kRetain = "Retain";
+
+}  // namespace K8sPersistentvolumeReclaimPolicyValues
+
+namespace K8sPersistentvolumeStatusPhaseValues
+{
+/**
+  The volume is available and not yet bound to a claim.
+ */
+static constexpr const char *kAvailable = "Available";
+
+/**
+  The volume is bound to a claim.
+ */
+static constexpr const char *kBound = "Bound";
+
+/**
+  The volume has failed its automatic reclamation.
+ */
+static constexpr const char *kFailed = "Failed";
+
+/**
+  The volume is being provisioned.
+ */
+static constexpr const char *kPending = "Pending";
+
+/**
+  The claim has been deleted but the volume is not yet available.
+ */
+static constexpr const char *kReleased = "Released";
+
+}  // namespace K8sPersistentvolumeStatusPhaseValues
+
+namespace K8sPersistentvolumeclaimStatusPhaseValues
+{
+/**
+  The claim is bound to a volume.
+ */
+static constexpr const char *kBound = "Bound";
+
+/**
+  The claim has lost its underlying volume (the volume does not exist anymore).
+ */
+static constexpr const char *kLost = "Lost";
+
+/**
+  The claim has not yet been bound to a volume.
+ */
+static constexpr const char *kPending = "Pending";
+
+}  // namespace K8sPersistentvolumeclaimStatusPhaseValues
 
 namespace K8sPodStatusPhaseValues
 {

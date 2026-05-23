@@ -38,6 +38,8 @@ struct TFmrServices: public TYtBaseServices {
     TFmrUserJobLauncher::TPtr JobLauncher;
     bool DisableLocalFmrWorker = false;
     TString FmrOperationSpecFilePath;
+    TString CoordinatorYsonPath;
+    TString WorkerYsonPath;
     IFileMetadataService::TPtr FileMetadataService;
     IFileUploadService::TPtr FileUploadService;
     IFmrJobPreparer::TPtr JobPreparer;

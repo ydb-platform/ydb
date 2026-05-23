@@ -63,7 +63,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
     flags.F.HasKinesisData = !blob.PartitionKey.empty();
-    flags.F.HasBatch = blob.MessagesCount > 1;
+    flags.F.HasMessagesCount = blob.MessagesCount > 1;
     return flags;
 }
 
@@ -81,7 +81,7 @@ ui32 BlobSize(const TClientBlob& blob) {
     if (flags.F.HasUncompressedSize) {
         size += sizeof(ui32);
     }
-    if (flags.F.HasBatch) {
+    if (flags.F.HasMessagesCount) {
         size += sizeof(ui32);
     }
     size += sizeof(ui16) + blob.SourceId.size();
@@ -648,7 +648,7 @@ void Serialize(const TClientBlob& blob, TBuffer& res) {
                        blob.ExplicitHashKey.size());
     }
 
-    if (flags.F.HasBatch) {
+    if (flags.F.HasMessagesCount) {
         res.Append((const char*)&blob.MessagesCount, sizeof(ui32));
     }
 
@@ -708,7 +708,7 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
     }
 
     ui32 messagesCount = 1;
-    if (flags.F.HasBatch) {
+    if (flags.F.HasMessagesCount) {
         messagesCount = ReadUnaligned<ui32>(data);
         data += sizeof(ui32);
         Y_ENSURE(messagesCount >= 1);

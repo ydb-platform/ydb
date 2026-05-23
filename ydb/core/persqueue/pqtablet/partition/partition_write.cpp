@@ -1212,6 +1212,14 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
+    if (p.Msg.MessagesCount > 1 && !AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) {
+        CancelOneWriteOnWrite(ctx,
+                                TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
+                                p,
+                                NPersQueue::NErrorCode::BAD_REQUEST);
+        return false;
+    }
+
     if (p.Msg.EnableKafkaDeduplication &&
         sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined() &&
         p.Msg.ProducerEpoch.Defined()

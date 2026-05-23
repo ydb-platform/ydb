@@ -697,7 +697,8 @@ void CmdWriteBatched(
     TTestContext& tc,
     i64 offset = -1,
     bool disableDeduplication = false,
-    std::optional<ui64> maxSeqNo = std::nullopt);
+    std::optional<ui64> maxSeqNo = std::nullopt,
+    NPersQueue::NErrorCode::EErrorCode expectedError = NPersQueue::NErrorCode::OK);
 
 void CmdRunCompaction(TTestActorRuntime& runtime,
                       ui64 tabletId,

@@ -20,7 +20,7 @@ union TMessageFlags {
         TValue HasCreateTimestamp : 1;
         TValue HasUncompressedSize : 1;
         TValue HasKinesisData : 1;
-        TValue HasBatch : 1;
+        TValue HasMessagesCount : 1;
         TValue Reserve: 2;
     } F;
 

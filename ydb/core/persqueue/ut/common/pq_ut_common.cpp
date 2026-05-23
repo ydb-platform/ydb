@@ -798,7 +798,8 @@ void CmdWriteBatched(
     TTestContext& tc,
     i64 offset,
     bool disableDeduplication,
-    std::optional<ui64> maxSeqNo)
+    std::optional<ui64> maxSeqNo,
+    NPersQueue::NErrorCode::EErrorCode expectedError)
 {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse* result = nullptr;
@@ -851,13 +852,15 @@ void CmdWriteBatched(
 
             UNIT_ASSERT_VALUES_EQUAL_C(
                 static_cast<ui32>(result->Record.GetErrorCode()),
-                static_cast<ui32>(NPersQueue::NErrorCode::OK),
+                static_cast<ui32>(expectedError),
                 result->Record.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1u);
-            const auto& writeResult = result->Record.GetPartitionResponse().GetCmdWriteResult(0);
-            UNIT_ASSERT(writeResult.HasOffset());
-            if (offset >= 0) {
-                UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOffset(), offset);
+            if (expectedError == NPersQueue::NErrorCode::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1u);
+                const auto& writeResult = result->Record.GetPartitionResponse().GetCmdWriteResult(0);
+                UNIT_ASSERT(writeResult.HasOffset());
+                if (offset >= 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOffset(), offset);
+                }
             }
             retriesLeft = 0;
         } catch (NActors::TSchedulingLimitReachedException) {

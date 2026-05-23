@@ -101,11 +101,25 @@ Y_UNIT_TEST(TestCompaction) {
     });
 }
 
+
+Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    CmdWriteBatched(0, "sourceid_batch_disabled", 1, TString(16, 'a'), 5, tc, -1, false, std::nullopt, NPersQueue::NErrorCode::BAD_REQUEST);
+    PQGetPartInfo(0, 0, tc);
+}
+
 Y_UNIT_TEST(BatchedMessagesWriteRead) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -144,6 +158,7 @@ Y_UNIT_TEST(BatchedMessagesFullDuplicateIsNotPartialOverlap) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
@@ -161,6 +176,7 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(50000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
 
     PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 

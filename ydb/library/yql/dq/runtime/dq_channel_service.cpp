@@ -116,6 +116,7 @@ void IChannelBuffer::SendFinish() {
 }
 
 EDqFillLevel TLocalBuffer::GetFillLevel() const {
+    std::lock_guard lock(Mutex);
     return FillLevel;
 }
 
@@ -403,10 +404,6 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         PushStats.Resume();
     }
 
-    const ui64 chunkBytes = data.Bytes;
-
-    std::lock_guard lock(FlowControlMutex);
-
     if (FinishPushed.load()) {
         return;
     }
@@ -415,39 +412,44 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         FinishPushed.store(true);
     }
 
-    auto fillLevel = FillLevel;
-
     bool spilled = false;
+    const ui64 chunkBytes = data.Bytes;
 
-    if (Storage) {
-        if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes)) {
-            if (SpilledChunkBytes.empty()) {
-                LOG_D("NodeId=" << nodeState->NodeId << ", ChannelId=" << Info.ChannelId << ", START SPILLING, PushBytes=" << PushBytes.load()
-                    << ", PopBytes=" << RemotePopBytes.load() << ", MaxInflightBytes=" << MaxInflightBytes
-                    << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
-                );
+    {
+        std::lock_guard lock(FlowControlMutex);
+
+        auto fillLevel = FillLevel;
+
+        if (Storage) {
+            if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes)) {
+                if (SpilledChunkBytes.empty()) {
+                    LOG_D("NodeId=" << nodeState->NodeId << ", ChannelId=" << Info.ChannelId << ", START SPILLING, PushBytes=" << PushBytes.load()
+                        << ", PopBytes=" << RemotePopBytes.load() << ", MaxInflightBytes=" << MaxInflightBytes
+                        << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
+                    );
+                }
+                SpilledChunkBytes.push(data.Bytes);
+                SpilledBytes += data.Bytes;
+                Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
+                spilled = true;
+                fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
+            } else {
+                PushBytes += data.Bytes;
             }
-            SpilledChunkBytes.push(data.Bytes);
-            SpilledBytes += data.Bytes;
-            Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
-            spilled = true;
-            fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
             PushBytes += data.Bytes;
+            if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
+                fillLevel = EDqFillLevel::HardLimit;
+            }
         }
-    } else {
-        PushBytes += data.Bytes;
-        if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
-            fillLevel = EDqFillLevel::HardLimit;
-        }
-    }
 
-    if (FillLevel != fillLevel) {
-        if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, fillLevel);
+        if (FillLevel != fillLevel) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, fillLevel);
+            }
+            FillLevel = fillLevel;
+            NeedToNotifyOutput.store(true);
         }
-        FillLevel = fillLevel;
-        NeedToNotifyOutput.store(true);
     }
 
     (*OutputBufferChunks)++;
@@ -693,9 +695,11 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     PushStats.Rows += data.Rows;
 
     (*InputBufferChunks)++;
-    InflightBytes += data.Bytes;
     *InputBufferBytes += data.Bytes;
-    *InputBufferInflightBytes += data.Bytes;
+
+    if (FinishPushed.load()) {
+        return false;
+    }
 
     std::lock_guard lock(QueueMutex);
 
@@ -703,13 +707,21 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
         return false;
     }
 
+    InflightBytes += data.Bytes;
+    *InputBufferInflightBytes += data.Bytes;
+
     if (data.Finished) {
         FinishPushed.store(true);
         if (EarlyFinished.load()) {
             std::queue<TInputItem> tmpQueue;
             Queue.swap(tmpQueue);
             QueueSize.store(0);
-            PopStats.Bytes += QueueBytes.exchange(0) + data.Bytes;
+            auto queueBytes = QueueBytes.exchange(0) + data.Bytes;
+
+            PopStats.Bytes += queueBytes;
+            InflightBytes -= queueBytes;
+            *InputBufferInflightBytes -= queueBytes;
+
             Finished.store(true);
             ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
             return true;
@@ -763,7 +775,10 @@ bool TInputDescriptor::EarlyFinish() {
             std::queue<TInputItem> tmpQueue;
             Queue.swap(tmpQueue);
             QueueSize.store(0);
-            PopStats.Bytes += QueueBytes.exchange(0);
+            auto queueBytes = QueueBytes.exchange(0);
+            PopStats.Bytes += queueBytes;
+            InflightBytes -= queueBytes;
+            *InputBufferInflightBytes -= queueBytes;
             if (FinishPushed.load()) {
                 Finished.store(true);
                 ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
@@ -785,7 +800,7 @@ void TInputDescriptor::AbortChannel(const TString& message) {
 
 ui32 TInputDescriptor::GetQueueSize() {
     std::lock_guard lock(QueueMutex);
-    return  Queue.size();
+    return Queue.size();
 }
 
 TInputBuffer::~TInputBuffer() {
@@ -842,7 +857,7 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
     if (it != LocalBuffers.end()) {
         auto result = it->second.lock();
         if (result) {
-            std::lock_guard bufferLock(result->Mutex);
+            std::lock_guard lock(result->Mutex);
             if (info.SrcStageId) {
                 result->Info.SrcStageId = info.SrcStageId;
             }
@@ -1574,6 +1589,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
     if (it != OutputDescriptors.end()) {
         auto result = it->second;
         if (bound) {
+            std::lock_guard lock(result->FlowControlMutex);
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
@@ -1603,6 +1619,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
     if (it != InputDescriptors.end()) {
         auto result = it->second;
         if (bound) {
+            std::lock_guard lock(result->QueueMutex);
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;

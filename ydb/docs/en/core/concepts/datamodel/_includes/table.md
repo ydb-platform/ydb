@@ -133,7 +133,7 @@ You can enable running read replicas for each shard of the table in the table da
 
 | Parameter name | Description | Type | Acceptable values | Update capability | Reset capability |
 | ------------- | --------- | --- | ------------------- | --------------------- | ------------------ |
-| `READ_REPLICAS_SETTINGS` | `PER_AZ` means using the specified number of replicas in each AZ and `ANY_AZ` in all AZs in total. | String | `"PER_AZ:<count>"`, `"ANY_AZ:<count>"`, where `<count>` is the number of replicas | Yes | No |
+| `READ_REPLICAS_SETTINGS` | `PER_AZ` means using the specified number of replicas in each AZ and `ANY_AZ` in all AZs in total. | String | `"PER_AZ:<count>"`, `"ANY_AZ:<count>"`, where `<count>` is the number of replicas. To remove replicas, set the value to 0. For example: "PER_AZ:0". | Yes | No |
 
 The internal state of each of the followers is restored exactly and fully consistently from the leader state.
 

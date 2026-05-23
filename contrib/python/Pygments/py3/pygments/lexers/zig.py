@@ -4,7 +4,7 @@
 
     Lexers for Zig.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -22,7 +22,7 @@ class ZigLexer(RegexLexer):
     grammar: https://ziglang.org/documentation/master/#Grammar
     """
     name = 'Zig'
-    url = 'http://www.ziglang.org'
+    url = 'http://ziglang.org'
     aliases = ['zig']
     filenames = ['*.zig']
     mimetypes = ['text/zig']

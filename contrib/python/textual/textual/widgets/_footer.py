@@ -56,8 +56,9 @@ class FooterKey(Widget):
         }
 
         &:hover {
+            pointer: pointer;
             color: $footer-key-foreground;
-            background: $block-hover-background;
+            background: $block-hover-background;            
         }
 
         &.-disabled {
@@ -96,7 +97,7 @@ class FooterKey(Widget):
         if disabled:
             classes += " -disabled"
         super().__init__(classes=classes)
-        self.shrink = False
+        self.set_reactive(Widget.shrink, False)
         if tooltip:
             self.tooltip = tooltip
 
@@ -195,30 +196,7 @@ class Footer(ScrollableContainer, can_focus=False, can_focus_children=False):
             background: $footer-description-background;
         }
 
-        &:ansi {
-            background: ansi_default;
-            .footer-key--key {
-                background: ansi_default;
-                color: ansi_magenta;
-            }
-            .footer-key--description {
-                background: ansi_default;
-                color: ansi_default;
-            }
-            FooterKey:hover {
-                text-style: underline;
-                background: ansi_default;
-                color: ansi_default;
-                .footer-key--key {
-                    background: ansi_default;
-                }
-            }
-            FooterKey.-command-palette {
-                background: ansi_default;
-                border-left: vkey ansi_black;
-            }
-        }
-        
+       
     }
     """
 
@@ -260,7 +238,8 @@ class Footer(ScrollableContainer, can_focus=False, can_focus_children=False):
             disabled=disabled,
         )
         self.set_reactive(Footer.show_command_palette, show_command_palette)
-        self.compact = compact
+        self.set_reactive(Footer.compact, compact)
+        self.set_class(compact, "-compact", update=False)
 
     def compose(self) -> ComposeResult:
         if not self._bindings_ready:

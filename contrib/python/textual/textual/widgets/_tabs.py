@@ -34,9 +34,12 @@ class Underline(Widget):
         & > .underline--bar {
             color: $block-cursor-background;
             background: $foreground 10%;
-        }
-        &:ansi {
-            text-style: dim;
+        }        
+        &:ansi {            
+            & > .underline--bar {
+                color: $block-cursor-background;
+                background: $border-blurred;
+            }
         }
     }
     """
@@ -99,7 +102,16 @@ class Tab(Static):
         padding: 0 1;
         text-align: center;
         color: $foreground 50%;
+        pointer: pointer;
 
+        &:ansi {
+            text-style: dim;
+            &.-active {
+                text-style: not dim bold;
+            }
+        }
+
+        
         &:hover {
             color: $foreground;
         }
@@ -115,6 +127,8 @@ class Tab(Static):
         }
     }
     """
+
+    ALLOW_SELECT = False
 
     @dataclass
     class TabMessage(Message):
@@ -226,27 +240,6 @@ class Tabs(Widget, can_focus=True):
             height: auto;
             min-width: 100%;
             overflow: hidden hidden;
-        }
-        &:ansi {
-            #tabs-list {
-                text-style: dim;
-            }
-            & #tabs-list > .-active {
-                text-style: not dim;
-            }
-            &:focus {
-                #tabs-list > .-active {
-                    text-style: bold not dim;
-                }
-            }
-            & .underline--bar {
-                color: ansi_bright_blue;
-                background: ansi_default;
-            }
-            & .-active {
-                color: transparent;
-                background: transparent;
-            }
         }
     }
     """
@@ -528,6 +521,21 @@ class Tabs(Widget, can_focus=True):
         self.post_message(self.Cleared(self))
         self.active = ""
         return AwaitComplete(self.query("#tabs-list > Tab").remove())
+
+    def get_tab(self, tab_id: str) -> Tab | None:
+        """Get a tab from its ID.
+
+        Args:
+            tab_id: The tab ID.
+
+        Returns:
+            The Tab instance, or `None` if no tab with the given ID.
+        """
+        try:
+            tab = self.query_one(f"#tabs-list > #{tab_id}", Tab)
+        except NoMatches:
+            return None
+        return tab
 
     def remove_tab(self, tab_or_id: Tab | str | None) -> AwaitComplete:
         """Remove a tab.

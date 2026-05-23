@@ -612,7 +612,7 @@ struct TPgOptimizerImpl {
         }
     }
 
-    std::shared_ptr<IBaseOptimizerNode> Convert(int nodeId) const {
+    [[nodiscard]] std::shared_ptr<IBaseOptimizerNode> Convert(int nodeId) const {
         const auto* node = &Result.Nodes[nodeId];
         if (node->Outer == -1 && node->Inner == -1) {
             YQL_ENSURE(node->Rels.size() == 1);

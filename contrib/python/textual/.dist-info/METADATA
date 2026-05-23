@@ -1,8 +1,9 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: textual
-Version: 6.12.0
+Version: 8.2.5
 Summary: Modern Text User Interface framework
 License: MIT
+License-File: LICENSE
 Author: Will McGugan
 Author-email: will@textualize.io
 Requires-Python: >=3.9,<4.0

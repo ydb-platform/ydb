@@ -453,8 +453,9 @@ runs:
                   local killed_count=0
                   local tree_dumped=0
 
-                  # Find the single ya-bin child process (first generation)
-                  local ya_bin_pid=$(pgrep -P "$ya_make_pid" "ya-bin" 2>/dev/null | head -1)
+                  # Find the ya-bin process by full command line (it is a descendant of $ya_make_pid
+                  # subshell, but not a direct child, so $! does not point to it).
+                  local ya_bin_pid=$(pgrep -f "ya-bin make" 2>/dev/null | head -1)
 
                   if [[ -n "$ya_bin_pid" ]]; then
                       # Get all child processes of ya-bin (second generation)

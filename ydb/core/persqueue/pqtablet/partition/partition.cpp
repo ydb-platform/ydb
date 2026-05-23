@@ -365,6 +365,8 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+    , AvgWriteMessages(TDuration::Minutes(1), 1000)
+    , AvgQuotaMessages(TDuration::Minutes(1), 1000)
     , ReservedSize(0)
     , Channel(0)
     , NumChannels(numChannels)
@@ -505,6 +507,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(now);
     }
+    AvgWriteMessages.Update(now);
+    AvgQuotaMessages.Update(now);
 
     TryRunCompaction();
 
@@ -2130,6 +2134,11 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, quotaUsage);
     }
 
+    if (TotalPartitionWriteSpeedInMessages) {
+        ui64 quotaUsage = ui64(AvgQuotaMessages.GetValue()) * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, quotaUsage);
+    }
+
     ui64 storageSize = StorageSize(ctx);
     SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_TOTAL_PART_SIZE, storageSize, METRIC_MAX_PART_SIZE);
 
@@ -3510,6 +3519,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     }
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+    TotalPartitionWriteSpeedInMessages = config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
 
     CreateCompacter();
     InitializeMLPConsumers();

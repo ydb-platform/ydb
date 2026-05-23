@@ -567,6 +567,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAvgWriteBytes(WriteNewSize, now);
     UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
 
+    AvgWriteMessages.Update(WriteNewMessages, now);
+    AvgQuotaMessages.Update(MessagesQuotaSize, now);
+
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
         avg.Update(WriteNewSizeFromSupportivePartitions, now);

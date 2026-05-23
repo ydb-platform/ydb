@@ -1,7 +1,11 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -9,7 +13,11 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
 using TStatus = IGraphTransformer::TStatus;
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
     return CreateFunctorTransformer(

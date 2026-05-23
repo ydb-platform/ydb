@@ -1,26 +1,40 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_tx_info.h>
-
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/library/actors/core/actorid.h>
 
-#include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/utils/log/log.h>
-#include <library/cpp/json/writer/json.h>
 
+#include <library/cpp/json/writer/json_value.h>
 
-namespace NKikimr {
-namespace NKqp {
+#include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
+
+#include <optional>
+
+namespace NYql {
+
+struct TKikimrConfiguration;
+struct TKikimrQueryContext;
+class TKikimrTablesData;
+class TExprNode;
+
+} // namespace NYql
+
+namespace NKqpProto {
+
+class TKqpPhyQuery;
+
+} // namespace NKqpProto
+
+namespace NKikimr::NKqp {
 
 struct TKqlTransformContext : TThrRefBase {
-    TKqlTransformContext(NYql::TKikimrConfiguration::TPtr& config, TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
-        TIntrusivePtr<NYql::TKikimrTablesData> tables)
-        : Config(config)
-        , QueryCtx(queryCtx)
-        , Tables(tables) {}
+    TKqlTransformContext(const TIntrusivePtr<NYql::TKikimrConfiguration>& config, TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx,
+        TIntrusivePtr<NYql::TKikimrTablesData> tables);
 
-    NYql::TKikimrConfiguration::TPtr Config;
+    TIntrusivePtr<NYql::TKikimrConfiguration> Config;
     TIntrusivePtr<NYql::TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<NYql::TKikimrTablesData> Tables;
     NActors::TActorId ReplyTarget;
@@ -28,17 +42,11 @@ struct TKqlTransformContext : TThrRefBase {
     NKqpProto::TKqpStatsQuery QueryStats;
     std::shared_ptr<const NKqpProto::TKqpPhyQuery> PhysicalQuery;
 
-    NYql::TExprNode::TPtr ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
+    TIntrusivePtr<NYql::TExprNode> ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
     std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
 
-    void Reset() {
-        ReplyTarget = {};
-        QueryStats = {};
-        PhysicalQuery = nullptr;
-        ExplainTransformerInput = nullptr;
-        DataQueryBlocks = Nothing();
-    }
+    void Reset();
 };
 
 class TLogExprTransformer {
@@ -68,5 +76,4 @@ private:
 // Saves current input into TKqlTransformContext::ExplainTransformerInput
 TAutoPtr<NYql::IGraphTransformer> CreateSaveExplainTransformerInput(TKqlTransformContext& transformCtx);
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

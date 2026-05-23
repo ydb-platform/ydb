@@ -209,7 +209,7 @@ The result of the query execution:
 {% endcut %}
 ### json_as_string format {#json_as_string}
 
-This format is based on [JSON representation](https://ru.wikipedia.org/wiki/JSON). The `json_as_string` format does not split the input JSON document into fields, but represents each line of the file as a single JSON object (or a single string). This format is convenient if the list of fields is not the same in all lines and can vary.
+This format is based on [JSON representation](https://en.wikipedia.org/wiki/JSON). The `json_as_string` format does not split the input JSON document into fields, but represents each line of the file as a single JSON object (or a single string). This format is convenient if the list of fields is not the same in all lines and can vary.
 
 In this format, each file should contain:
 
@@ -264,7 +264,7 @@ Supported data compression algorithms inside Parquet files for reading from S3:
 - LZ4_RAW
 {% note info %}
 
-Parquet format records will be written using the Snappy compression algorithm (https://en.wikipedia.org/wiki/Snappy_(library)).
+Parquet format records will be written using the [Snappy](https://en.wikipedia.org/wiki/Snappy_(library)) compression algorithm.
 
 {% endnote %}
 {% cut "Example query" %}
@@ -353,21 +353,21 @@ The result of the query execution:
 The use of compression algorithms depends on the file formats. For all file formats except Parquet, the following compression algorithms can be used:
 |Algorithm|Name in {{ydb-full-name}}|Reading|Writing|
 |----|-----|------|------|
-|[Gzip](https://ru.wikipedia.org/wiki/Gzip)|gzip|✓|✓|
-|[Zstd](https://ru.wikipedia.org/wiki/Zstandard)|zstd|✓|✓|
-|[LZ4](https://ru.wikipedia.org/wiki/LZ4)|lz4|✓|✓|
-|[Brotli](https://ru.wikipedia.org/wiki/Brotli)|brotli|✓|✓|
-|[Bzip2](https://ru.wikipedia.org/wiki/Bzip2)|bzip2|✓|✓|
-|[Xz](https://ru.wikipedia.org/wiki/XZ)|xz|✓|✓|
+|[Gzip](https://en.wikipedia.org/wiki/Gzip)|gzip|✓|✓|
+|[Zstd](https://en.wikipedia.org/wiki/Zstandard)|zstd|✓|✓|
+|[LZ4](https://en.wikipedia.org/wiki/LZ4)|lz4|✓|✓|
+|[Brotli](https://en.wikipedia.org/wiki/Brotli)|brotli|✓|✓|
+|[Bzip2](https://en.wikipedia.org/wiki/Bzip2)|bzip2|✓|✓|
+|[Xz](https://en.wikipedia.org/wiki/XZ)|xz|✓|✓|
 For Parquet file format, native internal compression algorithms are supported:
 |Compression format|Read|Write|
 |-------------|------|------|
 |None|✓| |
-|[Snappy](https://ru.wikipedia.org/wiki/Snappy_(библиотека))|✓|✓|
-|[Gzip](https://ru.wikipedia.org/wiki/Gzip)|✓||
-|[Brotli](https://ru.wikipedia.org/wiki/Brotli)|✓||
-|[LZ4](https://ru.wikipedia.org/wiki/LZ4)|✓||
-|[Zstd](https://ru.wikipedia.org/wiki/Zstandard)|✓||
+|[Snappy](https://en.wikipedia.org/wiki/Snappy_(library))|✓|✓|
+|[Gzip](https://en.wikipedia.org/wiki/Gzip)|✓||
+|[Brotli](https://en.wikipedia.org/wiki/Brotli)|✓||
+|[LZ4](https://en.wikipedia.org/wiki/LZ4)|✓||
+|[Zstd](https://en.wikipedia.org/wiki/Zstandard)|✓||
 |LZ4_RAW|✓||
 In {{ydb-full-name}}, working with externally compressed Parquet files, such as files of the form `<myfile>.parquet.gz` or similar, is not supported. All Parquet files must be without external compression.
 ## Supported data types {#types}

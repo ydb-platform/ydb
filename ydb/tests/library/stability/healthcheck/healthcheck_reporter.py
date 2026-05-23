@@ -7,7 +7,7 @@ import threading
 import time
 import traceback
 import requests
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 from ydb.tests.library.stability.utils.utils import unpack_resource
 
 
@@ -149,17 +149,28 @@ class HealthCheckReporter():
             for host in self.hosts
         }
 
-        # Iterate explicitly so we can bail out fast when stop is requested.
-        for future, host in future_to_host.items():
-            if self.stop:
+        # Use as_completed with a single overall timeout so total latency stays
+        # close to the slowest host instead of growing with len(hosts) * timeout.
+        overall_timeout = self.hc_request_timeout_seconds + 5
+        try:
+            for future in as_completed(future_to_host, timeout=overall_timeout):
+                host = future_to_host[future]
+                if self.stop:
+                    future.cancel()
+                    results[host] = {'self_check_result': 'HC_RESULT_ERROR'}
+                    continue
+                try:
+                    got_host, result = future.result()
+                    results[got_host] = result
+                except Exception:
+                    logging.error(f"Failed to retrieve result for healthcheck on {host}: {traceback.format_exc()}")
+                    results[host] = {'self_check_result': 'HC_RESULT_ERROR'}
+        except FuturesTimeoutError:
+            # Any futures that did not finish within the overall timeout: mark as error and try to cancel.
+            for future, host in future_to_host.items():
+                if host in results:
+                    continue
                 future.cancel()
-                results[host] = {'self_check_result': 'HC_RESULT_ERROR'}
-                continue
-            try:
-                got_host, result = future.result(timeout=self.hc_request_timeout_seconds + 5)
-                results[got_host] = result
-            except Exception:
-                logging.error(f"Failed to retrieve result for healthcheck on {host}: {traceback.format_exc()}")
                 results[host] = {'self_check_result': 'HC_RESULT_ERROR'}
         return results
 

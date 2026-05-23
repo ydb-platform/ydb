@@ -9,9 +9,6 @@ from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import Dispatch
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
-# Payloads — keep in sync with NetworkNemesis actor (catalog)
-PAYLOAD_INJECT = {"op": "isolate_node"}
-PAYLOAD_EXTRACT = {"op": "clear_network_isolation"}
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -21,10 +18,16 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
     when all target nodes have been restarted once, the round resets.
 
     Params: ``nodes_per_step``, ``use_storage_nodes`` (storage vs compute), ``node_downtime_sec``.
+
+    Agent-side runner ``ClusterRollingRestartNemesis.inject_fault`` requires
+    ``node_ic_port`` + ``duration`` in the payload, so this planner builds the
+    payload itself and overrides ``manual``/``extract_all_on_disable`` instead
+    of relying on the base class' constant ``PAYLOAD_INJECT``/``PAYLOAD_EXTRACT``.
     """
 
-    PAYLOAD_INJECT = PAYLOAD_INJECT
-    PAYLOAD_EXTRACT = PAYLOAD_EXTRACT
+    # Empty placeholders — actual payload is built per node in scheduled_tick / manual.
+    PAYLOAD_INJECT: dict = {}
+    PAYLOAD_EXTRACT: dict = {}
 
     def __init__(self, nodes_per_step: int = 2, use_storage_nodes: bool = False, node_downtime_sec: int = 60) -> None:
         super().__init__()
@@ -81,11 +84,7 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
                     self.nemesis_type,
                     node.host,
                     "inject",
-                    {
-                        'duration': self._node_downtime_sec,
-                        'node_ic_port': node.ic_port,
-                        **self.PAYLOAD_INJECT,
-                    },
+                    self._build_inject_payload(node),
                 )
                 for node in inject_targets
             ]
@@ -93,7 +92,34 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
             return result
         if not extract_targets:
             return []
-        return fanout(self.nemesis_type, extract_targets, "extract", self.PAYLOAD_EXTRACT)
+        return fanout(self.nemesis_type, extract_targets, "extract", {})
+
+    def _build_inject_payload(self, node: "YdbCluster.Node") -> dict:
+        return {
+            'duration': self._node_downtime_sec,
+            'node_ic_port': node.ic_port,
+        }
+
+    def manual(self, host: str, action: str) -> list[DispatchCommand] | None:
+        """Manual inject/extract from the UI.
+
+        Unlike the base implementation, ``inject`` must carry ``node_ic_port`` +
+        ``duration`` for the agent runner to do anything; we look up the node
+        by host and build the payload here. Returns ``None`` if the host is not
+        a known target node (the API will surface this as a no-op error).
+        """
+        if action == "inject":
+            node = self._find_node_by_host(host)
+            if node is None:
+                return None
+            with self._lock:
+                self._register_inject(host)
+            return [dispatch(self.nemesis_type, host, "inject", self._build_inject_payload(node))]
+        if action == "extract":
+            with self._lock:
+                self._register_extract(host)
+            return [dispatch(self.nemesis_type, host, "extract", {})]
+        return None
 
     def _find_node_by_host(self, host: str) -> "YdbCluster.Node | None":
         for node in self._target_nodes:

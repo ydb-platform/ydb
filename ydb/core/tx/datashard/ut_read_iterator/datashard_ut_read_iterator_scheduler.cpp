@@ -16,11 +16,6 @@ const TString TEST_POOL_ID = "test_pool";
 //
 // Parameters:
 //   readLimitMs           — ReadLimit for the test pool (nullopt = unlimited).
-//   blockSchedulerFactory — Drop every TEvGetReadFactory event so the leader
-//                           shard never receives a real factory from the scheduler.
-//                           The constructor then advances simulated time by 2 s to
-//                           let the shard's built-in 1-second fail-safe timer fire,
-//                           completing mediator-state init with a null factory.
 //   withFollower          — Create the table with one follower and route all
 //                           SendRead() calls through a ForceFollower pipe.
 //                           Followers never request a scheduler factory themselves,
@@ -351,7 +346,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
     // When the datashard receives a read request with a pool ID that is not registered
     // in ComputeScheduler, the read must succeed without quota enforcement.
     //
-    // For the leader: SchedulableRead is nullptr, quota check is bypassed.
+    // For the leader: factory returns nullptr for the unknown pool (no read query is registered), so quota check is bypassed.
     // For the follower: quota is never applied regardless of pool registration.
     Y_UNIT_TEST_TWIN(ShouldReadWithUnknownPoolId, WithFollower) {
         TSchedulerTestHelper helper(/*readLimitMs=*/std::nullopt,

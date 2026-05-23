@@ -3792,8 +3792,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
-    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory && *SchedulableReadFactory) {
-        schedulableRead = (*SchedulableReadFactory)->Get(record.GetDatabaseId(), record.GetPoolId());
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory) {
+        schedulableRead = SchedulableReadFactory->Get(record.GetDatabaseId(), record.GetPoolId());
     }
 
     ui64 localReadId = NextTieBreakerIndex++;

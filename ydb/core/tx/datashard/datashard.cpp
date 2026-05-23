@@ -401,7 +401,11 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
-        SchedulableReadFactory = std::make_unique<NKqp::NScheduler::TSchedulableReadFactory>(AppData()->KqpComputeScheduler);
+
+        // In tests the scheduler may be uninitialized
+        if (auto scheduler = AppData()->KqpComputeScheduler) {
+            SchedulableReadFactory = std::make_unique<NKqp::NScheduler::TSchedulableReadFactory>(scheduler);
+        }
     } else {
         SyncConfig();
         State = TShardState::Readonly;
@@ -4062,8 +4066,8 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Stoped key access sampling at datashard: " << TabletID());
     }
 
-    if (SchedulableReadFactory && *SchedulableReadFactory) {
-        (*SchedulableReadFactory)->CleanupReadsCache();
+    if (SchedulableReadFactory) {
+        SchedulableReadFactory->CleanupReadsCache();
     }
 
     if (!PeriodicWakeupPending) {

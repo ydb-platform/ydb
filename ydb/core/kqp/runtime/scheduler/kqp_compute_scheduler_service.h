@@ -65,11 +65,6 @@ struct TEvents {
         EvAddQuery,
         EvRemoveQuery,
         EvQueryResponse,
-
-        // Because datashard may get EvRead from another node, it's hard to use EvAddQuery+EvQueryResponse.
-        // These messages return factory that can create schedulable objects on-the-fly.
-        EvGetReadFactory,
-        EvReadFactoryResponse,
     };
 };
 

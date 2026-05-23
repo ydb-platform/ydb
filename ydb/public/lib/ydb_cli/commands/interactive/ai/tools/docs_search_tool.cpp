@@ -28,6 +28,8 @@ constexpr char DOCS_ARCHIVE_RESOURCE[] = "ydb/public/lib/ydb_cli/commands/intera
 
 class TDocStore {
 public:
+    using TPtr = std::shared_ptr<const TDocStore>;
+
     explicit TDocStore(std::unordered_map<TString, TString> files)
         : Files(std::move(files))
     {}
@@ -41,18 +43,21 @@ public:
 
         size_t amountSize = 0;
         for (size_t i = 0; i < reader.Count(); ++i) {
-            const TString key = reader.KeyByIndex(i);
+            TString key = reader.KeyByIndex(i);
             if (!key.EndsWith(".md") && !key.EndsWith(".yaml")) {
                 continue;
             }
 
             const TBlob& payload = reader.ObjectBlobByKey(key);
             amountSize += payload.Size();
-            YDB_CLI_LOG(Debug, "docs_search: loaded file \"" << key << "\" (" << payload.Size() << " bytes)");
-            Y_VALIDATE(files.emplace(std::move(key), TString(payload.AsCharPtr(), payload.Size())).second, "Duplicate file in docs archive: \"" << key << "\"");
+            YDB_CLI_LOG(Debug, "Loaded documentation file \"" << key << "\" (" << payload.Size() << " bytes)");
+
+            if (auto payloadStr = Strip(TString(payload.AsCharPtr(), payload.Size()))) {
+                Y_VALIDATE(files.emplace(std::move(key), std::move(payloadStr)).second, "Duplicate file in docs archive: \"" << key << "\"");
+            }
         }
 
-        YDB_CLI_LOG(Info, "docs_search: loaded " << files.size() << " files from the archive, total size: " << amountSize << " bytes");
+        YDB_CLI_LOG(Info, "Loaded " << files.size() << " documentation files from the archive, total size: " << amountSize << " bytes");
         return std::make_shared<TDocStore>(std::move(files));
     }
 
@@ -65,17 +70,152 @@ private:
     const std::unordered_map<TString, TString> Files;
 };
 
+class TTemplateResolver {
+    // Block in documentation: {% <block name> arg1 arg2 ... %}
+    static constexpr TStringBuf BLOCK_CUT = "cut";
+    static constexpr TStringBuf BLOCK_ENDCUT = "endcut";
+
+    static constexpr TStringBuf BLOCK_NOTE = "note";
+    static constexpr TStringBuf BLOCK_ENDNOTE = "endnote";
+
+    static constexpr TStringBuf BLOCK_BLOCK = "block";
+    static constexpr TStringBuf BLOCK_ENDBLOCK = "endblock";
+
+    static constexpr TStringBuf BLOCK_LIST = "list";
+    static constexpr TStringBuf BLOCK_ENDLIST = "endlist";
+
+    static constexpr TStringBuf BLOCK_IF = "if";
+    static constexpr TStringBuf BLOCK_ELSE = "else";
+    static constexpr TStringBuf BLOCK_ENDIF = "endif";
+
+    static constexpr TStringBuf BLOCK_INCLUDE = "include";
+    static constexpr TStringBuf BLOCK_FILE = "file";
+
+public:
+    using TPtr = std::shared_ptr<TTemplateResolver>;
+
+    TString Resolve(const TString& text) {
+        for (size_t i = text.find_first_of("{`"); i != TString::npos; i = text.find_first_of("{`", i + 1)) {
+            if (text[i] == '`') {
+                // Skip markdown blocks
+                if (i + 2 < text.size() && text[i + 1] == '`' && text[i + 2] == '`') {
+                    i = text.find("```", i + 3);
+
+                    if (i != TString::npos) {
+                        i += 2;
+                    } else {
+                        i = text.size();
+                    }
+                }
+                continue;
+            }
+
+            if (i + 1 == text.size() || !IsIn({'%', '{', '#'}, text[i + 1])) {
+                continue;
+            }
+
+            if (text[i + 1] == '#') {
+                if (i + 3 >= text.size() || text[i + 2] != 'T' || text[i + 3] != '}') {
+                    // Paragraph anchor definition, skip
+                    continue;
+                }
+
+                // TODO: support statement {#T}
+                continue;
+            }
+
+            if (text[i + 1] == '%' && i + 2 < text.size() && text[i + 2] == ' ') {
+                if (ContainsBlock(text, i + 3, BLOCK_CUT) || ContainsBlock(text, i + 3, BLOCK_ENDCUT)) {
+                    // Cut block, skip
+                    continue;
+                }
+
+                if (ContainsBlock(text, i + 3, BLOCK_NOTE) || ContainsBlock(text, i + 3, BLOCK_ENDNOTE)) {
+                    // Notice block, skip
+                    continue;
+                }
+
+                if (ContainsBlock(text, i + 3, BLOCK_BLOCK) || ContainsBlock(text, i + 3, BLOCK_ENDBLOCK)) {
+                    // Simple block, skip
+                    continue;
+                }
+
+                if (ContainsBlock(text, i + 3, BLOCK_LIST) || ContainsBlock(text, i + 3, BLOCK_ENDLIST)) {
+                    // Inline documentation blocks, skip
+                    continue;
+                }
+
+                if (ContainsBlock(text, i + 3, BLOCK_IF) || ContainsBlock(text, i + 3, BLOCK_ELSE) || ContainsBlock(text, i + 3, BLOCK_ENDIF)) {
+                    // TODO: support if
+                    continue;
+                }
+
+                if (ContainsBlock(text, i + 3, BLOCK_INCLUDE) || ContainsBlock(text, i + 3, BLOCK_FILE)) {
+                    // TODO: handle include/file block
+                    continue;
+                }
+            }
+
+            if (text[i + 1] == '{') {
+                if (const auto close = text.find("}}"); close != TString::npos) {
+                    // TODO: support variables
+                    continue;
+                }
+            }
+
+            // Report unknown template
+            const TString close = text[i + 1] == '{' ? "}}" : "}";
+            const auto start = i;
+            i = text.find(close, i + 2);
+            if (i == TString::npos) {
+                i = text.size();
+            }
+            UnknownTemplates.emplace(text.substr(start, std::min(i + close.size() - start, text.size() - start)));
+        }
+
+        return text;
+    }
+
+    void Finish() {
+        if (UnknownTemplates.empty()) {
+            return;
+        }
+
+        YDB_CLI_LOG(Notice, "Found " << UnknownTemplates.size() << " different unknown documentation templates");
+
+        if (auto entry = GetGlobalLogger().Info(); entry.LogEnabled()) {
+            entry << "Unknown documentation templates:";
+            for (const auto& t : UnknownTemplates) {
+                entry << "\n" << t;
+            }
+        }
+    }
+
+private:
+    static bool ContainsBlock(const TString& text, size_t startPos, TStringBuf block) {
+        return startPos + block.size() <= text.size() && text.substr(startPos, block.size()) == block;
+    }
+
+    std::unordered_set<TString> UnknownTemplates;
+};
+
 class TTocIndex {
 public:
+    using TPtr = std::shared_ptr<TTocIndex>;
+
     struct TEntry {
         TString Path; // Path in archive, e.g. "core/concepts/architecture.md"
+        TString Content; // Resolved page content after templates substitution
         std::vector<TString> Title; // Human-readable chain of section titles
     };
 
-    TTocIndex(const TDocStore& store, const TString& root)
+    TTocIndex(TDocStore::TPtr store, TTemplateResolver::TPtr templateResolver, const TString& root)
         : Root(root)
+        , Store(std::move(store))
+        , TemplateResolver(std::move(templateResolver))
     {
-        WalkTocFile(store, TStringBuilder() << Root << "/toc.yaml", root, {});
+        WalkTocFile(TStringBuilder() << Root << "/toc.yaml", root, {});
+
         std::sort(Entries.begin(), Entries.end(), [](const TEntry& l, const TEntry& r) {
             for (size_t i = 0; i < std::min(l.Title.size(), r.Title.size()); ++i) {
                 if (l.Title[i] == r.Title[i]) {
@@ -85,6 +225,11 @@ public:
             }
             return l.Title.size() < r.Title.size();
         });
+
+        EntriesIndex.reserve(Entries.size());
+        for (ui64 i = 0; i < Entries.size(); ++i) {
+            Y_VALIDATE(EntriesIndex.emplace(Entries[i].Path, i).second, "Duplicated documentation page: " << Entries[i].Path);
+        }
     }
 
     const std::vector<TEntry>& GetEntries() const{
@@ -115,20 +260,20 @@ private:
         return slash == TString::npos ? "" : path.substr(0, slash);
     }
 
-    static void AppendTitle(const TString& title, std::vector<TString>& titles) {
+    void AppendTitle(const TString& title, std::vector<TString>& titles) const {
         if (titles.empty() || titles.back() != title) {
-            titles.emplace_back(title);
+            titles.emplace_back(TemplateResolver->Resolve(title));
         }
     }
 
-    void WalkTocFile(const TDocStore& store, const TString& tocPath, const TString& baseDir, std::vector<TString> titles) {
+    void WalkTocFile(const TString& tocPath, const TString& baseDir, std::vector<TString> titles) {
         if (!VisitedTocs.insert(tocPath).second) {
             return;
         }
 
-        const TString* content = store.Find(tocPath);
+        const TString* content = Store->Find(tocPath);
         if (!content) {
-            YDB_CLI_LOG(Warning, "docs_search: TOC file \"" << tocPath << "\" was not found in the archive");
+            YDB_CLI_LOG(Warning, "Documentation TOC file \"" << tocPath << "\" was not found in the archive");
             return;
         }
 
@@ -136,7 +281,7 @@ private:
         try {
             root = YAML::Load(*content);
         } catch (const std::exception& e) {
-            YDB_CLI_LOG(Warning, "docs_search: failed to parse TOC file \"" << tocPath << "\": " << e.what());
+            YDB_CLI_LOG(Warning, "Failed to parse documentation TOC file \"" << tocPath << "\": " << e.what());
             return;
         }
 
@@ -146,20 +291,20 @@ private:
             }
         }
 
-        WalkItems(store, root["items"], tocPath, baseDir, titles);
+        WalkItems(root["items"], tocPath, baseDir, titles);
     }
 
-    void WalkItems(const TDocStore& store, const YAML::Node& items, const TString& tocPath, const TString& baseDir, const std::vector<TString>& titles) {
+    void WalkItems(const YAML::Node& items, const TString& tocPath, const TString& baseDir, const std::vector<TString>& titles) {
         if (!items || !items.IsSequence()) {
             return;
         }
 
         for (const auto& item : items) {
-            WalkItem(store, item, tocPath, baseDir, titles);
+            WalkItem(item, tocPath, baseDir, titles);
         }
     }
 
-    void WalkItem(const TDocStore& store, const YAML::Node& item, const TString& tocPath, const TString& baseDir, const std::vector<TString>& titles) {
+    void WalkItem(const YAML::Node& item, const TString& tocPath, const TString& baseDir, const std::vector<TString>& titles) {
         if (!item || !item.IsMap()) {
             return;
         }
@@ -173,14 +318,16 @@ private:
 
         if (const auto& href = item["href"]) {
             if (const auto& hrefStr = href.as<TString>(""); hrefStr && !hrefStr.StartsWith("http://") && !hrefStr.StartsWith("https://")) {
-                if (const auto& resolved = JoinRelative(baseDir, hrefStr); resolved.EndsWith(".md") && store.Find(resolved) && SeenPages.insert(resolved).second) {
-                    AddEntity(resolved, nextTitles);
+                if (const auto& resolved = JoinRelative(baseDir, hrefStr); resolved.EndsWith(".md")) {
+                    if (const auto* rawContent = Store->Find(resolved); rawContent && SeenPages.insert(resolved).second) {
+                        AddEntity(resolved, nextTitles, *rawContent);
+                    }
                 }
             }
         }
 
         if (const auto& childItems = item["items"]) {
-            WalkItems(store, childItems, tocPath, baseDir, nextTitles);
+            WalkItems(childItems, tocPath, baseDir, nextTitles);
         }
 
         if (const auto& include = item["include"]; include && include.IsMap()) {
@@ -189,23 +336,26 @@ private:
                     const TString mode = include["mode"] ? include["mode"].as<TString>("link") : TString("link");
                     const TString resolved = JoinRelative(baseDir, pathStr);
                     const TString includedBaseDir = mode == "merge" ? DirectoryOf(tocPath) : DirectoryOf(resolved);
-                    YDB_CLI_LOG(Debug, "docs_search: including TOC file \"" << pathStr << "\" (mode \"" << mode << "\", base \"" << baseDir << "\")");
-                    WalkTocFile(store, resolved, includedBaseDir, nextTitles);
+                    YDB_CLI_LOG(Debug, "Including documentation TOC file \"" << pathStr << "\" (mode \"" << mode << "\", base \"" << baseDir << "\")");
+                    WalkTocFile(resolved, includedBaseDir, nextTitles);
                 }
             }
         }
     }
 
-    void AddEntity(const TString& path, const std::vector<TString>& title) {
+    void AddEntity(const TString& path, const std::vector<TString>& title, const TString& rawContent) {
         Y_VALIDATE(path.StartsWith(Root + "/"), "Unexpected entity path");
-        const auto& canonizedPath = path.substr(Root.size() + 1);
-
-        Y_VALIDATE(EntriesIndex.emplace(canonizedPath, Entries.size()).second, "Duplicated documentation page: " << path);
-        Entries.push_back({canonizedPath, title});
+        Entries.push_back({
+            .Path = path.substr(Root.size() + 1),
+            .Content = TemplateResolver->Resolve(rawContent),
+            .Title = title,
+        });
     }
 
 private:
     const TString Root;
+    const TDocStore::TPtr Store;
+    const TTemplateResolver::TPtr TemplateResolver;
     std::vector<TEntry> Entries;
     std::unordered_map<TString, ui64> EntriesIndex;
     std::unordered_set<TString> VisitedTocs;
@@ -213,6 +363,7 @@ private:
 };
 
 // TODO: support grep-like search
+// TODO: resolve documentation templates
 class TDocsSearchTool final : public TToolBase {
     using TBase = TToolBase;
 
@@ -297,7 +448,7 @@ protected:
 
         const TString message = (Action == ACTION_LIST)
             ? TString("Listing YDB documentation pages...")
-            : TStringBuilder() << "Reading documentation page \"" << JoinSeq('/', pagePath) << "\"";
+            : TStringBuilder() << "Reading documentation page " << JoinSeq('/', pagePath);
         PrintFtxuiMessage("", message, ftxui::Color::Green);
     }
 
@@ -343,8 +494,11 @@ private:
         Y_VALIDATE(NResource::Has(DOCS_ARCHIVE_RESOURCE), "Can not load docs, no docs.archive resource: " << DOCS_ARCHIVE_RESOURCE);
 
         Store = TDocStore::Load();
-        RuDocIndex = std::make_shared<TTocIndex>(*Store, LANG_RU);
-        EnDocIndex = std::make_shared<TTocIndex>(*Store, LANG_EN);
+
+        const auto templateResolver = std::make_shared<TTemplateResolver>();
+        RuDocIndex = std::make_shared<TTocIndex>(Store, templateResolver, LANG_RU);
+        EnDocIndex = std::make_shared<TTocIndex>(Store, templateResolver, LANG_EN);
+        templateResolver->Finish();
     }
 
     const TTocIndex& GetDocIndex() const {
@@ -363,37 +517,36 @@ private:
 
         auto& array = result.SetType(NJson::JSON_ARRAY).GetArraySafe();
         const auto& entries = GetDocIndex().GetEntries();
-        for (const auto& [path, title] : entries) {
+        for (const auto& entry : entries) {
             auto& item = array.emplace_back();
 
-            item["path"] = path;
-            payloadSize += path.size();
+            item["path"] = entry.Path;
+            payloadSize += entry.Path.size();
 
             auto& titles = item["title_path"].SetType(NJson::JSON_ARRAY).GetArraySafe();
-            for (const auto& title : title) {
+            for (const auto& title : entry.Title) {
                 titles.emplace_back(title);
                 payloadSize += title.size();
             }
         }
 
-        YDB_CLI_LOG(Info, "docs_search: listed " << array.size() << " pages in the archive, payload size: " << payloadSize);
-        YDB_CLI_LOG(Debug, "docs_search: list result:\n" << FormatJsonValue(result));
+        YDB_CLI_LOG(Info, "Listed " << array.size() << " documentation pages in the archive, payload size: " << payloadSize);
+        YDB_CLI_LOG(Debug, "Full documentation list result:\n" << FormatJsonValue(result));
         return TResponse::Success(std::move(result));
     }
 
     TResponse DoGet() {
-        if (const TString* content = Store->Find(TStringBuilder() << Language << "/" << Path)) {
-            YDB_CLI_LOG(Debug, "docs_search: extracted page with size " << content->size());
-            YDB_CLI_LOG(Debug, "docs_search: get result:\n" << Strip(*content));
-            return TResponse::Success(*content);
+        if (const auto* entry = GetDocIndex().FindEntry(Path)) {
+            YDB_CLI_LOG(Info, "Extracted documentation page (size " << entry->Content.size() << "):\n" << Strip(entry->Content));
+            return TResponse::Success(entry->Content);
         }
         return TResponse::Error(TStringBuilder() << "Documentation page \"" << Path << "\" was not found in the archive. Use action \"" << ACTION_LIST << "\" to discover available pages.");
     }
 
 private:
-    std::shared_ptr<TDocStore> Store;
-    std::shared_ptr<TTocIndex> RuDocIndex;
-    std::shared_ptr<TTocIndex> EnDocIndex;
+    TDocStore::TPtr Store;
+    TTocIndex::TPtr RuDocIndex;
+    TTocIndex::TPtr EnDocIndex;
     TString Action;
     TString Language;
     TString Path;

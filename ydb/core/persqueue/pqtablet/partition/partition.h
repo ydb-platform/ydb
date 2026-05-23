@@ -1028,7 +1028,6 @@ private:
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
-    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgWriteMessages;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgQuotaMessages;
 
     std::unique_ptr<IAutopartitioningManager> AutopartitioningManager;

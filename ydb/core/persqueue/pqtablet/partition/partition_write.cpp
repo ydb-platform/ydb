@@ -567,7 +567,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAvgWriteBytes(WriteNewSize, now);
     UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
 
-    AvgWriteMessages.Update(WriteNewMessages, now);
     AvgQuotaMessages.Update(MessagesQuotaSize, now);
 
     for (auto& avg : AvgQuotaBytes) {
@@ -591,6 +590,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    BlobQuotaSize = 0;
+    MessagesQuotaSize = 0;
     WriteNewSizeFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
 

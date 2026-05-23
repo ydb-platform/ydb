@@ -365,7 +365,6 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
-    , AvgWriteMessages(TDuration::Minutes(1), 1000)
     , AvgQuotaMessages(TDuration::Minutes(1), 1000)
     , ReservedSize(0)
     , Channel(0)
@@ -507,7 +506,6 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(now);
     }
-    AvgWriteMessages.Update(now);
     AvgQuotaMessages.Update(now);
 
     TryRunCompaction();

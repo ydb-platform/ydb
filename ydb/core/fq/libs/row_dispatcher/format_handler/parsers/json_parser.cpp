@@ -272,7 +272,6 @@ public:
                 break;
             }
 
-#if 0 // TODO
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
                 if (cellType != simdjson::builtin::ondemand::json_type::object) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
@@ -280,33 +279,43 @@ public:
                 }
                 auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
                 auto keyType = dictType->GetKeyType();
-                Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data);
+                Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data); // should be already verified, not user-data-error
                 auto keyDataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, keyType)->GetDataSlot();
+                Y_ENSURE(keyDataSlot); // should be already verified, not user-data-error
                 auto payloadType = dictType->GetPayloadType();
-                TVector<std::pair<NYql::NUdf::TUnboxedValue, NYql::NUdf::TUnboxedValue>> pairs;
-                for (auto elt : jsonValue.get_object()) {
-                    std::string_view name;
-                    {
-                        CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
-                            SetParsingError(error, jsonValue, "parse as object", status);
-                            return false;
+                NKikimr::NMiniKQL::TKeyTypes keyTypes;
+                bool isTuple;
+                bool encoded;
+                bool useIHash;
+                GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded, useIHash);
+                Y_ENSURE(!(isTuple || encoded || useIHash));
+                status = TStatus::Success();
+                resultValue = HolderFactory->CreateDirectHashedDictHolder(
+                    [&, this](auto& map) {
+                        for (auto elt : jsonValue.get_object()) {
+                            std::string_view name;
+                            {
+                                CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
+                                    SetParsingError(error, jsonValue, "parse as object", status);
+                                    return;
+                                }
+                            }
+                            simdjson::builtin::ondemand::value eltValue;
+                            CHECK_JSON_ERROR(elt.value().get(eltValue)) {
+                                SetParsingError(error, jsonValue, "parse as object", status);
+                                return;
+                            }
+                            NYql::NUdf::TUnboxedValue payload;
+                            if (!ParseNestedValue(std::move(eltValue), payload, status, payloadType, false)) {
+                                return;
+                            }
+                            map.emplace(NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name), std::move(payload));
                         }
-                    }
-                    auto& [key, payload] = pairs.emplace_back();
-                    key = NKikimr::NMiniKQL::ValueFromString(keyDataSlot, name);
-                    simdjson::builtin::ondemand::value eltValue;
-                    CHECK_JSON_ERROR(elt.value().get(eltValue)) {
-                        SetParsingError(error, jsonValue, "parse as object", status);
-                        return false;
-                    }
-                    if (!ParseNestedValue(std::move(eltValue), payload, status, payloadType, false)) {
-                        return false;
-                    }
-                }
-                resultValue = NYql::NUdf::TUnboxedValuePod(NYql::NUdf::IBoxedValuePtr(new NYql::NDom::TMapNode(pairs.data(), pairs.size())));
-                break;
+                    },
+                    keyTypes, false, true, nullptr, nullptr, nullptr);
+                return status.IsSuccess();
             }
-#endif
+
             default:
                 // should've been handled in ParseNestedType
                 status = TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Unsupported type kind: " << type->GetKindAsStr());
@@ -369,7 +378,7 @@ private:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
                 auto dataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
                 if (!dataSlot) {
-                    return TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "DataType has no DataSlot");
+                    return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "DataType has no DataSlot");
                 }
                 return TStatus::Success();
             }
@@ -403,20 +412,20 @@ private:
                 }
                 break;
             }
-#if 0
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict: {
                 auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
                 auto keyType = dictType->GetKeyType();
                 if (keyType->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Data) {
-                    return TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Dict key type is not DataType");
+                    return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Dict key type: expected either String, or Utf8, but got " << keyType->GetKindAsStr());
                 }
                 auto keyTypeSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, keyType)->GetDataSlot();
-                if (!IsIn(keyTypeSlot, {NYql::NUdf::EDataSlot::String, NYql::NUdf::EDataSlot::Utf8})) {
-                    return TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Dict key type is not String or Utf8");
+                if (!IsIn({NYql::NUdf::EDataSlot::String, NYql::NUdf::EDataSlot::Utf8}, keyTypeSlot)) {
+                    return TStatus::Fail(EStatusId::UNSUPPORTED, TStringBuilder() << "Dict key type: expected either String, or Utf8, but got " << (keyTypeSlot ? NYql::NUdf::GetDataTypeInfo(*keyTypeSlot).Name : "<empty>"));
                 }
                 return ParseNestedType(dictType->GetPayloadType());
             }
-#endif
+
             case NKikimr::NMiniKQL::TTypeBase::EKind::List: {
                 auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
                 return ParseNestedType(listType->GetItemType());
@@ -461,9 +470,7 @@ private:
                 IsOptional = true;
                 return ExtractDataSlot(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType());
             }
-#if 0
             case NKikimr::NMiniKQL::TTypeBase::EKind::Dict:
-#endif
             case NKikimr::NMiniKQL::TTypeBase::EKind::Tuple:
             case NKikimr::NMiniKQL::TTypeBase::EKind::Struct:
             case NKikimr::NMiniKQL::TTypeBase::EKind::List: {

@@ -38,6 +38,14 @@ class TGenerateDocsMain final : public TMainClassArgs {
 
             const char* name = nullptr;
             while (name = fl.Next()) {
+                TStringBuf nameBuf(name);
+                if (!nameBuf.EndsWith(".md") && !nameBuf.EndsWith(".yaml")) {
+                    continue;
+                }
+                if (nameBuf.EndsWith(".yaml") && !nameBuf.StartsWith("toc") && nameBuf != "presets.yaml") {
+                    continue;
+                }
+
                 TMappedFileInput in(TStringBuilder() << dir << name);
                 w.Add(TStringBuilder() << prefix << name, &in);
             }

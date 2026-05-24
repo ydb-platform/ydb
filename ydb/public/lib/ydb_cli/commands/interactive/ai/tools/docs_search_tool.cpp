@@ -97,6 +97,10 @@ public:
         return it != Files.end() ? &it->second : nullptr;
     }
 
+    const std::unordered_map<TString, TString>& GetFiles() const {
+        return Files;
+    }
+
 private:
     const std::unordered_map<TString, TString> Files;
 };
@@ -122,6 +126,9 @@ class TTemplateResolver {
     static constexpr TStringBuf BLOCK_INCLUDE = "include";
     static constexpr TStringBuf BLOCK_FILE = "file";
 
+    // File with documentation variables definition
+    static constexpr TStringBuf PRESETS_FILE = "presets.yaml";
+
     struct TReplace {
         ui64 From = 0;
         ui64 To = 0;
@@ -133,7 +140,24 @@ public:
 
     explicit TTemplateResolver(TDocStore::TPtr store)
         : Store(std::move(store))
-    {}
+    {
+        for (const auto& [path, content] : Store->GetFiles()) {
+            if (path != PRESETS_FILE && !path.EndsWith(TStringBuilder() << "/" << PRESETS_FILE)) {
+                continue;
+            }
+
+            YAML::Node root;
+            try {
+                root = YAML::Load(content);
+            } catch (const std::exception& e) {
+                YDB_CLI_LOG(Warning, "Failed to parse documentation presets.yaml file: " << e.what());
+                continue;
+            }
+
+            ParsePresetsFile(root["default"], DirectoryOf(path));
+            ParsePresetsFile(root["ydb"], DirectoryOf(path));
+        }
+    }
 
     TString Resolve(const TString& text, const TString& baseDir) {
         std::vector<TReplace> replaces;
@@ -205,11 +229,8 @@ public:
                 }
             }
 
-            if (text[i + 1] == '{') {
-                if (const auto close = text.find("}}"); close != TString::npos) {
-                    // TODO: support variables
-                    continue;
-                }
+            if (text[i + 1] == '{' && ResolveVariable(text, baseDir, i, replaces)) {
+                continue;
             }
 
             // Report unknown template
@@ -263,6 +284,62 @@ private:
         return text.substr(startPos, std::min(text.find("}", startPos + 1), text.size() - 1) - startPos + 1);
     }
 
+    void ParsePresetsFile(const YAML::Node& d, const TString& directory, const TString& prefix = "") {
+        if (!d || !d.IsMap()) {
+            return;
+        }
+
+        for (YAML::const_iterator it = d.begin(); it != d.end(); ++it) {
+            const auto& key = it->first;
+            const auto& value = it->second;
+            if (!key || !value) {
+                continue;
+            }
+
+            auto keyStr = key.as<TString>("");
+            if (!keyStr) {
+                continue;
+            }
+            keyStr = TStringBuilder() << prefix << keyStr;
+
+            if (value.IsMap()) {
+                ParsePresetsFile(value, directory, TStringBuilder() << keyStr << ".");
+            }
+
+            auto valueStr = value.as<TString>("");
+            if (!valueStr) {
+                continue;
+            }
+
+            const auto varIt = PresetVariables.emplace(keyStr, std::unordered_map<TString, TString>{}).first;
+            if (!varIt->second.emplace(directory, std::move(valueStr)).second) {
+                YDB_CLI_LOG(Warning, "Duplicated presets.yaml variable: " << keyStr << " definition in directory " << directory);
+            }
+        }
+    }
+
+    std::optional<TString> GetVariableValue(const TString& name, const TString& baseDir) const {
+        const auto it = PresetVariables.find(name);
+        if (it == PresetVariables.end()) {
+            return std::nullopt;
+        }
+
+        TString resultValue;
+        TString resultDirectory;
+        for (const auto& [directory, value] : it->second) {
+            if (!baseDir.StartsWith(directory)) {
+                continue;
+            }
+
+            if (resultDirectory.size() <= directory.size()) {
+                resultDirectory = directory;
+                resultValue = value;
+            }
+        }
+
+        return resultValue;
+    }
+
     bool ResolveInclude(const TString& text, const TString& baseDir, size_t& startPos, std::vector<TReplace>& replaces) {
         if (!ContainsBlock(text, startPos + 3, BLOCK_INCLUDE)) {
             return false;
@@ -303,7 +380,36 @@ private:
         return true;
     }
 
+    bool ResolveVariable(const TString& text, const TString& baseDir, size_t& startPos, std::vector<TReplace>& replaces) const {
+        if (startPos + 1 >= text.size() || text[startPos] != '{' || text[startPos + 1] != '{') {
+            return false;
+        }
+
+        const auto variableEnd = text.find("}}", startPos + 2);
+        if (variableEnd == TString::npos) {
+            YDB_CLI_LOG(Info, "Failed to find variable end around: " << GetBlockContext(text, startPos));
+            return false;
+        }
+
+        const TString variableName = Strip(text.substr(startPos + 2, variableEnd - startPos - 2));
+        const auto& variableValue = GetVariableValue(variableName, baseDir);
+        if (!variableValue) {
+            YDB_CLI_LOG(Info, "Failed to find variable '" << variableName << "' in presets.yaml around: " << GetBlockContext(text, startPos));
+            return false;
+        }
+
+        replaces.push_back({
+            .From = startPos,
+            .To = variableEnd + 2,
+            .Content = *variableValue,
+        });
+        startPos = variableEnd + 1;
+
+        return true;
+    }
+
     const TDocStore::TPtr Store;
+    std::unordered_map<TString, std::unordered_map<TString, TString>> PresetVariables; // {Name -> {Preset Directory -> Value}}
     std::unordered_set<TString> UnknownTemplates;
 };
 
@@ -393,12 +499,6 @@ private:
         } catch (const std::exception& e) {
             YDB_CLI_LOG(Warning, "Failed to parse documentation TOC file \"" << tocPath << "\": " << e.what());
             return;
-        }
-
-        if (const auto& title = root["title"]) {
-            if (const auto& titleStr = title.as<TString>("")) {
-                AppendTitle(titleStr, tocPath, titles);
-            }
         }
 
         WalkItems(root["items"], tocPath, baseDir, titles);

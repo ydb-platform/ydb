@@ -91,7 +91,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
             const ui32 entryIndex = ownerIt->second;
             TEntry &entry = Entries[entryIndex];
             if (entry.PathIt->first != path) {
-                YDB_LOG_ERROR("unconsistent path for same owner");
+                YDB_LOG_ERROR("inconsistent path for same owner");
                 // reply nothing, request suspicious
                 return;
             }

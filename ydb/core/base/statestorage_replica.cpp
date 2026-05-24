@@ -406,10 +406,10 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         const NKikimrStateStorage::TEvRegisterFollower &record = ev->Get()->Record;
 
         YDB_LOG_DEBUG("Replica::Handle received TEvReplicaRegFollower for tabletId, followerId, followerActorId, followerTabletActorId",
-            {"GetTabletID", record.GetTabletID()},
-            {"#_num_0", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
-            {"GetFollower", record.GetFollower()},
-            {"GetFollowerTablet", record.GetFollowerTablet()});
+            {"tabletId", record.GetTabletID()},
+            {"followerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
+            {"followerActorId", record.GetFollower()},
+            {"followerTabletActorId", record.GetFollowerTablet()});
 
         CheckConfigVersion(ev->Sender, ev->Get());
         const ui64 tabletId = record.GetTabletID();
@@ -461,9 +461,9 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         const NKikimrStateStorage::TEvUnregisterFollower &record = ev->Get()->Record;
 
         YDB_LOG_DEBUG("Replica::Handle received TEvReplicaUnregFollower for tabletId, followerId, followerActorId",
-            {"GetTabletID", record.GetTabletID()},
-            {"#_num_0", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
-            {"GetFollower", record.GetFollower()});
+            {"tabletId", record.GetTabletID()},
+            {"followerId", ((record.HasFollowerId()) ? ToString(record.GetFollowerId()) : "UNSET")},
+            {"followerActorId", record.GetFollower()});
 
         const ui64 tabletId = record.GetTabletID();
         CheckConfigVersion(ev->Sender, ev->Get());

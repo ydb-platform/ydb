@@ -115,9 +115,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ui64 msgGuid = msg->Record.GetClusterStateGuid();
         if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
             YDB_LOG_DEBUG("LookupReplica TEvNodeWardenNotifyConfigMismatch:",
-                {"Info->ClusterStateGeneration", ClusterStateGeneration},
+                {"ClusterStateGeneration", ClusterStateGeneration},
                 {"msgGeneration", msgGeneration},
-                {"Info->ClusterStateGuid", ClusterStateGuid},
+                {"ClusterStateGuid", ClusterStateGuid},
                 {"msgGuid", msgGuid});
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));

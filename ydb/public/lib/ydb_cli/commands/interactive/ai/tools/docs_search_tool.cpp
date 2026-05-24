@@ -590,7 +590,6 @@ private:
     std::unordered_set<TString> SeenPages;
 };
 
-// TODO: support grep-like search
 class TDocsSearchTool final : public TToolBase {
     using TBase = TToolBase;
 

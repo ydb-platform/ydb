@@ -159,7 +159,13 @@ public:
         }
     }
 
-    TString Resolve(const TString& text, const TString& baseDir) {
+    TString Resolve(const TString& text, const TString& baseDir, bool cache = true) {
+        if (cache) {
+            if (const auto it = ParsedPages.find(text.c_str()); it != ParsedPages.end()) {
+                return it->second;
+            }
+        }
+
         std::vector<TReplace> replaces;
         for (size_t i = text.find_first_of("{`"); i != TString::npos; i = text.find_first_of("{`", i + 1)) {
             if (text[i] == '`') {
@@ -184,12 +190,7 @@ public:
             }
 
             if (text[i + 1] == '#') {
-                if (i + 3 >= text.size() || text[i + 2] != 'T' || text[i + 3] != '}') {
-                    // Paragraph anchor definition, skip
-                    continue;
-                }
-
-                // TODO: support statement {#T}
+                // Paragraph anchor definition, skip
                 continue;
             }
 
@@ -257,6 +258,10 @@ public:
             result << text.substr(pos);
         }
 
+        if (cache) {
+            Y_VALIDATE(ParsedPages.emplace(text.c_str(), result).second, "Failed to put in cache text: " << text);
+        }
+
         return result;
     }
 
@@ -280,8 +285,8 @@ private:
         return startPos + block.size() <= text.size() && text.substr(startPos, block.size()) == block;
     }
 
-    static TString GetBlockContext(const TString& text, size_t startPos) {
-        return text.substr(startPos, std::min(text.find("}", startPos + 1), text.size() - 1) - startPos + 1);
+    static TString GetBlockContext(const TString& text, size_t startPos, char right = '}') {
+        return text.substr(startPos, std::min(text.find(right, startPos + 1), text.size() - 1) - startPos + 1);
     }
 
     void ParsePresetsFile(const YAML::Node& d, const TString& directory, const TString& prefix = "") {
@@ -340,6 +345,25 @@ private:
         return resultValue;
     }
 
+    const TString* GetFileValue(const TString& text, const TString& baseDir, size_t startPos, size_t endPos = TString::npos, TString* path = nullptr) {
+        const auto fileRefBegin = text.find_first_of("(\"", startPos);
+        if (fileRefBegin >= endPos) {
+            return nullptr;
+        }
+
+        const auto fileRefEnd = text.find_first_of("\"#)", fileRefBegin + 1);
+        if (fileRefEnd >= endPos || fileRefEnd - fileRefBegin <= 1) {
+            return nullptr;
+        }
+
+        const auto& filePath = JoinRelative(baseDir, text.substr(fileRefBegin + 1, fileRefEnd - fileRefBegin - 1), /* protectRoot */ 2);
+        if (path) {
+            *path = filePath;
+        }
+
+        return Store->Find(filePath);
+    }
+
     bool ResolveInclude(const TString& text, const TString& baseDir, size_t& startPos, std::vector<TReplace>& replaces) {
         if (!ContainsBlock(text, startPos + 3, BLOCK_INCLUDE)) {
             return false;
@@ -351,22 +375,10 @@ private:
             return false;
         }
 
-        auto includeRefBegin = text.find_first_of("(\"", startPos + 3 + BLOCK_INCLUDE.size());
-        if (includeRefBegin >= includeBlockEnd) {
-            YDB_CLI_LOG(Info, "Failed to find include ref start around: " << GetBlockContext(text, startPos));
-            return false;
-        }
-
-        const auto includeRefEnd = text.find_first_of("\"#)", includeRefBegin + 1);
-        if (includeRefEnd >= includeBlockEnd || includeRefEnd - includeRefBegin <= 1) {
-            YDB_CLI_LOG(Info, "Failed to find include ref end around: " << GetBlockContext(text, startPos));
-            return false;
-        }
-
-        const auto& includePath = JoinRelative(baseDir, text.substr(includeRefBegin + 1, includeRefEnd - includeRefBegin - 1), /* protectRoot */ 2);
-        const auto* rawContent = Store->Find(includePath);
+        TString includePath;
+        const auto* rawContent = GetFileValue(text, baseDir, startPos + 3 + BLOCK_INCLUDE.size(), includeBlockEnd, &includePath);
         if (!rawContent) {
-            YDB_CLI_LOG(Info, "Failed to find include file under base dir '" << baseDir << "' with path '" << includePath << "' around: " << GetBlockContext(text, startPos));
+            YDB_CLI_LOG(Info, "Failed to find include file under base dir '" << baseDir << "' (tried path: '" << includePath << "') around: " << GetBlockContext(text, startPos));
             return false;
         }
 
@@ -409,6 +421,7 @@ private:
     }
 
     const TDocStore::TPtr Store;
+    std::unordered_map<const char*, TString> ParsedPages;
     std::unordered_map<TString, std::unordered_map<TString, TString>> PresetVariables; // {Name -> {Preset Directory -> Value}}
     std::unordered_set<TString> UnknownTemplates;
 };
@@ -478,7 +491,7 @@ private:
         }
 
         if (titles.empty() || titles.back() != title) {
-            titles.emplace_back(TemplateResolver->Resolve(title, DirectoryOf(tocPath)));
+            titles.emplace_back(TemplateResolver->Resolve(title, DirectoryOf(tocPath), /* cache */ false));
         }
     }
 

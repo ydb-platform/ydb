@@ -2141,6 +2141,11 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
     }
 
+    if (TotalPartitionWriteSpeedInMessages) {
+        ui64 quotaUsage = ui64(AvgQuotaMessages.GetValue()) * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, quotaUsage);
+    }
+
     ui64 storageSize = StorageSize(ctx);
     SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_TOTAL_PART_SIZE, storageSize, METRIC_MAX_PART_SIZE);
 

@@ -119,7 +119,7 @@ IMPORTANT:
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
-- ALWAYS wrap table paths inside folders in backticks. If a table path contains '/', '@', or '.', also wrap it in backticks, for example: `path/to/table`.
+- ALWAYS wrap any scheme paths inside folders in backticks. If a some scheme path contains '-', '/', '@', or '.', also wrap it in backticks, for example: `path/to/table`.
   - Examples of table paths correctly wrapped in backticks:
     - SELECT * FROM `national_league/goals`
     - SELECT * FROM `ships/crew/legacy`

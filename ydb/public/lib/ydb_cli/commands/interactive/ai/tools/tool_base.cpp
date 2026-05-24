@@ -29,7 +29,7 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
     try {
         ParseParameters(parameters);
     } catch (const std::exception& e) {
-        YDB_CLI_LOG(Warning, "Failed to parse parameters of tool: " << e.what());
+        YDB_CLI_LOG(Warning, "Failed to parse parameters of tool: " << e.what() << "\nParameters:\n" << FormatJsonValue(parameters));
         return TResponse::Error(TStringBuilder() << "Failed to parse parameters of tool: " << e.what());
     }
 

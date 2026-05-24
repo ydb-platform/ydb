@@ -244,6 +244,19 @@ public:
         return &Entries[it->second];
     }
 
+    std::vector<TString> PathToTitles(TString& path) const {
+        while (path) {
+            const auto it = DirectoriesNames.find(path);
+            if (it != DirectoriesNames.end()) {
+                return it->second;
+            }
+
+            path = DirectoryOf(path);
+        }
+
+        return {};
+    }
+
 private:
     static TString JoinRelative(const TString& baseDir, const TString& rel) {
         if (rel.StartsWith('/')) {
@@ -260,7 +273,11 @@ private:
         return slash == TString::npos ? "" : path.substr(0, slash);
     }
 
-    void AppendTitle(const TString& title, std::vector<TString>& titles) const {
+    void AppendTitle(const TString& title, const TString& tocPath, std::vector<TString>& titles) {
+        if (const auto& dir = DirectoryOf(CanonizePath(tocPath)); DirectoriesNames.emplace(dir, titles).second) {
+            YDB_CLI_LOG(Debug, "Added directory '" << dir << "'name '" << JoinSeq('/', titles) << "'");
+        }
+
         if (titles.empty() || titles.back() != title) {
             titles.emplace_back(TemplateResolver->Resolve(title));
         }
@@ -287,7 +304,7 @@ private:
 
         if (const auto& title = root["title"]) {
             if (const auto& titleStr = title.as<TString>("")) {
-                AppendTitle(titleStr, titles);
+                AppendTitle(titleStr, tocPath, titles);
             }
         }
 
@@ -312,7 +329,7 @@ private:
         std::vector<TString> nextTitles = titles;
         if (const auto& name = item["name"]) {
             if (const auto& nameStr = name.as<TString>("")) {
-                AppendTitle(nameStr, nextTitles);
+                AppendTitle(nameStr, tocPath, nextTitles);
             }
         }
 
@@ -344,12 +361,16 @@ private:
     }
 
     void AddEntity(const TString& path, const std::vector<TString>& title, const TString& rawContent) {
-        Y_VALIDATE(path.StartsWith(Root + "/"), "Unexpected entity path");
         Entries.push_back({
-            .Path = path.substr(Root.size() + 1),
+            .Path = CanonizePath(path),
             .Content = TemplateResolver->Resolve(rawContent),
             .Title = title,
         });
+    }
+
+    TString CanonizePath(const TString& path) const {
+        Y_VALIDATE(path.StartsWith(Root + "/"), "Unexpected entity path: '" << path << "', should start with '" << Root << "/'");
+        return path.substr(Root.size() + 1);
     }
 
 private:
@@ -358,12 +379,12 @@ private:
     const TTemplateResolver::TPtr TemplateResolver;
     std::vector<TEntry> Entries;
     std::unordered_map<TString, ui64> EntriesIndex;
+    std::unordered_map<TString, std::vector<TString>> DirectoriesNames;
     std::unordered_set<TString> VisitedTocs;
     std::unordered_set<TString> SeenPages;
 };
 
 // TODO: support grep-like search
-// TODO: resolve documentation templates
 class TDocsSearchTool final : public TToolBase {
     using TBase = TToolBase;
 
@@ -380,12 +401,53 @@ Supported actions:
                         reconstructed from the documentation table of contents
                         (e.g. ["YDB", "Concepts", "Architecture"]).
     Use this action first to discover which pages exist before retrieving them.
+    Optional "path" parameter may be used to provide archive-relative path prefix for pages that should be listed,
+    must match a value returned from the "list" action of parent or root directory.
 
 - "get": returns the raw content of the page (Markdown or YAML) by its archive path.
     The "path" parameter is required for this action and must match a value returned
     by the "list" action.
 
 You must provide "language" property with value matching the current conversation language.
+
+Documentation archive contains around of thousand different documents, so in first list call it is better to provide "path"
+depending on content that you want to find. There are folders with core information which you must read if you work with something YQL- / YDB-specific:
+
+- "core/yql" - complete information about YQL syntax for both DDL and DML queries with examples and recipes,
+    always read this folder if user ask you about syntax or you unsure about concrete builtin functions / DDL syntax for YDB specific scheme entities
+    (for example if you should work with strings / dates / urls e.t.c. and somehow process them you must read corresponding documentation)
+- "core/concepts" - top level information about all YDB entities, this should be your entry point for discovering YDB-specific entity before
+   it modification / answering to user about it
+- "core/dev" - folder with detailed explanation of internal YDB entities like CDC / Vector|Fulltext|Second index / Terraform / Sys view / Streaming queries
+    read this folder to get explanation how you should work with YDb-specific entities before making attempts to their creation / modification
+- "core/recipes" - this folder contains very useful examples for advanced scenarios with YDB-specific scheme entities like transfer, vector indexes,
+    streaming queries, full-text search indexes, backups (also incremental) and YDB SDK / YDB CLI examples. You must read this folder
+    if you should setup this YDB-specific features or have troubles wit YDB CLI commands execution.
+- "core/analyst" - information for YDB analytics usage
+
+This folders can help you to resolve failures:
+
+- "core/troubleshooting" - read this folder when you or user encountered into some troubles with server side queries execution / high latency / spilling or shard problems e.t.c.
+- "core/faq" - if you not sure how solve user task or have some problems which is not covered in other folders - try to look at this folder
+- "core/security" - read this folder when user asked you about authentication settings for YDB or you encountered into troubles with authorization / security access
+
+This is reference folders, read them if you need this information to answer to user / solve task:
+
+- "core/reference" - this folder contains detailed information about YDB CLI commands, read this folder if you have some troubles with
+    YDB CLI commands execution via exec shell tool. Also folder contains information about YDB SDK, YDB dsTOOL (managing server storage),
+    Observability and UI docs, YDB cluster configuration and docker setup, supported YDB APIs, so also read this folder if user asked about it. 
+- "core/postgresql" - read this folder if user asked you about YDB and Postgres compatibility or you want to execute queries in PG syntax (connolly you must awoid it)
+- "core/maintenance" - you must read this folder if user asked you to perform some maintence command that will change internal server storage state,
+    like storage disks eviction, selfheal, adding new disks, changing internal configuration e.t.c.
+- "core/devops" - folder with complete information about devops tasks about deploying and managing YDB cluster
+- "core/integrations" - read this folder if in task which you solving you should fond out YDB capabilities in integration with
+    ORM / GUI / Visualizations / Vector index search (embeddings) / Orchestration systems like airflow / django / graphana / langchain (and many others)
+- "core/downloads" - folder with description how YDB server / YDB CLI / YDB dsTOOL can be downloaded
+- "core/contributor" - information about implementation of some subsystems for contributors into YDB GitHUb repository
+- "core/public-materials" - comonly spread material about YDB like published papers
+
+It is better to always choose one of this folders to list.
+
 )";
 
     static constexpr char ACTION_PROPERTY[] = "action";
@@ -418,25 +480,26 @@ protected:
         }
 
         Language = to_lower(Strip(parser.GetKey(LANG_PROPERTY).GetString()));
-        if (Language != LANG_RU && Action != LANG_EN) {
-            throw yexception() << "Unknown language \"" << Action << "\". Expected \"" << LANG_RU << "\" or \"" << LANG_EN << "\".";
+        if (Language != LANG_RU && Language != LANG_EN) {
+            throw yexception() << "Unknown language \"" << Language << "\". Expected \"" << LANG_RU << "\" or \"" << LANG_EN << "\".";
         }
 
         Path.clear();
+        if (auto pathParser = parser.MaybeKey(PATH_PROPERTY)) {
+            Path = Strip(pathParser->GetString());
+
+            TStringBuf pathBuf(Path);
+            pathBuf.SkipPrefix("/");
+            pathBuf.SkipPrefix(TStringBuf(Language));
+            pathBuf.SkipPrefix("/");
+
+            Path = pathBuf;
+        }
+
         std::vector<TString> pagePath;
         if (Action == ACTION_GET) {
-            auto pathParser = parser.MaybeKey(PATH_PROPERTY);
-            if (!pathParser) {
-                throw yexception() << "\"" << PATH_PROPERTY << "\" parameter is required for action \"" << ACTION_GET << "\"";
-            }
-
-            Path = Strip(pathParser->GetString());
-            if (Path.empty()) {
-                throw yexception() << "\"" << PATH_PROPERTY << "\" must not be empty";
-            }
-
-            if (Path.StartsWith('/')) {
-                Path = Path.substr(1);
+            if (!Path) {
+                throw yexception() << "\"" << PATH_PROPERTY << "\" parameter is required for action \"" << ACTION_GET << "\" and must not be empty or equal to '/'";
             }
 
             const auto* entry = GetDocIndex().FindEntry(Path);
@@ -444,10 +507,16 @@ protected:
                 throw yexception() << "Documentation page \"" << Path << "\" was not found in the archive. Use action \"" << ACTION_LIST << "\" to discover available pages.";
             }
             pagePath = entry->Title;
+        } else {
+            const auto pathBefore = Path;
+            pagePath = GetDocIndex().PathToTitles(Path);
+            if (pathBefore != Path) {
+                YDB_CLI_LOG(Info, "Documentation listing path was changed to '" << Path << "' from '" << pathBefore << "'");
+            }
         }
 
-        const TString message = (Action == ACTION_LIST)
-            ? TString("Listing YDB documentation pages...")
+        const TString message = Action == ACTION_LIST
+            ? TStringBuilder() << "Listing YDB documentation pages" << (pagePath.empty() ? "" : " in folder " + JoinSeq('/', pagePath)) << "..."
             : TStringBuilder() << "Reading documentation page " << JoinSeq('/', pagePath);
         PrintFtxuiMessage("", message, ftxui::Color::Green);
     }
@@ -518,6 +587,10 @@ private:
         auto& array = result.SetType(NJson::JSON_ARRAY).GetArraySafe();
         const auto& entries = GetDocIndex().GetEntries();
         for (const auto& entry : entries) {
+            if (!entry.Path.StartsWith(Path)) {
+                continue;
+            }
+
             auto& item = array.emplace_back();
 
             item["path"] = entry.Path;

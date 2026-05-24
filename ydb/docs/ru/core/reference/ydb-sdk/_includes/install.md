@@ -24,7 +24,7 @@
 
   Для успешной установки в вашем окружении должен быть установлен [Go](https://go.dev/doc/install) версии не ниже 1.17.
 
-- С# (.NET)
+- С#
 
   {% include [install/cmd_dotnet.md](install/cmd_dotnet.md) %}
 

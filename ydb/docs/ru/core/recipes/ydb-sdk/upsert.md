@@ -338,6 +338,39 @@
 
   {% endlist %}
 
+- C#
+
+  ```C#
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Ado.YdbType;
+
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenRetryableConnectionAsync();
+
+  var seriesData = new List<YdbStruct>
+  {
+      new()
+      {
+          { "series_id", 1UL, YdbDbType.Uint64 },
+          { "title", "IT Crowd", YdbDbType.Text },
+          { "series_info", "The IT Crowd is a British sitcom produced by Channel 4.", YdbDbType.Text },
+          { "comment", null, YdbDbType.Text },
+      },
+      new()
+      {
+          { "series_id", 2UL, YdbDbType.Uint64 },
+          { "title", "Silicon Valley", YdbDbType.Text },
+          { "series_info", "Silicon Valley is an American comedy television series.", YdbDbType.Text },
+          { "comment", "lorem ipsum", YdbDbType.Text },
+      },
+  };
+
+  var command = new YdbCommand("UPSERT INTO series SELECT * FROM AS_TABLE($series_data)", connection);
+  command.Parameters.Add(new YdbParameter("$series_data", seriesData));
+
+  await command.ExecuteNonQueryAsync();
+  ```
+
 - JavaScript
 
   ```javascript

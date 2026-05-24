@@ -118,14 +118,19 @@ NYql::NUdf::TUnboxedValue LockObject(NYql::NUdf::TUnboxedValue&& value) {
     // 1) null (refs = -1)
     // 2) embedded string/POD (refs = -1)
     // 3) large string (refs = 1)
-    // 4) (struct | tuple | list) as boxed -> direct array holder (refs = 1, except for special case: zero-length direct array holder points to special shared zero-length container)
+    // 4a) dict as boxed: (refs = 1)
+    // 4b) (struct | tuple | list) as boxed -> direct array holder (refs = 1, except for special case: zero-length direct array holder points to special shared zero-length container)
     Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
+    // Note that GetListLength will trigger ABORT if called on non-List (i.e. Dict), so there are no much point in turning it into YQL_ENSURE/Y_VALIDATE.
+    // It is debatable if this should be Y_DEBUG_ABORT_UNLESS (if anything else keeps reference on our object, it must be outside of our code and will result in freeing-with-wrong-allocator, which is UB anyway, and better die early than later).
+    // It is debatable if it is NOT sufficient check for nested structures (but that check would be expensive and thus belong to DEBUG checks)
     return std::move(value);
 }
 
 void ClearObject(NYql::NUdf::TUnboxedValue& value) {
     // Every other reference to value must be cleared (except for special case - zero-length list)
     Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
+    // (again, using YQL_ENSURE/Y_VALIDATE pointless here)
     value.Clear();
 }
 

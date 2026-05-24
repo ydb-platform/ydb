@@ -1,4 +1,5 @@
 #include "yql_kikimr_provider_impl.h"
+#include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/base/fulltext.h>
@@ -607,13 +608,19 @@ public:
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         if (auto* extendedTypeAnn = SessionCtx->GetInternalTypeAnnTransformer()) {
+            TIssueScopeGuard issueScope(ctx.IssueManager, [&input, &ctx] {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << input->Content());
+            });
+
             if (extendedTypeAnn->CanParse(*input)) {
                 return extendedTypeAnn->DoTransform(input, output, ctx);
             }
+
             if (DqTypeAnn->CanParse(*input)) {
                 return DqTypeAnn->DoTransform(input, output, ctx);
             }
         }
+
         return TKiSinkVisitorTransformer::DoTransform(input, output, ctx);
     }
 

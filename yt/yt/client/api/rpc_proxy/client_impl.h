@@ -444,6 +444,21 @@ public:
     TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options) override;
 
+    TFuture<void> FreezeHydraPeer(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TFreezeHydraPeerOptions& options = {}) override;
+
+    TFuture<void> TruncateChangelog(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TTruncateChangelogOptions& options = {}) override;
+
+    TFuture<void> ScheduleRestart(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TScheduleRestartOptions& options = {}) override;
+
     TFuture<void> ResetDynamicallyPropagatedMasterCells(
         const TResetDynamicallyPropagatedMasterCellsOptions& options) override;
 

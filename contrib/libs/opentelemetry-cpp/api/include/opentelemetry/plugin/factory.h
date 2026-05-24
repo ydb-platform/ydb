@@ -10,6 +10,21 @@
 #include "opentelemetry/plugin/tracer.h"
 #include "opentelemetry/version.h"
 
+// Always print a warning
+
+#if defined(__clang__) || defined(__GNUC__)
+#  pragma GCC warning "opentelemetry/plugin/ is deprecated, and will be removed. Do not use."
+#elif defined(_MSC_VER)
+#  pragma message( \
+      "[WARNING]: opentelemetry/plugin/ is deprecated, and will be removed. Do not use.")
+#endif
+
+// And fail in deprecated-free builds
+
+#ifdef OPENTELEMETRY_NO_DEPRECATED_CODE
+#  error "header <opentelemetry/plugin/> is deprecated."
+#endif
+
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace plugin
 {
@@ -22,7 +37,12 @@ public:
   class FactoryImpl
   {
   public:
-    virtual ~FactoryImpl() {}
+    FactoryImpl()                                   = default;
+    FactoryImpl(const FactoryImpl &)                = default;
+    FactoryImpl(FactoryImpl &&) noexcept            = default;
+    FactoryImpl &operator=(const FactoryImpl &)     = default;
+    FactoryImpl &operator=(FactoryImpl &&) noexcept = default;
+    virtual ~FactoryImpl()                          = default;
 
     virtual nostd::unique_ptr<TracerHandle> MakeTracerHandle(
         nostd::string_view tracer_config,

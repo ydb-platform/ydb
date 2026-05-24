@@ -2692,7 +2692,9 @@ TExprNode::TPtr BuildHaving(
         .Build();
 }
 
-std::tuple<TExprNode::TPtr, TExprNode::TPtr> BuildFrame(TPositionHandle pos, const TExprNode& frameSettings, TExprContext& ctx) {
+std::tuple<TExprNode::TPtr, TExprNode::TPtr> BuildRowsFrame(TPositionHandle pos, const TExprNode& frameSettings, TExprContext& ctx) {
+    YQL_ENSURE(GetSetting(frameSettings, "type")->Tail().Content() == "rows");
+
     TExprNode::TPtr begin;
     TExprNode::TPtr end;
     const auto& from = GetSetting(frameSettings, "from");
@@ -2732,8 +2734,165 @@ std::tuple<TExprNode::TPtr, TExprNode::TPtr> BuildFrame(TPositionHandle pos, con
     return { begin, end };
 }
 
-TExprNode::TPtr BuildSortTraits(TPositionHandle pos, const TExprNode& sortColumns, const TExprNode::TPtr& list,
-    const TAggregationMap* aggId, TExprContext& ctx, TOptimizeContext& optCtx) {
+/// @param value nullable
+TExprNode::TPtr BuildRangeFrameBound(
+    TPositionHandle pos,
+    TStringBuf name,
+    TExprNode::TPtr value,
+    TExprContext& ctx)
+{
+    if (name == "up") {
+        YQL_ENSURE(!value);
+        // clang-format off
+        return ctx.Builder(pos)
+            .List()
+                .Atom(0, "preceding")
+                .Atom(1, "unbounded")
+            .Seal()
+            .Build();
+        // clang-format on
+    }
+
+    if (name == "p") {
+        YQL_ENSURE(value);
+        // clang-format off
+        return ctx.Builder(pos)
+            .List()
+                .Atom(0, "preceding")
+                .Add(1, std::move(value))
+            .Seal()
+            .Build();
+        // clang-format on
+    }
+
+    if (name == "c") {
+        YQL_ENSURE(!value);
+        // clang-format off
+        return ctx.Builder(pos)
+            .List()
+                .Atom(0, "currentRow")
+            .Seal()
+            .Build();
+        // clang-format on
+    }
+
+    if (name == "f") {
+        YQL_ENSURE(value);
+        // clang-format off
+        return ctx.Builder(pos)
+            .List()
+                .Atom(0, "following")
+                .Add(1, std::move(value))
+            .Seal()
+            .Build();
+        // clang-format on
+    }
+
+    if (name == "uf") {
+        YQL_ENSURE(!value);
+        // clang-format off
+        return ctx.Builder(pos)
+            .List()
+                .Atom(0, "following")
+                .Atom(1, "unbounded")
+            .Seal()
+            .Build();
+        // clang-format on
+    }
+
+    YQL_ENSURE(false, "Unknown range frame bound name: " << name);
+}
+
+std::tuple<TStringBuf, TExprNode::TPtr> UnpackRangeFrameBound(TString direction, const TExprNode& frameSettings) {
+    TStringBuf name = GetSetting(frameSettings, direction)->Tail().Content();
+
+    direction += "_value";
+    TExprNode::TPtr value = GetSetting(frameSettings, direction);
+
+    value = value ? value->TailPtr() : nullptr;
+
+    return { name, std::move(value) };
+}
+
+std::tuple<TExprNode::TPtr, TExprNode::TPtr> BuildRangeFrame(TPositionHandle pos, const TExprNode& frameSettings, TExprContext& ctx) {
+    YQL_ENSURE(GetSetting(frameSettings, "type")->Tail().Content() == "range");
+
+    auto [from, fromValue] = UnpackRangeFrameBound("from", frameSettings);
+    auto [to, toValue] = UnpackRangeFrameBound("to", frameSettings);
+
+    return {
+        BuildRangeFrameBound(pos, from, std::move(fromValue), ctx),
+        BuildRangeFrameBound(pos, to, std::move(toValue), ctx),
+    };
+}
+
+TExprNode::TPtr BuildSingletonSortTraits(
+    TPositionHandle pos,
+    TExprNode::TPtr column,
+    const TExprNode::TPtr& list,
+    const TAggregationMap* aggId,
+    TExprContext& ctx,
+    TOptimizeContext& optCtx)
+{
+    auto lambda = column->ChildPtr(1);
+    if (aggId) {
+        RewriteAggs(lambda, *aggId, ctx, optCtx, /*testExpr=*/false);
+    }
+
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("SortTraits")
+            .Callable(0, "TypeOf")
+                .Add(0, list)
+            .Seal()
+            .Callable(1, "Bool")
+                .Atom(0, column->Child(2)->Content() == "asc" ? "true" : "false")
+            .Seal()
+            .Lambda(2)
+                .Param("row")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    if (column->ChildPtr(3)->Content() == "last") {
+                        return parent
+                            .List()
+                                .Callable(0, "Not")
+                                    .Callable(0, "Exists")
+                                        .Apply(0, lambda)
+                                            .With(0, "row")
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                                .Apply(1, lambda)
+                                    .With(0, "row")
+                                .Seal()
+                            .Seal();
+                    }
+
+                    return parent
+                        .Apply(lambda)
+                            .With(0, "row")
+                        .Seal();
+                })
+            .Seal()
+        .Seal()
+        .Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildSortTraits(
+    TPositionHandle pos,
+    const TExprNode& sortColumns,
+    const TExprNode::TPtr& list,
+    const TAggregationMap* aggId,
+    bool isYql,
+    TExprContext& ctx,
+    TOptimizeContext& optCtx)
+{
+    // RANGE over a tuple was not supported
+    if (sortColumns.ChildrenSize() == 1 && isYql) {
+        return BuildSingletonSortTraits(pos, sortColumns.ChildPtr(0), list, aggId, ctx, optCtx);
+    }
+
+    // clang-format off
     return ctx.Builder(pos)
         .Callable("SortTraits")
             .Callable(0, "TypeOf")
@@ -2785,6 +2944,7 @@ TExprNode::TPtr BuildSortTraits(TPositionHandle pos, const TExprNode& sortColumn
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr ExpandWindowCall(
@@ -2864,6 +3024,7 @@ TExprNode::TPtr BuildWindows(
     TExprNode::TPtr& projectionRoot,
     const TExprNode::TPtr& projectionArg,
     const TAggregationMap& aggId,
+    bool isYql,
     TExprContext& ctx,
     TOptimizeContext& optCtx)
 {
@@ -2928,7 +3089,7 @@ TExprNode::TPtr BuildWindows(
         auto sortNode = ctx.NewCallable(pos, "Void", {});
         TExprNode::TPtr keyLambda;
         if (winDef->Child(3)->ChildrenSize() > 0) {
-            sortNode = BuildSortTraits(pos, *winDef->Child(3), ret, &aggId, ctx, optCtx);
+            sortNode = BuildSortTraits(pos, *winDef->Child(3), ret, &aggId, isYql, ctx, optCtx);
             keyLambda = sortNode->TailPtr();
         } else {
             keyLambda = ctx.Builder(pos)
@@ -2941,26 +3102,25 @@ TExprNode::TPtr BuildWindows(
         }
 
         TExprNode::TListType args;
+
         TExprNode::TPtr begin;
         TExprNode::TPtr end;
         bool useRange = false;
-        if (HasSetting(frameSettings, "type")) {
-            std::tie(begin, end) = BuildFrame(pos, frameSettings, ctx);
+        if (auto setting = GetSetting(frameSettings, "type");
+            setting && setting->Tail().Content() == "rows")
+        {
+            std::tie(begin, end) = BuildRowsFrame(pos, frameSettings, ctx);
+        } else if (setting && setting->Tail().Content() == "range") {
+            useRange = true;
+            std::tie(begin, end) = BuildRangeFrame(pos, frameSettings, ctx);
+        } else if (setting) {
+            YQL_ENSURE(false, "Unknown frame type: " << setting->Tail().Content());
         } else {
             // default frame
             if (winDef->Child(3)->ChildrenSize() > 0) {
                 useRange = true;
-                begin = ctx.Builder(pos)
-                    .List()
-                        .Atom(0, "preceding")
-                        .Atom(1, "unbounded")
-                    .Seal()
-                    .Build();
-                end = ctx.Builder(pos)
-                    .List()
-                        .Atom(0, "currentRow")
-                    .Seal()
-                    .Build();
+                begin = BuildRangeFrameBound(pos, "up", /*value=*/nullptr, ctx);
+                end = BuildRangeFrameBound(pos, "c", /*value=*/nullptr, ctx);
             } else {
                 begin = ctx.NewCallable(pos, "Void", {});
                 end = begin;
@@ -3129,7 +3289,10 @@ TExprNode::TPtr BuildSort(TPositionHandle pos, const TExprNode::TPtr& list, cons
 TExprNode::TPtr BuildDistinctOn(TPositionHandle pos,
                                 TExprNode::TPtr list,
                                 const TExprNode::TPtr& distinctOn,
-                                const TExprNode::TPtr& sort, TExprContext& ctx, TOptimizeContext& optCtx) {
+                                const TExprNode::TPtr& sort,
+                                bool isYql,
+                                TExprContext& ctx,
+                                TOptimizeContext& optCtx) {
     // filter by RowNumber() == 1
 
     const auto value = ctx.Builder(pos)
@@ -3206,7 +3369,7 @@ TExprNode::TPtr BuildDistinctOn(TPositionHandle pos,
 
     auto sortNode = ctx.NewCallable(pos, "Void", {});
     if (sort && sort->Tail().ChildrenSize() > 0) {
-        sortNode = BuildSortTraits(pos, sort->Tail(), list, nullptr, ctx, optCtx);
+        sortNode = BuildSortTraits(pos, sort->Tail(), list, nullptr, isYql, ctx, optCtx);
     }
 
     const auto begin = ctx.NewCallable(pos, "Void", {});
@@ -4100,7 +4263,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             }
 
             if (!winCtx.Funcs.empty()) {
-                list = BuildWindows(node->Pos(), list, window, winCtx, projectionRoot, projectionArg, aggId, ctx, optCtx);
+                list = BuildWindows(node->Pos(), list, window, winCtx, projectionRoot, projectionArg, aggId, isYql, ctx, optCtx);
             }
 
             RewriteAggsPartial(projectionRoot, projectionArg, aggId, ctx, optCtx, false);
@@ -4148,7 +4311,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                 list = ctx.NewCallable(node->Pos(), "SqlAggregateAll", { list });
             } else if (distinctOn) {
                 YQL_ENSURE(!extraSortColumns);
-                list = BuildDistinctOn(node->Pos(), list, distinctOn->TailPtr(), sort, ctx, optCtx);
+                list = BuildDistinctOn(node->Pos(), list, distinctOn->TailPtr(), sort, isYql, ctx, optCtx);
             }
 
             TVector<TString> sublinkColumns;

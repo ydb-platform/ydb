@@ -4,7 +4,7 @@
 
     Lexers for ActionScript and MXML.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -195,8 +195,8 @@ class ActionScript3Lexer(RegexLexer):
     }
 
     def analyse_text(text):
-        if re.match(r'\w+\s*:\s*\w', text):
-            return 0.3
+        if re.search(r'\bimport\s+flash\.', text):
+            return 0.2
         return 0
 
 

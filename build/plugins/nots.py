@@ -1070,8 +1070,31 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
             nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
             unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
 
-    pj_files = set(pj.get_files())
-    missing_outputs = set(ts_outputs) - pj_files
+    # remove "^./" and "/$"
+    # build/, ./build, ./build/ => build
+    # build/a/, ./build/a/, ./build/a => build/a
+    def _normalize_path(p):
+        if p.startswith("./"):
+            p = p[2:]
+        return p.rstrip("/")
+
+    # checks that build outputs contains in package.json#files
+    # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
+    # TS_OUTPUTS(build) -- files: ["./build", "./build/", "build/"] ✅
+    # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
+    # TS_OUTPUTS(dist) -- files: ["build"] ❌
+    # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
+    normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
+    normalized_ts_outputs = [_normalize_path(f) for f in ts_outputs]
+
+    missing_outputs = []
+    for output in normalized_ts_outputs:
+        found = any(
+            pj_file == output or pj_file.startswith(output + "/") or output.startswith(pj_file + "/")
+            for pj_file in normalized_pj_files
+        )
+        if not found:
+            missing_outputs.append(output)
 
     if missing_outputs:
         ymake.report_configure_error(

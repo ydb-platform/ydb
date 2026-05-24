@@ -1,4 +1,4 @@
-name: Cherry-pick_v2
+name: Cherry-pick
 on:
   workflow_dispatch:
     inputs:

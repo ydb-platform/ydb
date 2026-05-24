@@ -104,7 +104,7 @@ struct TRequest {
     }
 
     TString GetAuthToken() const;
-    TString GetAuthToken(const NHttp::THeaders& headers) const;
+    TString GetAuthToken(NHttp::THttpIncomingRequestPtr request) const;
     TString GetAuthTokenForIAM() const;
     TString GetAuthTokenForIAM(const NHttp::THeaders& headers) const;
     static void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& value);

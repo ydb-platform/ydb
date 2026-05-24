@@ -29,7 +29,6 @@ struct TTestEnvSettings {
     bool EnableTableCacheModes = false;
     bool EnableFulltextIndex = false;
     TMaybe<bool> EnableRealSystemViewPaths;
-    bool EnableCsDictionaryEncoding = false;
     bool EnableLocalMinMaxIndex = false;
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;

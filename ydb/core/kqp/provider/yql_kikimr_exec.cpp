@@ -2431,7 +2431,7 @@ public:
                                     }
                                     case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                            << "min_max index does not support setting: " << name));
+                                            << "min_max index does not support setting: " << name.StringValue()));
                                         break;
                                     }
                                     default:

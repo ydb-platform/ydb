@@ -29,7 +29,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
 )
 
-IF(YDB_CLI_AI_INCLUDE_DOCS)
+IF(YDB_CLI_AI_INCLUDE_DOCS OR BUILD_TYPE != RELEASE)
     DECLARE_IN_DIRS(DOCS *.*m? DIRS docs RECURSIVE SRCDIR ${ARCADIA_ROOT}/ydb) # *.md or *.yaml
     RUN_PROGRAM(
         ydb/public/lib/ydb_cli/commands/interactive/ai/tools/docs_generate ${ARCADIA_ROOT}/ydb/docs/ ${BINDIR}/ydb_docs.archive

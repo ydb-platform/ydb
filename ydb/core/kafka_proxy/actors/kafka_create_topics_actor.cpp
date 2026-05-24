@@ -152,6 +152,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             .Database = Context->DatabasePath,
             .Request = std::move(request),
             .UserToken = Context->UserToken,
+            .IfNotExists = true,
         }));
 
         InflyTopics++;

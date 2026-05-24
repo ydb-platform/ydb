@@ -7,9 +7,9 @@
 
 Y_UNIT_TEST_SUITE(MergeBenchmarkEquivalence) {
 
-    void CheckEquivalence(int numSources, int rowsPerSource) {
-        TFixture fxOld{numSources, rowsPerSource};
-        TFixture20 fxNew{numSources, rowsPerSource};
+    void CheckEquivalence(int numSources) {
+        TFixture fxOld{numSources};
+        TFixture20 fxNew{numSources};
 
         auto resOld = MergeOnce(fxOld);
         auto resNew = HashFirstMergeOnce(fxNew);
@@ -51,8 +51,8 @@ Y_UNIT_TEST_SUITE(MergeBenchmarkEquivalence) {
         }
     }
 
-    Y_UNIT_TEST(TwoSourcesSmall)   { CheckEquivalence( 2,  100); }
-    Y_UNIT_TEST(TenSourcesSmall)   { CheckEquivalence(10,  100); }
-    Y_UNIT_TEST(TwoSourcesLarger)  { CheckEquivalence( 2, 2000); }
-    Y_UNIT_TEST(TwentySourcesMid)  { CheckEquivalence(20,  500); }
+    Y_UNIT_TEST(TwoSourcesSmall)   { CheckEquivalence(2); }
+    Y_UNIT_TEST(TenSourcesSmall)   { CheckEquivalence(5); }
+    Y_UNIT_TEST(TwoSourcesLarger)  { CheckEquivalence(10); }
+    Y_UNIT_TEST(TwentySourcesMid)  { CheckEquivalence(20); }
 }

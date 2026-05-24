@@ -74,10 +74,10 @@ inline std::shared_ptr<arrow::RecordBatch> MakeBatch(int numRows, int sourceIdx)
 struct TFixture {
     std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
 
-    TFixture(int numSources, int rowsPerSource) {
+    TFixture(int numSources) {
         Batches.reserve(numSources);
         for (int i = 0; i < numSources; ++i) {
-            Batches.push_back(MakeBatch(rowsPerSource, i));
+            Batches.push_back(MakeBatch(10000, i));
         }
     }
 };
@@ -103,10 +103,10 @@ inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
 // ---- фикстуры: (источников, строк на источник) ----
 // Function-local static — Arrow memory pool должен быть инициализирован до первого использования билдеров.
 
-inline const TFixture& Get_2src_10k()   { static TFixture f{  2, 10'000 }; return f; }
-inline const TFixture& Get_5src_10k()   { static TFixture f{  5, 10'000 }; return f; }
-inline const TFixture& Get_10src_10k()  { static TFixture f{ 10, 10'000 }; return f; }
-inline const TFixture& Get_20src_10k()  { static TFixture f{20,  10'000 }; return f; }
+inline const TFixture& Get_2src_10k()   { static TFixture f{ 2 }; return f; }
+inline const TFixture& Get_5src_10k()   { static TFixture f{ 5 }; return f; }
+inline const TFixture& Get_10src_10k()  { static TFixture f{ 10 }; return f; }
+inline const TFixture& Get_20src_10k()  { static TFixture f{ 20 }; return f; }
 
 // ============================================================================
 // Третий алгоритм: arrow_next (arrow 20) — sort + Grouper + hash_first.

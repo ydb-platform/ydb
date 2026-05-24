@@ -27,7 +27,7 @@ def onregister_yql_python_udf(unit, *args):
     if not yql_python_dir:
         yql_python_dir = 'yql/essentials/udfs/common/python'
 
-    unit.onyql_abi_version(['2', '27', '0'])
+    unit.onyql_abi_version(['2', '44', '0'])
     unit.onpeerdir(['yql/essentials/udfs/common/python/python_udf'])
     unit.onpeerdir(['yql/essentials/public/udf'])
 

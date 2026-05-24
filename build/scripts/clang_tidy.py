@@ -8,7 +8,8 @@ import sys
 
 import subprocess
 
-import yaml
+
+load_yaml = None
 
 
 def setup_script(args):
@@ -16,13 +17,18 @@ def setup_script(args):
     sys.path.append(os.path.dirname(args.config_validation_script))
     import tidy_config_validation
 
+    tidy_config_validation.init_yaml2json(args.yaml2json)
+
+    global load_yaml
+    load_yaml = tidy_config_validation.load_yaml
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--testing-src", required=True)
+    parser.add_argument("--yaml2json", required=True)
     parser.add_argument("--clang-tidy-bin", required=True)
     parser.add_argument("--config-validation-script", required=True)
-    parser.add_argument("--ymake-python", required=True)
     parser.add_argument("--tidy-json", required=True)
     parser.add_argument("--source-root", required=True)
     parser.add_argument("--build-root", required=True)
@@ -82,11 +88,15 @@ def generate_outputs(output_json):
 
 
 def filter_configs(result_config, filtered_config):
-    with open(result_config, 'r') as afile:
-        input_config = yaml.safe_load(afile)
+    # FIXME: The Python 2 version of this script does not remove comments
+    # before parsing YAML. To keep the Python 2 behaviour, we don't remove
+    # comments before YAML parsing. If we start removing comments, we will
+    # suddenly enable more checks.
+
+    input_config = load_yaml(result_config, remove_comments=False)
     result_config = tidy_config_validation.filter_config(input_config)
     with open(filtered_config, 'w') as afile:
-        yaml.safe_dump(result_config, afile)
+        json.dump(result_config, afile)
 
 
 def filter_cmd(cmd):
@@ -175,14 +185,14 @@ def main():
         cmd += ["--checks", args.checks]
 
     print("cmd: {}".format(' '.join(cmd)))
-    res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     out, err = res.communicate()
     out = out.replace(args.source_root, "$(SOURCE_ROOT)")
     profile = load_profile(profile_tmpdir)
     testing_src = os.path.relpath(args.testing_src, args.source_root)
     tidy_fixes = load_fixes(fixes_file)
 
-    with open(output_json, "wb") as afile:
+    with open(output_json, "wt") as afile:
         json.dump(
             {
                 "file": testing_src,

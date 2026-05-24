@@ -1850,6 +1850,15 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/PartitionMaxWriteMessagesQuotaUsage"
+      },
+      "value": 0
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/PartitionMaxWriteQuotaUsage"
       },
       "value": 0
@@ -2150,6 +2159,15 @@
         "sensor": "PQ/PartitionLifeTimeMs"
       },
       "value": 5009
+    },
+    {
+      "kind": "GAUGE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "topic": "total",
+        "sensor": "PQ/PartitionMaxWriteMessagesQuotaUsage"
+      },
+      "value": 0
     },
     {
       "kind": "GAUGE",

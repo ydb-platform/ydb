@@ -172,7 +172,11 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
                 return result;
             }
         }
-        return {result};
+
+        if (result.Portions.size() > 1) {
+            return { result };
+        }
+        return {};
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

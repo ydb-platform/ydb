@@ -14,6 +14,7 @@
 #include <util/folder/path.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
 #include <util/memory/blob.h>
 #include <util/stream/input.h>
@@ -221,7 +222,6 @@ public:
                 }
 
                 if (ContainsBlock(text, i + 3, BLOCK_IF) || ContainsBlock(text, i + 3, BLOCK_ELSE) || ContainsBlock(text, i + 3, BLOCK_ENDIF)) {
-                    // TODO: support if
                     continue;
                 }
 
@@ -614,6 +614,10 @@ Supported actions:
     The "path" parameter is required for this action and must match a value returned
     by the "list" action.
 
+- "find": returns all occurrences of parameter "pattern" with exact case-sensitive match with context around.
+    Use this action when you not sure abut which page you should read, but have pattern to search for.
+    Optional "path" parameter may be used to select folder where search should be performed.
+
 You must provide "language" property with value matching the current conversation language.
 
 Documentation archive contains around of thousand different documents, so in first list call it is better to provide "path"
@@ -657,12 +661,17 @@ It is better to always choose one of this folders to list.)";
     static constexpr char ACTION_PROPERTY[] = "action";
     static constexpr char ACTION_LIST[] = "list";
     static constexpr char ACTION_GET[] = "get";
+    static constexpr char ACTION_FIND[] = "find";
 
     static constexpr char LANG_PROPERTY[] = "language";
     static constexpr char LANG_RU[] = "ru";
     static constexpr char LANG_EN[] = "en";
 
     static constexpr char PATH_PROPERTY[] = "path";
+    static constexpr char PATTERN_PROPERTY[] = "pattern";
+
+    static constexpr ui64 FIND_WINDOW_SIZE = 100;
+    static constexpr ui64 FIND_SIZE_LIMIT = 10_KB;
 
 public:
     TDocsSearchTool()
@@ -679,8 +688,8 @@ protected:
 
         TJsonParser parser(parameters);
         Action = to_lower(Strip(parser.GetKey(ACTION_PROPERTY).GetString()));
-        if (Action != ACTION_LIST && Action != ACTION_GET) {
-            throw yexception() << "Unknown action \"" << Action << "\". Expected \"" << ACTION_LIST << "\" or \"" << ACTION_GET << "\".";
+        if (Action != ACTION_LIST && Action != ACTION_GET && Action != ACTION_FIND) {
+            throw yexception() << "Unknown action \"" << Action << "\". Expected \"" << ACTION_LIST << "\" or \"" << ACTION_GET << "\" or \"" << ACTION_FIND << "\".";
         }
 
         Language = to_lower(Strip(parser.GetKey(LANG_PROPERTY).GetString()));
@@ -689,7 +698,7 @@ protected:
         }
 
         Path.clear();
-        if (auto pathParser = parser.MaybeKey(PATH_PROPERTY)) {
+        if (const auto pathParser = parser.MaybeKey(PATH_PROPERTY)) {
             Path = Strip(pathParser->GetString());
 
             TStringBuf pathBuf(Path);
@@ -700,18 +709,25 @@ protected:
             Path = pathBuf;
         }
 
+        if (const auto patternParser = parser.MaybeKey(PATTERN_PROPERTY)) {
+            Pattern = patternParser->GetString();
+        }
+
         std::vector<TString> pagePath;
+        const auto* entry = GetDocIndex().FindEntry(Path);
+        if (entry) {
+            pagePath = entry->Title;
+        }
+
         if (Action == ACTION_GET) {
             if (!Path) {
                 throw yexception() << "\"" << PATH_PROPERTY << "\" parameter is required for action \"" << ACTION_GET << "\" and must not be empty or equal to '/'";
             }
 
-            const auto* entry = GetDocIndex().FindEntry(Path);
             if (!entry) {
                 throw yexception() << "Documentation page \"" << Path << "\" was not found in the archive. Use action \"" << ACTION_LIST << "\" to discover available pages.";
             }
-            pagePath = entry->Title;
-        } else {
+        } else if (!entry) {
             const auto pathBefore = Path;
             pagePath = GetDocIndex().PathToTitles(Path);
             if (pathBefore != Path) {
@@ -719,9 +735,18 @@ protected:
             }
         }
 
-        const TString message = Action == ACTION_LIST
-            ? TStringBuilder() << "Listing YDB documentation pages" << (pagePath.empty() ? "" : " in folder " + JoinSeq('/', pagePath)) << "..."
-            : TStringBuilder() << "Reading documentation page " << JoinSeq('/', pagePath);
+        TString message;
+        if (Action == ACTION_LIST) {
+            message = TStringBuilder() << "Listing YDB documentation pages" << (pagePath.empty() ? "" : " in folder " + JoinSeq('/', pagePath)) << "...";
+        } else if (Action == ACTION_GET) {
+            message = TStringBuilder() << "Reading YDB documentation page " << JoinSeq('/', pagePath) << "...";
+        } else {
+            if (!Pattern) {
+                throw yexception() << "\"" << PATTERN_PROPERTY << "\" parameter is required for action \"" << ACTION_FIND << "\" and must not be empty";
+            }
+            message = TStringBuilder() << "Searching in YDB documentation" << (pagePath.empty() ? "" : " folder " + JoinSeq('/', pagePath)) << " pattern \"" << Pattern << "\"...";
+        }
+
         PrintFtxuiMessage("", message, ftxui::Color::Green);
     }
 
@@ -736,6 +761,9 @@ protected:
         if (Action == ACTION_GET) {
             return DoGet();
         }
+        if (Action == ACTION_FIND) {
+            return DoFind();
+        }
         Y_VALIDATE(false, "Unknown action: " << Action);
     }
 
@@ -744,8 +772,8 @@ private:
         return TJsonSchemaBuilder()
             .Property(ACTION_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
-                .Enum({"list", "get"})
-                .Description("Action to perform: \"list\" returns the catalogue of all documentation pages, \"get\" returns the content of a single page.")
+                .Enum({ACTION_LIST, ACTION_GET, ACTION_FIND})
+                .Description("Action to perform: \"list\" returns the catalogue of all documentation pages, \"get\" returns the content of a single page, \"find\" return all occupancies of parameter \"pattern\" via exact case-sensitive substring matching.")
                 .Done()
             .Property(LANG_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
@@ -756,7 +784,22 @@ private:
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Description("Archive-relative path to the documentation page (required when action is \"get\"). Use a value returned by the \"list\" action, e.g. \"ru/core/concepts/architecture.md\".")
                 .Done()
+            .Property(PATTERN_PROPERTY, /* required */ false)
+                .Type(TJsonSchemaBuilder::EType::String)
+                .Description("Pattern which should be searched in archive, should be used with action \"find\". Will be returned all occupancies of this pattern with fixed context window.")
+                .Done()
             .Build();
+    }
+
+    static void SaveEntryMetadata(NJson::TJsonValue& result, size_t& payloadSize, const TTocIndex::TEntry& entry) {
+        result["path"] = entry.Path;
+        payloadSize += entry.Path.size();
+
+        auto& titles = result["title_path"].SetType(NJson::JSON_ARRAY).GetArraySafe();
+        for (const auto& title : entry.Title) {
+            titles.emplace_back(title);
+            payloadSize += title.size();
+        }
     }
 
     void EnsureLoaded() {
@@ -796,15 +839,7 @@ private:
             }
 
             auto& item = array.emplace_back();
-
-            item["path"] = entry.Path;
-            payloadSize += entry.Path.size();
-
-            auto& titles = item["title_path"].SetType(NJson::JSON_ARRAY).GetArraySafe();
-            for (const auto& title : entry.Title) {
-                titles.emplace_back(title);
-                payloadSize += title.size();
-            }
+            SaveEntryMetadata(item, payloadSize, entry);
         }
 
         YDB_CLI_LOG(Info, "Listed " << array.size() << " documentation pages in the archive, payload size: " << payloadSize);
@@ -820,6 +855,61 @@ private:
         return TResponse::Error(TStringBuilder() << "Documentation page \"" << Path << "\" was not found in the archive. Use action \"" << ACTION_LIST << "\" to discover available pages.");
     }
 
+    TResponse DoFind() {
+        NJson::TJsonValue result;
+        ui64 payloadSize = 0;
+        ui64 processedFiles = 0;
+        ui64 matchesCount = 0;
+        bool truncated = false;
+
+        auto& array = result.SetType(NJson::JSON_ARRAY).GetArraySafe();
+        const auto& entries = GetDocIndex().GetEntries();
+        for (const auto& entry : entries) {
+            if (!entry.Path.StartsWith(Path)) {
+                continue;
+            }
+
+            ++processedFiles;
+            std::vector<TString> matches;
+            ui64 right = 0;
+            for (size_t i = entry.Content.find(Pattern); i < entry.Content.size(); i = entry.Content.find(Pattern, right + 1)) {
+                ++matchesCount;
+
+                const ui64 left = i - std::min(FIND_WINDOW_SIZE / 2, i);
+                right = std::min(i + Pattern.size() + FIND_WINDOW_SIZE / 2, entry.Content.size() - 1);
+                matches.emplace_back(entry.Content.substr(left, right - left + 1));
+
+                if ((payloadSize += matches.back().size()) >= FIND_SIZE_LIMIT) {
+                    truncated = true;
+                    break;
+                }
+            }
+
+            if (matches.empty()) {
+                continue;
+            }
+
+            auto& item = array.emplace_back();
+            SaveEntryMetadata(item, payloadSize, entry);
+            item["matches"].SetType(NJson::JSON_ARRAY).GetArraySafe().assign(matches.begin(), matches.end());
+
+            if (payloadSize >= FIND_SIZE_LIMIT) {
+                truncated = true;
+                break;
+            }
+        }
+
+        if (truncated) {
+            array.emplace_back(TStringBuilder() << "Results are truncated, processed only "
+                << processedFiles << " / " << entries.size() << " and found " << matchesCount << " matches, result size "
+                << payloadSize << " exceeded allowed limit " << FIND_SIZE_LIMIT << ", try to use deepest \"path\" value or larger \"pattern\"");
+        }
+
+        YDB_CLI_LOG(Info, "Found " << matchesCount << " documentation matches for pattern \"" << Pattern << "\" in the archive, processed " << processedFiles << " files, payload size: " << payloadSize);
+        YDB_CLI_LOG(Debug, "Full documentation search result:\n" << FormatJsonValue(result));
+        return TResponse::Success(std::move(result));
+    }
+
 private:
     TDocStore::TPtr Store;
     TTocIndex::TPtr RuDocIndex;
@@ -827,6 +917,7 @@ private:
     TString Action;
     TString Language;
     TString Path;
+    TString Pattern;
 };
 
 } // anonymous namespace

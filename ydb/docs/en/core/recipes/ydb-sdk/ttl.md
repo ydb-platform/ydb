@@ -40,6 +40,10 @@ In the example below, the items of the `mytable` table will be deleted an hour a
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -48,10 +52,6 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
-
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -91,6 +91,10 @@ The example below shows how to use the `modified_at` column with a numeric type 
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -103,10 +107,6 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
-
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -139,9 +139,9 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
 {% endif %}
 
-- JavaScript
+- Java
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  This functionality is not currently supported.
 
 - Go
 
@@ -151,9 +151,9 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
   This functionality is not currently supported.
 
-- Java
+- JavaScript
 
-  This functionality is not currently supported.
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -206,6 +206,10 @@ For a newly created table, you can pass TTL settings along with the table descri
   )
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -218,10 +222,6 @@ For a newly created table, you can pass TTL settings along with the table descri
 
   session.createTable("mytable", description).join().expectSuccess();
   ```
-
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -259,6 +259,10 @@ For a newly created table, you can pass TTL settings along with the table descri
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -267,10 +271,6 @@ For a newly created table, you can pass TTL settings along with the table descri
 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
-
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 
@@ -308,15 +308,15 @@ The current TTL settings can be obtained from the table description:
   ttl = desc.ttl_settings
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
   TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
   ```
-
-- JavaScript
-
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 

@@ -306,15 +306,6 @@ When creating a semaphore, you can specify its limit. The limit determines the m
 
   {% endlist %}
 
-- Java
-
-  Create a semaphore explicitly with `createSemaphore` on a connected session. You can pass custom binary data stored with the semaphore (`byte[] data`); the overload without `data` is equivalent to passing `null`. If a semaphore with that name already exists, the operation completes with an “already exists” status.
-
-  ```java
-  session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
-      .join()
-      .expectSuccess("create semaphore failed");
-      
 - JavaScript
 
   ```javascript
@@ -323,6 +314,16 @@ When creating a semaphore, you can specify its limit. The limit determines the m
     limit: 10,
     data: new Uint8Array(),
   });
+  ```
+
+- Java
+
+  Create a semaphore explicitly with `createSemaphore` on a connected session. You can pass custom binary data stored with the semaphore (`byte[] data`); the overload without `data` is equivalent to passing `null`. If a semaphore with that name already exists, the operation completes with an “already exists” status.
+
+  ```java
+  session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
+      .join()
+      .expectSuccess("create semaphore failed");
   ```
 
 {% endlist %}
@@ -418,6 +419,15 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
 - Java
 
   Acquisition is done via `acquireSemaphore` with the semaphore name, token `count`, optional operation data, and queue wait timeout as [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). The method returns `CompletableFuture<Result<SemaphoreLease>>` (see [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) and [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). If no semaphore exists with the given name, the operation fails with an exception (see the method javadoc).
@@ -439,15 +449,6 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
   For **ephemeral** semaphores, use `acquireEphemeralSemaphore` (the `exclusive` flag sets the acquisition mode); such semaphores are created on first acquire and removed after the last release.
 
   The API documentation states that a session can hold **only one** semaphore at a time; repeated calls for the same name **replace** the previous operation (for example, to reduce `count` or change the timeout).
-
-- JavaScript
-
-  ```javascript
-  {
-    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
-    await doWork(lease.signal);
-  } // lease.release() called automatically
-  ```
 
 {% endlist %}
 
@@ -514,6 +515,7 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
   session.updateSemaphore("my-semaphore", "updated-data".getBytes(java.nio.charset.StandardCharsets.UTF_8))
       .join()
       .expectSuccess("update semaphore failed");
+  ```
 
 - JavaScript
 
@@ -703,6 +705,7 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
   ```java
   lease.release().join().expectSuccess("release failed");
+  ```
 
 - JavaScript
 

@@ -17,28 +17,36 @@ TFmrCoordinatorSettings::TFmrCoordinatorSettings() {
     WorkersNum = 1;
     RandomProvider = CreateDefaultRandomProvider();
     TimeProvider = CreateDefaultTimeProvider();
+}
 
-    if (DefaultFmrOperationSpec.IsMap() && DefaultFmrOperationSpec.HasKey("coordinator")) {
-        auto& coord = DefaultFmrOperationSpec["coordinator"];
-        if (coord.HasKey("idempotency_key_store_time_sec")) {
-            IdempotencyKeyStoreTime = TDuration::Seconds(coord["idempotency_key_store_time_sec"].AsInt64());
-        }
-        if (coord.HasKey("time_to_sleep_between_clear_key_requests_sec")) {
-            TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(coord["time_to_sleep_between_clear_key_requests_sec"].AsInt64());
-        }
-        if (coord.HasKey("worker_deadline_lease_sec")) {
-            WorkerDeadlineLease = TDuration::Seconds(coord["worker_deadline_lease_sec"].AsInt64());
-        }
-        if (coord.HasKey("time_to_sleep_between_check_worker_status_requests_sec")) {
-            TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(coord["time_to_sleep_between_check_worker_status_requests_sec"].AsInt64());
-        }
-        if (coord.HasKey("session_inactivity_timeout_sec")) {
-            SessionInactivityTimeout = TDuration::Seconds(coord["session_inactivity_timeout_sec"].AsInt64());
-        }
-        if (coord.HasKey("health_check_interval_sec")) {
-            HealthCheckInterval = TDuration::Seconds(coord["health_check_interval_sec"].AsInt64());
-        }
+TFmrCoordinatorSettings GetDefaultCoordinatorSettings(const TMaybe<NYT::TNode>& configOverride, const TMaybe<NYT::TNode>& operationSpecOverride) {
+    TFmrCoordinatorSettings settings;
+    const auto configNode = configOverride.Defined()
+        ? *configOverride
+        : NYT::NodeFromYsonString(NResource::Find("default_coordinator_settings.yson"));
+    YQL_ENSURE(configNode.IsMap());
+    if (configNode.HasKey("idempotency_key_store_time_sec")) {
+        settings.IdempotencyKeyStoreTime = TDuration::Seconds(configNode["idempotency_key_store_time_sec"].AsInt64());
     }
+    if (configNode.HasKey("time_to_sleep_between_clear_key_requests_sec")) {
+        settings.TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(configNode["time_to_sleep_between_clear_key_requests_sec"].AsInt64());
+    }
+    if (configNode.HasKey("worker_deadline_lease_sec")) {
+        settings.WorkerDeadlineLease = TDuration::Seconds(configNode["worker_deadline_lease_sec"].AsInt64());
+    }
+    if (configNode.HasKey("time_to_sleep_between_check_worker_status_requests_sec")) {
+        settings.TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(configNode["time_to_sleep_between_check_worker_status_requests_sec"].AsInt64());
+    }
+    if (configNode.HasKey("session_inactivity_timeout_sec")) {
+        settings.SessionInactivityTimeout = TDuration::Seconds(configNode["session_inactivity_timeout_sec"].AsInt64());
+    }
+    if (configNode.HasKey("health_check_interval_sec")) {
+        settings.HealthCheckInterval = TDuration::Seconds(configNode["health_check_interval_sec"].AsInt64());
+    }
+    if (operationSpecOverride.Defined()) {
+        settings.DefaultFmrOperationSpec = *operationSpecOverride;
+    }
+    return settings;
 }
 
 namespace {

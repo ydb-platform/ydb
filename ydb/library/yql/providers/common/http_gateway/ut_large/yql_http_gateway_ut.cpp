@@ -102,6 +102,6 @@ Y_UNIT_TEST_SUITE(THttpGateway) {
         future.Wait();
 
         UNIT_ASSERT(future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(future.ExtractValueSync(), std::nullopt);
+        UNIT_ASSERT(future.ExtractValueSync() == std::nullopt);
     }
 }

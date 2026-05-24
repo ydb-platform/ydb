@@ -282,6 +282,24 @@ public:
         const TMasterExitReadOnlyOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, FreezeHydraPeer, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TFreezeHydraPeerOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, TruncateChangelog, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TTruncateChangelogOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, ScheduleRestart, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TScheduleRestartOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (
         const TResetDynamicallyPropagatedMasterCellsOptions& options),
         (override));

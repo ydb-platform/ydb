@@ -1,4 +1,3 @@
-ydb/core/blobstorage/backpressure/ut_client unittest.sole chunk
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
@@ -25,11 +24,13 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadSom
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnlyOneByOne
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOne
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
+ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactPublicApi
+ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql+UseQueryService
+ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql-UseQueryService
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
@@ -76,12 +77,126 @@ ydb/core/transfer/ut/functional Transfer.TransferSourceDropped
 ydb/core/transfer/ut/functional Transfer.TransferSourceDropped_LocalTopic
 ydb/core/transfer/ut/functional Transfer.WriteToNotExists
 ydb/core/transfer/ut/functional Transfer.WriteToNotTable
+ydb/core/tx/columnshard/engines/storage/optimizer/ut TilingCoreUnits.TilingChoosesAccumulatorMiddleAndLastLevelsIndependently
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelCascadeOperationOnHalfwaySuccess
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelCascadeOperationSuccess
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelOperationFailureOnDone
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelOperationFailureRepeated
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelOperationOnHalfwaySuccess
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckCancelOperationSuccess
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckForgetOperationFailureOnInProgress
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckForgetOperationFailureRepeated
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckForgetOperationSuccess
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckGetOperationCascadeShardsCounting
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckGetOperationShardsCounting
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckGetOperationSuccess
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckListOperationSuccess
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckListOperationSuccessWithPagination
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.CheckOperationFailures
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldCompact
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldCompactAfterRestart
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldCompactCascade
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldCompactCascadeAfterRestart
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldCompactIndexImplTable
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldCompactMultipleTables
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldCompactMultipleTimes
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldHandleTableDropDuringCompaction
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldNotCompactCascade
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldNotCompactSameTableSimultaneously
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldNotCompactTableAndIndexImpleTableSimultaneously
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldRetryOnError
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldRetryOnTimeout
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[PipeResetsBucket0]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[PipeResetsBucket1]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[PipeResetsBucket2]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[PipeResetsBucket3]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket0]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket1]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket2]
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket3]
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
+ydb/tests/compatibility py3test.[test_topic.py */*] chunk
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]
-ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_secret.py */*] chunk
+ydb/tests/compatibility test_compact.py.TestCompactMixedCluster.test_compact_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_compact.py.TestCompactRolling.test_compact_rolling[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_drop_default_nullable[restart_stable-26-1-1_to_stable-26-2-1]
+ydb/tests/compatibility test_default_columns.py.TestDefaultColumns.test_set_default[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_example.py.TestExampleMixedClusterFixture.test_example[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_stable-26-2-1_to_prestable-26-3-False]
+ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_stable-26-2-1_to_prestable-26-3-True]
+ydb/tests/compatibility test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_in_memory.py.TestInMemoryMixedCluster.test_in_memory_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_in_memory.py.TestInMemoryRolling.test_in_memory_rolling[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolMixedCluster.test[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_node_broker_delta_protocol.py.TestNodeBrokerDeltaProtocolRollingUpdate.test[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-26-2-1_to_prestable-26-3-column]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-26-2-1_to_prestable-26-3-row]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderMixedCluster.test_simple_reader_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_statistics.py.TestStatisticsFollowersRollingUpdate.test_example[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_prestable-26-3_and_stable-26-2-1-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_kv[mixed_prestable-26-3_and_stable-26-2-1-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_prestable-26-3_and_stable-26-2-1-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-row]
+ydb/tests/compatibility test_system_tablet_backup.py.TestSystemTabletBackupMixedCluster.test[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_system_tablet_backup.py.TestSystemTabletBackupRollingUpdate.test[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_system_views.py.TestSystemViewsRollingUpgrade.test_path_resolving[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_schema_changes_in_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityMixed.test_table_operations_in_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_schema_changes_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRolling.test_table_operations_during_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read_with_long_live_consumer[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read_with_long_live_producer[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-False]
+ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-2-1_to_prestable-26-3-row-True]
+ydb/tests/compatibility test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_user_management.py.TestUserManagementRollingUpgrade.test_user_management[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerMixedCluster.test_workload_manager_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerTabletTransfer.test_workload_manager_tablet_transfer[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility udf.test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility udf.test_digest.py.TestDigest.test_digest_all[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility udf.test_digest_regression.py.TestDigest.test_digest_regression[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityMixedCluster.test_external_data_source_secret_object_schema_compatibility[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/federated_queries test_external_data_source_secret.py.TestExternalDataSourceSecretCompatibilityRollingUpgradeAndDowngrade.test_external_data_source_secret_object_schema_compatibility[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-26-3_to_prestable-26-3-COLUMN]
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-26-3_to_stable-26-2-1-COLUMN]
+ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_prestable-26-3_to_prestable-26-3-COLUMN]
+ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_prestable-26-3_to_stable-26-2-1-COLUMN]
+ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_all_scheme_objects[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_topics[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_stable-26-2-1]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-1-1]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-2-1_to_stable-26-2-1]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
@@ -430,8 +545,12 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v0]
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v1]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
+ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[only_level-level=3-specified without an algorithm]
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[too_big_level-algorithm=zstd, level=99-annot parse serializer]
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2

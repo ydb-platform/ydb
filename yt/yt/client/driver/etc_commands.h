@@ -290,4 +290,21 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TCheckClusterLivenessCommand
+    : public TTypedCommand<NApi::TCheckClusterLivenessOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCheckClusterLivenessCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    bool CheckCypressRoot;
+    bool CheckSecondaryMasterCells;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

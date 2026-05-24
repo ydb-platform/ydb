@@ -1,10 +1,12 @@
 #include "fls.h"
 
+#include <yt/yt/core/misc/mpsc_stack.h>
+
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
-#include <util/system/sanitizers.h>
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 #include <array>
 
@@ -40,15 +42,71 @@ void DestructFlsSlot(int index, TFls::TCookie cookie)
     FlsDtors[index](cookie);
 }
 
-TFls* GetPerThreadFls()
+class TGlobalFlsPool
+{
+public:
+    static TGlobalFlsPool* Get()
+    {
+        return LeakySingleton<TGlobalFlsPool>();
+    }
+
+    TFls* Allocate()
+    {
+        auto* fls = new TFls();
+        Pool_.Enqueue(fls);
+        return fls;
+    }
+
+private:
+    TMpscStack<TFls*> Pool_;
+
+    // Best-effort process-wide cleanup for global FLS pool.
+    // See https://st.yandex-team.ru/DEVTOOLSSUPPORT-85470 on why we explicitly
+    // exclude Windows platform.
+#if defined(__clang__) && !defined(_win_)
+    __attribute__((destructor(101))) static void Cleanup()
+    {
+        Get()->DoCleanup();
+    }
+
+    void DoCleanup()
+    {
+        Pool_.DequeueAll(
+            /*reverse*/ false,
+            [] (auto* fls) { delete fls; });
+    }
+#endif
+};
+
+YT_PREVENT_TLS_CACHING TFls* GetPerThreadFls()
 {
     auto& perThreadFls = PerThreadFls();
-    if (!perThreadFls) {
-        // This is only needed when some code attempts to interact with FLS outside of a fiber context.
-        // Unfortunately there's no safe place to destroy this FLS upon thread shutdown.
-        perThreadFls = new TFls();
-        NSan::MarkAsIntentionallyLeaked(perThreadFls);
+    if (perThreadFls) {
+        // Fast path: per-thread FLS is already allocated.
+        return perThreadFls;
     }
+
+    static thread_local bool perThreadFlsDestroyed;
+    if (perThreadFlsDestroyed) {
+        // Per-thread FLS was created but already destroyed.
+        // Last resort: allocate from a global pool.
+        perThreadFls = TGlobalFlsPool::Get()->Allocate();
+        return perThreadFls;
+    }
+
+    // Allocate a per-thread FLS and install cleanup handler.
+    struct TPerThreadDestroyer
+    {
+        ~TPerThreadDestroyer()
+        {
+            auto& perThreadFls = PerThreadFls();
+            delete perThreadFls;
+            perThreadFls = nullptr;
+            perThreadFlsDestroyed = true;
+        }
+    };
+    static thread_local TPerThreadDestroyer destroyer;
+    perThreadFls = new TFls();
     return perThreadFls;
 }
 

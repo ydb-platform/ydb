@@ -1,18 +1,19 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
-
-#include <yql/essentials/core/yql_expr_optimize.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -592,11 +593,10 @@ class TKqpBuildTxsTransformer : public TSyncTransformerBase {
 
 public:
     TKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-        const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<IGraphTransformer>&& typeAnnTransformer,
+        const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx,
         TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr& config)
         : KqpCtx(kqpCtx)
         , BuildCtx(buildCtx)
-        , TypeAnnTransformer(std::move(typeAnnTransformer))
     {
         BuildTxTransformer = new TKqpBuildTxTransformer();
 
@@ -605,16 +605,15 @@ public:
         DataTxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
-            .Add(*TypeAnnTransformer, "TypeAnnotation")
+            .AddTypeAnnotationTransformer()
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpBuildPhyStagesTransformer(enableSpilling, typesCtx, config->GetBlockChannelsMode()), "BuildPhysicalStages")
-            .Add(CreateKqpPhyOptTransformer(kqpCtx, typesCtx, config,
-                CreateTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(kqpCtx->Cluster, kqpCtx->Tables, typesCtx, config), typesCtx)), "KqpPhysicalOptimize")
+            .Add(CreateKqpPhyOptTransformer(kqpCtx, typesCtx), "KqpPhysicalOptimize")
             // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.
             .Add(CreateKqpBuildWideBlockChannelsTransformer(typesCtx, config->GetBlockChannelsMode()), "BuildWideBlockChannels")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(
-                TypeAnnTransformer.Get(), typesCtx, config,
+                typesCtx, config,
                 /* withFinalStageRules */ config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
                 {"KqpPeephole-RewriteCrossJoin"}),
                 "Peephole")
@@ -1130,18 +1129,17 @@ private:
 private:
     TIntrusivePtr<TKqpOptimizeContext> KqpCtx;
     TIntrusivePtr<TKqpBuildQueryContext> BuildCtx;
-    TAutoPtr<IGraphTransformer> TypeAnnTransformer;
     TAutoPtr<TKqpBuildTxTransformer> BuildTxTransformer;
     TAutoPtr<IGraphTransformer> DataTxTransformer;
 };
 
-} // namespace
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<IGraphTransformer>&& typeAnnTransformer,
+    const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx,
     TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr& config)
 {
-    return new TKqpBuildTxsTransformer(kqpCtx, buildCtx, std::move(typeAnnTransformer), typesCtx, config);
+    return new TKqpBuildTxsTransformer(kqpCtx, buildCtx, typesCtx, config);
 }
 
 } // namespace NKikimr::NKqp::NOpt

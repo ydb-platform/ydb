@@ -50,8 +50,10 @@ from textual.css.constants import (
     VALID_KEYLINE,
     VALID_OVERFLOW,
     VALID_OVERLAY,
+    VALID_POINTER,
     VALID_POSITION,
     VALID_SCROLLBAR_GUTTER,
+    VALID_SCROLLBAR_VISIBILITY,
     VALID_STYLE_FLAGS,
     VALID_TEXT_ALIGN,
     VALID_TEXT_OVERFLOW,
@@ -76,6 +78,7 @@ from textual.css.types import (
     Display,
     EdgeType,
     Overflow,
+    ScrollbarVisibility,
     TextOverflow,
     TextWrap,
     Visibility,
@@ -768,6 +771,13 @@ class StylesBuilder:
     process_scrollbar_background_hover = process_color
     process_scrollbar_background_active = process_color
 
+    def process_scrollbar_visibility(self, name: str, tokens: list[Token]) -> None:
+        """Process scrollbar visibility rules."""
+        self.styles._rules["scrollbar_visibility"] = cast(
+            ScrollbarVisibility,
+            self._process_enum(name, tokens, VALID_SCROLLBAR_VISIBILITY),
+        )
+
     process_link_color = process_color
     process_link_background = process_color
     process_link_color_hover = process_color
@@ -1268,6 +1278,24 @@ class StylesBuilder:
             if token.value not in VALID_EXPAND:
                 self.error(name, tokens[0], expand_help_text(name))
             self.styles._rules["expand"] = token.value
+
+    def process_pointer(self, name: str, tokens: list[Token]) -> None:
+        for token in tokens:
+            name, value, _, _, location, _ = token
+            if name == "token":
+                value = value.lower()
+                if value in VALID_POINTER:
+                    self.styles._rules["pointer"] = value
+                else:
+                    self.error(
+                        name,
+                        token,
+                        string_enum_help_text(
+                            "pointer",
+                            valid_values=list(VALID_POINTER),
+                            context="css",
+                        ),
+                    )
 
     def _get_suggested_property_name_for_rule(self, rule_name: str) -> str | None:
         """

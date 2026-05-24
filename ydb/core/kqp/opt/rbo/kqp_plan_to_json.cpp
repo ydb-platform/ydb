@@ -1,11 +1,15 @@
 #include "kqp_operator.h"
+
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+
+#include <yql/essentials/utils/log/log.h>
+
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
 
-namespace {
+namespace NKikimr::NKqp {
 
-using namespace NKikimr::NKqp;
+namespace {
 
 void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperator>& op) {
     json["E-Rows"] = TStringBuilder() << op->Props.Statistics->ERows;
@@ -326,10 +330,7 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     ComputeCpuTimes(simplifiedPlan);
 }
 
-}
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
@@ -503,5 +504,4 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
     return SerializeRBOExplainPlan(txPlanJson);
 }
 
-}
-}
+} // namespace NKikimr::NKqp

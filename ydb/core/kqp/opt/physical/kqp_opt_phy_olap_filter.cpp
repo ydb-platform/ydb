@@ -3,6 +3,9 @@
 #include "kqp_opt_phy_olap_filter.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -16,6 +19,7 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
 TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNode);
 
@@ -43,7 +47,7 @@ TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TExprBase>& conjunc
         }
     }
 }
-} // namespace
+} // anonymous namespace
 
 TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TOLAPPredicateNode>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd,
                                                bool trueForEmpty) {
@@ -709,7 +713,7 @@ TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx,
             .Build()
         .Done();
 }
-}
+} // anonymous namespace
 
 TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
     const auto parameters = FindNodes(apply.Ptr(), [](const TExprNode::TPtr& node) {
@@ -878,7 +882,7 @@ void CollectPredicateMembers(TExprNode::TPtr predicate, THashSet<TString>& predi
     }
 }
 
-}  // anonymous namespace end
+} // anonymous namespace
 
 bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& arg, const THashSet<TString>& predicateMembers, THashSet<TString>& projectionMembers,
                                        TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>>& projectionCandidates,
@@ -1054,9 +1058,7 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
     return newFlatmap;
 }
 
-TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    TTypeAnnotationContext& typesCtx, NYql::IGraphTransformer &typeAnn)
-{
+TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx) {
     const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown());
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
@@ -1136,7 +1138,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             TExprNode::TPtr afterPeephole;
             bool hasNonDeterministicFunctions;
             if (const auto status =
-                    PeepHoleOptimizeNode(olapPredicateClosure.Ptr(), afterPeephole, ctx, typesCtx, &typeAnn, hasNonDeterministicFunctions);
+                    PeepHoleOptimizeNode(olapPredicateClosure.Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
                 status != IGraphTransformer::TStatus::Ok) {
                 YQL_CLOG(ERROR, ProviderKqp) << "[KQP_PUSH_OLAP_FILTER] Peephole failed with status: " << status << Endl;
                 return node;

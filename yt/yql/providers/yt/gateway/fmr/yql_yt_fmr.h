@@ -38,6 +38,8 @@ struct TFmrServices: public TYtBaseServices {
     TFmrUserJobLauncher::TPtr JobLauncher;
     bool DisableLocalFmrWorker = false;
     TString FmrOperationSpecFilePath;
+    TString CoordinatorYsonPath;
+    TString WorkerYsonPath;
     IFileMetadataService::TPtr FileMetadataService;
     IFileUploadService::TPtr FileUploadService;
     IFmrJobPreparer::TPtr JobPreparer;
@@ -49,6 +51,8 @@ struct TFmrYtGatewaySettings {
     TIntrusivePtr<ITimeProvider> TimeProvider = CreateDefaultTimeProvider();
     TDuration TimeToSleepBetweenGetOperationRequests = TDuration::Seconds(1);
     TDuration CoordinatorPingInterval = TDuration::Seconds(5);
+    ui64 MaxDirectPullBytes = 100 * 1024; // 100 KB
+    ui64 MaxDirectPullRows = 1000;
 };
 
 IYtGateway::TPtr CreateYtFmrGateway(

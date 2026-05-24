@@ -1,8 +1,10 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -3970,77 +3972,35 @@ void TestSortImpl(bool asc) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto key1 = pb.NewDataLiteral<ui32>(1);
-    const auto key2 = pb.NewDataLiteral<ui32>(2);
-    const auto key3 = pb.NewDataLiteral<ui32>(3);
+    using TInRow = NTest::TStructType<NTest::TStructMember<"key", ui32>,
+                                      NTest::TStructMember<"payload", TStringBuf>>;
 
-    const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("aaa");
-    const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("");
-    const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("qqq");
-
-    const auto keyType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-    const auto payloadType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    auto structType = pb.NewEmptyStructType();
-    structType = pb.NewStructType(structType, "payload", payloadType);
-    structType = pb.NewStructType(structType, "key", keyType);
-
-    std::vector<std::pair<std::string_view, TRuntimeNode>> map1 = {
-        {"key", key1},
-        {"payload", payload1}};
-
-    std::vector<std::pair<std::string_view, TRuntimeNode>> map2 = {
-        {"key", key2},
-        {"payload", payload2}};
-
-    std::vector<std::pair<std::string_view, TRuntimeNode>> map3 = {
-        {"key", key3},
-        {"payload", payload3}};
-
-    const auto list = pb.NewList(structType, {pb.NewStruct(map2),
-                                              pb.NewStruct(map1),
-                                              pb.NewStruct(map3)});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                               {{{2U}, {""}}},
+                                                               {{{1U}, {"aaa"}}},
+                                                               {{{3U}, {"qqq"}}},
+                                                           });
 
     {
         const auto pgmReturn = pb.Sort(list, pb.NewDataLiteral(asc),
                                        [&](TRuntimeNode item) {
                                            return pb.Member(item, "key");
                                        });
+        const auto graph = setup.BuildGraph(pgmReturn);
 
-        if (asc) {
-            // ascending sort
-            const auto graph = setup.BuildGraph(pgmReturn);
-            const auto iterator = graph->GetValue().GetListIterator();
-            NUdf::TUnboxedValue item;
+        using TOutRow = std::tuple<ui32, TString>;
 
-            UNIT_ASSERT(iterator.Next(item));
-            UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 1);
-            UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "aaa");
-            UNIT_ASSERT(iterator.Next(item));
-            UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 2);
-            UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "");
-            UNIT_ASSERT(iterator.Next(item));
-            UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 3);
-            UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "qqq");
-            UNIT_ASSERT(!iterator.Next(item));
-            UNIT_ASSERT(!iterator.Next(item));
-        } else {
-            // descending  sort
-            const auto graph = setup.BuildGraph(pgmReturn);
-            const auto iterator = graph->GetValue().GetListIterator();
-            NUdf::TUnboxedValue item;
-
-            UNIT_ASSERT(iterator.Next(item));
-            UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 3);
-            UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "qqq");
-            UNIT_ASSERT(iterator.Next(item));
-            UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 2);
-            UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "");
-            UNIT_ASSERT(iterator.Next(item));
-            UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 1);
-            UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "aaa");
-            UNIT_ASSERT(!iterator.Next(item));
-            UNIT_ASSERT(!iterator.Next(item));
-        }
+        const auto expected = asc ? TVector<TOutRow>{
+                                        {{1U}, {"aaa"}},
+                                        {{2U}, {""}},
+                                        {{3U}, {"qqq"}},
+                                    }
+                                  : TVector<TOutRow>{
+                                        {{3U}, {"qqq"}},
+                                        {{2U}, {""}},
+                                        {{1U}, {"aaa"}},
+                                    };
+        NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), expected);
     }
 }
 

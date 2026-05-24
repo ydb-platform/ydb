@@ -176,8 +176,8 @@ void DropIndex(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-Y_UNIT_TEST_TWIN(SelectWithFulltextMatch, UTF8) {
-    auto kikimr = Kikimr();
+Y_UNIT_TEST_QUAD(SelectWithFulltextMatch, UTF8, EnableIndexStreamWrite) {
+    auto kikimr = Kikimr(EnableIndexStreamWrite);
     auto db = kikimr.GetQueryClient();
 
     { // Create table with fulltext index
@@ -577,12 +577,12 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
 
 }
 
-Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextRelevance, UTF8, EnableIndexStreamWrite) {
     // If UTF8 is true, the column order produced by full text source
     // is the "Text", "_yql_fulltext_relevance"
     // If UTF8 is false, the column order produced by full text source
     // is the "_yql_fulltext_relevance", "text"
-    auto kikimr = Kikimr();
+    auto kikimr = Kikimr(EnableIndexStreamWrite);
     auto db = kikimr.GetQueryClient();
 
     { // Create table with fulltext index. IndexId is a non-key, non-indexed
@@ -2210,7 +2210,7 @@ Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
 
 // Test that fulltext queries handle delivery problems gracefully
 // This uses the observer pattern to inject delivery problems
-Y_UNIT_TEST_TWIN(FullTextDeliveryProblem, LimitRowsPerRequest) {
+Y_UNIT_TEST_QUAD(FullTextDeliveryProblem, LimitRowsPerRequest, EnableIndexStreamWrite) {
     // Test that fulltext query succeeds even if delivery problem happens
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
@@ -2222,6 +2222,7 @@ Y_UNIT_TEST_TWIN(FullTextDeliveryProblem, LimitRowsPerRequest) {
         settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxRows(1);
         settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxBytes(1024);
     }
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
     Y_DEFER {
         SetDefaultIteratorQuotaSettings(32767, 5_MB);
@@ -2554,7 +2555,7 @@ Y_UNIT_TEST_QUAD(FulltextRelevanceL2Reads, LimitRowsPerRequest, InjectFail) {
     }
 }
 
-Y_UNIT_TEST_TWIN(FullTextReadResultStatusRetry, LimitRowsPerRequest) {
+Y_UNIT_TEST_QUAD(FullTextReadResultStatusRetry, LimitRowsPerRequest, EnableIndexStreamWrite) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
 
@@ -2565,6 +2566,7 @@ Y_UNIT_TEST_TWIN(FullTextReadResultStatusRetry, LimitRowsPerRequest) {
         settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxRows(1);
         settings.AppConfig.MutableTableServiceConfig()->MutableIteratorReadQuotaSettings()->SetMaxBytes(1024);
     }
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
     Y_DEFER {
         SetDefaultIteratorQuotaSettings(32767, 5_MB);

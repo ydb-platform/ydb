@@ -49,12 +49,12 @@ NKikimrColumnShardExportProto::TExportTask TExportTask::DoSerializeToProto() con
 
 NBackground::TSessionControlContainer TExportTask::BuildConfirmControl() const {
     return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(),
-        std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+        std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetSchemeShardLocalPathId().GetRawValue())));
 }
 
 NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
     return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(),
-        std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+        std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetSchemeShardLocalPathId().GetRawValue())));
 }
 
 TExportTask::TExportTask(const TIdentifier& id, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask,

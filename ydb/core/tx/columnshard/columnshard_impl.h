@@ -535,7 +535,8 @@ private:
     NOlap::TSnapshot LastCleanupSnapshot = NOlap::TSnapshot::Zero();
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
-    NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;
+    THashMap<TSchemeShardLocalPathId, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactions;
+    THashMap<ui64, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactionsByTxId;   // TxId -> BackupTransaction
 
     ui64 StatsReportRound = 0;
     TString OwnerPath;

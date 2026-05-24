@@ -64,6 +64,8 @@ public:
 
     TTransactionCache::TEntry::TPtr GetOrCreateEntry(const TYtSettings::TConstPtr& settings) const;
 
+    void ReportFullCaptureCacheHit() const;
+
 protected:
     void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
         const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& OutputHash) override;

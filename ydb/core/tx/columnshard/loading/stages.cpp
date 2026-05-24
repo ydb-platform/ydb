@@ -1,5 +1,6 @@
 #include "stages.h"
 
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -148,13 +149,30 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         Self->LastCleanupSnapshot = NOlap::TSnapshot(lastCleanupStep, lastCleanupTxId);
     }
 
-    TString serializedLastCompletedBackupTransaction;
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedBackupTransaction, serializedLastCompletedBackupTransaction)) {
+    auto rowset = db.Table<Schema::TableInfoV1>().Range().Select();
+    if (!rowset.IsReady()) {
         return false;
     }
 
-    if (serializedLastCompletedBackupTransaction) {
-        Y_VERIFY(Self->LastCompletedBackupTransaction.ParseFromString(serializedLastCompletedBackupTransaction));
+    while (!rowset.EndOfSet()) {
+        const auto schemeShardLocalPathId =
+            TSchemeShardLocalPathId::FromRawValue(rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>());
+        const auto serializedBackupTx = rowset.HaveValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            ? rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            : TString{};
+        if (serializedBackupTx) {
+            NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
+            if (backupTx.ParseFromString(serializedBackupTx)) {
+                Self->LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
+                Self->LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
+            } else {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_last_completed_backup_transaction")(
+                    "scheme_shard_local_path_id", schemeShardLocalPathId)("serialized_size", serializedBackupTx.size());
+            }
+        }
+        if (!rowset.Next()) {
+            return false;
+        }
     }
 
     return true;
@@ -162,7 +180,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme());
+    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme()) && Schema::Precharge<Schema::TableInfoV1>(db, txc.DB.GetScheme());
 }
 
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

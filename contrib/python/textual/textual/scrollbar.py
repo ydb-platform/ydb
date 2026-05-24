@@ -258,7 +258,7 @@ class ScrollBar(Widget):
         self.thickness = thickness
         self.grabbed_position: float = 0
         super().__init__(name=name)
-        self.auto_links = False
+        self.set_reactive(ScrollBar.auto_links, False)
 
     window_virtual_size: Reactive[int] = Reactive(100)
     window_size: Reactive[int] = Reactive(0)
@@ -274,6 +274,10 @@ class ScrollBar(Widget):
         if self.thickness > 1:
             yield "thickness", self.thickness
 
+    def validate_position(self, position: float) -> float:
+        """Position has a granulatory of 1/8 of a cell."""
+        return int(position * 8) / 8
+
     def render(self) -> RenderableType:
         assert self.parent is not None
         styles = self.parent.styles
@@ -287,7 +291,7 @@ class ScrollBar(Widget):
             background = styles.scrollbar_background
             color = styles.scrollbar_color
         if background.a < 1:
-            base_background, _ = self.parent._opacity_background_colors
+            base_background, _ = self.parent.background_colors
             background = base_background + background
         color = background + color
         scrollbar_style = Style.from_color(color.rich_color, background.rich_color)
@@ -356,12 +360,16 @@ class ScrollBar(Widget):
         event.stop()
 
     def _on_mouse_capture(self, event: events.MouseCapture) -> None:
+        self.app._realtime_animation_begin()
+        self.styles.pointer = "grabbing"
         if isinstance(self._parent, Widget):
             self._parent.release_anchor()
         self.grabbed = event.mouse_position
         self.grabbed_position = self.position
 
     def _on_mouse_release(self, event: events.MouseRelease) -> None:
+        self.app._realtime_animation_complete()
+        self.styles.pointer = "default"
         self.grabbed = None
         if self.vertical and isinstance(self.parent, Widget):
             self.parent._check_anchor()

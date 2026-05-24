@@ -681,11 +681,12 @@ message TEvShrinkStoragePool {
 }
 
 message TEvShrinkStoragePoolReply {
-    optional NKikimrProto.EReplyStatus Status = 1;
+    optional NKikimrSubDomains.TDomainKey SubDomain = 1;
     optional string StoragePool = 2;
-    optional string Error = 3;
-    repeated uint32 GroupsToRemove = 4;
-    optional uint64 Version = 5;
+    optional uint64 Version = 3;
+    optional NKikimrProto.EReplyStatus Status = 4;
+    optional string Error = 5;
+    repeated uint32 GroupsToRemove = 6;
 }
 
 message TEvShrinkStoragePoolDone {

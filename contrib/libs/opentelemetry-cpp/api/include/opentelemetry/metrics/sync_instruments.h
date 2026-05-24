@@ -18,8 +18,12 @@ namespace metrics
 class SynchronousInstrument
 {
 public:
-  SynchronousInstrument()          = default;
-  virtual ~SynchronousInstrument() = default;
+  SynchronousInstrument()                                             = default;
+  SynchronousInstrument(const SynchronousInstrument &)                = default;
+  SynchronousInstrument(SynchronousInstrument &&) noexcept            = default;
+  SynchronousInstrument &operator=(const SynchronousInstrument &)     = default;
+  SynchronousInstrument &operator=(SynchronousInstrument &&) noexcept = default;
+  virtual ~SynchronousInstrument()                                    = default;
 };
 
 /* A Counter instrument that adds values. */

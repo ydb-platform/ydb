@@ -104,6 +104,7 @@ class TRemoteSnapshotsStorage : public TThrRefBase {
     };
 
 public:
+    void Init(const TVector<TRemoteSnapshotInfo>& snapshots);
     void UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime);
     void UpdateBorder(const TRowVersion& border);
     void Clear();

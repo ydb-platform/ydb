@@ -74,6 +74,7 @@ SRCS(
     table_index.cpp
     tablet.cpp
     tablet.h
+    tablet_mon_admin_path.h
     tablet_killer.cpp
     tablet_pipe.h
     tablet_pipecache.h

@@ -5,6 +5,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
+#include <ydb/core/base/tablet_mon_admin_path.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -2357,16 +2358,40 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
     if (const auto& action = cgi.Get("action")) {
         if (action == "cleanup-borrowed-parts") {
+            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
+            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
             HandleMonCleanupBorrowedParts(ev);
             return true;
         }
 
         if (action == "reset-schema-version") {
+            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
+            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
             HandleMonResetSchemaVersion(ev);
             return true;
         }
 
         if (action == "key-access-sample") {
+            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
+            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
             TDuration duration = TDuration::Seconds(120);
             EnableKeyAccessSampling(ctx, ctx.Now() + duration);
             ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Enabled key access sampling for " + duration.ToString()));
@@ -2381,6 +2406,14 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         if (page == "main") {
             // fallthrough
         } else if (page == "change-sender") {
+            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
+            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
             if (OutChangeSender) {
                 ctx.Send(ev->Forward(OutChangeSender));
                 return true;
@@ -2389,6 +2422,14 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
                 return true;
             }
         } else if (page == "volatile-txs") {
+            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
+            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                return true;
+            }
             HandleMonVolatileTxs(ev);
             return true;
         } else {

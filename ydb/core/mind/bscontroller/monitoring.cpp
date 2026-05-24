@@ -1,7 +1,10 @@
 #include "impl.h"
 #include "cluster_balancing.h"
 
+#include <ydb/core/base/tablet_mon_admin_path.h>
+
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <google/protobuf/util/json_util.h>
 
 
@@ -856,11 +859,15 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
     }
 }
 
-bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
+bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive) {
         return false;
     }
     if (!ev) {
+        return true;
+    }
+    if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
+        Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;
     }
     if (const auto& ext = ev->Get()->ExtendedQuery; ext && ext->GetMethod() == HTTP_METHOD_POST) {

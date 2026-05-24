@@ -1,13 +1,26 @@
 # -*- coding: utf-8 -*-
 import os
 import subprocess
+import time
 
 import pytest
 
+import ydb.core.protos.msgbus_pb2 as msgbus
+from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
+
+
+def _scheme_describe_with_table_partitions(cluster, path, token):
+    """Like KiKiMRMessageBusClient.describe but with ReturnPartitioningInfo."""
+    request = msgbus.TSchemeDescribe()
+    request.Path = path
+    request.SecurityToken = token
+    request.Options.ReturnPartitioningInfo = True
+    return cluster.client.invoke(request, 'SchemeDescribe')
 
 
 def generate_certificates(certs_tmp_dir):
@@ -165,6 +178,84 @@ def ydb_cluster_with_enforce_user_token(certificates):
     )
     cluster = KiKiMR(configurator)
     cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_datashard_tablet(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    database = '/Root/ds_mon_security'
+    cluster.create_database(
+        database,
+        storage_pool_units_count={'hdd': 1},
+        token='root@builtin',
+    )
+    cluster.register_and_start_slots(database, count=1)
+    cluster.wait_tenant_up(database, token='root@builtin')
+
+    node = cluster.nodes[1]
+    driver_config = ydb.DriverConfig(
+        endpoint=f'{node.host}:{node.port}',
+        database=database,
+        credentials=ydb.AuthTokenCredentials('root@builtin'),
+    )
+    table_path = f'{database}/ds_mon_t'
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(timeout=60)
+
+        def create_table(session):
+            session.create_table(
+                table_path,
+                ydb.TableDescription()
+                .with_column(ydb.Column('id', ydb.OptionalType(ydb.PrimitiveType.Uint64)))
+                .with_primary_key('id'),
+            )
+
+        with ydb.SessionPool(driver) as pool:
+            pool.retry_operation_sync(create_table)
+
+    datashard_tablet_id = None
+    for _ in range(120):
+        described = _scheme_describe_with_table_partitions(cluster, table_path, 'root@builtin')
+        partitions = described.PathDescription.TablePartitions
+        tid = None
+        if partitions:
+            p0 = partitions[0]
+            tid = getattr(p0, 'DatashardId', None) or getattr(p0, 'datashard_id', None)
+        if tid:
+            datashard_tablet_id = tid
+            break
+        time.sleep(1)
+    assert datashard_tablet_id, 'DataShard tablet id not available after CREATE TABLE'
+    cluster.datashard_tablet_id = datashard_tablet_id
+
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_bs_controller_tablet(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    bs_controller_tablet_id = None
+    for _ in range(240):
+        resp = cluster.client.tablet_state(tablet_type=TabletTypes.FLAT_BS_CONTROLLER)
+        if resp.TabletStateInfo:
+            bs_controller_tablet_id = resp.TabletStateInfo[0].TabletId
+            break
+        time.sleep(1)
+    assert bs_controller_tablet_id, 'BS controller tablet id not available after cluster start'
+    cluster.bs_controller_tablet_id = bs_controller_tablet_id
     yield cluster
     cluster.stop()
 

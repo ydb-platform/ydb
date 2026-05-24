@@ -152,7 +152,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             .Database = Context->DatabasePath,
             .Request = std::move(request),
             .UserToken = Context->UserToken,
-            .IfNotExists = true,
+            .IfNotExists = false,
         }));
 
         InflyTopics++;
@@ -167,15 +167,24 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
-    auto status = eventPtr->Status;
-    if (status == Ydb::StatusIds::SCHEME_ERROR) {
-        status = Ydb::StatusIds::BAD_REQUEST;
+
+    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(eventPtr->Status));
+
+    EKafkaErrors status;
+    switch(eventPtr->Status) {
+        case Ydb::StatusIds::SCHEME_ERROR:
+            status = INVALID_REQUEST;
+            break;
+        case Ydb::StatusIds::ALREADY_EXISTS:
+            status = TOPIC_ALREADY_EXISTS;
+            break;
+        default:
+            status = ConvertErrorCode(eventPtr->Status);
     }
-    KAFKA_LOG_D(TStringBuilder() << "Create topics actor. Topic's " << eventPtr->Path << " response received." << std::to_string(status));
 
     auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
     response->TopicPath = eventPtr->Path;
-    response->Status = ConvertErrorCode(status);
+    response->Status = status;
     response->Message = std::move(eventPtr->ErrorMessage);
 
     TopicNamesToResponses[eventPtr->Path] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(response.Release());

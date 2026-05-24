@@ -76,6 +76,39 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 40667:Import from https://github.com/ydb-platform/ydb-cpp-sdk/pull/617
+
+... [#40667](https://github.com/ydb-platform/ydb/pull/40667) ([Ermoshkin Artem](https://github.com/Shfdis))
+* 40175:Introduce IStackMem/TStackMemPool and allow coroutine actors to opt into
+pooled stack memory via the TUsePooledStack/UsePooledStack constructor tag.
+
+  The new pool allocates guarded stack memory mappings. Keeps a small
+thread-local cache with a global exchange for cross-thread reuse, and uses page-size based layout with explicit support for downward-growing stacks. Unix/Darwin use mmap and Windows uses VirtualAlloc.
+
+  Switch the interconnect handshake coroutine actor to UsePooledStack<64_KB>().
+
+  Add coroutine actor chain tests for legacy and pooled stacks,
+including parallel 4/16/64-chain runs, and add a dedicated ut_mprotect target that checks guard-page protection in a child process.
+
+Local relwithdebinfo checks:
+
+per_chain_step_us results:
+
+    StackPool x1   threads=4   3.0069
+    StackPool x4   threads=4   5.5408
+    StackPool x16  threads=4   17.4798
+    StackPool x64  threads=4   75.2520
+    StackPool x64  threads=64  41.3865
+
+    Legacy    x1   threads=4    16.391
+    Legacy    x4   threads=4    68.983
+    Legacy    x16  threads=4    275.079
+    Legacy    x64  threads=4    1034.003
+    Legacy    x64  threads=64   1090.413439
+
+
+
+... [#40175](https://github.com/ydb-platform/ydb/pull/40175) ([Daniil Cherednik](https://github.com/dcherednik))
 
 ### Bug fixes
 
@@ -146,12 +179,13 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 40801:https://github.com/ydb-platform/ydb/issues/38440 
+Handle NODATA by checking the KV pair reference count and returning NOT_FOUND or INTERNAL_ERROR instead of failing the process [#40801](https://github.com/ydb-platform/ydb/pull/40801) ([kruall](https://github.com/kruall))
+* 40492:Closes #38431
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+... [#40492](https://github.com/ydb-platform/ydb/pull/40492) ([Daniil Timižev](https://github.com/dahbka-lis))
+* 40307:Fix `File is corrupted` error during export with encryption [#40307](https://github.com/ydb-platform/ydb/pull/40307) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 
 ### YDB UI
 

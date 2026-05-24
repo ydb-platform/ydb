@@ -2405,55 +2405,11 @@ public:
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
-<<<<<<< HEAD
                                     case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                         NKikimr::NFulltext::FillSetting(
                                             *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
                                             name.StringValue(), value.StringValue(), error);
                                         break;
-=======
-                                } else {
-                                    switch (add_index->type_case()) {
-                                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
-                                            NKikimr::NKMeans::FillSetting(
-                                                *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
-                                                name, value.StringValue(), error);
-                                            break;
-                                        }
-                                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
-                                            NKikimr::NFulltext::FillSetting(
-                                                *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
-                                                name, value.StringValue(), error);
-                                            break;
-                                        }
-                                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
-                                            NKikimr::NFulltext::FillSetting(
-                                                *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
-                                                name, value.StringValue(), error);
-                                            break;
-                                        }
-                                        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
-                                            FillLocalBloomFilterSetting(
-                                                localBloomFilterDesc,
-                                                name, value.StringValue(), error);
-                                            break;
-                                        }
-                                        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
-                                            FillLocalBloomNgramFilterSetting(
-                                                localBloomNgramFilterDesc,
-                                                name, value.StringValue(), error);
-                                            break;
-                                        }
-                                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
-                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                                << "min_max index does not support setting: " << name));
-                                            return SyncError();
-                                        }
-                                        default:
-                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                                << "Unknown index setting: " << name));
-                                            return SyncError();
->>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
                                     }
                                     case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
                                         NKikimr::NFulltext::FillSetting(
@@ -2471,6 +2427,11 @@ public:
                                         FillLocalBloomNgramFilterSetting(
                                             localBloomNgramFilterDesc,
                                             name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                            << "min_max index does not support setting: " << name));
                                         break;
                                     }
                                     default:

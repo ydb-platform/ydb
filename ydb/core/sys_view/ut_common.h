@@ -28,12 +28,9 @@ struct TTestEnvSettings {
     bool EnableOlapCompression = false;
     bool EnableTableCacheModes = false;
     bool EnableFulltextIndex = false;
-<<<<<<< HEAD
     TMaybe<bool> EnableRealSystemViewPaths;
-=======
     bool EnableCsDictionaryEncoding = false;
     bool EnableLocalMinMaxIndex = false;
->>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;

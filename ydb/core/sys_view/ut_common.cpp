@@ -104,14 +104,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
-<<<<<<< HEAD
     if (settings.EnableRealSystemViewPaths) {
         featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
     }
-=======
     featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
     featureFlags.SetEnableLocalMinMaxIndex(settings.EnableLocalMinMaxIndex);
->>>>>>> f2cc2cd62f4 (cs min_max index kqp integration (#38585))
 
     Settings->SetFeatureFlags(featureFlags);
 

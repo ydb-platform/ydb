@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST(LocalBloomFilterIndexDoesntAllowWrongParametersOnAlter, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
         ExecQuery(kikimr, UseQueryService, R"(

@@ -280,5 +280,5 @@ message TFeatureFlags {
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
-    optional bool EnableLocalMinMaxIndex = 261 [default = false];
+    optional bool EnableLocalMinMaxIndex = 262 [default = false];
 }

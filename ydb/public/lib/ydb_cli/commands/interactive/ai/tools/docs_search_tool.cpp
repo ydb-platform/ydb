@@ -900,7 +900,7 @@ private:
 
         if (truncated) {
             array.emplace_back(TStringBuilder() << "Results are truncated, processed only "
-                << processedFiles << " / " << entries.size() << " and found " << matchesCount << " matches, result size "
+                << processedFiles << " / " << entries.size() << " files and found " << matchesCount << " matches, result size "
                 << payloadSize << " exceeded allowed limit " << FIND_SIZE_LIMIT << ", try to use deepest \"path\" value or larger \"pattern\"");
         }
 

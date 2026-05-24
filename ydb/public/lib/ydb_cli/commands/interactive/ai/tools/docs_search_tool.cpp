@@ -26,6 +26,40 @@ namespace {
 
 constexpr char DOCS_ARCHIVE_RESOURCE[] = "ydb/public/lib/ydb_cli/commands/interactive/ai/tools/docs_generate/docs.archive";
 
+TString JoinRelative(const TString& baseDir, const TString& rel, ui64 protectRoot = 0) {
+    if (rel.StartsWith('/')) {
+        return rel.substr(1);
+    }
+
+    if (baseDir.empty()) {
+        return TFsPath(rel).Fix().GetPath();
+    }
+
+    // Disable up's more than protectRoot folders
+
+    TString dir = baseDir;
+    TStringBuilder root;
+    for (; protectRoot; --protectRoot) {
+        const auto childPos = dir.find('/');
+        if (childPos == TString::npos) {
+            break;
+        }
+        root << dir.substr(0, childPos) << '/';
+        dir = dir.substr(childPos + 1);
+    }
+
+    const auto path = TFsPath(dir).Child(rel).Fix();
+    TStringBuf pathBuffer = path.GetPath();
+    while (pathBuffer.SkipPrefix("../") || pathBuffer.SkipPrefix("./")) {}
+
+    return root << pathBuffer;
+}
+
+TString DirectoryOf(const TString& path) {
+    const auto slash = path.rfind('/');
+    return slash == TString::npos ? "" : path.substr(0, slash);
+}
+
 class TDocStore {
 public:
     using TPtr = std::shared_ptr<const TDocStore>;
@@ -51,10 +85,7 @@ public:
             const TBlob& payload = reader.ObjectBlobByKey(key);
             amountSize += payload.Size();
             YDB_CLI_LOG(Debug, "Loaded documentation file \"" << key << "\" (" << payload.Size() << " bytes)");
-
-            if (auto payloadStr = Strip(TString(payload.AsCharPtr(), payload.Size()))) {
-                Y_VALIDATE(files.emplace(std::move(key), std::move(payloadStr)).second, "Duplicate file in docs archive: \"" << key << "\"");
-            }
+            Y_VALIDATE(files.emplace(std::move(key), Strip(TString(payload.AsCharPtr(), payload.Size()))).second, "Duplicate file in docs archive: \"" << key << "\"");
         }
 
         YDB_CLI_LOG(Info, "Loaded " << files.size() << " documentation files from the archive, total size: " << amountSize << " bytes");
@@ -91,14 +122,25 @@ class TTemplateResolver {
     static constexpr TStringBuf BLOCK_INCLUDE = "include";
     static constexpr TStringBuf BLOCK_FILE = "file";
 
+    struct TReplace {
+        ui64 From = 0;
+        ui64 To = 0;
+        TString Content;
+    };
+
 public:
     using TPtr = std::shared_ptr<TTemplateResolver>;
 
-    TString Resolve(const TString& text) {
+    explicit TTemplateResolver(TDocStore::TPtr store)
+        : Store(std::move(store))
+    {}
+
+    TString Resolve(const TString& text, const TString& baseDir) {
+        std::vector<TReplace> replaces;
         for (size_t i = text.find_first_of("{`"); i != TString::npos; i = text.find_first_of("{`", i + 1)) {
             if (text[i] == '`') {
-                // Skip markdown blocks
                 if (i + 2 < text.size() && text[i + 1] == '`' && text[i + 2] == '`') {
+                    // Skip markdown blocks
                     i = text.find("```", i + 3);
 
                     if (i != TString::npos) {
@@ -106,6 +148,9 @@ public:
                     } else {
                         i = text.size();
                     }
+                } else {
+                    // Skip markdown comments
+                    i = std::min(text.find("`", i + 1), text.size());
                 }
                 continue;
             }
@@ -145,13 +190,17 @@ public:
                     continue;
                 }
 
+                if (ContainsBlock(text, i + 3, BLOCK_FILE)) {
+                    // File block, skip
+                    continue;
+                }
+
                 if (ContainsBlock(text, i + 3, BLOCK_IF) || ContainsBlock(text, i + 3, BLOCK_ELSE) || ContainsBlock(text, i + 3, BLOCK_ENDIF)) {
                     // TODO: support if
                     continue;
                 }
 
-                if (ContainsBlock(text, i + 3, BLOCK_INCLUDE) || ContainsBlock(text, i + 3, BLOCK_FILE)) {
-                    // TODO: handle include/file block
+                if (ResolveInclude(text, baseDir, i, replaces)) {
                     continue;
                 }
             }
@@ -173,7 +222,21 @@ public:
             UnknownTemplates.emplace(text.substr(start, std::min(i + close.size() - start, text.size() - start)));
         }
 
-        return text;
+        TStringBuilder result;
+        ui64 pos = 0;
+        for (const auto& replace : replaces) {
+            Y_VALIDATE(replace.From >= pos, "Unexpected replace start: " << replace.From << ", should be >= " << pos);
+            result << text.substr(pos, replace.From - pos) << replace.Content;
+
+            Y_VALIDATE(replace.From < replace.To, "Invalid replace range [" << replace.From << "; " << replace.To << ")");
+            pos = replace.To;
+        }
+
+        if (pos < text.size()) {
+            result << text.substr(pos);
+        }
+
+        return result;
     }
 
     void Finish() {
@@ -196,6 +259,51 @@ private:
         return startPos + block.size() <= text.size() && text.substr(startPos, block.size()) == block;
     }
 
+    static TString GetBlockContext(const TString& text, size_t startPos) {
+        return text.substr(startPos, std::min(text.find("}", startPos + 1), text.size() - 1) - startPos + 1);
+    }
+
+    bool ResolveInclude(const TString& text, const TString& baseDir, size_t& startPos, std::vector<TReplace>& replaces) {
+        if (!ContainsBlock(text, startPos + 3, BLOCK_INCLUDE)) {
+            return false;
+        }
+
+        const auto includeBlockEnd = text.find("%}", startPos + 3 + BLOCK_INCLUDE.size());
+        if (includeBlockEnd == TString::npos) {
+            YDB_CLI_LOG(Info, "Failed to find include block end around: " << GetBlockContext(text, startPos));
+            return false;
+        }
+
+        auto includeRefBegin = text.find_first_of("(\"", startPos + 3 + BLOCK_INCLUDE.size());
+        if (includeRefBegin >= includeBlockEnd) {
+            YDB_CLI_LOG(Info, "Failed to find include ref start around: " << GetBlockContext(text, startPos));
+            return false;
+        }
+
+        const auto includeRefEnd = text.find_first_of("\"#)", includeRefBegin + 1);
+        if (includeRefEnd >= includeBlockEnd || includeRefEnd - includeRefBegin <= 1) {
+            YDB_CLI_LOG(Info, "Failed to find include ref end around: " << GetBlockContext(text, startPos));
+            return false;
+        }
+
+        const auto& includePath = JoinRelative(baseDir, text.substr(includeRefBegin + 1, includeRefEnd - includeRefBegin - 1), /* protectRoot */ 2);
+        const auto* rawContent = Store->Find(includePath);
+        if (!rawContent) {
+            YDB_CLI_LOG(Info, "Failed to find include file under base dir '" << baseDir << "' with path '" << includePath << "' around: " << GetBlockContext(text, startPos));
+            return false;
+        }
+
+        replaces.push_back({
+            .From = startPos,
+            .To = includeBlockEnd + 2,
+            .Content = Resolve(*rawContent, DirectoryOf(includePath)),
+        });
+        startPos = includeBlockEnd + 1;
+
+        return true;
+    }
+
+    const TDocStore::TPtr Store;
     std::unordered_set<TString> UnknownTemplates;
 };
 
@@ -258,28 +366,13 @@ public:
     }
 
 private:
-    static TString JoinRelative(const TString& baseDir, const TString& rel) {
-        if (rel.StartsWith('/')) {
-            return rel.substr(1);
-        }
-        if (baseDir.empty()) {
-            return TFsPath(rel).Fix().GetPath();
-        }
-        return TFsPath(baseDir).Child(rel).Fix().GetPath();
-    }
-
-    static TString DirectoryOf(const TString& path) {
-        const auto slash = path.rfind('/');
-        return slash == TString::npos ? "" : path.substr(0, slash);
-    }
-
     void AppendTitle(const TString& title, const TString& tocPath, std::vector<TString>& titles) {
         if (const auto& dir = DirectoryOf(CanonizePath(tocPath)); DirectoriesNames.emplace(dir, titles).second) {
             YDB_CLI_LOG(Debug, "Added directory '" << dir << "'name '" << JoinSeq('/', titles) << "'");
         }
 
         if (titles.empty() || titles.back() != title) {
-            titles.emplace_back(TemplateResolver->Resolve(title));
+            titles.emplace_back(TemplateResolver->Resolve(title, DirectoryOf(tocPath)));
         }
     }
 
@@ -363,7 +456,7 @@ private:
     void AddEntity(const TString& path, const std::vector<TString>& title, const TString& rawContent) {
         Entries.push_back({
             .Path = CanonizePath(path),
-            .Content = TemplateResolver->Resolve(rawContent),
+            .Content = TemplateResolver->Resolve(rawContent, DirectoryOf(path)),
             .Title = title,
         });
     }
@@ -446,9 +539,7 @@ This is reference folders, read them if you need this information to answer to u
 - "core/contributor" - information about implementation of some subsystems for contributors into YDB GitHUb repository
 - "core/public-materials" - comonly spread material about YDB like published papers
 
-It is better to always choose one of this folders to list.
-
-)";
+It is better to always choose one of this folders to list.)";
 
     static constexpr char ACTION_PROPERTY[] = "action";
     static constexpr char ACTION_LIST[] = "list";
@@ -546,7 +637,7 @@ private:
             .Property(LANG_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Enum({"ru", "en"})
-                .Description("Documentation language to select. Must be used same language as current conversation language.")
+                .Description("Documentation language to select. Must be used same language as current conversation language. For example, if user queries 'How can I setup my database?' you should select \"language\"=\"en\", and for query 'Как я могу настроить мою базу данных?' you should use \"language\"=\"ru\"")
                 .Done()
             .Property(PATH_PROPERTY, /* required */ false)
                 .Type(TJsonSchemaBuilder::EType::String)
@@ -564,7 +655,7 @@ private:
 
         Store = TDocStore::Load();
 
-        const auto templateResolver = std::make_shared<TTemplateResolver>();
+        const auto templateResolver = std::make_shared<TTemplateResolver>(Store);
         RuDocIndex = std::make_shared<TTocIndex>(Store, templateResolver, LANG_RU);
         EnDocIndex = std::make_shared<TTocIndex>(Store, templateResolver, LANG_EN);
         templateResolver->Finish();

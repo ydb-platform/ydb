@@ -97,17 +97,17 @@ runs:
       run: |
         jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
         # tricky: we are searching job with name that contains build_preset
-        check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
+        check_url=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: Bearer ${{github.token}}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$jobs_url" | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
 
         platform_name="$(echo "$(uname -s)-$(uname -p)" | tr '[:upper:]' '[:lower:]')-$BUILD_PRESET"
         echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
 
-        curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+        curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
           -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
 
         if [[ "${{inputs.run_tests}}" == "true" ]]; then
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
         fi
@@ -340,7 +340,6 @@ runs:
           ".github/scripts/check_ydb_qa_config.py"
           ".github/scripts/tests/generate-summary.py"
           ".github/scripts/tests/fail-checker.py"
-          ".github/scripts/tests/transform_build_results.py"
         )
         
         # Ensure main is available (may be missing in shallow clone)
@@ -360,6 +359,9 @@ runs:
         
         # Check YDB configuration (after checkout from main)
         python3 .github/scripts/check_ydb_qa_config.py || true
+
+        export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
+        echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
@@ -402,21 +404,24 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
+          PREV_REPORT="$CURRENT_REPORT"
+          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
-              RERUN_FAILED_OPT="-X --build-only-test-deps"
+              MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
+              python3 .github/scripts/tests/mute/mute_utils.py convert_muted_txt_to_yaml "$MUTED_YA_FILE" "$PREV_REPORT" > $MUTED_YAML_PATH
+              RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
             else
               RERUN_FAILED_OPT=""
             fi
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
-          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           monitor_memory() {
               set +x
@@ -487,7 +492,7 @@ runs:
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
             --test_dir="$TEST_META_INFO" \
-            -m .github/config/muted_ya.txt \
+            -m "$MUTED_YA_FILE" \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
@@ -594,11 +599,11 @@ runs:
         set -x
 
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"failure","description":"The check has been failed","context":"build_${{inputs.build_preset}}"}'
         else
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
         fi
@@ -616,7 +621,7 @@ runs:
           else
             testmessage="The check has been failed"
           fi
-          curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
               https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
 
@@ -632,44 +637,6 @@ runs:
         if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
           .github/scripts/tests/fail-checker.py "$LAST_BUILD_RESULTS_REPORT"
         fi
-
-    - name: show diff mute_ya.txt
-      if: inputs.build_preset == 'relwithdebinfo' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
-      shell: bash
-      continue-on-error: true
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        # Use ORIGINAL_HEAD from build step (saved before any git operations)
-        get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
-        file_to_check=.github/config/muted_ya.txt
-        check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`
-        if [[ ${check_result} == *"not changed" ]];then
-            echo file ${file_to_check} NOT changed
-        else
-            echo file ${file_to_check} changed
-            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"
-            FILE_PATH=$PUBLIC_DIR/mute_info/2_new_muted_tests.txt
-            SEPARATOR=""
-            if [ -f "$FILE_PATH" ]; then
-              LINE_COUNT=$(wc -l < "$FILE_PATH")
-              if [ "$LINE_COUNT" -gt 0 ]; then
-                SEPARATOR=', '
-                MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/2_new_muted_tests.txt)"
-              fi
-            fi
-            FILE_PATH=$PUBLIC_DIR/mute_info/3_unmuted_tests.txt
-            if [ -f "$FILE_PATH" ]; then
-              LINE_COUNT_unmute=$(wc -l < "$FILE_PATH")
-              if [ "$LINE_COUNT_unmute" -gt 0 ]; then
-                MESSAGE="${MESSAGE}${SEPARATOR}Unmuted $LINE_COUNT_unmute [tests](${PUBLIC_DIR_URL}/mute_info/3_unmuted_tests.txt)"
-              fi
-            fi
-            if [ -n "$MESSAGE" ]; then
-              printf "$MESSAGE" | .github/scripts/tests/comment-pr.py --color orange
-            fi
-          fi
-
 
     - name: sync results to s3 and publish links
       if: always()

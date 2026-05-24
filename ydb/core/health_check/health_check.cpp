@@ -1006,7 +1006,7 @@ public:
 
     void RequestDone(const char* name) {
         --Requests;
-        YDB_LOG_TRACE("RequestDone( ): remaining",
+        YDB_LOG_TRACE("RequestDone with remaining requests",
             {"name", name},
             {"Requests", Requests});
         if (Requests == 0) {

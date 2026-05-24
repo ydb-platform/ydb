@@ -8,11 +8,11 @@ Read from a topic using `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. The `WITH` 
 
 {% note info %}
 
-Topics are accessed through an [external data source](../../concepts/datamodel/external_data_source.md).
+The examples use [local and external topics](local-and-external-topics.md).
 
 In the examples:
 
-- `ydb_source` — a pre-created external data source;
+- `ext_source` — a pre-created external data source;
 - `input_topic` — topic to read from;
 - `output_topic` — topic to write results to;
 - `output_table` — {{ ydb-short-name }} table to write results to.
@@ -25,7 +25,7 @@ The following snippet reads JSON events from a topic. Use it inside [CREATE STRE
 SELECT
     *
 FROM
-    ydb_source.input_topic
+    ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -45,15 +45,14 @@ The query reads events from the input topic, builds a JSON object from fields, a
 CREATE STREAMING QUERY write_json_example AS
 DO BEGIN
 
--- ydb_source — external data source for topics
-INSERT INTO ydb_source.output_topic
+INSERT INTO ext_source.output_topic -- or local topic output_topic
 SELECT
     -- Build JSON from fields
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
         AsStruct(Id AS id, Name AS name)
     ))))
 FROM
-    ydb_source.input_topic
+    input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = json_each_row,  -- Input data format
     SCHEMA = (               -- Input schema
@@ -81,12 +80,11 @@ The query reads events from the input topic and writes a single field as a strin
 CREATE STREAMING QUERY write_utf8_example AS
 DO BEGIN
 
--- ydb_source — external data source for topics
-INSERT INTO ydb_source.output_topic
+INSERT INTO output_topic -- or external topic ext_source.output_topic
 SELECT
     Name
 FROM
-    ydb_source.input_topic
+    ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,  -- Input data format
     SCHEMA = (               -- Input schema
@@ -120,8 +118,7 @@ SELECT
     Id,
     Name
 FROM
-    -- ydb_source — external data source for topics
-    ydb_source.input_topic
+    ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,  -- Input data format
     SCHEMA = (               -- Input schema
@@ -137,5 +134,6 @@ More details: [{#T}](table-writing.md).
 
 ## See also
 
+- [Local and external topics in streaming queries](local-and-external-topics.md)
 - [{#T}](../../yql/reference/syntax/create-streaming-query.md)
 - [{#T}](../../recipes/streaming_queries/topics.md)

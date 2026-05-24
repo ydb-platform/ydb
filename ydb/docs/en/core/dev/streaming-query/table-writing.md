@@ -31,7 +31,7 @@ SELECT
     Count
 FROM
     -- Read events from topic
-    ydb_source.input_topic
+    input_topic
 WITH (
     -- Topic data format
     FORMAT = json_each_row,

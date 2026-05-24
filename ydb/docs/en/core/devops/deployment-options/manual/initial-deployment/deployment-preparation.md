@@ -4,7 +4,7 @@
 
 ### Prerequisites {#requirements}
 
-Review the [system requirements](../../../concepts/system-requirements.md) and the [cluster topology](../../../../concepts/topology.md).
+Review the [system requirements](../../../../devops/concepts/system-requirements.md) and the [cluster topology](../../../../concepts/topology.md).
 
 Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} executable.
 
@@ -97,27 +97,42 @@ For more information about spilling configuration and its relationship with file
 
 ## Install {{ ydb-short-name }} Software on Each Server {#install-binaries}
 
-1. Download and unpack an archive with the `ydbd` executable and the libraries required for {{ ydb-short-name }} to run:
+### Download and unpack an archive with the `ydbd` executable and the libraries required for {{ ydb-short-name }} to run
+
+{% list tabs %}
+
+  - OSS
+
+    ```bash
+    mkdir ydbd-stable-linux-amd64
+    curl -L <binaries_url> | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
+    ```
+  
+  - Enterprise
+
+    ```bash
+    mkdir ydbd-stable-linux-amd64
+    curl -L <binaries_url> | tar -xJ --strip-component=1 -C ydbd-stable-linux-amd64
+    ```
+  
+{% endlist %}
+
+  where `<binaries_url>` is a link to the archive of the version you need from the [downloads](../../../../downloads/index.md) page.
+
+### Create a directory on the server
 
   ```bash
-  mkdir ydbd-stable-linux-amd64
-  curl -L {{ ydb-binaries-url }}/{{ ydb-stable-binary-archive }} | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
+  sudo mkdir -p  /opt/ydb
   ```
 
-1. Create directories for {{ ydb-short-name }} software:
-
-  ```bash
-  sudo mkdir -p /opt/ydb /opt/ydb/cfg
-  ```
-
-1. Copy the executable and libraries to the appropriate directories:
+### Copy the executable and libraries to the appropriate directories
 
   ```bash
   sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
   sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
   ```
 
-1. Set the owner of files and folders:
+### Set the owner of files and folders
 
   ```bash
   sudo chown -R root:bin /opt/ydb
@@ -182,6 +197,51 @@ After executing this command, data on the disk will be erased.
 
   Perform this operation for each disk to be used for {{ ydb-short-name }} data storage.
 
+### Example of a full command for partitioning 3 disks
+
+```bash
+DISK=/dev/vdb
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_01
+sudo partx --u ${DISK}
+sleep 5
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
+
+DISK=/dev/vdc
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_02
+sudo partx --u ${DISK}
+sleep 5
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_02
+
+DISK=/dev/vdd
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_03
+sudo partx --u ${DISK}
+sleep 5
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_03
+```
+
+### Verify disk preparation
+
+To verify correct disk partitioning, run the following command on each cluster server:
+
+```bash
+ls -al /dev/disk/by-partlabel/
+```
+
+The output should show the disks you created and partitioned:
+
+```bash
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_01 -> ../../vdb1
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_02 -> ../../vdc1
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
+```
+
 After completing the preparation steps, proceed to deployment. Select the guide that matches your configuration:
 
 - [Deploying a cluster using configuration V1](deployment-configuration-v1.md)
+- [Deploying a cluster using configuration V2](deployment-configuration-v2.md)

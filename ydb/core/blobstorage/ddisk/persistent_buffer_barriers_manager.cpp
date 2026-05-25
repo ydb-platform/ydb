@@ -154,4 +154,157 @@ namespace NKikimr::NDDisk {
         }
         return true;
     }
+
+    bool TPersistentBufferBarriersManager::Compact(const std::set<ui64>& lsns, char* compactLsns) {
+        ui32 resPos = 0;
+        if (lsns.empty()) {
+            return false;
+        }
+
+        auto it = lsns.begin();
+        ui64 first = *it;
+
+        // Write first LSN as 8 raw bytes (little-endian)
+        memcpy(compactLsns, &first, 8);
+        resPos +=8;
+        ui64 prev = first;
+        ++it;
+        for (; it != lsns.end(); ++it) {
+            ui64 delta = *it - prev;
+            prev = *it;
+            // Encode delta as variable-length (LEB128-style)
+            while (delta >= 0x80) {
+                if (resPos >= TPersistentBufferHeader::ErasesBufferSize) {
+                    return false;
+                }
+                compactLsns[resPos++] = static_cast<char>((delta & 0x7F) | 0x80);
+                delta >>= 7;
+            }
+            if (resPos >= TPersistentBufferHeader::ErasesBufferSize) {
+                return false;
+            }
+            compactLsns[resPos++] = static_cast<char>(delta & 0x7F);
+        }
+
+        return true;
+    }
+
+    std::set<ui64> TPersistentBufferBarriersManager::Uncompact(const char* data) {
+        std::set<ui64> res;
+        ui64 first = 0;
+        memcpy(&first, data, 8);
+        if (first == 0) {
+            return res;
+        }
+        res.insert(first);
+
+        ui64 prev = first;
+        size_t pos = 8;
+        while (pos < TPersistentBufferHeader::ErasesBufferSize) {
+            ui64 delta = 0;
+            int shift = 0;
+            while (pos < TPersistentBufferHeader::ErasesBufferSize) {
+                ui8 byte = static_cast<ui8>(data[pos++]);
+                delta |= static_cast<ui64>(byte & 0x7F) << shift;
+                shift += 7;
+                if ((byte & 0x80) == 0) {
+                    break;
+                }
+            }
+            if (delta == 0) {
+                return res;
+            }
+            prev += delta;
+            res.insert(prev);
+        }
+
+        return res;
+    }
+
+    std::optional<TFastErase> TPersistentBufferBarriersManager::Erase(ui64 tabletId, const std::set<ui64>& lsns,
+        TPersistentBufferSpaceAllocator& allocator) {
+        if (allocator.GetFreeSpace() < 2 || lsns.size() < 2) {
+            return std::nullopt;
+        }
+        auto& erase = Erases[tabletId];
+        auto newLsns = erase.Lsns;
+        auto barrier = GetBarrier(tabletId);
+        auto it = newLsns.lower_bound(barrier);
+        if (it != newLsns.end()) {
+            ++it;
+        }
+        newLsns.erase(newLsns.begin(), it);
+        newLsns.insert(lsns.begin(), lsns.end());
+        TPersistentBufferHeader header;
+        if (!Compact(newLsns, &header.Erase.CompactLsns[0])) {
+            return std::nullopt;
+        }
+        erase.Lsns = std::move(newLsns);
+        auto oldChunkIdx = erase.ChunkIdx;
+        auto oldSectorIdx = erase.SectorIdx;
+        auto space = allocator.Occupy(1);
+        Y_ABORT_UNLESS(space.size() == 1);
+        erase.ChunkIdx = space[0].ChunkIdx;
+        erase.SectorIdx = space[0].SectorIdx;
+
+        memset(&header, 0, sizeof(TPersistentBufferHeader));
+        memcpy(header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
+        header.Flags = TPersistentBufferHeader::IS_ERASE;
+        header.RecordLsn = ++erase.HeaderLsn;
+        header.PersistentBufferUniqueId = PersistentBufferUniqueId;
+        header.NodeId = NodeId;
+        header.PDiskId = PDiskId;
+        header.SlotId = SlotId;
+        header.Erase.TabletId = tabletId;
+        header.Erase.EraseIdx = 0;
+        return std::make_optional(TFastErase{oldChunkIdx, oldSectorIdx, erase.ChunkIdx, erase.SectorIdx, header});
+    }
+
+    bool TPersistentBufferBarriersManager::AddErase(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx) {
+        if ((header->Flags & TPersistentBufferHeader::IS_ERASE) == 0) {
+            return false;
+        }
+        auto tabletId = header->Erase.TabletId;
+        auto& erase = Erases[tabletId];
+        if (erase.HeaderLsn > header->RecordLsn) {
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ", (TabletId, tabletId), (erase.HeaderLsn, erase.HeaderLsn), (header->RecordLsn, header->RecordLsn));
+            return false;
+        }
+        erase.ChunkIdx = chunkIdx;
+        erase.SectorIdx = sectorIdx;
+        erase.HeaderLsn = header->RecordLsn;
+        erase.Lsns = Uncompact(&header->Erase.CompactLsns[0]);
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase", (TabletId, tabletId), (HeaderLsn, header->RecordLsn));
+        return true;
+    }
+
+    void TPersistentBufferBarriersManager::RestoreErases(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
+        for (auto& [tid, erase] : Erases) {
+            allocator.MarkOccupied({{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx}});
+
+            for (auto it = persistentBuffers.lower_bound({tid, 0});
+                it != persistentBuffers.end() && std::get<0>(it->first) == tid;) {
+                TPersistentBuffer& buffer = it->second;
+                for (ui64 lsn : erase.Lsns) {
+                    STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found", (TabletId, tid), (Lsn, lsn));
+                    buffer.Records.erase(lsn);
+                }
+                if (buffer.Records.empty()) {
+                    auto eraseIt = it++;
+                    persistentBuffers.erase(eraseIt);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
+    ui32 TPersistentBufferBarriersManager::GetErasesCount(ui64 tabletId) {
+        const auto& it = Erases.find(tabletId);
+        if (it == Erases.end()) {
+            return 0;
+        }
+        return it->second.Lsns.size();
+    }
+
 }

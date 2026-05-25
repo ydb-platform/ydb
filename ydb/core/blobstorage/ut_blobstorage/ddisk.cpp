@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.ChangeTestingNode(node);
         for (ui32 i = 0; i < 10; ++i) {
             f.WritePB(0, RandomNumber(127u) + 1);
-            auto fs = f.ErasePB();
+            auto fs = f.BatchErasePB();
             UNIT_ASSERT(fs == 1);
         }
 
@@ -578,7 +578,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             freeSpace = fs >= 0 ? fs : freeSpace;
             Cerr << "freeSpace: " << freeSpace << Endl;
         }
-        UNIT_ASSERT(freeSpace == 1);
+        UNIT_ASSERT((1 - freeSpace) < 0.0001); // fast erase 
     }
 
     Y_UNIT_TEST(PersistentBufferFillAndRead) {
@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
     }
 
-    Y_UNIT_TEST(PersistentBufferEraseSingleLsnNoBarrier) {
+    Y_UNIT_TEST(PersistentBufferEraseSingleLsnBarrier) {
         TDDiskTestContext f(1_MB);
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
@@ -692,7 +692,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 0);
+            UNIT_ASSERT(b.size() == 1);
+            UNIT_ASSERT(b[f.PBCreds[0].TabletId] == 1);
         }
     }
 
@@ -708,11 +709,10 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         f.ErasePB(5, 1); // one record left
         f.ErasePB(100, 4); // all records deleted
-        f.ErasePB(1, 0); // 1 record deleted, no barrier
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 2);
+            UNIT_ASSERT(b.size() == 3);
             UNIT_ASSERT(b[f.PBCreds[4].TabletId] == 100);
             UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
         }

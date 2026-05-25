@@ -502,6 +502,7 @@ struct TPersistentBufferFormat {
             TInstant LastLsnTimestamp;
             ui32 LsnsCount;
             ui64 Size;
+            ui32 FastErasesCount;
         };
 
         struct TOpStats {

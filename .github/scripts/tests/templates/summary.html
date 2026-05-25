@@ -16,29 +16,6 @@
         h1 { 
             font-size: 20px; 
         }
-        .report-header {
-            background-color: #f6f8fa;
-            border: 1px solid #d0d7de;
-            border-radius: 6px;
-            padding: 16px;
-            margin: 16px 0;
-        }
-        .report-header h2 {
-            margin: 0 0 8px 0;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        .report-header p {
-            margin: 4px 0;
-            font-size: 14px;
-        }
-        .report-header a {
-            color: #0969da;
-            text-decoration: none;
-        }
-        .report-header a:hover {
-            text-decoration: underline;
-        }
         th {
             text-transform: uppercase;
         }
@@ -79,68 +56,33 @@
         span.test_mute {
             color: blue;
         }
-        
-        span.test_fail_sanitizer {
-            color: #ff4500;  /* Dark orange to distinguish from regular red */
-            background-color: #fff5ee;  /* Light orange background */
-            padding: 2px 4px;
-            border-radius: 3px;
-            border-left: 3px solid #ff4500;
+        .svg_passed {
+            fill: green;
         }
-        
-        span.test_error_sanitizer {
-            color: #ff4500;  /* Dark orange to distinguish from regular red */
-            background-color: #fff5ee;  /* Light orange background */
-            padding: 2px 4px;
-            border-radius: 3px;
-            border-left: 3px solid #ff4500;
+    
+        .svg_failure {
+            fill: red;
         }
-        .issue-button {
-            display: inline-block;
-            background-color: #f6f8fa;
-            border: 1px solid #d0d7de;
-            border-radius: 6px;
-            color: #0969da;
-            padding: 2px 6px;
-            font-size: 11px;
-            font-weight: 500;
-            text-decoration: none;
-            margin-left: 8px;
+    
+        .svg_skipped {
+            fill: gray;
+        }
+    
+        .svg_mute {
+            fill: blue;
+        }
+
+        .svg-icon {
+            float: left;
+            width: 14px;
+            height: 14px;
+            padding-left: 1px;
+            padding-right: 1px;
+            margin-right: 0px;
+            border-radius: 50%;
+            position: relative; /* Essential for tooltips */
             cursor: pointer;
-            transition: background-color 0.2s, border-color 0.2s;
         }
-
-        .issue-button:hover {
-            background-color: #f3f4f6;
-            border-color: #d0d7de;
-            text-decoration: none;
-        }
-
-        .success-rate-button {
-            background-color: #0366d6;
-            color: white;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 500;
-            white-space: nowrap;
-            min-width: 0;
-        }
-        .success-rate-button:hover {
-            background-color: #0256cc;
-        }
-        .emoji {
-            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
-            font-style: normal;
-            font-variant: normal;
-            font-weight: normal;
-            line-height: 1;
-            display: inline-block;
-            vertical-align: middle;
-        }
-
         .button {
             display: inline-flex;
             align-items: center;
@@ -302,22 +244,6 @@
         table > tbody > tr > td:nth-child(4) {
             text-align: left;
         }
-        
-        /* Status column styling */
-        th.status-column,
-        td.status-column {
-            width: 60px;
-            min-width: 50px;
-            max-width: 60px;
-            text-align: center;
-        }
-        
-        /* Ensure status text is centered */
-        td.status-column span.test_status {
-            display: inline-block;
-            width: 100%;
-            text-align: center;
-        }
     
         .collapsible-content {
             display: table-row-group;
@@ -395,7 +321,7 @@
             overflow: auto;
         }
 
-        /* Modal window styles */
+        /* Стили для модального окна */
         #errorModal {
             display: none;
             position: fixed;
@@ -417,23 +343,14 @@
             border-radius: 5px;
             max-height: 80vh;
             overflow-y: auto;
-            position: relative;
         }
     
         .close-modal {
             color: #aaa;
+            float: right;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            line-height: 1;
-            padding: 0;
-            z-index: 1;
-        }
-        .close-modal:hover {
-            color: #000;
         }
         
         .modal-header {
@@ -458,122 +375,6 @@
             display: inline-block;
             width: 80px;
         }
-        
-        /* Success rate modal styles */
-        #successRateModal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: rgba(0,0,0,0.5);
-            padding: 16px;
-            box-sizing: border-box;
-        }
-        #successRateModal .modal-content {
-            width: min(1200px, 90vw);
-            max-width: 90vw;
-            max-height: 90vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            margin: 2% auto;
-            position: relative;
-        }
-        #successRateModal .modal-header {
-            flex-shrink: 0;
-        }
-        #successRateModalTitle {
-            font-size: 14px;
-            word-break: break-word;
-        }
-        #successRateModalContent {
-            overflow-y: auto;
-            overflow-x: hidden;
-            flex: 1 1 auto;
-            min-height: 0;
-            padding-right: 10px;
-        }
-        #successRateModalContent::-webkit-scrollbar {
-            width: 8px;
-        }
-        #successRateModalContent::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 4px;
-        }
-        #successRateModalContent::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 4px;
-        }
-        #successRateModalContent::-webkit-scrollbar-thumb:hover {
-            background: #555;
-        }
-        .sr-runs {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-        .sr-runs span[data-tooltip] {
-            position: relative;
-        }
-        .sr-runs span[data-tooltip]:hover::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #333;
-            color: white;
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: nowrap;
-            z-index: 1000;
-            margin-bottom: 5px;
-            pointer-events: none;
-            opacity: 1;
-            transition: opacity 0.1s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }
-        .sr-runs span[data-tooltip]:hover::before {
-            content: '';
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 5px solid transparent;
-            border-top-color: #333;
-            z-index: 1001;
-            margin-bottom: -5px;
-            pointer-events: none;
-        }
-        .sr-table-wrap {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            max-width: 100%;
-            margin: 0 -4px;
-            padding: 0 4px;
-        }
-        .sr-table-wrap table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        .sr-table-wrap thead th {
-            background-color: #f6f8fa;
-            border-bottom: 2px solid #d0d7de;
-            padding: 10px;
-            text-align: left;
-        }
-        .sr-table-wrap tbody td {
-            padding: 10px;
-            border-bottom: 1px solid #d0d7de;
-        }
-        .sr-table-wrap tbody tr:last-child td {
-            border-bottom: none;
-        }
 </style>
 <script>
     function findParentBySelector(elm, selector) {
@@ -593,8 +394,31 @@
     }
 
     function copyTestNameToClipboard(text) {
-        const cmdArg = getTestRunCommand(text);
-        if (!cmdArg) return;
+        const full_name = text.trim();
+        let pieces 
+        if (full_name.includes('.py.'))
+        {
+            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(full_name);
+        } else
+        {
+            pieces = /(.+)\/([^$]+)$/.exec(full_name);
+        }
+
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
+
+        const namePieces = testName.split('.');
+
+        if (namePieces.length === 2) {
+            testName = namePieces[0] + '::' + namePieces[1];
+        } else {
+            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+        }
+
+        const cmdArg = `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
 
         console.log(cmdArg);
 
@@ -609,10 +433,16 @@
         );
     }
     function copyTestNameForMuteToClipboard(text) {
-        const parsed = parseTestName(text);
-        if (!parsed) return;
-        
-        const [path, testName] = parsed;
+        const full_name = text.trim();
+        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
+
+        if (!pieces) {
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
+        }
+        let [path, testName] = [pieces[1], pieces[2]];
+
+
         const cmdArg = `${path} ${testName}`;
 
         console.log(cmdArg);
@@ -628,306 +458,34 @@
         );
     }
 
-    // Configuration constants
-    const MAX_URL_LENGTH = 8000; // GitHub URL limit is 8201, stay under 8000 to be safe
-    const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new"; // Base URL for GitHub issues
-
-    // Utility functions
-    function buildGitHubIssueUrl(title, body, labels) {
-        // Body is already partially encoded (contains %0A for newlines, etc.)
-        // Title and labels need to be encoded, but body is already encoded
-        return GITHUB_ISSUE_BASE_URL + "?title=" + encodeURIComponent(title) + "&body=" + body + "&labels=" + encodeURIComponent(labels) + "&type=Bug";
-    }
-
-    // Show tooltip stub to avoid runtime errors (visual feedback provided by icon swap)
-    function showCopiedTooltip() {}
-
-    // Safe percent-encoded truncation helpers
-    function isDecodable(s) {
-        try { decodeURIComponent(s); return true; } catch (e) { return false; }
-    }
-
-    function safeTruncateEncoded(encoded, maxLen) {
-        if (encoded.length <= maxLen) return encoded;
-        let cut = encoded.slice(0, maxLen);
-        // Remove incomplete % sequence at the tail
-        cut = cut.replace(/%(?:[0-9A-Fa-f]{0,2})$/, '');
-        while (cut && !isDecodable(cut)) {
-            if (/%[0-9A-Fa-f]{2}$/.test(cut)) cut = cut.slice(0, -3);
-            else cut = cut.slice(0, -1);
-        }
-        return cut;
-    }
-
-    function parseTestName(full_name) {
-        const trimmed = full_name.trim();
-        let pieces;
-        
-        if (trimmed.includes('.py.')) {
-            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(trimmed);
-        } else {
-            pieces = /(.+)\/([^$]+)$/.exec(trimmed);
-        }
+    function createIssue(test,owner,success_count, fail_count) {
+        const full_name = test.trim();
+        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
 
         if (!pieces) {
-            console.error("Unable to split path/test name from %o", trimmed);
-            return null;
+            console.error("Unable to split path/test name from %o", full_name);
+            return;
         }
+        let [path, testName] = [pieces[1], pieces[2]];
         
-        return [pieces[1], pieces[2]];
-    }
-
-    // Bash/zsh: wrap in single quotes; embedded ' becomes '\'' (close quote, escaped quote, reopen).
-    function bashSingleQuote(s) {
-        return "'" + s.replace(/'/g, "'\\''") + "'";
-    }
-
-    function formatTestCommand(path, testName) {
-        const namePieces = testName.split('.');
-        let filterName = testName;
-        if (namePieces.length === 2) {
-            filterName = namePieces[0] + '::' + namePieces[1];
-        } else if (namePieces.length > 2) {
-            filterName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+        if (success_count + fail_count != 0){
+            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0A%20Success%20rate%20**"+(success_count/(success_count+fail_count)*100)+"%25**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
+            window.open(url, '_blank');
         }
-
-        return `./ya make -ttt {{ build_preset_params }} -F ${bashSingleQuote(filterName)} ${path}`;
-    }
-
-    function getTestRunCommand(test) {
-        const parsed = parseTestName(test);
-        if (!parsed) return "";
-        
-        const [path, testName] = parsed;
-        return formatTestCommand(path, testName);
-    }
-
-    function getOwnerAreaLabel(owner) {
-        const ownerMapping = {{ owner_area_mapping | tojson }};
-        return ownerMapping[owner] || "";
-    }
-
-    function buildLabels(issueType, buildPreset, ownerAreaLabel) {
-        let labels = [];
-        
-        if (issueType === 'mute') {
-            labels.push('mute');
-        } else {
-            labels.push('bug');
-            
-            if (issueType === 'sanitizer') {
-                labels.push('sanitizer');
-                
-                if (buildPreset.includes("asan")) {
-                    labels.push("asan");
-                } else if (buildPreset.includes("msan")) {
-                    labels.push("msan");
-                } else if (buildPreset.includes("tsan")) {
-                    labels.push("tsan");
-                }
-            }
+        else {
+            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
+            window.open(url, '_blank');
         }
-        
-        if (ownerAreaLabel) {
-            labels.push(ownerAreaLabel);
-        }
-        
-        return labels.join(',');
-    }
-
-    // Encode each '/'-separated segment with encodeURIComponent; '/' stays a separator
-    // (so '+' in a test name becomes %2B, not a space).
-    function encodePathSegmentsForUrl(path) {
-        return path.split('/').map(function(part) {
-            return encodeURIComponent(part);
-        }).join('/');
-    }
-
-    // Same as encodePathSegmentsForUrl, then double '%' for values embedded in the
-    // GitHub issue-creation URL body=... (GitHub decodes once; %252B → %2B in markdown).
-    function encodePathForBodyUrl(path) {
-        return encodePathSegmentsForUrl(path).replace(/%/g, '%25');
-    }
-
-    function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, successRates, logUrls, errorText, reportUrl) {
-        let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
-        
-        // Add type-specific header
-        if (issueType === 'sanitizer') {
-            // No header for sanitizer issues as requested
-        } else if (issueType === 'mute') {
-            body += "**Test mute request**%0A%0A";
-        } else {
-            body += "**Test Failure**%0A%0A";
-        }
-        
-        // Build information
-        body += "**Build Information:**%0A";
-        if (commitSha && commitSha !== "") {
-            body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
-        }
-        body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
-        body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
-        
-        // Report link (if available)
-        // Always include report link if reportUrl is provided, even if it's a local file:// URL
-        if (reportUrl && reportUrl.trim() !== "") {
-            // Encode the URL part of the markdown link to prevent special characters (like #) from breaking the link
-            // when the body is used as a URL parameter. This matches the pattern used for other URLs in the body.
-            body += "**Test Report:** [View report](" + encodeURIComponent(reportUrl) + ")%0A%0A";
-        } else {
-            // Log warning if reportUrl is missing
-            console.warn('reportUrl is empty or undefined in buildIssueBody, Test Report link will not be included');
-        }
-        
-        // Run command
-        body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
-        
-        // Owner
-        body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
-        
-        // Success rate (for all issue types)
-        if (successRates) {
-            body += "**Success rate (last 4 days):**%0A";
-            const parts = [];
-            if (successRates.other) {
-                parts.push(branch.toUpperCase() + ": " + successRates.other.rate + "%25 (" + successRates.other.passed + "/" + successRates.other.total + ")");
-            }
-            if (successRates.pr_check) {
-                parts.push("PR-Check: " + successRates.pr_check.rate + "%25 (" + successRates.pr_check.passed + "/" + successRates.pr_check.total + ")");
-            }
-            if (parts.length > 0) {
-                body += parts.join(" | ") + "%0A%0A";
-            } else {
-                body += "No history data available%0A%0A";
-            }
-        }
-        
-        // Always include test run history link
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodePathForBodyUrl(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
-        
-        // Always include report link
-        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
-        
-        return body;
-    }
-
-    function buildBodyWithLengthLimit(baseBody, logUrls, errorText, title, labels, maxUrlLength) {
-        let body = baseBody;
-        
-        // Add logs first
-        if (logUrls && Object.keys(logUrls).length > 0) {
-            let logsSection = "**Logs:**%0A";
-            for (const [logName, logUrl] of Object.entries(logUrls)) {
-                logsSection += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-            }
-            logsSection += "%0A";
-            body += logsSection;
-        }
-        
-        // Try to add error text, checking actual URL length
-        if (errorText && errorText.trim() !== "") {
-            const errorPrefix = "**Error Summary:**%0A```%0A";
-            const errorSuffix = "%0A```%0A%0A";
-            const tooLongMsg = "**Error Summary:**%0A```%0A_Error text is too long to include automatically. Please copy the error text from the test report and paste it here manually._%0A```%0A%0A";
-            
-            const fullErrorText = errorText.trim();
-            const encodedFullError = encodeURIComponent(fullErrorText);
-
-            // Compute minimal overhead URL length (without error content)
-            const minimalSection = errorPrefix + errorSuffix;
-            const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
-            
-            // Check if we can add the full error text
-            if (minimalUrl.length <= maxUrlLength) {
-                const allowedDelta = maxUrlLength - minimalUrl.length;
-                if (encodedFullError.length <= allowedDelta) {
-                    // Error text fits, include it fully
-                    body += errorPrefix + encodedFullError + errorSuffix;
-                    return body;
-                }
-            }
-            
-            // Error text doesn't fit or minimal section doesn't fit - try to add message instead
-            const urlWithMsg = buildGitHubIssueUrl(title, body + tooLongMsg, labels);
-            if (urlWithMsg.length <= maxUrlLength) {
-                body += tooLongMsg;
-            }
-            // If even the message doesn't fit, we skip it entirely
-        }
-        
-        return body;
-    }
-
-    function createIssueGeneric(issueType, test, owner, successRates, is_sanitizer, errorText, logUrls = {}) {
-        const parsed = parseTestName(test);
-        if (!parsed) return;
-        
-        const [path, testName] = parsed;
-        
-        // Get build preset and other contextual information
-        const buildPreset = "{{ build_preset }}";
-        const branch = "{{ branch }}";
-        const commitSha = "{{ commit_sha }}";
-        const testRunCommand = getTestRunCommand(test);
-        const ownerAreaLabel = getOwnerAreaLabel(owner);
-        
-        // Get report URL - use current page URL (the report page itself)
-        const reportUrl = window.location.href;
-        
-        // Log warning if reportUrl is empty (shouldn't happen in normal browser context)
-        if (!reportUrl || reportUrl.trim() === "") {
-            console.warn('Warning: reportUrl is empty, Test Report link will not be included');
-        }
-        
-        // Determine issue type based on parameters
-        let actualIssueType = issueType;
-        if (is_sanitizer && issueType === 'bug') {
-            actualIssueType = 'sanitizer';
-        }
-        
-        // Create title based on issue type
-        // Don't encode here - encoding will be done in buildGitHubIssueUrl
-        let title;
-        if (actualIssueType === 'sanitizer') {
-            title = "Sanitizer error in " + path + "/" + testName;
-        } else if (actualIssueType === 'mute') {
-            title = "Mute test " + path + "/" + testName;
-        } else {
-            title = "Test failure in " + path + "/" + testName;
-        }
-        
-        // Build body
-        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, successRates, logUrls, errorText, reportUrl);
-        
-        // Build labels
-        const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
-        
-        // Build body with exact length limit checking
-        const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
-        
-        // Create final URL and open
-        const finalUrl = buildGitHubIssueUrl(title, finalBody, labels);
-        window.open(finalUrl, '_blank');
-    }
-
-    function createIssue(test, owner, successRates, is_sanitizer, errorText, logUrls = {}) {
-        createIssueGeneric('bug', test, owner, successRates, is_sanitizer, errorText, logUrls);
-    }
-
-    function createMuteIssue(test, owner, successRates, errorText = '', logUrls = {}) {
-        createIssueGeneric('mute', test, owner, successRates, false, errorText, logUrls);
+         
     }
 
     function openHistory(test) {
         const full_name = test.trim();
-        const buildPreset = "{{ build_preset }}";
-        const branch = "{{ branch }}";
-        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodePathSegmentsForUrl(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name="+full_name
         window.open(url, '_blank');
     }
 
-    // Function to display test information in a modal window
+    // Функция для отображения информации о тесте в модальном окне
     function showTestInfo(testInfo) {
         const modal = document.getElementById('errorModal');
         const modalTitle = document.getElementById('modalTitle');
@@ -937,21 +495,21 @@
         const modalJob = document.getElementById('modalJob');
         const modalErrorContent = document.getElementById('modalErrorContent');
 
-        // Fill in the information
+        // Заполняем информацию
         modalTitle.textContent = 'Test details: ' + testInfo.testName;
         modalStatus.textContent = testInfo.status;
         modalDate.textContent = testInfo.date;
         
-        // Update the job run link
+        // Обновляем ссылку на запуск
         const jobLink = document.getElementById('modalJobLink');
         jobLink.href = `https://github.com/ydb-platform/ydb/actions/runs/${testInfo.job_id}`;
         jobLink.textContent = testInfo.job_name;
-        // Update the commit link
+        // Обновляем ссылку на коммит
         const shaLink = document.getElementById('modalShaLink');
         shaLink.href = `https://github.com/ydb-platform/ydb//commit/${testInfo.commit}`;
         shaLink.textContent = testInfo.commit.substring(0, 8);
         
-        // Status class
+        // Класс для статуса
         modalStatus.className = '';
         if (testInfo.status === 'passed') {
             modalStatus.classList.add('test_pass');
@@ -961,15 +519,15 @@
             modalStatus.classList.add('test_mute');
         }
         
-        // Error text handling
+        // Обработка текста ошибки
         if (testInfo.errorText && testInfo.errorText.trim() !== "") {
             document.getElementById('modalErrorSection').style.display = 'block';
             modalErrorContent.textContent = testInfo.errorText;
             
-            // Determine language for syntax highlighting
+            // Определяем язык для подсветки синтаксиса
             modalErrorContent.className = 'language-' + (testInfo.testName.includes('.py') ? 'python' : 'cpp');
             
-            // Activate syntax highlighting
+            // Активируем подсветку синтаксиса
             if (typeof Prism !== 'undefined') {
                 Prism.highlightElement(modalErrorContent);
             }
@@ -977,7 +535,7 @@
             document.getElementById('modalErrorSection').style.display = 'none';
         }
         
-        // Show the modal window
+        // Показываем модальное окно
         modal.style.display = 'block';
     }
     
@@ -1051,8 +609,32 @@
             }    
         });
 
-        // SVG icons are no longer used - replaced with success rate button
-        // History entries are now shown in success rate modal
+        const svgIcons = document.querySelectorAll('.svg-icon');
+        svgIcons.forEach(icon => {
+            icon.addEventListener('click', function(event) {
+                event.stopPropagation();
+                
+                // Получаем данные для модального окна
+                const testName = icon.getAttribute('data-test-name');
+                const status = icon.getAttribute('data-status');
+                const date = icon.getAttribute('data-date');
+                const errorText = icon.getAttribute('data-error');
+                const commit = icon.getAttribute('data-commit');
+                const job_name = icon.getAttribute('data-job-name');
+                const job_id = icon.getAttribute('data-job-id');
+                
+                // Открываем модальное окно с данными
+                showTestInfo({
+                    testName: testName,
+                    status: status,
+                    date: date,
+                    errorText: errorText,
+                    commit: commit,
+                    job_name: job_name,
+                    job_id: job_id
+                });
+            });
+        });
         
         const copyButtons = document.querySelectorAll(".copy");
         copyButtons.forEach(button => {
@@ -1077,105 +659,18 @@
         });
         const createIssueButton = document.querySelectorAll(".create_issue");
         createIssueButton.forEach(button => {
-            button.addEventListener('click', async function(event) {
+            button.addEventListener('click', function(event) {
                 event.preventDefault();
-                const testRow = findParentBySelector(event.target,'tr');
-                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
-                const owner = testRow.querySelector('.test_owner').innerText;
-                
-                // Get success rates from testSuccessRates (same data used for the button)
-                let successRates = null;
-                try {
-                    if (Object.keys(testSuccessRates).length === 0) {
-                        await getTestSuccessRates().catch((e) => {
-                            console.warn('Failed to load success rates for issue creation:', e);
-                        });
-                    }
-                    successRates = testSuccessRates[testName] || null;
-                } catch (e) {
-                    console.warn('Failed to load success rates for issue creation:', e);
-                }
-                
-                // Check if this is a sanitizer issue by looking for the SANITIZER badge
-                const is_sanitizer = testRow.querySelector('.test_name span[style*="background-color: #ff4500"]') !== null;
-                
-                // Get error text from the test description if available
-                let errorText = '';
-                const errorButton = testRow.querySelector('.error-button');
-                if (errorButton && errorButton.nextElementSibling) {
-                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
-                    if (errorContent) {
-                        errorText = errorContent.textContent;
-                    }
-                }
-                
-                // Extract log URLs from the test row
-                let logUrls = {};
-                const logCell = testRow.querySelector('td.log-column');
-                if (logCell) {
-                    const logLinks = logCell.querySelectorAll('a');
-                    logLinks.forEach(link => {
-                        const logName = link.textContent.trim();
-                        const logUrl = link.href;
-                        if (logName && logUrl) {
-                            logUrls[logName] = logUrl;
-                        }
-                    });
-                }
+                const success_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_passed').length
+                const fail_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_failure').length + findParentBySelector(event.target,'tr').querySelectorAll('.svg_mute').length
 
-                createIssue(testName, owner, successRates, is_sanitizer, errorText, logUrls);
+                createIssue(
+                    findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText,
+                    findParentBySelector(event.target,'tr').querySelector('.test_owner').innerText,
+                    success_count,fail_count
+                );
             });
         });
-        
-        const createMuteIssueButton = document.querySelectorAll(".create_mute_issue");
-        createMuteIssueButton.forEach(button => {
-            button.addEventListener('click', async function(event) {
-                event.preventDefault();
-                const testRow = findParentBySelector(event.target,'tr');
-                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
-                const owner = testRow.querySelector('.test_owner').innerText;
-                
-                // Get success rates from testSuccessRates (same data used for the button)
-                let successRates = null;
-                try {
-                    if (Object.keys(testSuccessRates).length === 0) {
-                        await getTestSuccessRates().catch((e) => {
-                            console.warn('Failed to load success rates for issue creation:', e);
-                        });
-                    }
-                    successRates = testSuccessRates[testName] || null;
-                } catch (e) {
-                    console.warn('Failed to load success rates for issue creation:', e);
-                }
-                
-                // Get error text from the test description if available
-                let errorText = '';
-                const errorButton = testRow.querySelector('.error-button');
-                if (errorButton && errorButton.nextElementSibling) {
-                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
-                    if (errorContent) {
-                        errorText = errorContent.textContent;
-                    }
-                }
-                
-                // Extract log URLs from the test row
-                let logUrls = {};
-                const logCell = testRow.querySelector('td.log-column');
-                if (logCell) {
-                    const logLinks = logCell.querySelectorAll('a');
-                    logLinks.forEach(link => {
-                        const logName = link.textContent.trim();
-                        const logUrl = link.href;
-                        if (logName && logUrl) {
-                            logUrls[logName] = logUrl;
-                        }
-                    });
-                }
-
-                createMuteIssue(testName, owner, successRates, errorText, logUrls);
-            });
-        });
-
 
         const headers = document.querySelectorAll(".collapsible-header");
         headers.forEach(header => {
@@ -1196,457 +691,18 @@
             toggleAllTables('collapse');
         });
         
-        // Handler for closing modal windows
-        document.querySelectorAll('.close-modal').forEach(closeBtn => {
-            closeBtn.onclick = function(event) {
-                event.stopPropagation();
-                // Find parent modal
-                let modal = this.closest('.modal');
-                if (!modal) {
-                    // Try to find by id
-                    modal = document.getElementById('errorModal');
-                    if (!modal) {
-                        modal = document.getElementById('successRateModal');
-                    }
-                }
-                if (modal) {
-                    modal.style.display = 'none';
-                }
-            };
-        });
+        // Обработчик для закрытия модального окна
+        document.querySelector('.close-modal').onclick = function() {
+            document.getElementById('errorModal').style.display = 'none';
+        }
         
-        // Close on click outside the modal window
+        // Закрытие при клике вне модального окна
         window.onclick = function(event) {
-            const errorModal = document.getElementById('errorModal');
-            const successRateModal = document.getElementById('successRateModal');
-            if (event.target == errorModal) {
-                errorModal.style.display = 'none';
-            }
-            if (event.target == successRateModal) {
-                successRateModal.style.display = 'none';
+            const modal = document.getElementById('errorModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
             }
         }
-        
-        // Close modals on Escape key - close only the topmost (last opened) modal
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape' || event.keyCode === 27) {
-                const errorModal = document.getElementById('errorModal');
-                const successRateModal = document.getElementById('successRateModal');
-                
-                // Check which modal is currently visible (has display: block)
-                // Close only the one that is visible, prioritizing errorModal (test details) if both are visible
-                // errorModal (test details) is typically opened on top of successRateModal
-                if (errorModal && errorModal.style.display === 'block') {
-                    errorModal.style.display = 'none';
-                } else if (successRateModal && successRateModal.style.display === 'block') {
-                    successRateModal.style.display = 'none';
-                }
-            }
-        });
-        
-        // Add click handlers for success rate buttons
-        document.addEventListener('click', function(e) {
-            const button = e.target.closest('.success-rate-button');
-            if (!button) return;
-            
-            const testFullName = button.getAttribute('data-test-full-name');
-            if (!testFullName) return;
-            
-            showSuccessRateModal(testFullName);
-        });
-    });
-    
-    // Data loading and success rate modal functions
-    const dataFileUrl = "{{ data_file_url }}";
-    let testData = null;
-    let dataLoadPromise = null;
-    
-    // Lazy load test data from JSON file
-    async function loadTestData() {
-        if (testData) {
-            return testData;
-        }
-        if (dataLoadPromise) {
-            return dataLoadPromise;
-        }
-        
-        // Check if we're in a local file:// context (CORS will fail)
-        const isLocalFile = window.location.protocol === 'file:';
-        
-        // For local file:// protocol, fetch won't work due to CORS
-        // Return empty data structure immediately to avoid errors
-        if (isLocalFile) {
-            console.warn('Local file mode detected (file://). JSON data cannot be loaded via fetch due to CORS restrictions.');
-            console.warn('For local testing, use a local web server: python3 -m http.server 8000');
-            testData = {
-                history_for_js: {},
-                history_descriptions: {},
-                test_descriptions: {},
-                test_success_rates: {}
-            };
-            return Promise.resolve(testData);
-        }
-        
-        dataLoadPromise = fetch(dataFileUrl)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Failed to load data: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('Test data loaded successfully. Keys:', Object.keys(data));
-                testData = data;
-                return testData;
-            })
-            .catch(error => {
-                console.error('Error loading test data from JSON file:', error);
-                console.error('Data file URL:', dataFileUrl);
-                // Return empty data structure on error
-                testData = {
-                    history_for_js: {},
-                    history_descriptions: {},
-                    test_descriptions: {},
-                    test_success_rates: {}
-                };
-                return testData;
-            });
-        
-        return dataLoadPromise;
-    }
-    
-    // Initialize with empty data structures (will be populated when needed)
-    let testHistory = {};
-    let historyDescriptions = {};
-    let testDescriptions = {};
-    let testSuccessRates = {};
-    
-    // Helper functions to get data (with lazy loading)
-    async function getTestHistory() {
-        if (Object.keys(testHistory).length === 0) {
-            const data = await loadTestData();
-            testHistory = data.history_for_js || {};
-        }
-        return testHistory;
-    }
-    
-    async function getHistoryDescriptions() {
-        if (Object.keys(historyDescriptions).length === 0) {
-            const data = await loadTestData();
-            historyDescriptions = data.history_descriptions || {};
-        }
-        return historyDescriptions;
-    }
-    
-    async function getTestDescriptions() {
-        if (Object.keys(testDescriptions).length === 0) {
-            const data = await loadTestData();
-            testDescriptions = data.test_descriptions || {};
-        }
-        return testDescriptions;
-    }
-    
-    async function getTestSuccessRates() {
-        if (Object.keys(testSuccessRates).length === 0) {
-            const data = await loadTestData();
-            testSuccessRates = data.test_success_rates || {};
-        }
-        return testSuccessRates;
-    }
-    
-    // Flag to prevent multiple simultaneous updates
-    let isUpdatingButtons = false;
-    
-    // Update success rate buttons with loaded data
-    async function updateSuccessRateButtons() {
-        // Prevent multiple simultaneous calls
-        if (isUpdatingButtons) {
-            return;
-        }
-        
-        isUpdatingButtons = true;
-        try {
-            const branch = "{{ branch }}";
-            const buttons = document.querySelectorAll('.success-rate-button');
-            
-            // If no buttons, nothing to update
-            if (buttons.length === 0) {
-                return;
-            }
-            
-            // If no data yet, load it once and then proceed
-            if (Object.keys(testSuccessRates).length === 0) {
-                await getTestSuccessRates().catch((e) => {
-                    console.warn('Failed to load success rates:', e);
-                });
-            }
-        
-            let updatedCount = 0;
-            buttons.forEach(button => {
-                const testFullName = button.getAttribute('data-test-full-name');
-                if (!testFullName) {
-                    console.warn('Button missing data-test-full-name attribute');
-                    return;
-                }
-                
-                const rates = testSuccessRates[testFullName];
-                if (!rates) {
-                    // Don't log every missing test to avoid spam
-                    return;
-                }
-                
-                const rateText = button.querySelector('.success-rate-text');
-                if (!rateText) {
-                    console.warn('Button missing .success-rate-text element for test:', testFullName);
-                    return;
-                }
-                
-                let text = '';
-                if (rates.other) {
-                    text += branch.toUpperCase() + ':' + rates.other.rate + '%';
-                }
-                if (rates.other && rates.pr_check) {
-                    text += ' | ';
-                }
-                if (rates.pr_check) {
-                    text += 'PR:' + rates.pr_check.rate + '%';
-                }
-                
-                if (text) {
-                    rateText.textContent = text;
-                    updatedCount++;
-                }
-            });
-            // Only log if we actually updated something
-            if (updatedCount > 0) {
-                console.log('Updated', updatedCount, 'success rate buttons');
-            }
-        } finally {
-            isUpdatingButtons = false;
-        }
-    }
-    
-    async function showSuccessRateModal(testFullName) {
-        const modal = document.getElementById('successRateModal');
-        const modalTitle = document.getElementById('successRateModalTitle');
-        const modalContent = document.getElementById('successRateModalContent');
-        
-        // Load data asynchronously
-        const [history, rates] = await Promise.all([
-            getTestHistory(),
-            getTestSuccessRates()
-        ]);
-
-        // After data is loaded, also refresh buttons so the clicked one updates
-        updateSuccessRateButtons();
-        
-        if (!history || !history[testFullName] || !rates || !rates[testFullName]) {
-            modalTitle.textContent = `Success Rate: ${testFullName}`;
-            modalContent.innerHTML = '<div style="padding: 20px;"><p>No history data available for this test.</p><p>History is collected for the last 4 days for failed, error, and muted tests.</p></div>';
-            modal.style.display = 'block';
-            return;
-        }
-        
-        const testRates = rates[testFullName];
-        const historyEntries = history[testFullName];
-        
-        // Build modal content
-        let html = '<div style="margin-bottom: 20px;">';
-        html += '<h3>Overall Success Rate (Last 4 Days)</h3>';
-        html += '<div style="display: flex; gap: 30px; margin: 15px 0;">';
-        if (testRates.other) {
-            html += `<div><strong>Branch Runs:</strong> ${testRates.other.rate}% (${testRates.other.passed}/${testRates.other.total})</div>`;
-        }
-        if (testRates.pr_check) {
-            html += `<div><strong>PR-Check:</strong> ${testRates.pr_check.rate}% (${testRates.pr_check.passed}/${testRates.pr_check.total})</div>`;
-        }
-        html += '</div></div>';
-        
-        // Group history by date and calculate daily success rates
-        const historyByDate = {};
-        for (const timestamp in historyEntries) {
-            const entry = historyEntries[timestamp];
-            if (!entry) continue;
-            
-            // Safely get date - handle both 'date' and 'datetime' fields
-            const dateStr = entry.date || entry.datetime || '';
-            if (!dateStr) continue;
-            
-            const date = dateStr.split(' ')[0]; // Get date part only
-            if (!date) continue;
-            
-            if (!historyByDate[date]) {
-                historyByDate[date] = {
-                    pr_check: { passed: 0, total: 0 },
-                    other: { passed: 0, total: 0 },
-                    entries: []
-                };
-            }
-            const isPrCheck = entry.job_name && (
-                entry.job_name.toLowerCase().includes('pr-check') ||
-                entry.job_name.toLowerCase().includes('pr_check') ||
-                entry.job_name.toLowerCase().includes('pr/check')
-            );
-            const group = isPrCheck ? 'pr_check' : 'other';
-            historyByDate[date][group].total++;
-            if (entry.status === 'passed') {
-                historyByDate[date][group].passed++;
-            }
-            historyByDate[date].entries.push({
-                timestamp: timestamp,
-                entry: entry
-            });
-        }
-        
-        // Sort dates (newest first)
-        const sortedDates = Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a));
-        
-        html += '<h3>Daily History</h3>';
-        html += '<div class="sr-table-wrap"><table class="sr-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">';
-        html += '<thead><tr style="background-color: #f6f8fa; border-bottom: 2px solid #d0d7de;">';
-        html += '<th style="padding: 10px; text-align: left;">Date</th>';
-        const branch = "{{ branch }}";
-        html += `<th style="padding: 10px; text-align: center;">Success Rate Branch (${branch})</th>`;
-        html += `<th style="padding: 10px; text-align: left;">Runs in Branch (${branch})</th>`;
-        html += '<th style="padding: 10px; text-align: center;">Success Rate PR-Check</th>';
-        html += '<th style="padding: 10px; text-align: left;">Runs in PR-Check</th>';
-        html += '</tr></thead><tbody>';
-        
-        for (const date of sortedDates) {
-            const dayData = historyByDate[date];
-            const prRate = dayData.pr_check.total > 0 
-                ? ((dayData.pr_check.passed / dayData.pr_check.total) * 100).toFixed(1)
-                : '-';
-            const otherRate = dayData.other.total > 0
-                ? ((dayData.other.passed / dayData.other.total) * 100).toFixed(1)
-                : '-';
-            
-            // Sort entries by timestamp (newest first) and separate by type
-            dayData.entries.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
-            
-            // Separate entries by type
-            const prCheckEntries = dayData.entries.filter(({ entry }) => {
-                const jobName = entry.job_name || '';
-                return jobName.toLowerCase().includes('pr-check') ||
-                       jobName.toLowerCase().includes('pr_check') ||
-                       jobName.toLowerCase().includes('pr/check');
-            });
-            const otherEntries = dayData.entries.filter(({ entry }) => {
-                const jobName = entry.job_name || '';
-                return !jobName.toLowerCase().includes('pr-check') &&
-                       !jobName.toLowerCase().includes('pr_check') &&
-                       !jobName.toLowerCase().includes('pr/check');
-            });
-            
-            html += `<tr style="border-bottom: 1px solid #d0d7de;">`;
-            html += `<td style="padding: 10px;"><strong>${date}</strong></td>`;
-            
-            // Column 1: Success Rate Branch (main)
-            html += `<td style="padding: 10px; text-align: center;">${dayData.other.total > 0 ? `${otherRate}% (${dayData.other.passed}/${dayData.other.total})` : '-'}</td>`;
-            
-            // Column 2: Runs in Branch (main)
-            html += `<td style="padding: 10px;"><div class="sr-runs">`;
-            for (const { timestamp, entry } of otherEntries) {
-                if (!entry) continue;
-                const status = entry.status || 'unknown';
-                const date = entry.date || entry.datetime || '';
-                const jobName = entry.job_name || '';
-                const statusColor = status === 'passed' ? '#28a745' : 
-                                   status === 'failure' ? '#dc3545' : '#007bff';
-                const statusSymbol = status === 'passed' ? '\u2713' : 
-                                    status === 'failure' ? '\u2717' : '\u2298';
-                const tooltipText = `${status} - ${date} - ${jobName}`;
-                html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
-                html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
-                html += `data-tooltip="${tooltipText.replace(/"/g, '&quot;')}" title="${tooltipText.replace(/"/g, '&quot;')}">`;
-                html += `${statusSymbol}</span>`;
-            }
-            html += '</div></td>';
-            
-            // Column 3: Success Rate PR-Check
-            html += `<td style="padding: 10px; text-align: center;">${dayData.pr_check.total > 0 ? `${prRate}% (${dayData.pr_check.passed}/${dayData.pr_check.total})` : '-'}</td>`;
-            
-            // Column 4: Runs in PR-Check
-            html += `<td style="padding: 10px;"><div class="sr-runs">`;
-            for (const { timestamp, entry } of prCheckEntries) {
-                if (!entry) continue;
-                const status = entry.status || 'unknown';
-                const date = entry.date || entry.datetime || '';
-                const jobName = entry.job_name || '';
-                const statusColor = status === 'passed' ? '#28a745' : 
-                                   status === 'failure' ? '#dc3545' : '#007bff';
-                const statusSymbol = status === 'passed' ? '\u2713' : 
-                                    status === 'failure' ? '\u2717' : '\u2298';
-                const tooltipText = `${status} - ${date} - ${jobName}`;
-                html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
-                html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
-                html += `data-tooltip="${tooltipText.replace(/"/g, '&quot;')}" title="${tooltipText.replace(/"/g, '&quot;')}">`;
-                html += `${statusSymbol}</span>`;
-            }
-            html += '</div></td></tr>';
-        }
-        html += '</tbody></table>';
-        html += '</div>'; // sr-table-wrap
-        
-        modalTitle.textContent = `Success Rate: ${testFullName}`;
-        modalContent.innerHTML = html;
-        modal.style.display = 'block';
-    }
-    
-    async function showHistoryEntry(testName, timestamp) {
-        const history = await getTestHistory();
-        if (!history || !history[testName] || !history[testName][timestamp]) return;
-        
-        const entry = history[testName][timestamp];
-        const timestampStr = String(timestamp);
-        // Get error text from separate historyDescriptions object
-        const descs = await getHistoryDescriptions();
-        const errorText = descs[testName] && descs[testName][timestampStr] ? descs[testName][timestampStr] : '';
-        
-        // Find the test row to get log URLs
-        // Search for test name in all rows
-        const allRows = document.querySelectorAll('tbody tr');
-        let testRow = null;
-        for (const row of allRows) {
-            const testNameCell = row.querySelector('.test_name span');
-            if (testNameCell && testNameCell.textContent.trim() === testName) {
-                testRow = row;
-                break;
-            }
-        }
-        const logUrls = {};
-        if (testRow) {
-            const logCell = testRow.querySelector('td.log-column');
-            if (logCell) {
-                const logLinks = logCell.querySelectorAll('a');
-                logLinks.forEach(link => {
-                    logUrls[link.textContent.trim()] = link.href;
-                });
-            }
-        }
-        
-        showTestInfo({
-            testName: testName,
-            status: entry.status || '',
-            date: entry.date || entry.datetime || '',
-            errorText: errorText,
-            commit: entry.commit || '',
-            job_name: entry.job_name || '',
-            job_id: entry.job_id || '',
-            logUrls: logUrls
-        });
-    }
-    
-    function closeSuccessRateModal() {
-        const modal = document.getElementById('successRateModal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-    }
-    
-    // Initialize success rate buttons on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        updateSuccessRateButtons();
     });
     function toggleError(button) {
     const errorContent = button.nextElementSibling;
@@ -1664,57 +720,24 @@
 </script>
 </head>
 <body>
-    {% if pr_url or workflow_url %}
-    <div class="report-header">
-        <h2>Test Report Information</h2>
-        {% if pr_url %}
-        <p><strong>Pull Request:</strong> <a href="{{ pr_url }}" target="_blank">PR #{{ pr_number }}</a></p>
-        {% endif %}
-        {% if workflow_url %}
-        <p><strong>Workflow Run:</strong> <a href="{{ workflow_url }}" target="_blank">{{ workflow_run_id }}</a></p>
-        {% endif %}
-        <p><strong>Build Preset:</strong> {{ build_preset }}</p>
-        <p><strong>Branch:</strong> {{ branch }}</p>
-    </div>
-    {% endif %}
     <div class="toggle-visibility-buttons">
         <button id="expand-all">Expand All</button>
         <button id="collapse-all">Collapse All</button>
     </div>
 {% for status in status_order %}
-{% set sanitizer_count = tests[status] | selectattr('is_sanitizer_issue') | list | length %}
-{% set timeout_count = tests[status] | selectattr('is_timeout_issue') | list | length %}
-{% set xfailed_count = tests[status] | selectattr('is_xfailed_issue') | list | length %}
-{% set verify_count = tests[status] | selectattr('is_verify_issue') | list | length %}
-{% set not_launched_count = tests[status] | selectattr('is_not_launched') | list | length %}
-<h1 id="{{ status.name}}" class="collapsible-header">
-    {{ status.name }} ({{ tests[status] | length }})
-    {% if sanitizer_count > 0 %}
-        <span style="color: #ff4500; font-weight: bold;">- {{ sanitizer_count }} SANITIZER ISSUE{{ 's' if sanitizer_count != 1 else '' }}</span>
-    {% endif %}
-    {% if timeout_count > 0 %}
-        <span style="color: #ff8c00; font-weight: bold;">- {{ timeout_count }} TIMEOUT ISSUE{{ 's' if timeout_count != 1 else '' }}</span>
-    {% endif %}
-    {% if xfailed_count > 0 %}
-        <span style="color: #6f42c1; font-weight: bold;">- {{ xfailed_count }} XFAILED ISSUE{{ 's' if xfailed_count != 1 else '' }}</span>
-    {% endif %}
-    {% if verify_count > 0 %}
-        <span style="color: #b22222; font-weight: bold;">- {{ verify_count }} VERIFY ISSUE{{ 's' if verify_count != 1 else '' }}</span>
-    {% endif %}
-    {% if not_launched_count > 0 %}
-        <span style="color: #6c757d; font-weight: bold;">- {{ not_launched_count }} NOT LAUNCHED ISSUE{{ 's' if not_launched_count != 1 else '' }}</span>
-    {% endif %}
-</h1>
+<h1 id="{{ status.name}}" class="collapsible-header">{{ status.name }} ({{ tests[status] | length }})</h1>
 <table class="collapsible-content active" border="1">
     <thead>
     <tr>
         <th>test owner</th>
         <th>test name</th>
     {% if status.is_error  and history%}
-        <th>Success rate</th>
+        <th>history<br>
+            old->new
+        </th>
     {% endif %}
         <th>elapsed</th>
-        <th class="status-column">status</th>
+        <th>status</th>
     {% if status in has_any_log %}
         <th>LOG</th>
     {% endif %}
@@ -1732,24 +755,6 @@
         <td class="test_name">
         {% endif %}
             <span>{{ t.full_name }}</span>
-            {% if status.is_error %}
-                <button class="issue-button create_issue" title="Create issue">+ ISSUE</button>
-            {% endif %}
-            {% if t.is_sanitizer_issue %}
-                <span style="background-color: #ff4500; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">SANITIZER</span>
-            {% endif %}
-            {% if t.is_timeout_issue %}
-                <span style="background-color: #ff8c00; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">TIMEOUT</span>
-            {% endif %}
-            {% if t.is_xfailed_issue %}
-                <span style="background-color: #6f42c1; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">XFAILED</span>
-            {% endif %}
-            {% if t.is_verify_issue %}
-                <span style="background-color: #b22222; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">VERIFY</span>
-            {% endif %}
-            {% if t.is_not_launched %}
-                <span style="background-color: #6c757d; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">NOT LAUNCHED</span>
-            {% endif %}
             {% if status.is_error %}
             <div class="button-group">
                 <button class="button" title="Show options">
@@ -1770,7 +775,7 @@
                         </div>
                         <span class="button-text">Copy run command</span>
                     </button>
-                    {% if status.is_error %} 
+                    {% if status.name == "FAIL" %} 
                     <button class="button mute" title="Copy mute string to clipboard" >
                         <div class="icon-container"> 
                             <svg  class="mute_svg"  xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
@@ -1786,7 +791,7 @@
                         </div>
                         <span class="button-text">Copy mute string</span>
                     </button>
-                    <button class="button create_mute_issue" title="Create mute issue">
+                    <button class="button create_issue" title="Create issue">
                         <div class="icon-container"> 
                             <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
                                 <!-- First icon: plus -->
@@ -1801,7 +806,6 @@
                         </div>
                         <span class="button-text">Create mute issue</span>
                     </button>
-
                      {% endif %}
                     <button class="button open_history" title="Show history">
                         <div class="icon-container"> 
@@ -1827,26 +831,48 @@
             <button class="error-button" onclick="toggleError(this)"></button>
             <div style="display: none;" class="error-content">
                 <div class="console-frame" style="display: none;">
-                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") | e }}</code></pre>
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") }}</code></pre>
                 </div>
             </div>
             {% endif %}
         </td>
-        {% if status.is_error and history %}
+        {% if (status.is_error and t.full_name in history) %}
         <td>
-            {% if t.full_name in history %}
-            <button class="success-rate-button" data-test-full-name="{{ t.full_name|e }}" data-action="show-success-rate" title="View success rate and history">
-                <span class="success-rate-text">No history</span>
-            </button>
+            {% for h in history[t.full_name] %}
+                <span class="svg-icon" 
+                      data-test-name="{{ t.full_name }}" 
+                      data-status="{{ history[t.full_name][h].status }}" 
+                      data-date="{{ history[t.full_name][h].datetime }}" 
+                      data-error="{{ history[t.full_name][h].status_description }}" 
+                      data-commit="{{ history[t.full_name][h].commit }}"
+                      data-job-name="{{ history[t.full_name][h].job_name }}[{{ history[t.full_name][h].branch}}:{{ build_preset }}]"
+                      data-job-id="{{ history[t.full_name][h].job_id }}">
+                    {% if history[t.full_name][h].status == 'failure' %}
+                    <svg class="svg_failure" viewBox="0 0 16 16" >
+                        <path  fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'passed' %}
+                    <svg class="svg_passed" viewBox="0 0 16 16" >
+                        <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                    </svg>
+                    {% elif history[t.full_name][h].status == 'mute' %}
+                    <svg class="svg_mute" viewBox="0 0 17 16" >
+                        <path  fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>                    </svg>
+                    </svg>
                     {% endif %}
+                </span>
+            {% endfor %}
         </td> 
+        {% elif (status.is_error and  history) %}
+        <td></td>
+        {% elif status.is_error %}
         {% endif %}
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
-        <td class="status-column">
+        <td>
             <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>
         </td>
         {% if status in has_any_log %}
-        <td class="log-column">
+        <td>
             {% if t.log_urls %}
                 {% for log_name, log_url in t.log_urls.items() %}
                 <a href="{{ log_url }}">{{ log_name }}</a>{% if not loop.last %} | {% endif %}
@@ -1863,18 +889,7 @@
 </table>
 {% endfor %}
 
-<!-- Modal window for success rate and detailed history -->
-<div id="successRateModal" class="modal">
-    <div class="modal-content">
-        <span class="close-modal">&times;</span>
-        <div class="modal-header">
-            <h2 id="successRateModalTitle">Test Success Rate</h2>
-        </div>
-        <div id="successRateModalContent"></div>
-    </div>
-</div>
-
-<!-- Modal window for detailed error display -->
+<!-- Модальное окно для детального отображения ошибок -->
 <div id="errorModal" class="modal">
     <div class="modal-content">
         <span class="close-modal">&times;</span>

@@ -32,9 +32,6 @@ void TClientCommandInternalRoot::Config(TConfig& config) {
 }
 
 int NewInternalClient(int argc, char** argv) {
-    // Settings follow opensource `ydb` (ydb/apps/ydb), not internal kikimr/public/tools/ydb.
-    // Differences vs `ydb`: no StorageUrl (and therefore no update/version commands) since
-    // ydb_int is built from sources rather than distributed via release storage.
     NYdb::NConsoleClient::TClientSettings settings;
     settings.EnableSsl = true;
     settings.UseAccessToken = true;

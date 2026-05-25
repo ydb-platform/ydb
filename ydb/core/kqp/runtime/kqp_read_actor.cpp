@@ -752,14 +752,15 @@ public:
         return state->RetryAttempt + 1 > MaxShardRetries();
     }
 
-    void RetryRead(ui64 id, bool allowInstantRetry = true, bool throttled = false) {
+    void RetryRead(ui64 id, bool allowInstantRetry = true, std::optional<TDuration> throttleDelay = std::nullopt) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 
         auto* state = Reads[id].Shard;
 
-        if (!throttled) {
+        TDuration delay;
+        if (!throttleDelay) {
             if (CheckTotalRetriesExeeded()) {
                 return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
                     NDqProto::StatusIds::UNAVAILABLE);
@@ -771,9 +772,11 @@ public:
                 return ResolveShard(state);
             }
             ++state->RetryAttempt;
+            delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
 
-        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry && !throttled); // TODO: account potential quota shortage
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }
@@ -1031,13 +1034,15 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
-                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
-                if (!isThrottled && (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id))) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!throttleDelay && (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id))) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
                 }
-                return RetryRead(id, false, isThrottled);
+                return RetryRead(id, false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
                 if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {

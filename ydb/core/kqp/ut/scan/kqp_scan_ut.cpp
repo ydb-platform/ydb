@@ -2825,7 +2825,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
-                    resp->Record.SetThrottled(true);
+                    resp->Record.SetThrottleDelayMs(1);
                     runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
                     ++throttleResponded;
                     return true;
@@ -2928,7 +2928,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
-                    resp->Record.SetThrottled(true);
+                    resp->Record.SetThrottleDelayMs(1);
                     runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
                     ++throttleResponded;
                     return true;
@@ -3036,7 +3036,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
-                    resp->Record.SetThrottled(true);
+                    resp->Record.SetThrottleDelayMs(1);
                     runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
                     ++throttleResponded;
                     return true;
@@ -3134,7 +3134,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
-                    resp->Record.SetThrottled(true);
+                    resp->Record.SetThrottleDelayMs(1);
                     runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
                     ++throttleResponded;
                     return true;
@@ -3248,7 +3248,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
                     resp->Record.SetReadId(record.GetReadId());
                     resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
-                    resp->Record.SetThrottled(true);
+                    resp->Record.SetThrottleDelayMs(1);
                     runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
                     ++throttleResponded;
                     return true;

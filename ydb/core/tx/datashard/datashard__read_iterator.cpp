@@ -2086,7 +2086,7 @@ public:
                 TStringBuilder() << "Read quota for resource pool exceeded" // TODO: add pool id
                     << " (shard# " << Self->TabletID()
                     << " node# " << ctx.SelfID.NodeId() << ")");
-            Result->Record.SetThrottled(true);
+            Result->Record.SetThrottleDelayMs(schedulableRead->EstimateQuotaDelay(TDuration::MilliSeconds(10)).MilliSeconds());
             return EExecutionStatus::DelayComplete;
         }
 

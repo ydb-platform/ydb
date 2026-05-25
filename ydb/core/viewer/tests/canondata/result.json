@@ -5637,7 +5637,7 @@
                 "BusProxyPort": 2134,
                 "ProxyBusQueueConfig": {
                     "Name": "",
-                    "NumWorkers": 14
+                    "NumWorkers": "not-zero-number"
                 },
                 "ProxyBusSessionConfig": {
                     "ConnectTimeout": "15000000",
@@ -5647,8 +5647,8 @@
                     "ExecuteOnReplyInWorkerPool": true,
                     "ListenPort": 0,
                     "MaxBufferSize": "1048576",
-                    "MaxInFlight": "13200442",
-                    "MaxInFlightBySize": "13517252812",
+                    "MaxInFlight": "not-zero-number-text",
+                    "MaxInFlightBySize": "not-zero-number-text",
                     "MaxMessageSize": 27262976,
                     "Name": "",
                     "NumRetries": 0,
@@ -6684,7 +6684,7 @@
                 "BusProxyPort": 2134,
                 "ProxyBusQueueConfig": {
                     "Name": "",
-                    "NumWorkers": 14
+                    "NumWorkers": "not-zero-number"
                 },
                 "ProxyBusSessionConfig": {
                     "ConnectTimeout": "15000000",
@@ -6694,8 +6694,8 @@
                     "ExecuteOnReplyInWorkerPool": true,
                     "ListenPort": 0,
                     "MaxBufferSize": "1048576",
-                    "MaxInFlight": "13200442",
-                    "MaxInFlightBySize": "13517252812",
+                    "MaxInFlight": "not-zero-number-text",
+                    "MaxInFlightBySize": "not-zero-number-text",
                     "MaxMessageSize": 27262976,
                     "Name": "",
                     "NumRetries": 0,
@@ -7731,7 +7731,7 @@
                 "BusProxyPort": 2134,
                 "ProxyBusQueueConfig": {
                     "Name": "",
-                    "NumWorkers": 14
+                    "NumWorkers": "not-zero-number"
                 },
                 "ProxyBusSessionConfig": {
                     "ConnectTimeout": "15000000",
@@ -7741,8 +7741,8 @@
                     "ExecuteOnReplyInWorkerPool": true,
                     "ListenPort": 0,
                     "MaxBufferSize": "1048576",
-                    "MaxInFlight": "13200442",
-                    "MaxInFlightBySize": "13517252812",
+                    "MaxInFlight": "not-zero-number-text",
+                    "MaxInFlightBySize": "not-zero-number-text",
                     "MaxMessageSize": 27262976,
                     "Name": "",
                     "NumRetries": 0,

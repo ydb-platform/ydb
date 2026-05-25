@@ -641,8 +641,11 @@ class TestViewer(object):
     def normalize_result_viewer_config(cls, result):
         """Normalize dynamic local cluster settings returned by /viewer/config."""
         return cls.replace_values_by_key(result, {'BackendFileName',
+                                                  'MaxInFlight',
+                                                  'MaxInFlightBySize',
                                                   'MonitoringPort',
                                                   'NetDataFilePath',
+                                                  'NumWorkers',
                                                   'Port',
                                                   'StartupConfigYaml',
                                                   })

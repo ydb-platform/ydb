@@ -122,7 +122,10 @@ void TSimpleCoreFacility::WorkerLoop() {
 
         for (auto& task : ready) {
             if (task) {
-                task();
+                try {
+                    task();
+                } catch (...) {
+                }
             }
         }
     }

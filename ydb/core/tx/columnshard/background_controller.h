@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
+#include <ydb/core/tx/priorities/usage/abstract.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
@@ -16,6 +17,8 @@ private:
     using TCurrentCompaction = THashMap<std::pair<TInternalPathId, TString>, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
+    ui32 MaxInflightCompactions = 1;
+    std::shared_ptr<NPrioritiesQueue::TAllocationGuard> CompactionSessionGuard;
 
     std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
@@ -68,6 +71,35 @@ public:
 
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();
+    }
+
+    bool CanStartMoreCompactions() const {
+        return GetCompactionsCount() < MaxInflightCompactions;
+    }
+
+    ui32 GetMaxInflightCompactions() const {
+        return MaxInflightCompactions;
+    }
+
+    void SetMaxInflightCompactions(const ui32 maxInflight) {
+        MaxInflightCompactions = Max<ui32>(1, maxInflight);
+    }
+
+    bool HasCompactionSession() const {
+        return static_cast<bool>(CompactionSessionGuard);
+    }
+
+    const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& GetCompactionSessionGuard() const {
+        return CompactionSessionGuard;
+    }
+
+    void SetCompactionSessionGuard(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+        CompactionSessionGuard = guard;
+    }
+
+    void ClearCompactionSession() {
+        CompactionSessionGuard.reset();
+        MaxInflightCompactions = 1;
     }
 
     void StartCleanupPortions() {

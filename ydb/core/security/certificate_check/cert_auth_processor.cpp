@@ -13,6 +13,8 @@
 #include <util/generic/string.h>
 #include <util/string/hex.h>
 
+#include <limits>
+
 namespace NKikimr {
 
 X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsPEM(const TStringBuf& cert) {
@@ -30,7 +32,7 @@ X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsPEM(const TStrin
 }
 
 X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsDER(const TStringBuf& cert) {
-    if (cert.size() > std::numeric_limits<long>::max()) {
+    if (cert.empty() || cert.size() > std::numeric_limits<long>::max()) {
         return {};
     }
 

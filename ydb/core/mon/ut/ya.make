@@ -9,11 +9,13 @@ PEERDIR(
     ydb/core/mon
     ydb/core/mon/ut_utils
     ydb/core/testlib/default
+    ydb/core/testlib/audit_helpers
     ydb/library/aclib
     ydb/library/actors/core
 )
 
 SRCS(
+    mon_audit_ut.cpp
     mon_ut.cpp
 )
 

@@ -545,11 +545,11 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
-        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         if (ActorMonPage->AuthMode == TMon::EAuthMode::ExtractOnly) {
             // Extract token but don't enforce authorization - let the handler decide
             SendRequest(&result);
@@ -1179,11 +1179,11 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
-        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         if (Fields.AuthMode == TMon::EAuthMode::ExtractOnly) {
             // Extract token but don't enforce authorization - let the handler decide
             SendRequest(&result);
@@ -1375,11 +1375,11 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
-        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         if (AuthMode == TMon::EAuthMode::ExtractOnly) {
             // Extract token but don't enforce authorization - let the handler decide
             ProcessRequest();

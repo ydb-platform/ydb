@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/testlib/default
     ydb/library/aclib
 )
 

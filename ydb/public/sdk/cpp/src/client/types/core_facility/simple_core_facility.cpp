@@ -45,13 +45,18 @@ void TSimpleCoreFacility::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration 
 }
 
 void TSimpleCoreFacility::PostToResponseQueue(TPostTaskCb&& f) {
-    std::lock_guard lock(Mutex_);
-    if (Stop_) {
+    if (!f) {
         return;
     }
-    EnqueueTaskNoLock(TClock::now(), std::move(f));
-
-    Cv_.notify_one();
+    {
+        std::lock_guard lock(Mutex_);
+        if (!Stop_) {
+            EnqueueTaskNoLock(TClock::now(), std::move(f));
+            Cv_.notify_one();
+            return;
+        }
+    }
+    f();
 }
 
 void TSimpleCoreFacility::EnqueueTaskNoLock(TTimePoint executeAt, TPostTaskCb&& task) {

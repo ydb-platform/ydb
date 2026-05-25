@@ -1379,23 +1379,25 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
         const int flags = F_NULLABLE | (Covered ? F_COVERING : 0);
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+        kikimr.RunCall([&] {
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableAndVectorIndex(db, flags);
 
-        if (Followers) {
-            std::vector<TString> tableNames = {
-                "/Root/TestTable",
-                "/Root/TestTable/index1/indexImplLevelTable",
-                "/Root/TestTable/index1/indexImplPostingTable"
-            };
-            for (const TString& tableName: tableNames) {
-                const TString alterTable(Q_(Sprintf(R"(
-                    ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
-                )", tableName.c_str())));
-                auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(alterTable).ExtractValueSync(); });
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (Followers) {
+                std::vector<TString> tableNames = {
+                    "/Root/TestTable",
+                    "/Root/TestTable/index1/indexImplLevelTable",
+                    "/Root/TestTable/index1/indexImplPostingTable"
+                };
+                for (const TString& tableName: tableNames) {
+                    const TString alterTable(Q_(Sprintf(R"(
+                        ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
+                    )", tableName.c_str())));
+                    auto result = session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                }
             }
-        }
+        });
 
         constexpr static ui32 levelType = 1, postingType = 2, mainType = 3;
         constexpr static ui32 followerTypeFlag = 8;
@@ -1457,6 +1459,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )"));
 
             auto result = kikimr.RunCall([&] {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
                 return session.ExecuteDataQuery(query1, TTxControl::BeginTx(
                     Followers ? TTxSettings::StaleRO() : TTxSettings::SerializableRW()).CommitTx())
                     .ExtractValueSync();

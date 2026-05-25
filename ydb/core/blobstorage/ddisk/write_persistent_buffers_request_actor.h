@@ -14,6 +14,7 @@ namespace NKikimr::NDDisk {
             ui64 Cookie;
             ui64 TabletId;
             ui32 TabletGeneration;
+            ui64 DDiskSessionSeqNo;
             ui32 RequestGeneration;
             ui64 Lsn;
             ui32 Timeout;

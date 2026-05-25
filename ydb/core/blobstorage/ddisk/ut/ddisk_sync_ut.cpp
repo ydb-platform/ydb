@@ -119,9 +119,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
     Y_UNIT_TEST(SessionMismatch) {
         TTestContext ctx;
 
-        NDDisk::TQueryCredentials creds;
-        creds.TabletId = 30;
-        creds.Generation = 1;
+        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForDDisk(30, 1, 1);
 
         auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
             creds,

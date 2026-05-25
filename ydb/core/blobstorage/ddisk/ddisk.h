@@ -51,21 +51,35 @@ namespace NKikimr::NDDisk {
         ui32 Generation;
         std::optional<ui64> DDiskInstanceGuid;
         bool FromPersistentBuffer = false;
+        ui64 DDiskSessionSeqNo = 0;
 
-        TQueryCredentials() = default;
+        static TQueryCredentials ForDDisk(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
+            return TQueryCredentials(tabletId, generation, std::nullopt, false, ddiskSessionSeqNo);
+        }
 
-        TQueryCredentials(ui64 tabletId, ui32 generation, std::optional<ui64> ddiskInstanceGuid, bool fromPersistentBuffer = false)
-            : TabletId(tabletId)
-            , Generation(generation)
-            , DDiskInstanceGuid(ddiskInstanceGuid)
-            , FromPersistentBuffer(fromPersistentBuffer)
-        {}
+        static TQueryCredentials ForPersistentBuffer(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
+            return TQueryCredentials(tabletId, generation, std::nullopt, true, ddiskSessionSeqNo);
+        }
+
+        static TQueryCredentials ForPersistentBuffer(
+                ui64 tabletId,
+                ui32 generation,
+                ui64 ddiskSessionSeqNo,
+                ui64 ddiskInstanceGuid) {
+            return TQueryCredentials(
+                tabletId,
+                generation,
+                std::make_optional(ddiskInstanceGuid),
+                true,
+                ddiskSessionSeqNo);
+        }
 
         TQueryCredentials(const NKikimrBlobStorage::NDDisk::TQueryCredentials& pb)
             : TabletId(pb.GetTabletId())
             , Generation(pb.GetGeneration())
             , DDiskInstanceGuid(pb.HasDDiskInstanceGuid() ? std::make_optional(pb.GetDDiskInstanceGuid()) : std::nullopt)
             , FromPersistentBuffer(pb.GetFromPersistentBuffer())
+            , DDiskSessionSeqNo(pb.GetDDiskSessionSeqNo())
         {}
 
         void Serialize(NKikimrBlobStorage::NDDisk::TQueryCredentials *pb) const {
@@ -77,7 +91,26 @@ namespace NKikimr::NDDisk {
             if (FromPersistentBuffer) {
                 pb->SetFromPersistentBuffer(FromPersistentBuffer);
             }
+            if (DDiskSessionSeqNo) {
+                pb->SetDDiskSessionSeqNo(DDiskSessionSeqNo);
+            }
         }
+
+    private:
+        TQueryCredentials() = default;
+
+        TQueryCredentials(
+                ui64 tabletId,
+                ui32 generation,
+                std::optional<ui64> ddiskInstanceGuid,
+                bool fromPersistentBuffer,
+                ui64 ddiskSessionSeqNo)
+            : TabletId(tabletId)
+            , Generation(generation)
+            , DDiskInstanceGuid(ddiskInstanceGuid)
+            , FromPersistentBuffer(fromPersistentBuffer)
+            , DDiskSessionSeqNo(ddiskSessionSeqNo)
+        {}
     };
 
     struct TBlockSelector {

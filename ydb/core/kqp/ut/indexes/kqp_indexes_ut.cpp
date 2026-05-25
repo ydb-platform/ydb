@@ -265,11 +265,13 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         TestNoReadFromMainTableBeforeJoin();
     }
 
-    Y_UNIT_TEST(HandleWriteOnlyIndex) {
+        Y_UNIT_TEST_TWIN(HandleWriteOnlyIndex, EnableIndexStreamWrite) {
         using namespace NYql;
         using namespace NYql::NNodes;
 
-        auto setting = NKikimrKqp::TKqpSetting();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        auto setting = NKikimrKqp::TKqpSetting(appConfig);
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -295,17 +297,13 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
             )");
             auto explainResult = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
+            Cerr << "AST: " << explainResult.QueryAst << Endl;
 
             TExprContext exprCtx;
             bool indexUpdated = false;
             bool indexCleaned = false;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
                 [&indexName, &indexUpdated, &indexCleaned](const TExprNode::TPtr& exprNode) mutable {
-                    if (TMaybeNode<TKqpUpsertRows>(exprNode)) {
-                        if (TKqpUpsertRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                            indexUpdated = true;
-                        }
-                    }
                     if (TMaybeNode<TKqpTableSinkSettings>(exprNode)) {
                         if (TKqpTableSinkSettings(exprNode).Table().Path().Value().Contains(indexName)) {
                             if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert") {
@@ -315,11 +313,6 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
                             } else if (TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
                                 indexUpdated = true;
                             }
-                        }
-                    }
-                    if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
-                        if (TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName)) {
-                            indexCleaned = true;
                         }
                     }
                     return true;

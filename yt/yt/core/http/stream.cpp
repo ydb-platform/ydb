@@ -624,7 +624,12 @@ const THeadersPtr& THttpOutput::GetHeaders()
 void THttpOutput::SetHost(TStringBuf host, TStringBuf port)
 {
     if (!port.empty()) {
-        HostHeader_ = Format("%v:%v", host, port);
+        auto parseResult = TNetworkAddress::TryParse(host);
+        if (parseResult.IsOK() && parseResult.Value().IsIP6()) {
+            HostHeader_ = Format("[%v]:%v", host, port);
+        } else {
+            HostHeader_ = Format("%v:%v", host, port);
+        }
     } else {
         HostHeader_ = std::string(host);
     }

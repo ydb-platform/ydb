@@ -571,6 +571,7 @@ constexpr const size_t StorageArenaMinSize = 32_MB;
 struct TDqHashCombineTestParams
 {
     bool DisableStateDehydration = false;
+    bool DisableKeyPassthrough = false;
 };
 
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
@@ -1007,8 +1008,8 @@ protected:
                 auto k = tempKey;
                 for (ui32 i = 0U; i < tempKeySize; ++i) {
                     k->UnRef();
+                    k++;
                 }
-                k++;
             }
 
             if (SampleSpillingInput) {
@@ -1192,7 +1193,7 @@ public:
 
         PrepareForNewBatch();
 
-        if (IsAggregation) {
+        if (IsAggregation && !TestParams.DisableKeyPassthrough) {
             std::vector<ui32> keySourceItems;
             for (const auto& node : Nodes.KeyResultNodes) {
 
@@ -2126,6 +2127,10 @@ public:
         TestParams.DisableStateDehydration = disable;
     }
 
+    virtual void DisableKeyPassthrough(const bool disable) override {
+        TestParams.DisableKeyPassthrough = disable;
+    }
+
 #if !defined(MKQL_DISABLE_CODEGEN)
     TGenerateResult DoGenGetValues(
         const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override
@@ -2441,6 +2446,11 @@ public:
     virtual void DisableStateDehydration(const bool disable) override {
         TestParams.DisableStateDehydration = disable;
     }
+
+    virtual void DisableKeyPassthrough(const bool disable) override {
+        TestParams.DisableKeyPassthrough = disable;
+    }
+
 
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {

@@ -1,11 +1,19 @@
 #include "kqp_operator.h"
+
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
 
 using TStatus = NYql::IGraphTransformer::TStatus;
 
 namespace {
+
 using namespace NKikimr;
 using namespace NKqp;
 using namespace NYql;
@@ -468,14 +476,11 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
 }
 
-}
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
     for (auto it = begin(); it != end(); it++) {
-        auto status = ::ComputeTypes((*it).Current, ctx, PlanProps);
+        auto status = ::NKikimr::NKqp::ComputeTypes((*it).Current, ctx, PlanProps);
         if (status != TStatus::Ok) {
             return status;
         }
@@ -483,5 +488,4 @@ TStatus TOpRoot::ComputeTypes(TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-}
-}
+} // namespace NKikimr::NKqp

@@ -36,8 +36,6 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 GRANT 'CREATE TABLE' ON `.metadata/workload_manager/pools` TO `user1@domain`;
 ```
 
-## Примеры {#examples}
-
 ```yql
 CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=20,

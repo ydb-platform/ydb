@@ -44,7 +44,7 @@ public:
   template <class T>
   Context SetValues(T &values) noexcept
   {
-    Context context                  = Context(values);
+    Context context(values);
     nostd::shared_ptr<DataList> last = context.head_;
     while (last->next_ != nullptr)
     {
@@ -59,7 +59,7 @@ public:
   // exisiting list to the end of the new list.
   Context SetValue(nostd::string_view key, ContextValue value) noexcept
   {
-    Context context      = Context(key, std::move(value));
+    Context context(key, std::move(value));
     context.head_->next_ = head_;
     return context;
   }
@@ -92,11 +92,11 @@ private:
   // A linked list to contain the keys and values of this context node
   struct DataList
   {
-    char *key_ = nullptr;
+    char *key_{nullptr};
 
     nostd::shared_ptr<DataList> next_{nullptr};
 
-    size_t key_length_ = 0UL;
+    size_t key_length_{};
 
     ContextValue value_;
 
@@ -108,7 +108,7 @@ private:
     {
       bool first = true;
       auto *node = this;
-      for (auto &iter : keys_and_vals)
+      for (const auto &iter : keys_and_vals)
       {
         if (first)
         {
@@ -126,29 +126,28 @@ private:
     // Builds a data list with just a key and value, so it will just be the head
     // and returns that head.
     DataList(nostd::string_view key, ContextValue value)
+        : key_{new char[key.size()]},
+          next_{nostd::shared_ptr<DataList>{nullptr}},
+          key_length_{key.size()},
+          value_{std::move(value)}
     {
-      key_        = new char[key.size()];
-      key_length_ = key.size();
       std::memcpy(key_, key.data(), key.size() * sizeof(char));
-      next_  = nostd::shared_ptr<DataList>{nullptr};
-      value_ = std::move(value);
     }
 
-    DataList(const DataList &other)
-        : key_(new char[other.key_length_]),
-          next_(other.next_),
-          key_length_(other.key_length_),
-          value_(other.value_)
-    {
-      std::memcpy(key_, other.key_, other.key_length_ * sizeof(char));
-    }
+    // Delete unused special member functions
+    DataList(const DataList &other)            = delete;
+    DataList(DataList &&other) noexcept        = delete;
+    DataList &operator=(const DataList &other) = delete;
 
+    // Move assignment operator is only called by DataList(const T &keys_and_vals)
+    // The moved to object has default member values
     DataList &operator=(DataList &&other) noexcept
     {
       key_length_ = other.key_length_;
       value_      = std::move(other.value_);
       next_       = std::move(other.next_);
 
+      // key_ has a default nullptr value and does not need to be deleted before this assignment
       key_       = other.key_;
       other.key_ = nullptr;
 

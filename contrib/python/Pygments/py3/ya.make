@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.19.2)
+VERSION(2.20.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -225,6 +225,7 @@ PY_SRCS(
     pygments/lexers/rdf.py
     pygments/lexers/rebol.py
     pygments/lexers/rego.py
+    pygments/lexers/rell.py
     pygments/lexers/resource.py
     pygments/lexers/ride.py
     pygments/lexers/rita.py

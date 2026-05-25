@@ -63,13 +63,13 @@ CreateAsyncDoubleMetricProcessContextSwitches(metrics::Meter *meter)
 }
 
 /**
-  Total CPU seconds broken down by different states.
+  Total CPU seconds broken down by different CPU modes.
   <p>
   counter
  */
 static constexpr const char *kMetricProcessCpuTime = "process.cpu.time";
 static constexpr const char *descrMetricProcessCpuTime =
-    "Total CPU seconds broken down by different states.";
+    "Total CPU seconds broken down by different CPU modes.";
 static constexpr const char *unitMetricProcessCpuTime = "s";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricProcessCpuTime(

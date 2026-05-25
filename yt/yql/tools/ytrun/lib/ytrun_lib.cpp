@@ -130,6 +130,12 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmr-coordinator-url", "Fmr coordinator URL")
             .Optional()
             .StoreResult(&FmrCoordinatorUrl_);
+        opts.AddLongOption("fmr-coordinator-yson-path", "Path to YSON file with coordinator settings")
+            .Optional()
+            .StoreResult(&CoordinatorYsonPath_);
+        opts.AddLongOption("fmr-worker-yson-path", "Path to YSON file with worker settings")
+            .Optional()
+            .StoreResult(&WorkerYsonPath_);
         opts.AddLongOption("tvm-cfg", "TVM configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
             TFacadeRunOptions::ParseProtoConfig(file, &TvmConfig_);
         });
@@ -243,6 +249,8 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     fmrServices.YtJobService = NFmr::MakeYtJobSerivce();
     fmrServices.YtCoordinatorService = NFmr::MakeYtCoordinatorService();
     fmrServices.FmrOperationSpecFilePath = FmrOperationSpecFilePath_;
+    fmrServices.CoordinatorYsonPath = CoordinatorYsonPath_;
+    fmrServices.WorkerYsonPath = WorkerYsonPath_;
     fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(NFmr::TFmrUserJobLauncherOptions{
         .RunInSeparateProcess = true,
         .FmrJobBinaryPath = FmrJobBin_,

@@ -5,13 +5,13 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/iterator/zip.h>
@@ -44,7 +44,7 @@ bool IsSingleKey(const TKqlKeyRange& range, const TKikimrTableMetadata& tableMet
     return true;
 }
 
-} // namespace
+} // anonymous namespace
 
 TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, TExprContext& ctx) {
     TMaybeNode<TDqConnection> precomputeInput;

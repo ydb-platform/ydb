@@ -162,6 +162,8 @@ struct TEquiJoinLinkSettings {
     bool ForceSortedMerge = false;
     bool Compact = false;
     TVector<TString> JoinAlgoOptions;
+    // Left join side is enforced to be star join center if flag is set
+    bool ForceStar = false;
 
     TVector<NDq::TJoinColumn> ShuffleLhsBy;
     TVector<NDq::TJoinColumn> ShuffleRhsBy;

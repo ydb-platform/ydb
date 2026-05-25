@@ -89,6 +89,7 @@ from textual.renderables.blank import Blank
 from textual.rlock import RLock
 from textual.selection import Selection
 from textual.strip import Strip
+from textual.style import NULL_STYLE
 from textual.style import Style as VisualStyle
 from textual.visual import Visual, VisualType, visualize
 
@@ -307,6 +308,7 @@ class Widget(DOMNode):
     }
     """
     COMPONENT_CLASSES: ClassVar[set[str]] = set()
+    """A set of component classes."""
 
     BORDER_TITLE: ClassVar[str] = ""
     """Initial value for border_title attribute."""
@@ -329,6 +331,9 @@ class Widget(DOMNode):
     FOCUS_ON_CLICK: ClassVar[bool] = True
     """Should focusable widgets be automatically focused on click? Default return value of [Widget.focus_on_click][textual.widget.Widget.focus_on_click]."""
 
+    BLANK: ClassVar[bool] = False
+    """Is this widget blank (no border, no content)? Enable for very large scrolling containers."""
+
     can_focus: bool = False
     """Widget may receive focus."""
     can_focus_children: bool = True
@@ -349,7 +354,7 @@ class Widget(DOMNode):
     loading: Reactive[bool] = Reactive(False)
     """If set to `True` this widget will temporarily be replaced with a loading indicator."""
 
-    virtual_size: Reactive[Size] = Reactive(Size(0, 0), layout=True)
+    virtual_size = Reactive(Size(0, 0), layout=True)
     """The virtual (scrollable) [size][textual.geometry.Size] of the widget."""
 
     has_focus: Reactive[bool] = Reactive(False, repaint=False)
@@ -395,7 +400,7 @@ class Widget(DOMNode):
         "light": lambda widget: not widget.app.current_theme.dark,
         "focus-within": lambda widget: widget.has_focus_within,
         "inline": lambda widget: widget.app.is_inline,
-        "ansi": lambda widget: widget.app.ansi_color,
+        "ansi": lambda widget: widget.app.native_ansi_color,
         "nocolor": lambda widget: widget.app.no_color,
         "first-of-type": lambda widget: widget.first_of_type,
         "last-of-type": lambda widget: widget.last_of_type,
@@ -452,6 +457,9 @@ class Widget(DOMNode):
         """A dict that is refreshed when the widget is resized / refreshed."""
 
         self._visual_style: VisualStyle | None = None
+        """Cached style of visual."""
+        self._visual_style_cache_key: int = -1
+        """Cache busting integer."""
 
         self._render_cache = _RenderCache(_null_size, [])
         # Regions which need to be updated (in Widget)
@@ -681,6 +689,33 @@ class Widget(DOMNode):
     def text_selection(self) -> Selection | None:
         """Text selection information, or `None` if no text is selected in this widget."""
         return self.screen.selections.get(self, None)
+
+    @classmethod
+    def get_common_ancestor(
+        cls, widget1: Widget, widget2: Widget, *, default: Widget | None = None
+    ) -> Widget:
+        """Get a common ancestors to both widgets.
+
+        Raises:
+            ValueError: If there is no common ancestor and `default` is not provided (will not occur if both widgets are attached to the same DOM).
+
+        Args:
+            widget1: A Widget.
+            widget2: A second widgets.
+            default: A widget to return if no common ancestor is found.
+
+        Returns:
+            A common ancestor widgets.
+        """
+        ancestors1 = widget1.ancestors
+        ancestors2 = set(widget2.ancestors)
+        for node in ancestors1:
+            if node in ancestors2:
+                assert isinstance(node, Widget)
+                return node
+        if default is not None:
+            return default
+        raise ValueError("No common ancestor found")
 
     def focus_on_click(self) -> bool:
         """Automatically focus the widget on click?
@@ -1032,6 +1067,7 @@ class Widget(DOMNode):
             self._cover(loading_indicator)
         else:
             self._uncover()
+        self.screen.update_pointer_shape()
 
     def _watch_loading(self, loading: bool) -> None:
         """Called when the 'loading' reactive is changed."""
@@ -1136,19 +1172,32 @@ class Widget(DOMNode):
                 return child
         raise NoMatches(f"No immediate child of type {expect_type}; {self._nodes}")
 
-    def get_component_rich_style(self, *names: str, partial: bool = False) -> Style:
+    def get_component_rich_style(
+        self, *names: str, partial: bool = False, default: Style | None = None
+    ) -> Style:
         """Get a *Rich* style for a component.
 
         Args:
             names: Names of components.
             partial: Return a partial style (not combined with parent).
+            default: A Style to return if any component style doesn't exist.
+
+        Raises:
+            KeyError: If a component style doesn't exist, and no `default` is provided.
 
         Returns:
             A Rich style object.
         """
 
         if names not in self._rich_style_cache:
-            component_styles = self.get_component_styles(*names)
+            if default is None:
+                component_styles = self.get_component_styles(*names)
+            else:
+                try:
+                    component_styles = self.get_component_styles(*names)
+                except KeyError:
+                    return default
+
             style = component_styles.rich_style
             text_opacity = component_styles.text_opacity
             if text_opacity < 1 and style.bgcolor is not None:
@@ -1244,24 +1293,23 @@ class Widget(DOMNode):
         """
         if isinstance(style, VisualStyle):
             return style
-        visual_style = VisualStyle.null()
+
         if style.startswith("."):
+            style_name = style[1:]
             for node in self.ancestors_with_self:
                 if not isinstance(node, Widget):
                     break
                 try:
-                    visual_style = node.get_visual_style(style[1:], partial=True)
-                    break
+                    return node.get_visual_style(style_name, partial=True)
                 except KeyError:
                     continue
             else:
                 raise KeyError(f"No matching component class found for '{style}'")
-            return visual_style
+            return NULL_STYLE
         try:
-            visual_style = VisualStyle.parse(style)
+            return VisualStyle.parse(style)
         except Exception:
-            pass
-        return visual_style
+            return NULL_STYLE
 
     @overload
     def render_str(self, text_content: str) -> Content: ...
@@ -1903,12 +1951,14 @@ class Widget(DOMNode):
             self.highlight_link_id = hover_style.link_id
 
     def watch_scroll_x(self, old_value: float, new_value: float) -> None:
-        self.horizontal_scrollbar.position = new_value
+        if self.show_horizontal_scrollbar:
+            self.horizontal_scrollbar.position = new_value
         if round(old_value) != round(new_value):
             self._refresh_scroll()
 
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
-        self.vertical_scrollbar.position = new_value
+        if self.show_vertical_scrollbar:
+            self.vertical_scrollbar.position = new_value
         if self._anchored and self._anchor_released:
             self._check_anchor()
         if round(old_value) != round(new_value):
@@ -2223,12 +2273,17 @@ class Widget(DOMNode):
         return self.region.shrink(self.styles.gutter).size
 
     @property
+    def _selection_order(self) -> tuple[int, int]:
+        """A tuple of integers used to sort widgets in selection order."""
+        try:
+            x, y, _width, _height = self.screen.find_widget(self).region
+        except (NoScreen, errors.NoWidget):
+            return (0, 0)
+        return y, x
+
+    @property
     def region(self) -> Region:
         """The region occupied by this widget, relative to the Screen.
-
-        Raises:
-            NoScreen: If there is no screen.
-            errors.NoWidget: If the widget is not on the screen.
 
         Returns:
             Region within screen occupied by widget.
@@ -2306,7 +2361,7 @@ class Widget(DOMNode):
         while isinstance(node, Widget) and not node.is_dom_root:
             if node.disabled:
                 return True
-            node = node._parent  # type:ignore[assignment]
+            node = node._parent  # type: ignore[assignment]
         return False
 
     @property
@@ -2645,7 +2700,6 @@ class Widget(DOMNode):
             self._repaint_regions.clear()
             self._styles_cache.clear()
             self._styles_cache.set_dirty(self.size.region)
-
             outer_size = self.outer_size
             self._dirty_regions.add(outer_size.region)
             if outer_size:
@@ -2692,6 +2746,7 @@ class Widget(DOMNode):
         Returns:
             `True` if the scroll position changed, otherwise `False`.
         """
+
         if release_anchor:
             self.release_anchor()
         maybe_scroll_x = x is not None and (self.allow_horizontal_scroll or force)
@@ -2704,6 +2759,7 @@ class Widget(DOMNode):
 
         def _animate_on_complete() -> None:
             """set last scroll time, and invoke callback."""
+            self.app._realtime_animation_complete()
             self._last_scroll_time = monotonic()
             if on_complete is not None:
                 self.call_next(on_complete)
@@ -2720,6 +2776,7 @@ class Widget(DOMNode):
                 assert x is not None
                 self.scroll_target_x = x
                 if x != self.scroll_x:
+                    self.app._realtime_animation_begin()
                     self.animate(
                         "scroll_x",
                         self.scroll_target_x,
@@ -2734,6 +2791,7 @@ class Widget(DOMNode):
                 assert y is not None
                 self.scroll_target_y = y
                 if y != self.scroll_y:
+                    self.app._realtime_animation_begin()
                     self.animate(
                         "scroll_y",
                         self.scroll_target_y,
@@ -2770,7 +2828,7 @@ class Widget(DOMNode):
         Returns:
             `True` if the widget supports text selection, otherwise `False`.
         """
-        return self.ALLOW_SELECT and not self.is_container
+        return self.ALLOW_SELECT
 
     def pre_layout(self, layout: Layout) -> None:
         """This method id called prior to a layout operation.
@@ -3248,6 +3306,7 @@ class Widget(DOMNode):
             force=force,
             on_complete=on_complete,
             level=level,
+            release_anchor=False,
         )
 
     def scroll_up(
@@ -3879,7 +3938,7 @@ class Widget(DOMNode):
             scrollbar_size_vertical = styles.scrollbar_size_vertical
 
         if show_horizontal_scrollbar and show_vertical_scrollbar:
-            (region, _, _, _) = region.split(
+            region, _, _, _ = region.split(
                 -scrollbar_size_vertical,
                 -scrollbar_size_horizontal,
             )
@@ -4092,13 +4151,13 @@ class Widget(DOMNode):
         self._refresh_scrollbars()
         width, height = self.container_size
 
-        if self.show_vertical_scrollbar:
+        if self.show_vertical_scrollbar and self.styles.scrollbar_size_vertical:
             self.vertical_scrollbar.window_virtual_size = virtual_size.height
             self.vertical_scrollbar.window_size = (
                 height - self.scrollbar_size_horizontal
             )
             self.vertical_scrollbar.refresh()
-        if self.show_horizontal_scrollbar:
+        if self.show_horizontal_scrollbar and self.styles.scrollbar_size_horizontal:
             self.horizontal_scrollbar.window_virtual_size = virtual_size.width
             self.horizontal_scrollbar.window_size = width - self.scrollbar_size_vertical
             self.horizontal_scrollbar.refresh()
@@ -4108,7 +4167,12 @@ class Widget(DOMNode):
 
     @property
     def visual_style(self) -> VisualStyle:
-        if self._visual_style is None:
+        """The widget's current style."""
+        if (
+            self._visual_style is None
+            or self._visual_style_cache_key != self.styles._cache_key
+        ):
+            self._visual_style_cache_key = self.styles._cache_key
             background = Color(0, 0, 0, 0)
             color = Color(255, 255, 255, 0)
 
@@ -4149,6 +4213,11 @@ class Widget(DOMNode):
     def get_selection(self, selection: Selection) -> tuple[str, str] | None:
         """Get the text under the selection.
 
+        !!! note
+            Implement this method if are building custom widget. If you just want to get the currently
+            selected text, then see [`Screen.get_selected_text`](textual.screen.Screen.get_selected_text)
+
+
         Args:
             selection: Selection information.
 
@@ -4187,6 +4256,9 @@ class Widget(DOMNode):
         Returns:
             A rendered line.
         """
+        if self.BLANK:
+            return Strip.blank(self.size.width, self.visual_style.rich_style)
+
         if self._dirty_regions:
             self._render_content()
         try:
@@ -4205,7 +4277,12 @@ class Widget(DOMNode):
         Returns:
             A list of list of segments.
         """
-        strips = self._styles_cache.render_widget(self, crop)
+        if self.BLANK:
+            strips = [
+                Strip.blank(crop.width, self.visual_style.rich_style)
+            ] * crop.height
+        else:
+            strips = self._styles_cache.render_widget(self, crop)
         return strips
 
     def get_style_at(self, x: int, y: int) -> Style:

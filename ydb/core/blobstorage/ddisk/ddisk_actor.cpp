@@ -68,7 +68,7 @@ namespace {
     {
         StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
-        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
+        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME || BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_SSD) {
             latencyHistBounds = NvmeLatencyHistBoundsMs;
         } else {
             latencyHistBounds = GetCommonLatencyHistBounds(BaseInfo.DeviceType);
@@ -194,6 +194,7 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);

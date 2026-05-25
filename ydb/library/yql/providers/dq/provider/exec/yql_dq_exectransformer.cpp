@@ -112,7 +112,7 @@ public:
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(lambda);
         program.SetLangVer(State->TypeCtx->LangVer);
-        program.MutableRuntimeSettings()->MergeFrom(NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings));
+        *program.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();
@@ -1446,7 +1446,7 @@ private:
                 fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
                 t.MutableProgram()->SetRaw(lambda);
                 t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
-                t.MutableProgram()->MutableRuntimeSettings()->MergeFrom(NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings));
+                *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
                 Yql::DqsProto::TTaskMeta taskMeta;
                 t.MutableMeta()->UnpackTo(&taskMeta);
@@ -1999,7 +1999,7 @@ private:
                     fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
                     t.MutableProgram()->SetRaw(lambda);
                     t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
-                    t.MutableProgram()->MutableRuntimeSettings()->MergeFrom(NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings));
+                    *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
                     Yql::DqsProto::TTaskMeta taskMeta;
                     t.MutableMeta()->UnpackTo(&taskMeta);

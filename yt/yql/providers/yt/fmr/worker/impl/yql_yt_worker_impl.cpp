@@ -513,6 +513,15 @@ TFmrWorkerSettings GetDefaultWorkerSettings(const TMaybe<NYT::TNode>& configOver
     if (configNode.HasKey("memory_limit_bytes")) {
         settings.MemoryLimitBytes = static_cast<ui64>(configNode["memory_limit_bytes"].AsInt64());
     }
+    if (configNode.HasKey("job_factory")) {
+        auto& jobFactoryNode = configNode["job_factory"];
+        if (jobFactoryNode.HasKey("num_threads")) {
+            settings.JobFactorySettings.NumThreads = jobFactoryNode["num_threads"].AsInt64();
+        }
+        if (jobFactoryNode.HasKey("max_queue_size")) {
+            settings.JobFactorySettings.MaxQueueSize = jobFactoryNode["max_queue_size"].AsInt64();
+        }
+    }
     return settings;
 }
 

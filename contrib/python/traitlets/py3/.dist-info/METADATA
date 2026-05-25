@@ -1,6 +1,6 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: traitlets
-Version: 5.14.3
+Version: 5.15.0
 Summary: Traitlets Python configuration system
 Project-URL: Homepage, https://github.com/ipython/traitlets
 Project-URL: Documentation, https://traitlets.readthedocs.io
@@ -49,13 +49,14 @@ Classifier: License :: OSI Approved :: BSD License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Typing :: Typed
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Provides-Extra: docs
 Requires-Dist: myst-parser; extra == 'docs'
 Requires-Dist: pydata-sphinx-theme; extra == 'docs'
 Requires-Dist: sphinx; extra == 'docs'
 Provides-Extra: test
 Requires-Dist: argcomplete>=3.0.3; extra == 'test'
+Requires-Dist: mypy<1.19,>=1.7.0; (platform_python_implementation == 'PyPy') and extra == 'test'
 Requires-Dist: mypy>=1.7.0; extra == 'test'
 Requires-Dist: pre-commit; extra == 'test'
 Requires-Dist: pytest-mock; extra == 'test'

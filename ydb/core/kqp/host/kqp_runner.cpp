@@ -1,38 +1,34 @@
 #include "kqp_host_impl.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
-#include <ydb/core/kqp/opt/kqp_opt.h>
-#include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
-#include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/opt/kqp_column_statistics_requester.h>
 #include <ydb/core/kqp/opt/kqp_constant_folding_transformer.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/kqp_opt_hash_func_propagate_transformer.h>
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
-#include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
-
-
-#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
-#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
+#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <yql/essentials/core/type_ann/type_ann_expr.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/yql_opt_proposed_by_data.h>
-
+#include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
 
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/is_in.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NOpt;
 using namespace NYql;
@@ -526,7 +522,7 @@ private:
     TActorSystem* ActorSystem;
 };
 
-} // namespace
+} // anonymous namespace
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
@@ -536,5 +532,4 @@ TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, co
     return new TKqpRunner(gateway, cluster, typesCtx, sessionCtx, transformCtx, funcRegistry, actorSystem, usePessimisticLocks);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

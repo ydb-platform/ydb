@@ -20,6 +20,12 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
 
+#include <ydb/library/actors/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/json_writer.h>
+#include <ydb/library/actors/struct_log/meta_writer.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -256,6 +262,9 @@ namespace NActors {
         TDuration WakeupInterval{TDuration::Seconds(5)};
         std::unique_ptr<ILoggerMetrics> Metrics;
         TLogBuffer LogBuffer;
+        NActors::NStructuredLog::TJsonWriter StructuredJsonWriter;
+        NActors::NStructuredLog::TMetaWriter StructuredMetaWriter;
+        NActors::NStructuredLog::TTextWriter StructuredTextWriter;
 
         void BecomeDefunct();
         void FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx);
@@ -272,7 +281,8 @@ namespace NActors {
             const char* fileName,
             ui64 lineNumber,
             const TString& formatted,
-            bool json) noexcept;
+            bool json,
+            const TMaybe<NActors::NStructuredLog::TStructuredMessage>&) noexcept;
         void RenderComponentPriorities(IOutputStream& str);
         void FlushLogBufferMessage();
         void WriteMessageStat(const NLog::TEvLog& ev);
@@ -372,6 +382,30 @@ namespace NActors {
                 json)));
     }
 
+    template <typename TCtx>
+    inline void DeliverLogMessage(
+        TCtx& ctx,
+        NLog::EPriority mPriority,
+        NLog::EComponent mComponent,
+        const char* fileName,
+        ui64 lineNumber,
+        TString&& str,
+        NActors::NStructuredLog::TStructuredMessage&& structuredMessage)
+    {
+        const NLog::TSettings *mSettings = ctx.LoggerSettings();
+        TLoggerActor::Throttle(*mSettings);
+        ctx.Send(new IEventHandle(
+            mSettings->LoggerActorId,
+            TActorId(),
+            new NLog::TEvLog(
+                mPriority,
+                mComponent,
+                fileName,
+                lineNumber,
+                std::move(str),
+                std::move(structuredMessage))));
+    }
+
     template <typename TCtx, typename... TArgs>
     inline void MemLogAdapter(
         TCtx& actorCtxOrSystem,
@@ -441,6 +475,27 @@ namespace NActors {
             lineNumber,
             std::move(str),
             json);
+    }
+
+    template <typename TCtx>
+    Y_WRAPPER inline void MemStructLogAdapter(
+        TCtx& actorCtxOrSystem,
+        NLog::EPriority mPriority,
+        NLog::EComponent mComponent,
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& str,
+        NActors::NStructuredLog::TStructuredMessage&& structuredMessage = {}) {
+
+        MemLogWrite(str.data(), str.size(), true);
+        DeliverLogMessage(
+            actorCtxOrSystem,
+            mPriority,
+            mComponent,
+            fileName,
+            lineNumber,
+            TString(str),
+            std::move(structuredMessage));
     }
 
     class TRecordWriter: public TStringBuilder {
@@ -698,3 +753,65 @@ namespace NActors {
 #define ACFL_CRIT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_CRIT2, BASE_CFL_CRIT1)(__VA_ARGS__)
 #define ACFL_ALERT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ALERT2, BASE_CFL_ALERT1)(__VA_ARGS__)
 #define ACFL_EMERG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_EMERG2, BASE_CFL_EMERG1)(__VA_ARGS__)
+
+#define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
+    do { \
+        auto& ydblogActorContext = (CTX); \
+        const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
+            TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
+            MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageTextStream.Str(), std::move(ydblogStructuredMessage) ); \
+        } \
+    } while (false)
+
+#define YDB_LOG_CTX_COMP_EMERG(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_EMERG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_ALERT(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_ALERT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_CRIT(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_CRIT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_ERROR(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_ERROR, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_WARN(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_WARN, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_NOTICE(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_NOTICE, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_INFO(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_INFO, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_DEBUG(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CTX_COMP_TRACE(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_TRACE, COMP, T, __VA_ARGS__)
+
+#define YDB_LOG_CTX(CTX, PRIO, T, ...) YDB_LOG_CTX_COMP(CTX, PRIO, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
+#define YDB_LOG_CTX_EMERG(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_EMERG, T, __VA_ARGS__)
+#define YDB_LOG_CTX_ALERT(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_ALERT, T, __VA_ARGS__)
+#define YDB_LOG_CTX_CRIT(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_CRIT, T, __VA_ARGS__)
+#define YDB_LOG_CTX_ERROR(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_ERROR, T, __VA_ARGS__)
+#define YDB_LOG_CTX_WARN(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_WARN, T, __VA_ARGS__)
+#define YDB_LOG_CTX_NOTICE(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_NOTICE, T, __VA_ARGS__)
+#define YDB_LOG_CTX_INFO(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_INFO, T, __VA_ARGS__)
+#define YDB_LOG_CTX_DEBUG(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_DEBUG, T, __VA_ARGS__)
+#define YDB_LOG_CTX_TRACE(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_TRACE, T, __VA_ARGS__)
+
+#define YDB_LOG_COMP(PRIO, COMP, T, ...) \
+    do { \
+        if (auto ctxp = NActors::TlsActivationContext) { \
+            YDB_LOG_CTX_COMP(*ctxp, PRIO, COMP, T, __VA_ARGS__); \
+        } \
+    } while (false)
+
+#define YDB_LOG_COMP_EMERG(COMP, T, ...) YDB_LOG_COMP(PRI_EMERG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_ALERT(COMP, T, ...) YDB_LOG_COMP(PRI_ALERT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_CRIT(COMP, T, ...) YDB_LOG_COMP(PRI_CRIT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_ERROR(COMP, T, ...) YDB_LOG_COMP(PRI_ERROR, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_WARN(COMP, T, ...) YDB_LOG_COMP(PRI_WARN, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_NOTICE(COMP, T, ...) YDB_LOG_COMP(PRI_NOTICE, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_INFO(COMP, T, ...) YDB_LOG_COMP(PRI_INFO, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_DEBUG(COMP, T, ...) YDB_LOG_COMP(PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_COMP_TRACE(COMP, T, ...) YDB_LOG_COMP(PRI_TRACE, COMP, T, __VA_ARGS__)
+
+#define YDB_LOG(PRIO, T, ...) YDB_LOG_COMP(PRIO, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
+#define YDB_LOG_EMERG(T, ...) YDB_LOG(PRI_EMERG, T, __VA_ARGS__)
+#define YDB_LOG_ALERT(T, ...) YDB_LOG(PRI_ALERT, T, __VA_ARGS__)
+#define YDB_LOG_CRIT(T, ...) YDB_LOG(PRI_CRIT, T, __VA_ARGS__)
+#define YDB_LOG_ERROR(T, ...) YDB_LOG(PRI_ERROR, T, __VA_ARGS__)
+#define YDB_LOG_WARN(T, ...) YDB_LOG(PRI_WARN, T, __VA_ARGS__)
+#define YDB_LOG_NOTICE(T, ...) YDB_LOG(PRI_NOTICE, T, __VA_ARGS__)
+#define YDB_LOG_INFO(T, ...) YDB_LOG(PRI_INFO, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG(T, ...) YDB_LOG(PRI_DEBUG, T, __VA_ARGS__)
+#define YDB_LOG_TRACE(T, ...) YDB_LOG(PRI_TRACE, T, __VA_ARGS__)

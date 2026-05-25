@@ -3,10 +3,10 @@
 
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
     return TVector<NYdb::NTopic::ECodec>{
-            NYdb::NTopic::ECodec::RAW,
-            NYdb::NTopic::ECodec::ZSTD,
-            NYdb::NTopic::ECodec::GZIP,
-            NYdb::NTopic::ECodec::LZOP};
+        NYdb::NTopic::ECodec::RAW,
+        NYdb::NTopic::ECodec::ZSTD,
+        NYdb::NTopic::ECodec::GZIP,
+    };
 }
 
 int main(int argc, char **argv) {

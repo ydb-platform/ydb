@@ -101,24 +101,7 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
         }
 
     def manual(self, host: str, action: str) -> list[DispatchCommand] | None:
-        """Manual inject/extract from the UI.
-
-        Unlike the base implementation, ``inject`` must carry ``node_ic_port`` +
-        ``duration`` for the agent runner to do anything; we look up the node
-        by host and build the payload here. Returns ``None`` if the host is not
-        a known target node (the API will surface this as a no-op error).
-        """
-        if action == "inject":
-            node = self._find_node_by_host(host)
-            if node is None:
-                return None
-            with self._lock:
-                self._register_inject(host)
-            return [dispatch(self.nemesis_type, host, "inject", self._build_inject_payload(node))]
-        if action == "extract":
-            with self._lock:
-                self._register_extract(host)
-            return [dispatch(self.nemesis_type, host, "extract", {})]
+        """Disabled: planner relies on cross-tick state."""
         return None
 
     def _find_node_by_host(self, host: str) -> "YdbCluster.Node | None":
@@ -131,13 +114,3 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
         targets = list({node.host for node in self._affected_nodes})
         self._affected_nodes.clear()
         return targets
-
-    def _register_inject(self, host: str) -> None:
-        node = self._find_node_by_host(host)
-        if node is not None:
-            self._affected_nodes.add(node)
-
-    def _register_extract(self, host: str) -> None:
-        node = self._find_node_by_host(host)
-        if node is not None:
-            self._affected_nodes.discard(node)

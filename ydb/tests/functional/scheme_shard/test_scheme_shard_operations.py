@@ -37,7 +37,7 @@ class TestSchemeShardSimpleOps(object):
             callee,
             raises(
                 ydb.SchemeError,
-                "Path does not exist"
+                "does not exist"
             )
         )
 
@@ -312,6 +312,6 @@ class TestSchemeShardSimpleOps(object):
             callee,
             raises(
                 ydb.SchemeError,
-                "Path does not exist"
+                "does not exist"
             )
         )

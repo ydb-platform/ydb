@@ -5986,7 +5986,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "/UnknownPath", result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error for the path: /UnknownPath", result.GetIssues().ToString());
             CheckPermissions(session, {{.Path = "/Root", .Permissions = {{"user1", {"ydb.database.connect", "ydb.generic.list"}}}}});
         }
@@ -8041,7 +8041,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto checkNotFound = [](const auto& result, const TString& error) {
             const auto& issuesString = result.GetIssues().ToString();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, issuesString);
-            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, "Path does not exist", issuesString);
+            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, "does not exist", issuesString);
             UNIT_ASSERT_STRING_CONTAINS_C(issuesString, error, issuesString);
         };
 
@@ -10153,7 +10153,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "/Root/table_not_exists");
         }
 
         // positive
@@ -10471,7 +10471,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "/Root/table_not_exists");
         }
 
         // positive
@@ -11851,7 +11851,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // DROP RESOURCE POOL
         checkQuery("DROP RESOURCE POOL MyResourcePool;",
             EStatus::SCHEME_ERROR,
-            "Path does not exist");
+            "MyResourcePool");
     }
 
     Y_UNIT_TEST(DisableResourcePoolsOnServerless) {
@@ -11867,7 +11867,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto checkNotFound = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "does not exist", result.GetIssues().ToString());
         };
 
         const auto& createSql = R"(
@@ -13673,7 +13673,7 @@ END DO)",
             } else if (result.GetStatus() == EStatus::NOT_FOUND) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions") &&
-                    !issues.contains("Path does not exist")) {
+                    !issues.contains("does not exist")) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected NOT_FOUND error: " << issues);
                 }
             } else if (result.GetStatus() == EStatus::ABORTED) {
@@ -14468,7 +14468,6 @@ END DO)",
 
         {
             auto result = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
                 CREATE TABLE `/Root/SerialTable` (
                     Key   Serial,
                     Value String,
@@ -14480,7 +14479,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 INSERT INTO `/Root/SerialTable` (Value) VALUES ("a"), ("b"), ("c");
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14489,7 +14487,6 @@ END DO)",
         // Verify rows exist with keys 1, 2, 3
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 SELECT Key, Value FROM `/Root/SerialTable` ORDER BY Key;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14508,7 +14505,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 INSERT INTO `/Root/SerialTable` (Value) VALUES ("d"), ("e");
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14516,7 +14512,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 SELECT Key, Value FROM `/Root/SerialTable` ORDER BY Key;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14537,7 +14532,6 @@ END DO)",
 
         {
             auto result = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
                 CREATE TABLE `/Root/TtlTable` (
                     Key   Uint32,
                     Ts    Timestamp,
@@ -14552,7 +14546,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 UPSERT INTO `/Root/TtlTable` (Key, Ts, Value) VALUES
                     (1, Timestamp("2020-01-01T00:00:00.000000Z"), "a"),
                     (2, Timestamp("2020-01-02T00:00:00.000000Z"), "b"),
@@ -14579,6 +14572,33 @@ END DO)",
             TResultSetParser parser(resultSet);
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 0u);
+        }
+    }
+
+    Y_UNIT_TEST(TruncateNonExistentTable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTruncateTable(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    k Uint32,
+                    v String,
+                    PRIMARY KEY(k)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/WrongTable`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path '/Root/WrongTable' does not exist");
         }
     }
 

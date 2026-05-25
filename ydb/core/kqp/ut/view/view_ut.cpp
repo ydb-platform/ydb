@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ).ExtractValueSync();
 
         UNIT_ASSERT(!dropResult.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "/Root/NonexistingView");
     }
 
     Y_UNIT_TEST(CallDropViewOnTable) {
@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto dropResult = session.ExecuteSchemeQuery(dropQuery).GetValueSync();
             UNIT_ASSERT(!dropResult.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "/Root/TheView");
         }
     }
 

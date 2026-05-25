@@ -9,6 +9,7 @@ from ydb.tests.library.stability.utils.results_models import StressUtilDeployRes
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
 from ydb.tests.library.stability.utils.collect_errors import AgentErrorsCollector, WardenResults
 from ydb.tests.library.stability.utils.upload_results import RunConfigInfo, safe_upload_results, test_event_report
+from ydb.tests.library.stability.utils.summary_writer import SummaryWriter
 from ydb.tests.library.stability.utils.utils import external_param_is_true, get_external_param
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.run_stress import StressRunExecutor
@@ -105,49 +106,65 @@ class ParallelWorkloadTestBase:
         additional_stats.all_hosts = stress_deployer.hosts
         additional_stats.stress_util_names = list(workload_params.keys())
         errors_collector = AgentErrorsCollector(additional_stats.all_hosts, stress_deployer.nodes)
+        summary_writer = SummaryWriter()
 
-        # Publish TestInit record
-        with allure.step("Initialize test"):
-            test_event_report('TestInit', workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
+        try:
+            # Publish TestInit record
+            with allure.step("Initialize test"):
+                test_event_report('TestInit', workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
 
-        # THEN execute cluster health check
-        with allure.step("Pre-workload cluster verification"):
-            errors_collector.perform_verification_with_cluster_check(workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
+            # THEN execute cluster health check
+            with allure.step("Pre-workload cluster verification"):
+                errors_collector.perform_verification_with_cluster_check(workload_names=additional_stats.stress_util_names, nemesis_enabled=nemesis_enabled)
 
-        logging.info("=== Starting environment preparation ===")
+            logging.info("=== Starting environment preparation ===")
 
-        # PHASE 1: PREPARATION (deploy binaries to nodes)
-        preparation_result = stress_deployer.prepare_stress_execution(workload_params, nodes_percentage)
+            # PHASE 1: PREPARATION (deploy binaries to nodes)
+            preparation_result = stress_deployer.prepare_stress_execution(workload_params, nodes_percentage)
 
-        logging.debug(f"Deploy finished with {preparation_result}")
+            logging.debug(f"Deploy finished with {preparation_result}")
 
-        # PHASE 2: EXECUTION (run workloads in parallel)
-        execution_result = stress_executor.execute_stress_runs(
-            stress_deployer,
-            workload_params,
-            duration_value,
-            preparation_result,
-            nemesis_enabled,
-        )
-        logging.debug(f"Execution finished with {execution_result}")
-        logging.debug(f"Additional stats {additional_stats}")
-
-        if stress_deployer.nemesis_started:
-            recoverability_result = self.stop_nemesis_and_check_recoverability(
-                stress_executor,
+            # PHASE 2: EXECUTION (run workloads in parallel)
+            execution_result = stress_executor.execute_stress_runs(
                 stress_deployer,
                 workload_params,
-                preparation_result)
-            execution_result['overall_result'].recoverability_result = recoverability_result['overall_result']
+                duration_value,
+                preparation_result,
+                nemesis_enabled,
+            )
+            logging.debug(f"Execution finished with {execution_result}")
+            logging.debug(f"Additional stats {additional_stats}")
 
-        # PHASE 3: RESULTS (collect diagnostics and finalize)
-        self._finalize_workload_results(
-            stress_deployer,
-            errors_collector,
-            execution_result,
-            preparation_result['deployed_nodes'],
-            additional_stats
-        )
+            if stress_deployer.nemesis_started:
+                recoverability_result = self.stop_nemesis_and_check_recoverability(
+                    stress_executor,
+                    stress_deployer,
+                    workload_params,
+                    preparation_result)
+                execution_result['overall_result'].recoverability_result = recoverability_result['overall_result']
+
+            # PHASE 3: RESULTS (collect diagnostics and finalize)
+            self._finalize_workload_results(
+                stress_deployer,
+                errors_collector,
+                execution_result,
+                preparation_result['deployed_nodes'],
+                additional_stats,
+                summary_writer,
+            )
+        except BaseException as exc:
+            # Record failure status + exception details into summary directory.
+            # pytest.fail uses pytest.fail.Exception (a subclass of BaseException
+            # in some pytest versions), so use BaseException to capture it.
+            summary_writer.write_exception(exc)
+            # pytest.fail produces an exception whose name contains 'Failed';
+            # treat it as 'failed', everything else as 'broken'.
+            exc_name = type(exc).__name__.lower()
+            status = 'failed' if 'failed' in exc_name or 'fail' in exc_name else 'broken'
+            summary_writer.write_status(status, message=str(exc))
+            raise
+        else:
+            summary_writer.write_status('passed')
 
         logging.info("=== Workload test completed ===")
         # logging.debug(f"Execution final result {final_result}")
@@ -158,7 +175,8 @@ class ParallelWorkloadTestBase:
         errors_collector: AgentErrorsCollector,
         execution_result: dict,
         preparation_result: dict[str, StressUtilDeployResult],
-        run_config: RunConfigInfo
+        run_config: RunConfigInfo,
+        summary_writer: SummaryWriter = None,
     ):
         """
         PHASE 3: Finalizing results and diagnostics
@@ -184,6 +202,19 @@ class ParallelWorkloadTestBase:
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
             node_errors, warden_results = self.process_workload_result_with_diagnostics(errors_collector, overall_result)
+
+            # Persist collected errors into summary directory (if configured)
+            if summary_writer is not None and summary_writer.enabled:
+                try:
+                    summary_writer.write_node_errors(node_errors)
+                    workload_errors = []
+                    if overall_result.errors:
+                        for err in overall_result.errors:
+                            if "coredump" not in err.lower() and "oom" not in err.lower():
+                                workload_errors.append(err)
+                    summary_writer.write_workload_errors(workload_errors)
+                except Exception as e:
+                    logging.warning(f"Failed to write summary: {e}")
 
             # Separate step for uploading results (AFTER all data preparation)
             safe_upload_results(overall_result, run_config, node_errors)  # noqa: warden_results not uploaded yet

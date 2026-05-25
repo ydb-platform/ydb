@@ -7,6 +7,7 @@ PY3_LIBRARY()
         utils.py
         upload_results.py
         results_models.py
+        summary_writer.py
     )
 
     PEERDIR (

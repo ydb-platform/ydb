@@ -41,6 +41,7 @@ message TStartOperationRequest {
     repeated TFileInfo Files = 8;
     repeated TYtResourceInfo YtResources = 9;
     repeated TFmrResourceOperationInfo FmrResources = 10;
+    optional TYtResourceInfo FmrJob = 11;
 }
 
 message TStartOperationResponse {

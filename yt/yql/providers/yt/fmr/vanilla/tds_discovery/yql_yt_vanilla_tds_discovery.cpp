@@ -24,6 +24,10 @@ class TVanillaTdsDiscovery : public ITableDataServiceDiscovery {
 public:
     explicit TVanillaTdsDiscovery(const IVanillaExternalPeerTracker& peerTracker, TVanillaTdsDiscoverySettings settings);
 
+    ~TVanillaTdsDiscovery() override {
+        Stop();
+    }
+
     void Start() override;
     void Stop() override;
     ui64 GetHostCount() const override;

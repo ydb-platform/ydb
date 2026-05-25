@@ -191,13 +191,13 @@ void TFmrUserJob::InitializeFmrUserJob() {
     QueueReader_ = MakeIntrusive<TFmrRawTableQueueReader>(UnionInputTablesQueue_);
 
     ITableDataServiceDiscovery::TPtr tableDataServiceDiscovery;
-    std::unique_ptr<IVanillaPeerTracker> peerTracker;
     if (Discovery_) {
         tableDataServiceDiscovery = Discovery_;
     } else if (VanillaInfo_.Defined()) {
-        peerTracker = std::make_unique<TStaticVanillaPeerTracker>(VanillaInfo_->Tracker);
-        auto vanillaDiscovery = MakeVanillaTdsDiscovery(*peerTracker, TVanillaTdsDiscoverySettings{
-            .TdsPort    = VanillaInfo_->TdsPort
+        VanillaPeerTracker_ = std::make_unique<TStaticVanillaPeerTracker>(VanillaInfo_->Tracker);
+        auto vanillaDiscovery = MakeVanillaTdsDiscovery(*VanillaPeerTracker_, TVanillaTdsDiscoverySettings{
+            .TdsPort    = VanillaInfo_->TdsPort,
+            .MinIndex   = VanillaInfo_->TdsMinIndex
         });
         vanillaDiscovery->Start();
         tableDataServiceDiscovery = vanillaDiscovery;

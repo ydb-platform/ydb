@@ -127,10 +127,10 @@ def _collect_endpoints(cluster):
     ]
     results = {}
     for base_path, query_string, _, methods in endpoint_specs:
-        results.setdefault(base_path, {})
         for method in methods:
-            results[base_path].setdefault(method, {})
-            results[base_path][method][query_string] = {}
+            results.setdefault(method, {})
+            results[method].setdefault(base_path, {})
+            results[method][base_path][query_string] = {}
     with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_REQUESTS) as executor:
         futures = [
             executor.submit(_request_status, method, base_url, path, token)
@@ -138,7 +138,7 @@ def _collect_endpoints(cluster):
         ]
         for (base_path, method, query_string, _, token), future in zip(requests_to_run, futures):
             label = token if token is not None else '__none__'
-            results[base_path][method][query_string][label] = future.result()
+            results[method][base_path][query_string][label] = future.result()
     return results
 
 

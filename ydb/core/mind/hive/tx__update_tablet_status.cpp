@@ -76,10 +76,8 @@ public:
                         << " from local "
                         << Local);
             NIceDb::TNiceDb db(txc.DB);
-            TInstant now = TActivationContext::Now();
+            const TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
-                tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
-                tablet->ActualizeTabletStatistics(now);
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {

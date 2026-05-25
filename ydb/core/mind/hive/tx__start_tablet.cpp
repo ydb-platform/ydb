@@ -38,6 +38,9 @@ public:
                 }
                 tablet->LastNodeId = 0;
             }
+
+            tablet->AddRestartTimestamp(TActivationContext::Now());
+
             // increase generation
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
@@ -48,6 +51,10 @@ public:
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute Tablet " << leader.ToString() << " (" << leader.StateString() << ") skipped generation increment " << (ui64)leader.State);
                 }
+
+                db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::Statistics>(leader.Statistics);
+            } else {
+                db.Table<Schema::TabletFollowerTablet>().Key(TabletId.first, TabletId.second).Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
             }
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();

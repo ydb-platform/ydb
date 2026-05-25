@@ -30,10 +30,12 @@ X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsPEM(const TStrin
 }
 
 X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsDER(const TStringBuf& cert) {
-    const ui8* ptr = reinterpret_cast<const ui8*>(cert.data());
+    const ui8* start = reinterpret_cast<const ui8*>(cert.data());
+    const ui8* ptr = start;
+    const ui8* end = start + cert.size();
 
     auto x509 = X509Ptr{d2i_X509(NULL, &ptr, cert.size())};
-    if (x509 == nullptr) {
+    if (x509 == nullptr || ptr != end) {
         return {};
     }
 

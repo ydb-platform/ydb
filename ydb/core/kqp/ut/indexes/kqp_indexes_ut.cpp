@@ -6172,24 +6172,20 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         TVector<TAutoPtr<IEventHandle>> capturedEvents;
         int captured = 0;
-        NThreading::TPromise<void> eventPromise = NThreading::NewPromise<void>();
-        NThreading::TFuture<void> eventFuture = eventPromise.GetFuture();
         runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) -> NActors::TTestActorRuntimeBase::EEventAction {
             if (captured < toCapture && condition(event)) {
                 captured++;
                 capturedEvents.push_back(event.Release());
-                if (captured >= toCapture) {
-                    eventPromise.SetValue();
-                }
                 return NActors::TTestActorRuntimeBase::EEventAction::DROP;
             }
             return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
         });
 
+        NYdb::NQuery::TAsyncExecuteQueryResult addIndexFuture;
+        auto queryClient = kikimr.GetQueryClient();
+
         kikimr.RunCall([&]
         {
-            auto queryClient = kikimr.GetQueryClient();
-
             {
                 // Create table
                 auto result = queryClient.ExecuteQuery(R"(
@@ -6211,13 +6207,16 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
-            NYdb::NQuery::TAsyncExecuteQueryResult addIndexFuture = queryClient.ExecuteQuery(R"sql(
+            addIndexFuture = queryClient.ExecuteQuery(R"sql(
                 ALTER TABLE `/Root/TestOnlineUniq`
                 ADD INDEX idx_uniq GLOBAL UNIQUE ON (uniq)
             )sql", NYdb::NQuery::TTxControl::NoTx());
+        });
 
-            eventFuture.Wait();
+        runtime->WaitFor("Paused index build", [&] { return captured >= toCapture; });
 
+        kikimr.RunCall([&]
+        {
             // Insert a normal row
             {
                 auto result = queryClient.ExecuteQuery(R"(
@@ -6234,13 +6233,16 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
                     expectInsertOk ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             }
+        });
 
-            // Unblock and let index build fail if insertion succeeds
-            for (auto& ev: capturedEvents) {
-                runtime->Send(ev.Release());
-            }
-            capturedEvents.clear();
+        // Unblock and let index build fail if insertion succeeds
+        for (auto& ev: capturedEvents) {
+            runtime->Send(ev.Release());
+        }
+        capturedEvents.clear();
 
+        kikimr.RunCall([&]
+        {
             {
                 auto result = addIndexFuture.GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),

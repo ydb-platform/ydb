@@ -116,35 +116,6 @@
    }
    ```
 
-         // Set global tracer of this application.
-         otel.SetTracerProvider(tracerProvider)
-
-         // Create a root span.
-         ctx, span := traceProvider.Tracer("ydb-go-sdk-example").Start(context.Background(), "client")
-         defer span.End()
-
-         // If you want to see otel-trace-id in the logs,
-         // it’s important to connect the adapters in a specific order — first otel, then logger.
-         nativeDriver, err := ydb.Open(ctx,
-             os.Getenv("YDB_CONNECTION_STRING"),
-             ydbOtel.WithTraces(ydbOtel.WithDetails(trace.DetailsAll)),
-             ydbZap.WithTraces(logger, trace.DetailsAll),
-         )
-         if err != nil {
-             panic(err)
-         }
-         defer nativeDriver.Close(ctx)
-
-         connector, err := ydb.Connector(nativeDriver)
-         if err != nil {
-             panic(err)
-         }
-         db := sql.OpenDB(connector)
-         defer db.Close()
-         ...
-     }
-     ```
-
   {% endlist %}
 
 - Java

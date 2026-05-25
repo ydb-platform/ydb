@@ -397,6 +397,7 @@
 
         dbapi_conn.bulk_upsert("tablename", rows, column_types)
     ```
+
   {% endlist %}
   
 - JavaScript

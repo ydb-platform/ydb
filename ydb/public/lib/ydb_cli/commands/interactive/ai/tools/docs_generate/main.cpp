@@ -3,6 +3,7 @@
 
 #include <util/generic/size_literals.h>
 #include <util/folder/filelist.h>
+#include <util/folder/path.h>
 #include <util/stream/buffered.h>
 #include <util/stream/file.h>
 
@@ -25,13 +26,13 @@ class TGenerateDocsMain final : public TMainClassArgs {
     int DoRun(NLastGetopt::TOptsParseResult&&) final {
         TBuffered<TUnbufferedFileOutput> out(BUFFER_SIZE, OutputPath);
         TArchiveWriter archiveWriter(&out, /* compress */ true);
-        CollectFiles(DocsPath, archiveWriter);
+        CollectFiles(TFsPath(DocsPath), archiveWriter);
         archiveWriter.Finish();
         out.Finish();
         return 0;
     }
 
-    static void CollectFiles(const TString& dir, TArchiveWriter& w, const TString& prefix = "") {
+    static void CollectFiles(const TFsPath& dir, TArchiveWriter& w, const TFsPath& prefix = {}) {
         {
             TFileList fl;
             fl.Fill(dir);
@@ -46,8 +47,8 @@ class TGenerateDocsMain final : public TMainClassArgs {
                     continue;
                 }
 
-                TMappedFileInput in(TStringBuilder() << dir << name);
-                w.Add(TStringBuilder() << prefix << name, &in);
+                TMappedFileInput in(dir.Child(name));
+                w.Add(prefix.Child(name).Fix().GetPath(), &in);
             }
         }
 
@@ -58,7 +59,7 @@ class TGenerateDocsMain final : public TMainClassArgs {
             const char* name = nullptr;
             while (name = dl.Next()) {
                 if (strcmp(name, ".") && strcmp(name, "..")) {
-                    CollectFiles(TStringBuilder() << dir << name << "/", w, TStringBuilder() << prefix << name << "/");
+                    CollectFiles(dir / name, w, prefix / name);
                 }
             }
         }

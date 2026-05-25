@@ -160,11 +160,10 @@ public:
         }
     }
 
-    TString Resolve(const TString& text, const TString& baseDir, bool cache = true) {
-        if (cache) {
-            if (const auto it = ParsedPages.find(text.c_str()); it != ParsedPages.end()) {
-                return it->second;
-            }
+    TString Resolve(const TString& text, const TString& baseDir) {
+        const auto [it, inserted] = ParsedPages.emplace(text, "");
+        if (!inserted) {
+            return it->second;
         }
 
         std::vector<TReplace> replaces;
@@ -258,11 +257,8 @@ public:
             result << text.substr(pos);
         }
 
-        if (cache) {
-            Y_VALIDATE(ParsedPages.emplace(text.c_str(), result).second, "Failed to put in cache text: " << text);
-        }
-
-        return result;
+        it->second = result;
+        return it->second;
     }
 
     void Finish() {
@@ -330,15 +326,17 @@ private:
         }
 
         TString resultValue;
-        TString resultDirectory;
+        std::optional<TString> resultDirectory;
         for (const auto& [directory, value] : it->second) {
             if (!baseDir.StartsWith(directory)) {
                 continue;
             }
 
-            if (resultDirectory.size() <= directory.size()) {
+            if (!resultDirectory || resultDirectory->size() < directory.size()) {
                 resultDirectory = directory;
                 resultValue = value;
+            } else if (resultDirectory->size() == directory.size()) {
+                YDB_CLI_LOG(Info, "Found duplicated variable instances from same directory prefix: " << directory);
             }
         }
 
@@ -421,7 +419,7 @@ private:
     }
 
     const TDocStore::TPtr Store;
-    std::unordered_map<const char*, TString> ParsedPages;
+    std::unordered_map<TString, TString> ParsedPages;
     std::unordered_map<TString, std::unordered_map<TString, TString>> PresetVariables; // {Name -> {Preset Directory -> Value}}
     std::unordered_set<TString> UnknownTemplates;
 };
@@ -491,7 +489,7 @@ private:
         }
 
         if (titles.empty() || titles.back() != title) {
-            titles.emplace_back(TemplateResolver->Resolve(title, DirectoryOf(tocPath), /* cache */ false));
+            titles.emplace_back(TemplateResolver->Resolve(title, DirectoryOf(tocPath)));
         }
     }
 
@@ -600,62 +598,62 @@ Use this tool to look up authoritative information about YDB concepts, SQL synta
 configuration, deployment, and other topics described in the official documentation.
 
 Supported actions:
-- "list": returns the catalogue of all documentation pages. Each entry contains:
-    * "path"  — archive-relative path to the page (e.g. "ru/core/concepts/architecture.md").
+- "list": returns the catalog of all documentation pages. Each entry contains:
+    * "path" — archive-relative path to the page (e.g., "core/concepts/architecture.md").
     * "title_path" — array of human-readable section titles leading to the page,
                         reconstructed from the documentation table of contents
-                        (e.g. ["YDB", "Concepts", "Architecture"]).
+                        (e.g., ["YDB", "Concepts", "Architecture"]).
     Use this action first to discover which pages exist before retrieving them.
-    Optional "path" parameter may be used to provide archive-relative path prefix for pages that should be listed,
-    must match a value returned from the "list" action of parent or root directory.
+    The optional "path" parameter may be used to provide an archive-relative path prefix for pages that should be listed;
+    it must match a value returned from the "list" action for the parent or root directory.
 
 - "get": returns the raw content of the page (Markdown or YAML) by its archive path.
     The "path" parameter is required for this action and must match a value returned
     by the "list" action.
 
-- "find": returns all occurrences of parameter "pattern" with exact case-sensitive match with context around.
-    Use this action when you not sure abut which page you should read, but have pattern to search for.
-    Optional "path" parameter may be used to select folder where search should be performed.
+- "find": returns all occurrences of the "pattern" parameter with an exact case-sensitive match and surrounding context.
+    Use this action when you are not sure which page you should read but have a pattern to search for.
+    The optional "path" parameter may be used to select the folder where the search should be performed.
 
-You must provide "language" property with value matching the current conversation language.
+You must provide the "language" property with a value matching the current conversation language.
 
-Documentation archive contains around of thousand different documents, so in first list call it is better to provide "path"
-depending on content that you want to find. There are folders with core information which you must read if you work with something YQL- / YDB-specific:
+The documentation archive contains around a thousand different documents, so in the first "list" call, it is better to provide a "path"
+depending on the content that you want to find. There are folders with core information that you must read if you work with something YQL- / YDB-specific:
 
-- "core/yql" - complete information about YQL syntax for both DDL and DML queries with examples and recipes,
-    always read this folder if user ask you about syntax or you unsure about concrete builtin functions / DDL syntax for YDB specific scheme entities
-    (for example if you should work with strings / dates / urls e.t.c. and somehow process them you must read corresponding documentation)
-- "core/concepts" - top level information about all YDB entities, this should be your entry point for discovering YDB-specific entity before
-   it modification / answering to user about it
-- "core/dev" - folder with detailed explanation of internal YDB entities like CDC / Vector|Fulltext|Second index / Terraform / Sys view / Streaming queries
-    read this folder to get explanation how you should work with YDb-specific entities before making attempts to their creation / modification
+- "core/yql" - complete information about YQL syntax for both DDL and DML queries with examples and recipes.
+    Always read this folder if the user asks you about syntax or you are unsure about specific built-in functions / DDL syntax for YDB-specific scheme entities
+    (for example, if you need to work with strings / dates / URLs, etc., and process them in some way, you must read the corresponding documentation).
+- "core/concepts" - top-level information about all YDB entities; this should be your entry point for discovering a YDB-specific entity before
+   modifying it / answering the user about it.
+- "core/dev" - folder with detailed explanations of internal YDB entities like CDC / Vector|Fulltext|Secondary indexes / Terraform / Sys view / Streaming queries.
+    Read this folder to get an explanation of how you should work with YDB-specific entities before attempting to create / modify them.
 - "core/recipes" - this folder contains very useful examples for advanced scenarios with YDB-specific scheme entities like transfer, vector indexes,
-    streaming queries, full-text search indexes, backups (also incremental) and YDB SDK / YDB CLI examples. You must read this folder
-    if you should setup this YDB-specific features or have troubles wit YDB CLI commands execution.
-- "core/analyst" - information for YDB analytics usage
+    streaming queries, full-text search indexes, backups (also incremental), and YDB SDK / YDB CLI examples. You must read this folder
+    if you need to set up these YDB-specific features or have trouble with YDB CLI command execution.
+- "core/analyst" - information for YDB analytics usage.
 
-This folders can help you to resolve failures:
+These folders can help you resolve failures:
 
-- "core/troubleshooting" - read this folder when you or user encountered into some troubles with server side queries execution / high latency / spilling or shard problems e.t.c.
-- "core/faq" - if you not sure how solve user task or have some problems which is not covered in other folders - try to look at this folder
-- "core/security" - read this folder when user asked you about authentication settings for YDB or you encountered into troubles with authorization / security access
+- "core/troubleshooting" - read this folder when you or the user encounters some trouble with server-side query execution / high latency / spilling or shard problems, etc.
+- "core/faq" - if you are not sure how to solve the user's task or have some problems that are not covered in other folders, try looking at this folder.
+- "core/security" - read this folder when the user asks you about authentication settings for YDB or you encounter trouble with authorization / security access.
 
-This is reference folders, read them if you need this information to answer to user / solve task:
+These are reference folders; read them if you need this information to answer the user / solve the task:
 
-- "core/reference" - this folder contains detailed information about YDB CLI commands, read this folder if you have some troubles with
-    YDB CLI commands execution via exec shell tool. Also folder contains information about YDB SDK, YDB dsTOOL (managing server storage),
-    Observability and UI docs, YDB cluster configuration and docker setup, supported YDB APIs, so also read this folder if user asked about it. 
-- "core/postgresql" - read this folder if user asked you about YDB and Postgres compatibility or you want to execute queries in PG syntax (connolly you must awoid it)
-- "core/maintenance" - you must read this folder if user asked you to perform some maintence command that will change internal server storage state,
-    like storage disks eviction, selfheal, adding new disks, changing internal configuration e.t.c.
-- "core/devops" - folder with complete information about devops tasks about deploying and managing YDB cluster
-- "core/integrations" - read this folder if in task which you solving you should fond out YDB capabilities in integration with
-    ORM / GUI / Visualizations / Vector index search (embeddings) / Orchestration systems like airflow / django / graphana / langchain (and many others)
-- "core/downloads" - folder with description how YDB server / YDB CLI / YDB dsTOOL can be downloaded
-- "core/contributor" - information about implementation of some subsystems for contributors into YDB GitHUb repository
-- "core/public-materials" - comonly spread material about YDB like published papers
+- "core/reference" - this folder contains detailed information about YDB CLI commands; read this folder if you have trouble with
+    YDB CLI command execution via an exec shell tool. The folder also contains information about YDB SDK, YDB dsTOOL (managing server storage),
+    Observability and UI docs, YDB cluster configuration and Docker setup, and supported YDB APIs, so also read this folder if the user asks about them.
+- "core/postgresql" - read this folder if the user asks you about YDB and PostgreSQL compatibility or you want to execute queries in PG syntax (generally, you must avoid it).
+- "core/maintenance" - you must read this folder if the user asks you to perform some maintenance command that will change the internal server storage state,
+    such as storage disk eviction, self-healing, adding new disks, changing internal configuration, etc.
+- "core/devops" - folder with complete information about DevOps tasks related to deploying and managing a YDB cluster.
+- "core/integrations" - read this folder if, in the task you are solving, you need to find out about YDB capabilities in integration with
+    ORM / GUI / Visualizations / Vector index search (embeddings) / Orchestration systems like Airflow / Django / Grafana / LangChain (and many others).
+- "core/downloads" - folder with a description of how YDB server / YDB CLI / YDB dsTOOL can be downloaded.
+- "core/contributor" - information about the implementation of some subsystems for contributors to the YDB GitHub repository.
+- "core/public-materials" - commonly distributed material about YDB, such as published papers.
 
-It is better to always choose one of this folders to list.)";
+It is better to always choose one of these folders to list.)";
 
     static constexpr char ACTION_PROPERTY[] = "action";
     static constexpr char ACTION_LIST[] = "list";
@@ -848,7 +846,8 @@ private:
 
     TResponse DoGet() {
         if (const auto* entry = GetDocIndex().FindEntry(Path)) {
-            YDB_CLI_LOG(Info, "Extracted documentation page (size " << entry->Content.size() << "):\n" << Strip(entry->Content));
+            YDB_CLI_LOG(Info, "Extracted documentation page with size " << entry->Content.size());
+            YDB_CLI_LOG(Debug, "Extracted documentation with content:\n" << Strip(entry->Content));
             return TResponse::Success(entry->Content);
         }
         return TResponse::Error(TStringBuilder() << "Documentation page \"" << Path << "\" was not found in the archive. Use action \"" << ACTION_LIST << "\" to discover available pages.");

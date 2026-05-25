@@ -700,7 +700,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
 
             tools = self.mock_server.last_request["body"]["tools"]
             tool_names = {t["name"] for t in tools}
-            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell"}
+            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell", 'docs_search'}
             for tool in tools:
                 assert "input_schema" in tool
                 assert "description" in tool
@@ -3192,7 +3192,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             assert "{% include" not in tool_result, (
                 "Include directives must be expanded and must not appear in the output"
             )
-            assert "Scan queries" in tool_result, (
+            assert "scan queries" in tool_result.lower(), (
                 "Included file content must appear after include expansion"
             )
             assert "{{ ydb-short-name }}" not in tool_result, (

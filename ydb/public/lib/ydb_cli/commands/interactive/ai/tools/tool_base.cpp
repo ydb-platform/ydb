@@ -26,7 +26,7 @@ const TString& TToolBase::GetDescription() const {
 }
 
 TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
-    YDB_CLI_LOG(Info, "Execution tool with params:\n" << FormatJsonValue(parameters));
+    YDB_CLI_LOG(Debug, "Execution tool with params:\n" << FormatJsonValue(parameters));
 
     try {
         ParseParameters(parameters);

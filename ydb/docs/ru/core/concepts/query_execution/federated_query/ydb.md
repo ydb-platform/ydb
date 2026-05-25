@@ -10,11 +10,7 @@
     CREATE OBJECT ydb_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 
-<<<<<<< HEAD:ydb/docs/ru/core/concepts/federated_query/ydb.md
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Параметр `LOCATION` содержит сетевой адрес экземпляра {{ ydb-short-name }}, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `local`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. Если шифрование включено, то в поле `<port>` параметра `LOCATION` необходимо указать порт gRPCs внешней {{ ydb-short-name }}, в противном случае - порт gRPC.
-=======
 1. Создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Параметр `LOCATION` содержит сетевой адрес экземпляра {{ ydb-short-name }}, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `local`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. Если шифрование включено, то в поле `<port>` параметра `LOCATION` необходимо указать порт gRPCs внешней {{ ydb-short-name }}, в противном случае - порт gRPC.
->>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906)):ydb/docs/ru/core/concepts/query_execution/federated_query/ydb.md
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ydb_datasource WITH (
@@ -55,9 +51,6 @@ SELECT * FROM ydb_datasource.<table_name>
 При работе с внешними источниками данных {{ ydb-short-name }} существует ряд ограничений:
 
 1. {% include [!](_includes/supported_requests.md) %}
-<<<<<<< HEAD:ydb/docs/ru/core/concepts/federated_query/ydb.md
-1. {% include [!](_includes/predicate_pushdown.md) %}
-=======
 1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
 
     |Описание|Пример|Ограничение|
@@ -71,7 +64,6 @@ SELECT * FROM ydb_datasource.<table_name>
     При использовании других видов фильтров пушдаун на источник не выполняется: фильтрация строк внешней таблицы будет выполнена на стороне федеративной {{ ydb-short-name }}, что означает, что {{ ydb-short-name }} выполнит полное чтение (full scan) внешней таблицы в момент обработки запроса.
 
     Поддерживаемые типы данных для пушдауна фильтров:
->>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906)):ydb/docs/ru/core/concepts/query_execution/federated_query/ydb.md
 
     |Тип данных {{ ydb-short-name }}|
     |----|

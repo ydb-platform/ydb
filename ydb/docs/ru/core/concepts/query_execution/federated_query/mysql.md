@@ -10,11 +10,7 @@
     CREATE OBJECT mysql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
 
-<<<<<<< HEAD:ydb/docs/ru/core/concepts/federated_query/mysql.md
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных MySQL. Параметр `LOCATION` содержит сетевой адрес экземпляра MySQL, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `mysql`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
-=======
 1. Создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий определённую базу данных MySQL. Параметр `LOCATION` содержит сетевой адрес экземпляра MySQL, к которому осуществляется подключение. В `DATABASE_NAME` указывается имя базы данных (например, `mysql`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
->>>>>>> 513440ae1e0 (DOCSUP-119247: Рефакторинг выполнения запросов (#29906)):ydb/docs/ru/core/concepts/query_execution/federated_query/mysql.md
 
     ```yql
     CREATE EXTERNAL DATA SOURCE mysql_datasource WITH (

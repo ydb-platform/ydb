@@ -639,14 +639,14 @@ namespace {
         }
     };
 
-    // NQuery-based test context (primary API for all tests) not using the real threads
-    struct TTliThreadlessTestContext {
+    // Test context with manual event dispatching for better control over order of query execution.
+    struct TTliManualDispatchTestContext {
         TKikimrRunner Kikimr;
         TQueryClient Client;
         TSession Session;
         TSession VictimSession;
 
-        TTliThreadlessTestContext(TStringStream& ss, bool logEnabled = true)
+        TTliManualDispatchTestContext(TStringStream& ss, bool logEnabled = true)
             : Kikimr(MakeKikimrSettings(ss).SetUseRealThreads(false))
             , Client(Kikimr.RunCall([&] () { return Kikimr.GetQueryClient(); }))
             , Session(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
@@ -671,8 +671,8 @@ namespace {
             Kikimr.RunCall([&] () { return CreateAndSeedTablesWithSecondKeyInSession(Session, count); });
         }
 
-        void ExecuteQuery(const TString& query, bool sync = true) {
-            if (sync) {
+        void ExecuteQuery(const TString& query, bool waitForMediatorStep = true) {
+            if (waitForMediatorStep) {
                 NActors::TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate> waiter(*Kikimr.GetTestServer().GetRuntime());
                 waiter.Wait(TDuration::Seconds(5));
             }
@@ -1372,9 +1372,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
     // Tests that BreakerQuerySpanId and VictimQuerySpanId linkage is maintained even with
     // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
-    Y_UNIT_TEST(ConcurrentUpsertSelectThreadless) {
+    Y_UNIT_TEST(ConcurrentUpsertSelectManualDispatch) {
         TStringStream ss;
-        auto ctx = std::make_unique<TTliThreadlessTestContext>(ss);
+        auto ctx = std::make_unique<TTliManualDispatchTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
         // Seed with initial data in the key range 1-10

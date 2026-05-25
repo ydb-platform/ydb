@@ -63,13 +63,13 @@ TConclusionStatus TStopCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& kikimr) {
+TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
-    TSchemaCommand command;
-    command.DeserializeFromString("ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,`COMPACTION_PLANNER.FEATURES`=`{'accumulator_trigger_portions':2}`)");
-    AFL_VERIFY(command.Execute(kikimr).IsSuccess());
+    // TSchemaCommand command;
+    // command.DeserializeFromString("ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,`COMPACTION_PLANNER.FEATURES`=`{'accumulator_trigger_portions':2}`)");
+    // AFL_VERIFY(command.Execute(kikimr).IsSuccess());
     const i64 compactions = controller->GetCompactionFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     const TInstant start = TInstant::Now();

@@ -110,14 +110,40 @@ When a stricter `style-src` is eventually added to the header, do **not** weaken
 
 > **Enforcement status.** Only the `script-src` row below is enforced by the CSP header from PR [#36981](https://github.com/ydb-platform/ydb/pull/36981). The other rows describe the **target policy** the codebase is moving toward — follow them in new code so that turning on the stricter header later does not break the UI.
 
-| Directive     | Target policy                             | Enforced today?                    |
-| ------------- | ----------------------------------------- | ---------------------------------- |
-| `script-src`  | `'self'` + nonce, no external scripts     | ✅ Yes — `script-src 'nonce-…'`    |
-| `style-src`   | `'self'` only, no external stylesheets    | ❌ No directive in header (see §1) |
-| `font-src`    | `'self'`, no external fonts               | ❌ No directive in header          |
-| `connect-src` | `'self'`, no external `fetch()`/XHR       | ❌ No directive in header          |
-| `frame-src`   | `'self'`, no external iframes             | ❌ No directive in header          |
-| `img-src`     | `'self'`, `data:`, `https:` (external ok) | ❌ No directive in header          |
+| Directive     | Target policy                               | Enforced today?                    |
+| ------------- | ------------------------------------------- | ---------------------------------- |
+| `script-src`  | `'self'` + nonce, no external scripts       | ✅ Yes — `script-src 'nonce-…'`    |
+| `style-src`   | `'self'` only, no external stylesheets      | ❌ No directive in header (see §1) |
+| `font-src`    | `'self'`, no external fonts                 | ❌ No directive in header          |
+| `connect-src` | `'self'`, no external `fetch()`/XHR         | ❌ No directive in header          |
+| `frame-src`   | `'self'`, no external iframes               | ❌ No directive in header          |
+| `img-src`     | `'self'` and `data:` only, no external URLs | ❌ No directive in header          |
+
+### Rule: Use only relative links in HTML generated from C++
+
+Monitoring pages may be served under different prefixes, so generated HTML must not hardcode absolute locations. In `href`, `src`, `action`, `formaction`, `fetch()`, `$.ajax()`, etc. use only relative links. Do not use:
+
+- full URLs: `https://example.com/...`;
+- protocol-relative URLs: `//example.com/...`;
+- root-relative paths: `/get_blob`, `/static/js/...`.
+
+**❌ FORBIDDEN:**
+
+```cpp
+out << "<a href='https://ydb.tech/docs'>docs</a>\n";
+out << "<button type='submit' formaction='/get_blob'>Query</button>\n";
+out << "fetch('/api/data')\n";
+```
+
+**✅ CORRECT:**
+
+```cpp
+out << "<a href='docs'>docs</a>\n";
+out << "<button type='submit' formaction='../../../get_blob'>Query</button>\n";
+out << "fetch('api/data')\n";
+```
+
+If a page must reference product documentation or any other external page, route it through a relative internal documentation page/redirect, or render plain text instead of a clickable external link.
 
 ### Rule: NEVER load scripts, styles, or fonts from external URLs
 
@@ -130,35 +156,30 @@ out << "<link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesh
 
 **✅ CORRECT — use only resources served from the same origin**
 
-Bootstrap, jQuery, and tablesorter are already bundled and served by the monitoring HTTP server. Note that they live under **different** URL prefixes — bootstrap/jQuery are under `/static/`, while tablesorter is served from the root:
+Bootstrap, jQuery, and tablesorter are already bundled and served by the monitoring page wrapper. Page-specific C++ renderers normally must not emit additional `<script>`/`<link>` tags for them.
 
-```cpp
-// These are already included by the monitoring page wrapper — do NOT add them again:
-// /static/css/bootstrap.min.css
-// /static/js/jquery.min.js
-// /static/js/bootstrap.min.js   (or /static/js/bootstrap.bundle.min.js)
-// /jquery.tablesorter.js        (NOT under /static/)
-// /jquery.tablesorter.css       (NOT under /static/)
-```
+If a page-specific renderer still needs to reference a bundled resource, follow the relative-link rule above: do not hardcode root-relative paths such as `/static/js/jquery.min.js` or `/jquery.tablesorter.js`.
 
-When referencing these from a monitoring page, use the same paths the wrapper uses — do not invent a `/static/js/jquery.tablesorter.js` path, it will 404.
+If you need a library that is not yet bundled, add it to the embedded resources in [`ydb/core/viewer/`](../ydb/core/viewer/) and expose it through the monitoring wrapper/helper without introducing external or root-relative links in page C++.
 
-If you need a library that is not yet bundled, add it to the embedded resources in [`ydb/core/viewer/`](../ydb/core/viewer/) and serve it from the same origin (preferably under `/static/`).
+### Rule: NEVER make `fetch()`/XHR requests to absolute links
 
-### Rule: NEVER make `fetch()`/XHR requests to external URLs
+This is the same rule for JavaScript requests: use relative URLs only.
 
 **❌ FORBIDDEN:**
 
 ```cpp
 str << "fetch('https://external-api.example.com/data')\n";
-str << "$.ajax({ url: 'https://external-api.example.com/data' })\n";
+str << "fetch('/api/data')\n";
+str << "$.ajax({ url: '/api/data' })\n";
 ```
 
-**✅ CORRECT — only relative URLs or same-origin absolute URLs:**
+**✅ CORRECT:**
 
 ```cpp
-str << "fetch('')\n";           // relative — same URL as the page
-str << "fetch('/api/data')\n";  // absolute path — same origin
+str << "fetch('')\n";           // same URL as the page
+str << "fetch('api/data')\n";   // relative to the current page
+str << "fetch('../api/data')\n"; // relative path to a sibling/parent endpoint
 ```
 
 ### Rule: NEVER embed external iframes

@@ -1438,7 +1438,12 @@ namespace Tests {
                 }
             }
 
-            NKqp::NTests::SetKqpFinalizeScriptServiceSettings(Settings->EnableScriptExecutionBackgroundChecks, TDuration::Zero());
+            if (federatedQuerySetupFactory) {
+                federatedQuerySetupFactory->SetScriptExecutionSettings({
+                    .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
+                    .LeaseCheckStartupTimeout = TDuration::Zero(),
+                });
+            }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),

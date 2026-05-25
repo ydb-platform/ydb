@@ -14,9 +14,6 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-std::atomic<bool> EnableBackgroundLeaseChecks = true;
-std::atomic<TDuration> LeaseCheckStartupTimeout = TDuration::Seconds(15);
-
 class TKqpFinalizeScriptService : public TActorBootstrapped<TKqpFinalizeScriptService> {
     using TRetryPolicy = IRetryPolicy<bool>;
 
@@ -26,6 +23,8 @@ public:
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
         : QueryServiceConfig(queryServiceConfig)
         , FederatedQuerySetup(federatedQuerySetup)
+        , EnableBackgroundLeaseChecks(FederatedQuerySetup && FederatedQuerySetup->ScriptExecutionSettings.EnableBackgroundLeaseChecks)
+        , LeaseCheckStartupTimeout(FederatedQuerySetup ? FederatedQuerySetup->ScriptExecutionSettings.LeaseCheckStartupTimeout : TDuration::Zero())
         , S3ActorsFactory(std::move(s3ActorsFactory))
     {}
 
@@ -184,6 +183,8 @@ private:
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const bool EnableBackgroundLeaseChecks = true;
+    const TDuration LeaseCheckStartupTimeout;
 
     TIntrusivePtr<TKqpCounters> Counters;
     TRetryPolicy::IRetryState::TPtr RetryState;  // Used for check script execution tables existence
@@ -203,14 +204,5 @@ IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig&
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory) {
     return new TKqpFinalizeScriptService(queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
 }
-
-namespace NTests {
-
-void SetKqpFinalizeScriptServiceSettings(bool enableBackgroundLeaseChecks, TDuration leaseCheckStartupTimeout) {
-    EnableBackgroundLeaseChecks = enableBackgroundLeaseChecks;
-    LeaseCheckStartupTimeout = leaseCheckStartupTimeout;
-}
-
-} // namespace NTests
 
 }  // namespace NKikimr::NKqp

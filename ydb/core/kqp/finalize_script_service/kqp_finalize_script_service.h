@@ -16,10 +16,4 @@ IActor* CreateKqpFinalizeScriptService(const NKikimrConfig::TQueryServiceConfig&
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
 
-namespace NTests {
-
-void SetKqpFinalizeScriptServiceSettings(bool enableBackgroundLeaseChecks, TDuration leaseCheckStartupTimeout);
-
-} // namespace NTests
-
 }  // namespace NKikimr::NKqp

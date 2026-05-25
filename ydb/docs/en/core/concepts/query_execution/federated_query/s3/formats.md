@@ -298,8 +298,7 @@ The result of the query execution:
 
 This format allows you to read the contents of files as is, in "raw" form. Data read in this way can be processed using [YQL](../../../../yql/reference/udf/list/string) by dividing it into rows and columns.
 
-This format should be used if the built-in data parsing capabilities in {{ ydb-full-name }} are insufficient. In this format, the [schema](external_data_source.md#schema) for reading and writing data should consist of only one column with one of the allowed data types; see [below](#types) for more details.
-{% note info %}
+This format allows reading the contents of files as is, in raw form. The data read in this way can be processed using [YQL](../../../../yql/reference/udf/list/string) tools, splitting into rows and columns.
 
 The size of each of the files read in `raw` format cannot exceed the overall memory consumption limit for a single query in {{ ydb-short-name }}.
 

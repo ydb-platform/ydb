@@ -15,6 +15,6 @@ FROM (
         DateTime::MakeDate(run_timestamp) as date
     FROM `test_results/test_runs_column`
     WHERE (job_name = 'PR-check') AND (branch = 'main') AND (build_type = 'relwithdebinfo')
-    AND (run_timestamp > CurrentUtcDate() - Interval("P7D"))
+    AND (run_timestamp > CurrentUtcDate() - Interval("P180D"))
 )
 GROUP BY date

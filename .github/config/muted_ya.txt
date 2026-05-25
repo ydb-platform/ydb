@@ -134,6 +134,7 @@ ydb/tests/functional/secrets test_secrets.py.test_drop_without_grants
 ydb/tests/functional/secrets test_secrets_usage.py.test_create_eds_with_single_secret_with_fail
 ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py] chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
+ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test

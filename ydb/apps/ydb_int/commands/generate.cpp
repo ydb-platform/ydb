@@ -123,10 +123,16 @@ public:
         }
 
         TBuilder typedBuilder;
-        typedBuilder.Reserve(NumRows).ok();
-        typedBuilder.AppendValues(vec).ok();
-        typedBuilder.Finish(&Cache[primType]).ok();
-        return Cache[primType];
+        if (!typedBuilder.Reserve(NumRows).ok()
+            || !typedBuilder.AppendValues(vec).ok()) {
+            return {};
+        }
+        std::shared_ptr<arrow::Array> array;
+        if (!typedBuilder.Finish(&array).ok()) {
+            return {};
+        }
+        Cache[primType] = array;
+        return array;
     }
 
     template <typename ArrowType>
@@ -151,11 +157,17 @@ public:
         }
 
         TBuilder typedBuilder;
-        typedBuilder.Reserve(NumRows).ok();
-        typedBuilder.ReserveData(numBytes).ok();
-        typedBuilder.AppendValues(vec).ok();
-        typedBuilder.Finish(&Cache[primType]).ok();
-        return Cache[primType];
+        if (!typedBuilder.Reserve(NumRows).ok()
+            || !typedBuilder.ReserveData(numBytes).ok()
+            || !typedBuilder.AppendValues(vec).ok()) {
+            return {};
+        }
+        std::shared_ptr<arrow::Array> array;
+        if (!typedBuilder.Finish(&array).ok()) {
+            return {};
+        }
+        Cache[primType] = array;
+        return array;
     }
 
     std::shared_ptr<arrow::Array> AppendJsons(arrow::DataType& type, NYdb::EPrimitiveType primType) {
@@ -179,11 +191,17 @@ public:
         }
 
         TBuilder typedBuilder;
-        typedBuilder.Reserve(NumRows).ok();
-        typedBuilder.ReserveData(numBytes).ok();
-        typedBuilder.AppendValues(vec).ok();
-        typedBuilder.Finish(&Cache[primType]).ok();
-        return Cache[primType];
+        if (!typedBuilder.Reserve(NumRows).ok()
+            || !typedBuilder.ReserveData(numBytes).ok()
+            || !typedBuilder.AppendValues(vec).ok()) {
+            return {};
+        }
+        std::shared_ptr<arrow::Array> array;
+        if (!typedBuilder.Finish(&array).ok()) {
+            return {};
+        }
+        Cache[primType] = array;
+        return array;
     }
 
     static bool IsAllowedType(const NYdb::TType& ydbType) {

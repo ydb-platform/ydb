@@ -158,7 +158,7 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TClientCommand::TConfig& config, 
         }
         THolder<TParamsBuilder> paramBuilder;
         if (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
-            // Execute script without parameters
+            // Execute script with parameters
             Operation = queryClient.ExecuteScript(
                 Query,
                 paramBuilder->Build(),
@@ -306,7 +306,7 @@ void TCommandSqlExperimental::Config(TConfig& config) {
             "  - If YDB CLI loses connection to the server when running a query without this option, "
             "the stream breaks and command execution finishes with error. "
             "If this option is used, the polling process continues and query results may still be received after reconnect.\n"
-            "  - Using this option will probably reduce performance due to artifitial delays between polling requests.\n"
+            "  - Using this option will probably reduce performance due to artificial delays between polling requests.\n"
             "Note: query results will be stored on server and thus consume storage resources. "
             "Use --results-ttl option to set how long results should be stored for")
         .StoreTrue(&AsyncWait);
@@ -333,7 +333,7 @@ void TCommandSqlExperimental::Parse(TConfig& config) {
             "Relevant for execution mode only.";
     }
     if ((ExplainAnalyzeMode || ExplainMode) && (AsyncWait || RunAsync)) {
-        throw TMisuseException() << "Analyze modes can't be run in async mode";
+        throw TMisuseException() << "Explain and explain-analyze modes can't be run in async mode";
     }
 }
 
@@ -549,7 +549,7 @@ namespace {
     IOutputStream& operator<<(IOutputStream& out, NQuery::ESyntax syntax) {
         switch (syntax) {
             case NQuery::ESyntax::Pg:
-                return out << "PostgresQL";
+                return out << "PostgreSQL";
             case NQuery::ESyntax::YqlV1:
                 return out << "YQL";
             default:
@@ -566,9 +566,13 @@ int TCommandSqlOperationGet::Run(TConfig& config) {
     std::string quotedId = "\"" + operation.Id().ToString() + "\"";
     auto printOperationInfo = [&]() {
         PrintOperation(operation, OutputFormat);
-        const auto& metadata = operation.Metadata();
-        Cout << "Script syntax: " << metadata.ScriptContent.Syntax << Endl;
-        Cout << "Script text: \"" << metadata.ScriptContent.Text << "\"" << Endl << Endl;
+        // Print extra human-readable fields only in Pretty format, otherwise machine-readable
+        // output (e.g. proto-json-base64) would be corrupted by these free-form lines.
+        if (OutputFormat == EDataFormat::Default || OutputFormat == EDataFormat::Pretty) {
+            const auto& metadata = operation.Metadata();
+            Cout << "Script syntax: " << metadata.ScriptContent.Syntax << Endl;
+            Cout << "Script text: \"" << metadata.ScriptContent.Text << "\"" << Endl << Endl;
+        }
     };
     switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:

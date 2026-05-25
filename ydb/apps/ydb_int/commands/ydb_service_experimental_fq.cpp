@@ -32,6 +32,16 @@ T CreateFqSettings(const TString& scope)
     return settings;
 }
 
+// Prints protobuf message DebugString() only when verbose mode is enabled. Used to avoid
+// leaking sensitive request fields (passwords, OAuth tokens, IAM tokens, etc.) to stdout/logs
+// by default while still letting users inspect the full request via `-v`/`--verbose`.
+template <typename TRequest>
+void PrintRequestIfVerbose(const NYdb::NConsoleClient::TClientCommand::TConfig& config, const TRequest& request) {
+    if (config.IsVerbose()) {
+        Cout << "Request:" << Endl << request.DebugString() << Endl;
+    }
+}
+
 TString SnakeToCamelCase(TString name) {
     name[0] = tolower(name[0]);
     size_t max = name.size() - 1;
@@ -310,8 +320,7 @@ int TCommandFederatedQueryCreateQuery::Run(TConfig& config) {
         }
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     auto response = client.CreateQuery(request, CreateFqSettings<NYdb::NFq::TCreateQuerySettings>(config.YScope)).ExtractValueSync();
@@ -395,8 +404,7 @@ int TCommandFederatedQueryListQueries::Run(TConfig& config) {
         request.set_limit(Limit);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ListQueries(request, CreateFqSettings<NYdb::NFq::TListQueriesSettings>(config.YScope)).ExtractValueSync());
@@ -423,8 +431,7 @@ int TCommandFederatedQueryDescribeQuery::Run(TConfig& config) {
     FederatedQuery::DescribeQueryRequest request;
     request.set_query_id(QueryId);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.DescribeQuery(request, CreateFqSettings<NYdb::NFq::TDescribeQuerySettings>(config.YScope)).ExtractValueSync());
@@ -451,8 +458,7 @@ int TCommandFederatedQueryGetQueryStatus::Run(TConfig& config) {
     FederatedQuery::GetQueryStatusRequest request;
     request.set_query_id(QueryId);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.GetQueryStatus(request, CreateFqSettings<NYdb::NFq::TGetQueryStatusSettings>(config.YScope)).ExtractValueSync());
@@ -624,8 +630,7 @@ int TCommandFederatedQueryModifyQuery::Run(TConfig& config) {
         request.set_idempotency_key(IdempotencyKey);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ModifyQuery(request, CreateFqSettings<NYdb::NFq::TModifyQuerySettings>(config.YScope)).ExtractValueSync());
@@ -696,8 +701,7 @@ int TCommandFederatedQueryDeleteQuery::Run(TConfig& config) {
     request.set_previous_revision(PreviousRevision);
     request.set_idempotency_key(IdempotencyKey);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.DeleteQuery(request, CreateFqSettings<NYdb::NFq::TDeleteQuerySettings>(config.YScope)).ExtractValueSync());
@@ -740,8 +744,7 @@ int TCommandFederatedQueryControlQuery::Run(TConfig& config) {
     request.set_previous_revision(PreviousRevision);
     request.set_idempotency_key(IdempotencyKey);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ControlQuery(request, CreateFqSettings<NYdb::NFq::TControlQuerySettings>(config.YScope)).ExtractValueSync());
@@ -774,8 +777,7 @@ int TCommandFederatedQueryGetResultData::Run(TConfig& config) {
     request.set_limit(Limit);
     request.set_offset(Offset);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
 
@@ -855,8 +857,7 @@ int TCommandFederatedQueryQueryListJobs::Run(TConfig& config) {
         request.mutable_filter()->set_created_by_me(CreatedByMe);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ListJobs(request, CreateFqSettings<NYdb::NFq::TListJobsSettings>(config.YScope)).ExtractValueSync());
@@ -889,8 +890,7 @@ int TCommandFederatedQueryListJobs::Run(TConfig& config) {
         request.mutable_filter()->set_created_by_me(CreatedByMe);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ListJobs(request, CreateFqSettings<NYdb::NFq::TListJobsSettings>(config.YScope)).ExtractValueSync());
@@ -916,8 +916,7 @@ int TCommandFederatedQueryDescribeJob::Run(TConfig& config) {
     FederatedQuery::DescribeJobRequest request;
     request.set_job_id(JobId);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.DescribeJob(request, CreateFqSettings<NYdb::NFq::TDescribeJobSettings>(config.YScope)).ExtractValueSync());
@@ -1008,8 +1007,7 @@ int TCommandFederatedQueryCreateConnectionYdb::Run(TConfig& config) {
 
     ydb->set_secure(Secure);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.CreateConnection(request, CreateFqSettings<NYdb::NFq::TCreateConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1110,9 +1108,8 @@ int TCommandFederatedQueryCreateConnectionIceberg::Run(TConfig& config) {
         throw TMisuseException() << "Catalog has to be set";
     }
 
-    Cout << "Request:" << Endl
-        << request.DebugString() << Endl
-        << "Response:" << Endl;
+    PrintRequestIfVerbose(config, request);
+    Cout << "Response:" << Endl;
 
     ProcessProtoResult(client.CreateConnection(request, CreateFqSettings<NYdb::NFq::TCreateConnectionSettings>(config.YScope)).ExtractValueSync());
     return EXIT_SUCCESS;
@@ -1244,8 +1241,7 @@ int TCommandFederatedQueryCreateConnectionGeneric<TDataSource>::Run(TConfig& con
 
     cluster->set_database_name(DatabaseName);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.CreateConnection(request, CreateFqSettings<NYdb::NFq::TCreateConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1334,8 +1330,7 @@ int TCommandFederatedQueryCreateConnectionDataStreams::Run(TConfig& config) {
         data_stream->set_shared_reading(SharedReading);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.CreateConnection(request, CreateFqSettings<NYdb::NFq::TCreateConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1400,8 +1395,7 @@ int TCommandFederatedQueryCreateConnectionObjectStorage::Run(TConfig& config) {
 
     object_storage->set_bucket(Bucket);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.CreateConnection(request, CreateFqSettings<NYdb::NFq::TCreateConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1424,7 +1418,7 @@ void TCommandFederatedQueryCreateConnectionMonitoring::Config(TConfig& config) {
     config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access monitoring").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("project", "Monitoring project name").StoreResult(&Project);
     config.Opts->AddLongOption("cluster", "Monitoring cluster name").StoreResult(&Cluster);
-    config.Opts->AddLongOption("token-auth", "OAuth2 token to be used to access data streams").StoreResult(&TokenAuth);
+    config.Opts->AddLongOption("token-auth", "OAuth2 token to be used to access monitoring").StoreResult(&TokenAuth);
 }
 
 void TCommandFederatedQueryCreateConnectionMonitoring::Parse(TConfig& config) {
@@ -1474,8 +1468,7 @@ int TCommandFederatedQueryCreateConnectionMonitoring::Run(TConfig& config) {
     monitoring->set_project(Project);
     monitoring->set_cluster(Cluster);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.CreateConnection(request, CreateFqSettings<NYdb::NFq::TCreateConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1542,8 +1535,7 @@ int TCommandFederatedQueryTestConnectionYdb::Run(TConfig& config) {
 
     ydb->set_secure(Secure);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.TestConnection(request, CreateFqSettings<NYdb::NFq::TTestConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1556,7 +1548,7 @@ TCommandFederatedQueryTestConnectionGeneric<TDataSource>::TCommandFederatedQuery
     : TYdbCommand(
         LowerCaseName(TDataSource::Name),
         {},
-        TStringBuilder() << "Test a connection to" << TDataSource::Name << " that can be used in queries")
+        TStringBuilder() << "Test a connection to " << TDataSource::Name << " that can be used in queries")
 {}
 
 template <typename TDataSource>
@@ -1618,8 +1610,7 @@ int TCommandFederatedQueryTestConnectionGeneric<TDataSource>::Run(TConfig& confi
 
     cluster->set_database_name(DatabaseName);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.TestConnection(request, CreateFqSettings<NYdb::NFq::TTestConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1674,8 +1665,7 @@ int TCommandFederatedQueryTestConnectionDataStreams::Run(TConfig& config) {
 
     data_stream->set_secure(Secure);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.TestConnection(request, CreateFqSettings<NYdb::NFq::TTestConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1717,8 +1707,7 @@ int TCommandFederatedQueryTestConnectionObjectStorage::Run(TConfig& config) {
 
     object_storage->set_bucket(Bucket);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.TestConnection(request, CreateFqSettings<NYdb::NFq::TTestConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1762,8 +1751,7 @@ int TCommandFederatedQueryTestConnectionMonitoring::Run(TConfig& config) {
     monitoring->set_project(Project);
     monitoring->set_cluster(Cluster);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.TestConnection(request, CreateFqSettings<NYdb::NFq::TTestConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1805,8 +1793,7 @@ int TCommandFederatedQueryConnectionListBindings::Run(TConfig& config) {
         request.mutable_filter()->set_created_by_me(CreatedByMe);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ListBindings(request, CreateFqSettings<NYdb::NFq::TListBindingsSettings>(config.YScope)).ExtractValueSync());
@@ -1844,8 +1831,7 @@ int TCommandFederatedQueryListConnections::Run(TConfig& config) {
         request.mutable_filter()->set_created_by_me(CreatedByMe);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ListConnections(request, CreateFqSettings<NYdb::NFq::TListConnectionsSettings>(config.YScope)).ExtractValueSync());
@@ -1871,8 +1857,7 @@ int TCommandFederatedQueryDescribeConnection::Run(TConfig& config) {
     FederatedQuery::DescribeConnectionRequest request;
     request.set_connection_id(ConnectionId);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.DescribeConnection(request, CreateFqSettings<NYdb::NFq::TDescribeConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -1972,8 +1957,7 @@ int TCommandFederatedQueryModifyConnectionYdb::Run(TConfig& config) {
 
     ydb->set_secure(Secure);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ModifyConnection(request, CreateFqSettings<NYdb::NFq::TModifyConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -2081,8 +2065,7 @@ int TCommandFederatedQueryModifyConnectionGeneric<TDataSource>::Run(TConfig& con
 
     cluster->set_database_name(DatabaseName);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ModifyConnection(request, CreateFqSettings<NYdb::NFq::TModifyConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -2170,8 +2153,7 @@ int TCommandFederatedQueryModifyConnectionDataStreams::Run(TConfig& config) {
 
     data_stream->set_secure(Secure);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ModifyConnection(request, CreateFqSettings<NYdb::NFq::TModifyConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -2246,8 +2228,7 @@ int TCommandFederatedQueryModifyConnectionObjectStorage::Run(TConfig& config) {
 
     object_storage->set_bucket(Bucket);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ModifyConnection(request, CreateFqSettings<NYdb::NFq::TModifyConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -2324,8 +2305,7 @@ int TCommandFederatedQueryModifyConnectionMonitoring::Run(TConfig& config) {
     monitoring->set_project(Project);
     monitoring->set_cluster(Cluster);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ModifyConnection(request, CreateFqSettings<NYdb::NFq::TModifyConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -2355,8 +2335,7 @@ int TCommandFederatedQueryDeleteConnection::Run(TConfig& config) {
     request.set_previous_revision(PreviousRevision);
     request.set_idempotency_key(IdempotencyKey);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.DeleteConnection(request, CreateFqSettings<NYdb::NFq::TDeleteConnectionSettings>(config.YScope)).ExtractValueSync());
@@ -2410,8 +2389,7 @@ int TCommandFederatedQueryCreateBinding::Run(TConfig& config) {
         request.set_idempotency_key(IdempotencyKey);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.CreateBinding(request, CreateFqSettings<NYdb::NFq::TCreateBindingSettings>(config.YScope)).ExtractValueSync());
@@ -2449,8 +2427,7 @@ int TCommandFederatedQueryListBindings::Run(TConfig& config) {
         request.mutable_filter()->set_created_by_me(CreatedByMe);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ListBindings(request, CreateFqSettings<NYdb::NFq::TListBindingsSettings>(config.YScope)).ExtractValueSync());
@@ -2476,8 +2453,7 @@ int TCommandFederatedQueryDescribeBinding::Run(TConfig& config) {
     FederatedQuery::DescribeBindingRequest request;
     request.set_binding_id(BindingId);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.DescribeBinding(request, CreateFqSettings<NYdb::NFq::TDescribeBindingSettings>(config.YScope)).ExtractValueSync());
@@ -2541,8 +2517,7 @@ int TCommandFederatedQueryModifyBinding::Run(TConfig& config) {
         request.set_idempotency_key(IdempotencyKey);
     }
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.ModifyBinding(request, CreateFqSettings<NYdb::NFq::TModifyBindingSettings>(config.YScope)).ExtractValueSync());
@@ -2572,8 +2547,7 @@ int TCommandFederatedQueryDeleteBinding::Run(TConfig& config) {
     request.set_previous_revision(PreviousRevision);
     request.set_idempotency_key(IdempotencyKey);
 
-    Cout << "Request:" << Endl;
-    Cout << request.DebugString() << Endl;
+    PrintRequestIfVerbose(config, request);
 
     Cout << "Response:" << Endl;
     ProcessProtoResult(client.DeleteBinding(request, CreateFqSettings<NYdb::NFq::TDeleteBindingSettings>(config.YScope)).ExtractValueSync());

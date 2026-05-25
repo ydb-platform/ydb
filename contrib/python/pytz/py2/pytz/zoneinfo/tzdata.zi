@@ -2966,7 +2966,9 @@ Z America/Toronto -5:17:32 - LMT 1895
 -5 C E%sT
 Z America/Vancouver -8:12:28 - LMT 1884
 -8 Va P%sT 1987
--8 C P%sT
+-8 C P%sT 2026 Mar 9
+-8 1 PDT 2026 N 1 2
+-7 - MST
 Z America/Whitehorse -9:0:12 - LMT 1900 Au 20
 -9 Y Y%sT 1965
 -9 Yu Y%sT 1966 F 27

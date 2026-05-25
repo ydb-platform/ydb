@@ -67,7 +67,7 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         for (auto candidate : Candidates) {
             if (isLocked(candidate)) {
@@ -91,10 +91,10 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
                 }
             }
             if (success) {
-                return { CompactionTask<TKey, TPortion>{ result, 1 } };
+                return CompactionTask<TKey, TPortion>{ result, 1 };
             }
         }
-        return {};
+        return std::nullopt;
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -143,12 +143,16 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
 <<<<<<< HEAD
     void DoAddPortion(typename TPortion::TConstPtr p) override {
+<<<<<<< HEAD
 =======
     void DoAddPortion(typename TPortion::TPtr p) override {
         AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
         LastAdd = TInstant::Now();
 >>>>>>> 3762dac960c (tiling++ by default (#40146))
         Portions.insert(p);
+=======
+        AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
+>>>>>>> 73c7e833124 (parallel compaction (#40678))
         TotalBlobBytes += p->GetTotalBlobBytes();
         this->Counters.Portions->SetHeight(Portions.size());
     }
@@ -159,15 +163,19 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
 <<<<<<< HEAD
         if (TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
+<<<<<<< HEAD
             return {};
 =======
         if (TInstant::Now() - LastAdd < BoredTime && TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
             return std::nullopt;
 >>>>>>> 3762dac960c (tiling++ by default (#40146))
+=======
+            return std::nullopt;
+>>>>>>> 73c7e833124 (parallel compaction (#40678))
         }
         CompactionTask<TKey, TPortion> result;
         result.TargetLevel = 0;
@@ -180,9 +188,10 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
             currentBlobBytes += it->GetTotalBlobBytes();
             if (currentBlobBytes > Settings.Compaction.Bytes || result.Portions.size() > Settings.Compaction.Portions) {
                 result.TargetLevel = 0;
-                return { result };
+                return result;
             }
         }
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 
@@ -191,6 +200,9 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         }
 >>>>>>> 3762dac960c (tiling++ by default (#40146))
         return {};
+=======
+        return std::nullopt;
+>>>>>>> 73c7e833124 (parallel compaction (#40678))
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -199,7 +211,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         return std::max(portionPriority, bytestPriority);
     }
 
-    TSet<typename TPortion::TConstPtr> Portions;
+    TSet<typename TPortion::TConstPtr, TPortionByIdComparator<TPortion>> Portions;
     ui64 TotalBlobBytes = 0;
 
     /// DEBUG: portion must live here before accumulator counters are adjusted.
@@ -273,7 +285,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         this->Counters.Portions->SetHeight(maxCount);
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         CompactionTask<TKey, TPortion> result;
         auto range = Intersections.GetMaxRange();
@@ -289,10 +301,10 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
             return true;
         });
         if (result.Portions.size() < 2) {
-            return {};
+            return std::nullopt;
         }
         result.TargetLevel = LevelIdx;
-        return { result };
+        return result;
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

@@ -2735,90 +2735,6 @@ public:
     }
 
 
-    // Temporary per-query logging.
-    // TODO(anely-d): remove once the query logging system is ready.
-    // Errors are logged at PRI_WARN, other events at PRI_INFO.
-    void LogQueryFinalState(const NKikimrKqp::TEvQueryResponse& record) {
-        if (!QueryState || !QueryState->UserRequestContext
-                || !IsExecuteAction(QueryState->GetAction())
-                || !IsQueryTypeSupported(QueryState->GetType())) {
-            return;
-        }
-
-        auto ctx = TlsActivationContext->AsActorContext();
-        auto logSettings = ctx.LoggerSettings();
-        if (!logSettings) {
-            return;
-        }
-
-        const auto status = record.GetYdbStatus();
-        const bool isError = (status != Ydb::StatusIds::SUCCESS);
-        const auto priority = isError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
-        if (!logSettings->Satisfies(priority, NKikimrServices::KQP_SESSION)) {
-            return;
-        }
-
-        ui64 durationUs = QueryState->QueryStats.DurationUs;
-        if (!durationUs) {
-            durationUs = (TInstant::Now() - QueryState->StartTime).MicroSeconds();
-        }
-        const auto duration = TDuration::MicroSeconds(durationUs);
-
-        auto username = QueryState->UserToken ? QueryState->UserToken->GetUserSID() : TString();
-        if (username.empty()) {
-            username = "UNAUTHENTICATED";
-        }
-
-        ui64 resultsSize = 0;
-        for (const auto& result : record.GetResponse().GetYdbResults()) {
-            resultsSize += result.ByteSize();
-        }
-
-        TString queryText;
-        if (QueryState->CompileResult && QueryState->CompileResult->Query) {
-            queryText = QueryState->CompileResult->Query->Text;
-        } else if (QueryState->RequestEv) {
-            queryText = QueryState->RequestEv->GetQuery();
-        } else {
-            queryText = "<failed to extract query text>";
-        }
-        constexpr size_t MaxQueryTextLen = 10_KB;
-        const size_t origQueryLen = queryText.size();
-        if (queryText.size() > MaxQueryTextLen) {
-            Utf8TruncateInplaceRobust(queryText, MaxQueryTextLen);
-        }
-
-        TStringBuilder line;
-        line << "Query event"
-            << ", database: " << QueryState->Database
-            << ", databaseId: " << QueryState->UserRequestContext->DatabaseId
-            << ", user: " << username
-            << ", action: " << NKikimrKqp::EQueryAction_Name(QueryState->GetAction())
-            << ", type: " << NKikimrKqp::EQueryType_Name(QueryState->GetType())
-            << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
-            << ", duration: " << duration.ToString()
-            << ", results: " << resultsSize << 'b'
-            << ", parameters: " << QueryState->ParametersSize << 'b'
-            << ", queryLen: " << origQueryLen
-            << ", query: \"" << EscapeC(queryText) << '"';
-
-        if (isError) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-            if (!issues.Empty()) {
-                constexpr size_t MaxIssuesLen = 1024;
-                TString issuesStr = issues.ToString(true);
-                if (issuesStr.size() > MaxIssuesLen) {
-                    Utf8TruncateInplaceRobust(issuesStr, MaxIssuesLen);
-                }
-                line << ", issues: \"" << EscapeC(issuesStr) << '"';
-            }
-        }
-
-        auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
-        LOG_LOG_S(ctx, priority, NKikimrServices::KQP_SESSION, requestInfo << line);
-    }
-
     template<class TEvRecord>
     void AddTrailingInfo(TEvRecord& record) {
         if (ShutdownState) {
@@ -3212,8 +3128,6 @@ public:
         );
 
         KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record));
-
-        LogQueryFinalState(record);
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         STLOG_D("Sent query response back to proxy",

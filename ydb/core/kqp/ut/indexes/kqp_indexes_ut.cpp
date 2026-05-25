@@ -265,13 +265,11 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         TestNoReadFromMainTableBeforeJoin();
     }
 
-        Y_UNIT_TEST_TWIN(HandleWriteOnlyIndex, EnableIndexStreamWrite) {
+    Y_UNIT_TEST(HandleWriteOnlyIndex) {
         using namespace NYql;
         using namespace NYql::NNodes;
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
-        auto setting = NKikimrKqp::TKqpSetting(appConfig);
+        auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -306,12 +304,10 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
                 [&indexName, &indexUpdated, &indexCleaned](const TExprNode::TPtr& exprNode) mutable {
                     if (TMaybeNode<TKqpTableSinkSettings>(exprNode)) {
                         if (TKqpTableSinkSettings(exprNode).Table().Path().Value().Contains(indexName)) {
-                            if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert") {
+                            if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert" || TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
                                 indexUpdated = true;
                             } else if (TKqpTableSinkSettings(exprNode).Mode().Value() == "delete") {
                                 indexCleaned = true;
-                            } else if (TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
-                                indexUpdated = true;
                             }
                         }
                     }

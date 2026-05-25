@@ -19,7 +19,8 @@ TKey TKey::FromString(const TString& s, const TPartitionId& partition)
                 t.GetPartNo(),
                 t.GetCount(),
                 t.GetInternalPartsCount(),
-                t.GetSuffix());
+                t.GetSuffix(),
+                t.GetOffsetDelta());
 }
 
 TKey TKey::ForBody(EType type,
@@ -72,7 +73,7 @@ TKey TKey::FromKey(const TKey& k,
                    const TPartitionId& partition,
                    ui64 offset)
 {
-    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.GetSuffix()};
+    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.GetSuffix(), k.GetOffsetDelta()};
 }
 
 void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)

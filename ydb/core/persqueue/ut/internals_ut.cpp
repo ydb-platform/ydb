@@ -363,6 +363,44 @@ Y_UNIT_TEST(RestoreKeys) {
         auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005|", TPartitionId{8});
         UNIT_ASSERT_VALUES_EQUAL(key.GetPartition().InternalPartitionId, 8);
         UNIT_ASSERT(key.HasSuffix());
+        UNIT_ASSERT(!key.GetOffsetDelta().Defined());
+    }
+}
+
+Y_UNIT_TEST(StoreKeysWithOffsetDelta) {
+    auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    key.SetOffsetDelta(42);
+    UNIT_ASSERT(key.HasOffsetDelta());
+    UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 42u);
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005_0000000042");
+
+    auto keyHead = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    keyHead.SetOffsetDelta(3);
+    UNIT_ASSERT_VALUES_EQUAL(keyHead.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005_0000000003|");
+
+    key.SetOffsetDelta(Nothing());
+    UNIT_ASSERT(!key.HasOffsetDelta());
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), "d0000000009_00000000000000000008_00007_0000000006_00005");
+}
+
+Y_UNIT_TEST(RestoreKeysWithOffsetDelta) {
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005_0000000042", TPartitionId{4});
+        UNIT_ASSERT(key.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 42u);
+        UNIT_ASSERT(!key.HasSuffix());
+    }
+
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005_0000000003?", TPartitionId{4});
+        UNIT_ASSERT(key.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 3u);
+        UNIT_ASSERT(key.IsFastWrite());
+    }
+
+    {
+        auto key = TKey::FromString("d0000000002_00000000000000000013_00007_0000000006_00005", TPartitionId{4});
+        UNIT_ASSERT(!key.GetOffsetDelta().Defined());
     }
 }
 

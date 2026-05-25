@@ -52,7 +52,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/security/util.h>
 
-#include <util/charset/utf8.h>
 #include <util/string/printf.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -3114,7 +3113,8 @@ public:
             }
         }
 
-        Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
+        const ui64 responseByteSize = record.ByteSize();
+        Counters->ReportResponseStatus(Settings.DbCounters, responseByteSize, record.GetYdbStatus());
         for (auto& issue : record.GetResponse().GetQueryIssues()) {
             Counters->ReportIssues(Settings.DbCounters, CachedIssueCounters, issue);
         }
@@ -3127,7 +3127,7 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
-        KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record));
+        KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record, responseByteSize));
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         STLOG_D("Sent query response back to proxy",

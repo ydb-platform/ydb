@@ -12,7 +12,6 @@ SRCS(
 )
 
 PEERDIR(
-    util/charset
     ydb/core/docapi
     ydb/core/kqp/common
     ydb/core/kqp/federated_query

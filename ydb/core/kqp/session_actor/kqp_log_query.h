@@ -4,7 +4,6 @@
 #include <util/stream/output.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
-#include <util/stream/output.h>
 #include <functional>
 
 namespace NKikimrKqp {
@@ -27,18 +26,27 @@ public:
 
     static TLogQuery Started(const TKqpQueryState& state);
 
+    // responseByteSize: record.ByteSize() from Reply() (same value as ResponseBytes counter).
     static TLogQuery Completed(const TKqpQueryState& state,
-                               const NKikimrKqp::TEvQueryResponse& record);
+                               const NKikimrKqp::TEvQueryResponse& record,
+                               ui64 responseByteSize);
 
 private:
     TAction Action;
 };
 
-// Cheap macro-level gate: avoid invoking the action when even the most
-// permissive level we ever emit at (WARN, used by Completed for failures)
-// is disabled for KQP_REQUEST. The action itself re-checks IS_..._ENABLED
-// for the priority it actually emits at (TRACE for started/success-completed,
-// WARN for failure-completed) before paying for JSON serialization.
+// KQP_REQUEST log contract (component NKikimrServices::KQP_REQUEST, tag [REQ_JSON]):
+//
+//   WARN  — failed completed only (default-friendly: broken queries visible).
+//   DEBUG — started + successful completed; SQL truncated to 10 KB unless TRACE.
+//   TRACE — same events as DEBUG, but full SQL text (no truncation).
+//
+// Macro gate is WARN; lambdas re-check the priority they actually emit at.
+// req_id is ProxyRequestId (proxy cookie), correlates with STLOG proxy_request_id.
+// results_size on completed is TEvQueryResponse::ByteSize() (ResponseBytes counter).
+//
+// UI queries prefixed with /*UI-QUERY-EXCLUDE*/ skip success-path logs; failures
+// still emit at WARN.
 #define KQP_REQ_LOG(logQuery) \
     do { \
         if (IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::KQP_REQUEST, 0ull)) { \

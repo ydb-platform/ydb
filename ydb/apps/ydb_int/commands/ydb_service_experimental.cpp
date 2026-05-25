@@ -112,6 +112,10 @@ void TCommandStreamQuery::Config(TConfig& config) {
 
 int TCommandStreamQuery::Run(TConfig& config) {
     if (!Query) {
+        if (!FileName) {
+            throw TMisuseException() << "Neither query text (\"--query\", \"-q\") "
+                << "nor path to a file with query text (\"--file\", \"-f\") were provided.";
+        }
         Query = TFileInput(FileName).ReadAll();
     }
 

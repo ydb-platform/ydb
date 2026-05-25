@@ -17,6 +17,52 @@ namespace NConsoleClient {
 
 using namespace NKikimr::NOperationId;
 
+namespace {
+
+// Command names are kept in one place to make a future move into the open-source
+// `ydb` binary easier (where `experimental` parent command does not exist).
+constexpr TStringBuf SqlCommandName = "sql";
+constexpr TStringBuf SqlOperationCommandName = "sql-operation";
+
+// Wraps `arg` in single quotes if it contains shell-significant characters, so that
+// copy-pasted hint commands work even when option values contain spaces or quotes.
+TString ShellQuoteIfNeeded(TStringBuf arg) {
+    if (arg.find_first_of(" \t\n\"'\\$`*?[]{}()|&;<>!#~") == TStringBuf::npos && !arg.empty()) {
+        return TString(arg);
+    }
+    TStringBuilder result;
+    result << '\'';
+    for (char c : arg) {
+        if (c == '\'') {
+            result << "'\\''";
+        } else {
+            result << c;
+        }
+    }
+    result << '\'';
+    return result;
+}
+
+// Builds a command line prefix from the original argv (binary path + everything the user
+// typed) up to the `sql` or `sql-operation` token, then appends `sql-operation <subCommand>`.
+// Using InitialArgV/InitialArgC (not ArgV/ArgC, which get shifted as subcommands are parsed)
+// keeps the hint identical to how the tool was actually invoked.
+TString MakeSqlOperationCommand(const TClientCommand::TConfig& config, TStringBuf subCommand) {
+    TStringBuilder result;
+    result << ShellQuoteIfNeeded(config.InitialArgV[0]);
+    for (int i = 1; i < config.InitialArgC; ++i) {
+        TStringBuf arg(config.InitialArgV[i]);
+        if (arg == SqlCommandName || arg == SqlOperationCommandName) {
+            break;
+        }
+        result << ' ' << ShellQuoteIfNeeded(arg);
+    }
+    result << ' ' << SqlOperationCommandName << ' ' << subCommand;
+    return result;
+}
+
+} // anonymous namespace
+
 void TCommandExecuteSqlBase::DeclareScriptOptions(TClientCommand::TConfig& config) {
     config.Opts->AddLongOption('s', "script", "Script (query) text to execute").RequiredArgument("[String]")
         .StoreResult(&Query);
@@ -58,8 +104,8 @@ void TCommandExecuteSqlBase::DeclareCommonOutputOptions(TClientCommand::TConfig&
 
 void TCommandExecuteSqlBase::ParseCommonInputOptions(TClientCommand::TConfig& config) {
     if (Query && QueryFile) {
-        throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
-            << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+        throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
+            << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
     if (QueryFile) {
         if (QueryFile == "-") {
@@ -79,9 +125,6 @@ void TCommandExecuteSqlBase::ParseCommonInputOptions(TClientCommand::TConfig& co
     if (Query.empty()) {
         throw TMisuseException() << "Neither text of script (\"--script\", \"-s\") "
             << "nor path to file with script text (\"--file\", \"-f\") were provided.";
-        //Cerr << "Neither text of script (\"--script\", \"-s\") "
-        //    << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
-        //config.PrintHelpAndExit();
     }
     // Should be called after setting ReadingSomethingFromStdin
     ParseParameters(config);
@@ -111,7 +154,7 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TClientCommand::TConfig& config, 
         // Execute query with parameters
         if (InputFramingFormat != EFramingFormat::Default && InputFramingFormat != EFramingFormat::NoFraming) {
             throw TMisuseException() << "Can't execute several async scripts (with \""
-                << InputFramingFormat << "\" framing format";
+                << InputFramingFormat << "\" framing format).";
         }
         THolder<TParamsBuilder> paramBuilder;
         if (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
@@ -138,19 +181,19 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TClientCommand::TConfig& config, 
         NOperation::TOperationClient operationClient(driver);
         return WaitAndPrintResults(queryClient, operationClient, Operation->Id());
     } else {
-        return PrintOperationInfo();
+        return PrintOperationInfo(config);
     }
 }
 
-int TCommandExecuteSqlBase::PrintOperationInfo() {
+int TCommandExecuteSqlBase::PrintOperationInfo(const TClientCommand::TConfig& config) {
     Y_ENSURE(Operation.has_value());
     Cout << "Operation info:" << Endl << Operation->ToString() << Endl;
     std::string quotedId = "\"" + Operation->Id().ToString() + "\"";
-    Cerr << "To wait for completion and fetch results: ydb sql-operation fetch " << quotedId << Endl
-        << "To get current execution status: ydb sql-operation get " << quotedId << Endl
-        << "To wait for completion only: ydb sql-operation wait " << quotedId << Endl
-        << "To cancel operation: ydb sql-operation cancel " << quotedId << Endl
-        << "To forget operation: ydb sql-operation forget " << quotedId << Endl;
+    Cerr << "To wait for completion and fetch results: " << MakeSqlOperationCommand(config, "fetch") << " " << quotedId << Endl
+        << "To get current execution status: " << MakeSqlOperationCommand(config, "get") << " " << quotedId << Endl
+        << "To wait for completion only: " << MakeSqlOperationCommand(config, "wait") << " " << quotedId << Endl
+        << "To cancel operation: " << MakeSqlOperationCommand(config, "cancel") << " " << quotedId << Endl
+        << "To forget operation: " << MakeSqlOperationCommand(config, "forget") << " " << quotedId << Endl;
     return EXIT_SUCCESS;
 }
 
@@ -167,7 +210,6 @@ int TCommandExecuteSqlBase::WaitAndPrintResults(
 bool TCommandExecuteSqlBase::WaitForCompletion(NOperation::TOperationClient& operationClient,
         const TOperation::TOperationId& operationId) {
     SetInterruptHandlers();
-    // Throw exception on getting operation info if it is the first getOperation, then retry
     bool firstGetOperation = true;
     TWaitingBar waitingBar("Waiting for script execution to finish... ");
     while (!IsInterrupted()) {
@@ -176,26 +218,28 @@ bool TCommandExecuteSqlBase::WaitForCompletion(NOperation::TOperationClient& ope
             : operationClient
                 .Get<NQuery::TScriptExecutionOperation>(operationId)
                 .GetValueSync();
-        if (firstGetOperation) {
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(execScriptOperation.Status());
-            firstGetOperation = false;
-        }
-        if (!execScriptOperation.Status().IsSuccess() || !execScriptOperation.Ready()) {
+        firstGetOperation = false;
+
+        // Surface any failure status from polling immediately, otherwise the loop
+        // would silently retry forever on terminal server-side errors. Use ThrowOnError
+        // (not ThrowOnErrorOrPrintIssues) here so that transient in-progress issues are not
+        // re-printed each poll iteration; issues will still be reported via the exception.
+        NStatusHelpers::ThrowOnError(execScriptOperation.Status());
+        if (!execScriptOperation.Ready()) {
             waitingBar.Render();
             Sleep(TDuration::Seconds(1));
             continue;
         }
         Operation = execScriptOperation;
-        waitingBar.Finish(true);
-        break;
+        waitingBar.Finish(/* cleanup */ true);
+        // Print any final-status issues once, now that the operation is ready.
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(execScriptOperation.Status());
+        return true;
     }
-    waitingBar.Finish(false);
 
-    if (IsInterrupted()) {
-        Cerr << "<INTERRUPTED>" << Endl;
-            return false;
-    }
-    return true;
+    waitingBar.Finish(/* cleanup */ false);
+    Cerr << "<INTERRUPTED>" << Endl;
+    return false;
 }
 
 int TCommandExecuteSqlBase::PrintScriptResults(NQuery::TQueryClient& queryClient) {
@@ -203,31 +247,33 @@ int TCommandExecuteSqlBase::PrintScriptResults(NQuery::TQueryClient& queryClient
     TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
     for (size_t resultSetIndex = 0; resultSetIndex < Operation->Metadata().ResultSetsMeta.size(); ++resultSetIndex) {
-        std::string const* nextFetchToken = nullptr;
+        // Stored by value, not by pointer: the underlying response is destroyed at the end of the
+        // iteration, so a pointer into it would dangle on the next loop iteration.
+        std::string nextFetchToken;
         while (!IsInterrupted()) {
             NYdb::NQuery::TFetchScriptResultsSettings settings;
-            if (nextFetchToken != nullptr) {
-                settings.FetchToken(*nextFetchToken);
+            if (!nextFetchToken.empty()) {
+                settings.FetchToken(nextFetchToken);
             }
 
             // TODO: fetch with retries
             auto asyncResult = queryClient.FetchScriptResults(Operation->Id(), resultSetIndex, settings);
             auto result = asyncResult.GetValueSync();
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
             if (result.HasResultSet()) {
                 printer.Print(result.ExtractResultSet());
             }
 
-            if (!result.GetNextFetchToken().empty()) {
-                nextFetchToken = &result.GetNextFetchToken();
-            } else {
+            if (result.GetNextFetchToken().empty()) {
                 break;
             }
+            nextFetchToken = result.GetNextFetchToken();
         }
     }
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
-            return EXIT_FAILURE;
+        return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
 }
@@ -247,10 +293,10 @@ void TCommandSqlExperimental::Config(TConfig& config) {
             "Query results are ignored.\n"
             "Important note: The query is actually executed, so any changes will be applied to the database.")
         .StoreTrue(&ExplainAnalyzeMode);
-    config.Opts->AddLongOption("async", "Execute script (query) asynchronously. "
+    config.Opts->AddLongOption("async", TStringBuilder() << "Execute script (query) asynchronously. "
             "Operation will be started on server and its Id will be printed. "
-            "To get operation status use \"ydb sql-operation get\" command. "
-            "To fetch query results use \"ydb sql-operation fetch\" command.\n"
+            "To get operation status use \"" << MakeSqlOperationCommand(config, "get") << "\" command. "
+            "To fetch query results use \"" << MakeSqlOperationCommand(config, "fetch") << "\" command.\n"
             "Note: query results will be stored on server and thus consume storage resources. "
             "Use --results-ttl option to set how long results should be stored for")
         .StoreTrue(&RunAsync);
@@ -494,6 +540,11 @@ void TCommandSqlOperationGet::Config(TConfig& config) {
     });
 }
 
+void TCommandSqlOperationGet::Parse(TConfig& config) {
+    TCommandWithScriptExecutionOperationId::Parse(config);
+    ParseOutputFormats();
+}
+
 namespace {
     IOutputStream& operator<<(IOutputStream& out, NQuery::ESyntax syntax) {
         switch (syntax) {
@@ -523,17 +574,17 @@ int TCommandSqlOperationGet::Run(TConfig& config) {
         case EStatus::SUCCESS:
             printOperationInfo();
             if (operation.Ready()) {
-                Cerr << "To fetch results: ydb sql-operation fetch " << quotedId << Endl;
+                Cerr << "To fetch results: " << MakeSqlOperationCommand(config, "fetch") << " " << quotedId << Endl;
             } else {
-                Cerr << "To wait for completion and fetch results: ydb sql-operation fetch " << quotedId << Endl
-                    << "To wait for completion only: ydb sql-operation wait " << quotedId << Endl
-                    << "To cancel operation: ydb sql-operation cancel " << quotedId << Endl;
+                Cerr << "To wait for completion and fetch results: " << MakeSqlOperationCommand(config, "fetch") << " " << quotedId << Endl
+                    << "To wait for completion only: " << MakeSqlOperationCommand(config, "wait") << " " << quotedId << Endl
+                    << "To cancel operation: " << MakeSqlOperationCommand(config, "cancel") << " " << quotedId << Endl;
             }
-            Cerr << "To forget operation: ydb sql-operation forget " << quotedId << Endl;
+            Cerr << "To forget operation: " << MakeSqlOperationCommand(config, "forget") << " " << quotedId << Endl;
             return EXIT_SUCCESS;
         case EStatus::CANCELLED:
             printOperationInfo();
-            Cerr << "To forget operation: ydb sql-operation forget " << quotedId << Endl;
+            Cerr << "To forget operation: " << MakeSqlOperationCommand(config, "forget") << " " << quotedId << Endl;
             return EXIT_FAILURE;
         default:
             NStatusHelpers::ThrowOnErrorOrPrintIssues(operation.Status());
@@ -551,8 +602,8 @@ int TCommandSqlOperationWait::Run(TConfig& config) {
     if (WaitForCompletion(client, OperationId)) {
         std::string quotedId = "\"" + OperationId.ToString() + "\"";
         Cerr << "Operation completed." << Endl
-            << "To fetch results: ydb sql-operation fetch " << quotedId << Endl
-            << "To forget operation: ydb sql-operation forget " << quotedId << Endl;
+            << "To fetch results: " << MakeSqlOperationCommand(config, "fetch") << " " << quotedId << Endl
+            << "To forget operation: " << MakeSqlOperationCommand(config, "forget") << " " << quotedId << Endl;
         return EXIT_SUCCESS;
     } else {
         return EXIT_FAILURE;
@@ -566,8 +617,8 @@ TCommandSqlOperationCancel::TCommandSqlOperationCancel()
 int TCommandSqlOperationCancel::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
-    Cerr << "Operation cancelled. To forget operation: ydb sql-operation forget \""
-         << OperationId.ToString() << "\"" << Endl;
+    Cerr << "Operation cancelled. To forget operation: " << MakeSqlOperationCommand(config, "forget")
+         << " \"" << OperationId.ToString() << "\"" << Endl;
     return EXIT_SUCCESS;
 }
 

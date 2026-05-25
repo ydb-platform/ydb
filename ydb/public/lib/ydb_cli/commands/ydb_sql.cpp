@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 namespace NYdb::NConsoleClient {
 
 using namespace NKikimr::NOperationId;
@@ -97,7 +98,7 @@ void TCommandSql::Parse(TConfig& config) {
     ParseInputFormats();
     ParseOutputFormats();
     if (Query && QueryFile) {
-        throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
+        throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
             << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
     }
     if (ExecSettings.ExplainMode && ExecSettings.ExplainAnalyzeMode) {

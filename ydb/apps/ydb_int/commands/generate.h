@@ -42,14 +42,14 @@ struct TGenerateSettings : public TOperationRequestSettings<TGenerateSettings> {
     static constexpr ui64 MaxBytesPerRequest = 8_MB;
     static constexpr ui32 MaxRetries = 10000;
     static constexpr ui64 DefaultRowsToGenerate = 1000 * 1000;
-    static constexpr ui64 DefaultRowsBerRequest = 10 * 1000;
+    static constexpr ui64 DefaultRowsPerRequest = 10 * 1000;
 
     FLUENT_SETTING_DEFAULT(TDuration, OperationTimeout, TDuration::Seconds(5 * 60));
     FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, OperationTimeout_ + TDuration::Seconds(5));
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
     FLUENT_SETTING_DEFAULT(ui64, Threads, std::thread::hardware_concurrency());
     FLUENT_SETTING_DEFAULT(ui64, RowsToGenerate, DefaultRowsToGenerate);
-    FLUENT_SETTING_DEFAULT(ui64, RowsPerRequest, DefaultRowsBerRequest);
+    FLUENT_SETTING_DEFAULT(ui64, RowsPerRequest, DefaultRowsPerRequest);
 };
 
 class TGenerateClient {
@@ -69,8 +69,6 @@ private:
 
     NTable::TBulkUpsertSettings UpsertSettings;
     NTable::TRetryOperationSettings RetrySettings;
-
-    static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
 
     using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
 

@@ -24,7 +24,7 @@ public:
 
 protected:
     int ExecuteScriptAsync(TClientCommand::TConfig& config, TDriver& driver, NQuery::TQueryClient& client);
-    int PrintOperationInfo();
+    int PrintOperationInfo(const TClientCommand::TConfig& config);
     bool WaitForCompletion(NOperation::TOperationClient& operationClient, const TOperation::TOperationId& operationId);
     int PrintScriptResults(NQuery::TQueryClient& queryClient);
     int WaitAndPrintResults(NQuery::TQueryClient& queryClient, NOperation::TOperationClient& operationClient,
@@ -94,6 +94,7 @@ class TCommandSqlOperationGet : public TCommandWithScriptExecutionOperationId, p
 public:
     TCommandSqlOperationGet();
     virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 

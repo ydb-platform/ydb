@@ -183,9 +183,9 @@ void TCommandFederatedQueryCreateQuery::Config(TConfig& config) {
         .StoreResult(&DispositionDuration);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption('j', "json", "Json file").StoreResult(&JsonFile);
-    config.Opts->AddLongOption("automatic", "Flag that indicates that an automatic query will be created").StoreResult(&Automatic);
-    config.Opts->AddLongOption('w', "wait", "Wait result data").StoreResult(&Wait);
-    config.Opts->AddLongOption("skip-result", "Do not print query results").StoreResult(&SkipResult);
+    config.Opts->AddLongOption("automatic", "Flag that indicates that an automatic query will be created").NoArgument().StoreTrue(&Automatic);
+    config.Opts->AddLongOption('w', "wait", "Wait result data").NoArgument().StoreTrue(&Wait);
+    config.Opts->AddLongOption("skip-result", "Do not print query results").NoArgument().StoreTrue(&SkipResult);
 }
 
 void TCommandFederatedQueryCreateQuery::Parse(TConfig& config) {
@@ -487,7 +487,7 @@ void TCommandFederatedQueryModifyQuery::Config(TConfig& config) {
     config.Opts->AddLongOption("revision", "Previous revision").StoreResult(&PreviousRevision);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption('j', "json", "Json file").StoreResult(&JsonFile);
-    config.Opts->AddLongOption('w', "wait", "Wait result data").StoreResult(&Wait);
+    config.Opts->AddLongOption('w', "wait", "Wait result data").NoArgument().StoreTrue(&Wait);
     config.Opts->AddLongOption('f', "disposition-force", "Force disposition (mode for FROM_LAST_CHECKPOINT disposition)").NoArgument().StoreTrue(&DispositionForce);
 }
 
@@ -609,7 +609,7 @@ int TCommandFederatedQueryModifyQuery::Run(TConfig& config) {
     if (State) {
         if (State == "EMPTY") {
             request.set_state_load_mode(FederatedQuery::EMPTY);
-        } else if (Disposition == "FROM_LAST_CHECKPOINT") {
+        } else if (State == "FROM_LAST_CHECKPOINT") {
             request.set_state_load_mode(FederatedQuery::FROM_LAST_CHECKPOINT);
         } else {
             throw TMisuseException() << "Unknown state mode: " << State;
@@ -729,7 +729,7 @@ int TCommandFederatedQueryControlQuery::Run(TConfig& config) {
     request.set_query_id(QueryId);
 
     if (!Action) {
-        Action = "ABORTED";
+        Action = "ABORT";
     }
 
     FederatedQuery::QueryAction action = FederatedQuery::QUERY_ACTION_UNSPECIFIED;
@@ -759,7 +759,7 @@ void TCommandFederatedQueryGetResultData::Config(TConfig& config) {
     config.Opts->AddLongOption("index", "Index of the set").StoreResult(&ResultSetIndex);
     config.Opts->AddLongOption('l', "limit", "Limit the size of the response").StoreResult(&Limit);
     config.Opts->AddLongOption("offset", "Data offset").StoreResult(&Offset);
-    config.Opts->AddLongOption('w', "wait", "Wait result set").StoreResult(&Wait);
+    config.Opts->AddLongOption('w', "wait", "Wait result set").NoArgument().StoreTrue(&Wait);
 }
 
 void TCommandFederatedQueryGetResultData::Parse(TConfig& config) {
@@ -837,7 +837,7 @@ void TCommandFederatedQueryQueryListJobs::Config(TConfig& config) {
                     .StoreResult(&QueryId);
     config.Opts->AddLongOption("page-token", "Page token").StoreResult(&PageToken);
     config.Opts->AddLongOption('l', "limit", "Limit the size of the response").StoreResult(&Limit);
-    config.Opts->AddLongOption("created-by-me", "Only created by me").StoreResult(&CreatedByMe);
+    config.Opts->AddLongOption("created-by-me", "Only created by me").NoArgument().StoreTrue(&CreatedByMe);
 }
 
 void TCommandFederatedQueryQueryListJobs::Parse(TConfig& config) {
@@ -872,7 +872,7 @@ void TCommandFederatedQueryListJobs::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("page-token", "Page token").StoreResult(&PageToken);
     config.Opts->AddLongOption('l', "limit", "Limit the size of the response").StoreResult(&Limit);
-    config.Opts->AddLongOption("created-by-me", "Only created by me").StoreResult(&CreatedByMe);
+    config.Opts->AddLongOption("created-by-me", "Only created by me").NoArgument().StoreTrue(&CreatedByMe);
 }
 
 void TCommandFederatedQueryListJobs::Parse(TConfig& config) {
@@ -950,11 +950,11 @@ void TCommandFederatedQueryCreateConnectionYdb::Config(TConfig& config) {
         .StoreResult(&Visibility);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access YDB").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access YDB").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access YDB").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("endpoint", "Endpoint").StoreResult(&Endpoint);
     config.Opts->AddLongOption("database", "Database").StoreResult(&Database);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
 }
 
 void TCommandFederatedQueryCreateConnectionYdb::Parse(TConfig& config) {
@@ -1030,7 +1030,7 @@ void TCommandFederatedQueryCreateConnectionIceberg::Config(TConfig& config) {
         .StoreResult(&Visibility);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access to an iceberg").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access to an iceberg").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access to an iceberg").NoArgument().StoreTrue(&CurrentIAM);
 
     config.Opts->AddLongOption(TS3WarehouseParams::BUCKET, "Warehouse s3 bucket e.g., s3a://iceberg-bucket")
         .StoreResult(&S3Warehouse.Bucket);
@@ -1141,13 +1141,13 @@ void TCommandFederatedQueryCreateConnectionGeneric<TDataSource>::Config(TConfig&
         .StoreResult(&Visibility);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", TStringBuilder() << "Service account to be used to access " << TDataSource::Name).StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", TStringBuilder() << "Current IAM token to be used to access " << TDataSource::Name).StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", TStringBuilder() << "Current IAM token to be used to access " << TDataSource::Name).NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("login", "Login").StoreResult(&Login);
     config.Opts->AddLongOption("pwd", "Password").StoreResult(&Password);
     config.Opts->AddLongOption("host", "Host").StoreResult(&Host);
     config.Opts->AddLongOption("port", "Port").StoreResult(&Port);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
     config.Opts->AddLongOption("db-name", "Database Name").StoreResult(&DatabaseName);
 }
 
@@ -1156,16 +1156,17 @@ void TCommandFederatedQueryCreateConnectionGeneric<TDataSource>::Parse(TConfig& 
     TClientCommand::Parse(config);
 }
 
+// SFINAE detectors check the setter on the cluster object itself, not on a pointer to it.
+// Note: protobuf string setters typically take const std::string& / std::string_view; we use
+// const std::string& here, which is what generated set_host signatures accept.
 template <typename, typename = std::void_t<>>
-    struct has_set_host: std::false_type {};
+struct has_set_host: std::false_type {};
 
 template <typename T>
-struct has_set_host<T, std::void_t<decltype(std::declval<T&>().set_host(std::declval<int>()))>>: std::true_type {};
+struct has_set_host<T, std::void_t<decltype(std::declval<T&>().set_host(std::declval<const std::string&>()))>>: std::true_type {};
 
 template <typename T>
-constexpr bool optional_set_host(T*) {
-    return has_set_host<T>::value;
-}
+constexpr bool has_set_host_v = has_set_host<std::remove_pointer_t<T>>::value;
 
 template <typename, typename = std::void_t<>>
 struct has_set_port: std::false_type {};
@@ -1174,20 +1175,16 @@ template <typename T>
 struct has_set_port<T, std::void_t<decltype(std::declval<T&>().set_port(std::declval<int>()))>>: std::true_type {};
 
 template <typename T>
-constexpr bool optional_set_port(T*) {
-    return has_set_port<T>::value;
-}
+constexpr bool has_set_port_v = has_set_port<std::remove_pointer_t<T>>::value;
 
 template <typename, typename = std::void_t<>>
 struct has_set_secure: std::false_type {};
 
 template <typename T>
-struct has_set_secure<T, std::void_t<decltype(std::declval<T&>().set_secure(std::declval<int>()))>>: std::true_type {};
+struct has_set_secure<T, std::void_t<decltype(std::declval<T&>().set_secure(std::declval<bool>()))>>: std::true_type {};
 
 template <typename T>
-constexpr bool optional_set_secure(T*) {
-    return has_set_secure<T>::value;
-}
+constexpr bool has_set_secure_v = has_set_secure<std::remove_pointer_t<T>>::value;
 
 template <typename TDataSource>
 int TCommandFederatedQueryCreateConnectionGeneric<TDataSource>::Run(TConfig& config) {
@@ -1231,17 +1228,17 @@ int TCommandFederatedQueryCreateConnectionGeneric<TDataSource>::Run(TConfig& con
         }
         cluster->set_database_id(DatabaseId);
     } else {
-        if constexpr (optional_set_host(&cluster)) {
+        if constexpr (has_set_host_v<decltype(cluster)>) {
             cluster->set_host(Host);
         }
-        if constexpr (optional_set_port(&cluster)) {
+        if constexpr (has_set_port_v<decltype(cluster)>) {
             cluster->set_port(Port);
         }
     }
 
     cluster->set_login(Login);
     cluster->set_password(Password);
-    if constexpr (optional_set_secure(&cluster)) {
+    if constexpr (has_set_secure_v<decltype(cluster)>) {
         cluster->set_secure(Secure);
     }
 
@@ -1268,13 +1265,13 @@ void TCommandFederatedQueryCreateConnectionDataStreams::Config(TConfig& config) 
         .StoreResult(&Visibility);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access data streams").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access data streams").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access data streams").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("token-auth", "OAuth2 token to be used to access data streams").StoreResult(&TokenAuth);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("endpoint", "Endpoint").StoreResult(&Endpoint);
     config.Opts->AddLongOption("database", "Database").StoreResult(&Database);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
-    config.Opts->AddLongOption("shared-reading", "Enable Shared Reading").StoreResult(&SharedReading);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
+    config.Opts->AddLongOption("shared-reading", "Enable Shared Reading").NoArgument().StoreTrue(&SharedReading);
 }
 
 void TCommandFederatedQueryCreateConnectionDataStreams::Parse(TConfig& config) {
@@ -1358,7 +1355,7 @@ void TCommandFederatedQueryCreateConnectionObjectStorage::Config(TConfig& config
         .StoreResult(&Visibility);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access object storage bucket").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access object storage bucket").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access object storage bucket").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("bucket", "Object storage bucket name").StoreResult(&Bucket);
 }
 
@@ -1424,7 +1421,7 @@ void TCommandFederatedQueryCreateConnectionMonitoring::Config(TConfig& config) {
         .StoreResult(&Visibility);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access monitoring").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access monitoring").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access monitoring").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("project", "Monitoring project name").StoreResult(&Project);
     config.Opts->AddLongOption("cluster", "Monitoring cluster name").StoreResult(&Cluster);
     config.Opts->AddLongOption("token-auth", "OAuth2 token to be used to access data streams").StoreResult(&TokenAuth);
@@ -1505,11 +1502,11 @@ TCommandFederatedQueryTestConnectionYdb::TCommandFederatedQueryTestConnectionYdb
 void TCommandFederatedQueryTestConnectionYdb::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("sa", "Service account to be used to access YDB").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access YDB").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access YDB").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("endpoint", "Endpoint").StoreResult(&Endpoint);
     config.Opts->AddLongOption("database", "Database").StoreResult(&Database);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
 }
 
 void TCommandFederatedQueryTestConnectionYdb::Parse(TConfig& config) {
@@ -1566,14 +1563,14 @@ template <typename TDataSource>
 void TCommandFederatedQueryTestConnectionGeneric<TDataSource>::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("sa", TStringBuilder() << "Service account to be used to access " << TDataSource::Name).StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", TStringBuilder() << "Current IAM token to be used to access " << TDataSource::Name).StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", TStringBuilder() << "Current IAM token to be used to access " << TDataSource::Name).NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("db-name", "Database Name").StoreResult(&DatabaseName);
     config.Opts->AddLongOption("login", "Login").StoreResult(&Login);
     config.Opts->AddLongOption("pwd", "Password").StoreResult(&Password);
     config.Opts->AddLongOption("host", "Host").StoreResult(&Host);
     config.Opts->AddLongOption("port", "Port").StoreResult(&Port);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
 }
 
 template <typename TDataSource>
@@ -1605,17 +1602,17 @@ int TCommandFederatedQueryTestConnectionGeneric<TDataSource>::Run(TConfig& confi
         }
         cluster->set_database_id(DatabaseId);
     } else {
-        if constexpr (optional_set_host(&cluster)) {
+        if constexpr (has_set_host_v<decltype(cluster)>) {
             cluster->set_host(Host);
         }
-        if constexpr (optional_set_port(&cluster)) {
+        if constexpr (has_set_port_v<decltype(cluster)>) {
             cluster->set_port(Port);
         }
     }
 
     cluster->set_login(Login);
     cluster->set_password(Password);
-    if constexpr (optional_set_secure(&cluster)) {
+    if constexpr (has_set_secure_v<decltype(cluster)>) {
         cluster->set_secure(Secure);
     }
 
@@ -1637,11 +1634,11 @@ TCommandFederatedQueryTestConnectionDataStreams::TCommandFederatedQueryTestConne
 void TCommandFederatedQueryTestConnectionDataStreams::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("sa", "Service account to be used to access data streams").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access data streams").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access data streams").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("endpoint", "Endpoint").StoreResult(&Endpoint);
     config.Opts->AddLongOption("database", "Database").StoreResult(&Database);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
 }
 
 void TCommandFederatedQueryTestConnectionDataStreams::Parse(TConfig& config) {
@@ -1693,7 +1690,7 @@ TCommandFederatedQueryTestConnectionObjectStorage::TCommandFederatedQueryTestCon
 void TCommandFederatedQueryTestConnectionObjectStorage::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("sa", "Service account to be used to access object storage bucket").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access object storage bucket").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access object storage bucket").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("bucket", "Object storage bucket name").StoreResult(&Bucket);
 }
 
@@ -1736,7 +1733,7 @@ TCommandFederatedQueryTestConnectionMonitoring::TCommandFederatedQueryTestConnec
 void TCommandFederatedQueryTestConnectionMonitoring::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("sa", "Service account to be used to access monitoring").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access monitoring").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access monitoring").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("project", "Monitoring project name").StoreResult(&Project);
     config.Opts->AddLongOption("cluster", "Monitoring cluster name").StoreResult(&Cluster);
 }
@@ -1784,7 +1781,7 @@ void TCommandFederatedQueryConnectionListBindings::Config(TConfig& config) {
     config.Opts->AddLongOption('l', "limit", "Limit the size of the response").StoreResult(&Limit);
     config.Opts->AddLongOption("id", "Connection identifier").Required().StoreResult(&ConnectionId);
     config.Opts->AddLongOption("name", "Filter by substring name").StoreResult(&Name);
-    config.Opts->AddLongOption("created-by-me", "Only created by me").StoreResult(&CreatedByMe);
+    config.Opts->AddLongOption("created-by-me", "Only created by me").NoArgument().StoreTrue(&CreatedByMe);
 }
 
 void TCommandFederatedQueryConnectionListBindings::Parse(TConfig& config) {
@@ -1826,7 +1823,7 @@ void TCommandFederatedQueryListConnections::Config(TConfig& config) {
     config.Opts->AddLongOption("page-token", "Page token").StoreResult(&PageToken);
     config.Opts->AddLongOption('l', "limit", "Limit the size of the response").StoreResult(&Limit);
     config.Opts->AddLongOption("name", "Filter by substring name").StoreResult(&Name);
-    config.Opts->AddLongOption("created-by-me", "Only created by me").StoreResult(&CreatedByMe);
+    config.Opts->AddLongOption("created-by-me", "Only created by me").NoArgument().StoreTrue(&CreatedByMe);
 }
 
 void TCommandFederatedQueryListConnections::Parse(TConfig& config) {
@@ -1909,11 +1906,11 @@ void TCommandFederatedQueryModifyConnectionYdb::Config(TConfig& config) {
     config.Opts->AddLongOption("revision", "Previous revision").StoreResult(&PreviousRevision);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access YDB").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access YDB").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access YDB").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("endpoint", "Endpoint").StoreResult(&Endpoint);
     config.Opts->AddLongOption("database", "Database").StoreResult(&Database);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
 }
 
 void TCommandFederatedQueryModifyConnectionYdb::Parse(TConfig& config) {
@@ -2003,14 +2000,14 @@ void TCommandFederatedQueryModifyConnectionGeneric<TDataSource>::Config(TConfig&
     config.Opts->AddLongOption("revision", "Previous revision").StoreResult(&PreviousRevision);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", TStringBuilder() << "Service account to be used to access " << TDataSource::Name).StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", TStringBuilder() << "Current IAM token to be used to access " << TDataSource::Name).StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", TStringBuilder() << "Current IAM token to be used to access " << TDataSource::Name).NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("db-name", "Database Name").StoreResult(&DatabaseName);
     config.Opts->AddLongOption("login", "Login").StoreResult(&Login);
     config.Opts->AddLongOption("pwd", "Password").StoreResult(&Password);
     config.Opts->AddLongOption("host", "Host").StoreResult(&Host);
     config.Opts->AddLongOption("port", "Port").StoreResult(&Port);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
 }
 
 template <typename TDataSource>
@@ -2068,17 +2065,17 @@ int TCommandFederatedQueryModifyConnectionGeneric<TDataSource>::Run(TConfig& con
         }
         cluster->set_database_id(DatabaseId);
     } else {
-        if constexpr (optional_set_host(&cluster)) {
+        if constexpr (has_set_host_v<decltype(cluster)>) {
             cluster->set_host(Host);
         }
-        if constexpr (optional_set_port(&cluster)) {
+        if constexpr (has_set_port_v<decltype(cluster)>) {
             cluster->set_port(Port);
         }
     }
 
     cluster->set_login(Login);
     cluster->set_password(Password);
-    if constexpr (optional_set_secure(&cluster)) {
+    if constexpr (has_set_secure_v<decltype(cluster)>) {
         cluster->set_secure(Secure);
     }
 
@@ -2107,11 +2104,11 @@ void TCommandFederatedQueryModifyConnectionDataStreams::Config(TConfig& config) 
     config.Opts->AddLongOption("revision", "Previous revision").StoreResult(&PreviousRevision);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access data streams").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access data streams").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access data streams").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("db-id", "Database Id").StoreResult(&DatabaseId);
     config.Opts->AddLongOption("endpoint", "Endpoint").StoreResult(&Endpoint);
     config.Opts->AddLongOption("database", "Database").StoreResult(&Database);
-    config.Opts->AddLongOption("secure", "Secure").StoreResult(&Secure);
+    config.Opts->AddLongOption("secure", "Secure").NoArgument().StoreTrue(&Secure);
 }
 
 void TCommandFederatedQueryModifyConnectionDataStreams::Parse(TConfig& config) {
@@ -2196,7 +2193,7 @@ void TCommandFederatedQueryModifyConnectionObjectStorage::Config(TConfig& config
     config.Opts->AddLongOption("revision", "Previous revision").StoreResult(&PreviousRevision);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access object storage bucket").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access object storage bucket").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access object storage bucket").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("bucket", "Object storage bucket name").StoreResult(&Bucket);
 }
 
@@ -2272,7 +2269,7 @@ void TCommandFederatedQueryModifyConnectionMonitoring::Config(TConfig& config) {
     config.Opts->AddLongOption("revision", "Previous revision").StoreResult(&PreviousRevision);
     config.Opts->AddLongOption("idempotency-key", "Idempotency key").StoreResult(&IdempotencyKey);
     config.Opts->AddLongOption("sa", "Service account to be used to access monitoring").StoreResult(&ServiceAccount);
-    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access monitoring").StoreResult(&CurrentIAM);
+    config.Opts->AddLongOption("current-iam", "Current IAM token to be used to access monitoring").NoArgument().StoreTrue(&CurrentIAM);
     config.Opts->AddLongOption("project", "Monitoring project name").StoreResult(&Project);
     config.Opts->AddLongOption("cluster", "Monitoring cluster name").StoreResult(&Cluster);
 }
@@ -2431,7 +2428,7 @@ void TCommandFederatedQueryListBindings::Config(TConfig& config) {
     config.Opts->AddLongOption("page-token", "Page token").StoreResult(&PageToken);
     config.Opts->AddLongOption('l', "limit", "Limit the size of the response").StoreResult(&Limit);
     config.Opts->AddLongOption("name", "Filter by substring name").StoreResult(&Name);
-    config.Opts->AddLongOption("created-by-me", "Only created by me").StoreResult(&CreatedByMe);
+    config.Opts->AddLongOption("created-by-me", "Only created by me").NoArgument().StoreTrue(&CreatedByMe);
 }
 
 void TCommandFederatedQueryListBindings::Parse(TConfig& config) {

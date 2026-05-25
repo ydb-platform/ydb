@@ -174,7 +174,7 @@ public:
         vec.reserve(NumRows);
         for (size_t i = 0; i < NumRows; ++i) {
             TString s = ToString(Seed + i);
-            vec.push_back("{a='" + std::string(s.data(), s.size()) + "'}");
+            vec.push_back("{\"a\":\"" + std::string(s.data(), s.size()) + "\"}");
             numBytes += vec.back().size();
         }
 
@@ -361,7 +361,9 @@ TStatus TGenerateClient::Generate(const TString& dbPath, const TGenerateSettings
         progressBar.SetProgress(static_cast<double>(globalProgressValue) * 100 / settings.RowsToGenerate_);
     };
 
-    ProgressCallbackFunc progressCallback;
+    // Default to a no-op so the callback is always safely invokable;
+    // calling an empty std::function would throw std::bad_function_call.
+    ProgressCallbackFunc progressCallback = [](ui64, ui64) {};
 
     if (IsStdoutInteractive()) {
         progressCallback = [&](ui64 rows, ui64) mutable {

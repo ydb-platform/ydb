@@ -161,7 +161,7 @@ public:
     }
 
     TString Resolve(const TString& text, const TString& baseDir) {
-        const auto [it, inserted] = ParsedPages.emplace(text, "");
+        const auto [it, inserted] = ParsedPages.emplace(std::pair(baseDir, text), "");
         if (!inserted) {
             return it->second;
         }
@@ -419,7 +419,7 @@ private:
     }
 
     const TDocStore::TPtr Store;
-    std::unordered_map<TString, TString> ParsedPages;
+    THashMap<std::pair<TString, TString>, TString> ParsedPages; // {(BaseDir, RawContent) -> ResolvedContent}
     std::unordered_map<TString, std::unordered_map<TString, TString>> PresetVariables; // {Name -> {Preset Directory -> Value}}
     std::unordered_set<TString> UnknownTemplates;
 };
@@ -594,7 +594,7 @@ class TDocsSearchTool final : public TToolBase {
     static constexpr char DESCRIPTION[] = R"(
 Searches and retrieves YDB documentation pages from a bundled docs archive.
 
-Use this tool to look up authoritative information about YDB concepts, SQL syntax,
+Use this tool to look up authoritative information about YDB concepts, YQL syntax,
 configuration, deployment, and other topics described in the official documentation.
 
 Supported actions:
@@ -770,20 +770,20 @@ private:
             .Property(ACTION_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Enum({ACTION_LIST, ACTION_GET, ACTION_FIND})
-                .Description("Action to perform: \"list\" returns the catalogue of all documentation pages, \"get\" returns the content of a single page, \"find\" return all occupancies of parameter \"pattern\" via exact case-sensitive substring matching.")
+                .Description("Action to perform: \"list\" returns the catalog of all documentation pages, \"get\" returns the content of a single page, and \"find\" returns all occurrences of the \"pattern\" parameter via exact case-sensitive substring matching.")
                 .Done()
             .Property(LANG_PROPERTY)
                 .Type(TJsonSchemaBuilder::EType::String)
                 .Enum({"ru", "en"})
-                .Description("Documentation language to select. Must be used same language as current conversation language. For example, if user queries 'How can I setup my database?' you should select \"language\"=\"en\", and for query 'Как я могу настроить мою базу данных?' you should use \"language\"=\"ru\"")
+                .Description("Documentation language to select. The same language as the current conversation language must be used. For example, if the user queries 'How can I set up my database?', you should select \"language\"=\"en\"; for the query 'Как я могу настроить мою базу данных?', you should use \"language\"=\"ru\".")
                 .Done()
             .Property(PATH_PROPERTY, /* required */ false)
                 .Type(TJsonSchemaBuilder::EType::String)
-                .Description("Archive-relative path to the documentation page (required when action is \"get\"). Use a value returned by the \"list\" action, e.g. \"ru/core/concepts/architecture.md\".")
+                .Description("Archive-relative path to the documentation page (required when the action is \"get\"). Use a value returned by the \"list\" action, e.g., \"core/concepts/architecture.md\".")
                 .Done()
             .Property(PATTERN_PROPERTY, /* required */ false)
                 .Type(TJsonSchemaBuilder::EType::String)
-                .Description("Pattern which should be searched in archive, should be used with action \"find\". Will be returned all occupancies of this pattern with fixed context window.")
+                .Description("Pattern to search for in the archive; should be used with the \"find\" action. All occurrences of this pattern will be returned with a fixed context window.")
                 .Done()
             .Build();
     }

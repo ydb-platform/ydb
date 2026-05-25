@@ -3192,7 +3192,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
             assert "{% include" not in tool_result, (
                 "Include directives must be expanded and must not appear in the output"
             )
-            assert "scan queries" in tool_result.lower(), (
+            assert "Scan queries are a separate data access" in tool_result, (
                 "Included file content must appear after include expansion"
             )
             assert "{{ ydb-short-name }}" not in tool_result, (

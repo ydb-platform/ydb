@@ -10,6 +10,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 #include <util/generic/scope.h>
+#include <util/system/backtrace.h>
 
 namespace NYdb::NConsoleClient {
 

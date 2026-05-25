@@ -4871,4 +4871,98 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT(!keyRanges[0].To());
         }
     }
+
+    Y_UNIT_TEST(BulkUpsertBuiltInRetrySuccess) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+            UNIT_ASSERT(session.CreateTable("/Root/BuiltinRetry", tableBuilder.Build()).ExtractValueSync().IsSuccess());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Utf8("value")
+            .EndStruct();
+        rows.EndList();
+
+        auto result = client.BulkUpsert("/Root/BuiltinRetry", rows.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(BulkUpsertBuiltInRetryDisabled) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        auto clientSettings = TClientSettings().RetrySettings(TRetryOperationSettings().MaxRetries(0));
+        NYdb::NTable::TTableClient client(driver, clientSettings);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+            UNIT_ASSERT(session.CreateTable("/Root/BuiltinRetryDisabled", tableBuilder.Build()).ExtractValueSync().IsSuccess());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Utf8("value")
+            .EndStruct();
+        rows.EndList();
+
+        auto result = client.BulkUpsert("/Root/BuiltinRetryDisabled", rows.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(BulkUpsertNoDoubleRetryInRetryOperation) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+            UNIT_ASSERT(session.CreateTable("/Root/BuiltinRetryNested", tableBuilder.Build()).ExtractValueSync().IsSuccess());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Utf8("value")
+            .EndStruct();
+        rows.EndList();
+        auto rowsValue = rows.Build();
+
+        auto status = client.RetryOperationSync([&](TTableClient& tableClient) {
+            return tableClient.BulkUpsert("/Root/BuiltinRetryNested", NYdb::TValue{rowsValue}).GetValueSync();
+        });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
 }

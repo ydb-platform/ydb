@@ -14,6 +14,7 @@
 
 #include <functional>
 #include <memory>
+#include <type_traits>
 
 namespace NYdb::inline Dev {
 class IClientImplCommon;
@@ -123,5 +124,38 @@ public:
         session.SetPropagatedDeadline(deadline);
     }
 };
+
+template<typename TClient>
+class TInRetryOperationContextClientGuard {
+public:
+    explicit TInRetryOperationContextClientGuard(TClient& client)
+        : Client_(client)
+        , Previous_(client.GetInRetryOperationContext())
+    {
+        Client_.SetInRetryOperationContext(true);
+    }
+
+    ~TInRetryOperationContextClientGuard() {
+        Client_.SetInRetryOperationContext(Previous_);
+    }
+
+private:
+    TClient& Client_;
+    bool Previous_;
+};
+
+template<typename TStatusType>
+const TStatus& GetRetryStatus(const TStatusType& status) {
+    if constexpr (std::is_base_of_v<TStatus, std::decay_t<TStatusType>>) {
+        return status;
+    } else {
+        return status.Status();
+    }
+}
+
+template<typename TStatusType>
+EStatus GetRetryStatusCode(const TStatusType& status) {
+    return GetRetryStatus(status).GetStatus();
+}
 
 } // namespace NYdb::NRetry

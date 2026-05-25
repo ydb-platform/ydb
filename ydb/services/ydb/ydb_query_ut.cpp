@@ -2,6 +2,7 @@
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/shutdown/events.h>
@@ -291,6 +292,41 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         p->Cancel();
         UNIT_ASSERT(allDoneOk);
+    }
+
+    Y_UNIT_TEST(ExecuteQueryBuiltInRetrySuccess) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(location));
+        NYdb::NQuery::TQueryClient client(driver);
+
+        auto result = client.ExecuteQuery(
+            "SELECT 1 AS x;",
+            NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1u);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ExecuteQueryBuiltInRetryDisabled) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(location));
+        auto settings = NYdb::NQuery::TClientSettings()
+            .RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+        NYdb::NQuery::TQueryClient client(driver, settings);
+
+        auto result = client.ExecuteQuery(
+            "SELECT 1 AS x;",
+            NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        driver.Stop(true);
     }
 
 }

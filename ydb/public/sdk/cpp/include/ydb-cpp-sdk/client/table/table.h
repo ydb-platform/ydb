@@ -1545,17 +1545,21 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     // ydb.table.session.pool.name. When empty the default
     // "<database>@<endpoint>" is used.
     FLUENT_SETTING(std::string, PoolName);
+
+    FLUENT_SETTING_DEFAULT(TRetryOperationSettings, RetrySettings, TRetryOperationSettings());
 };
 
 struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {
     // Format setting proto serialized into string. If not set format defaults are used.
     // I.e. it's Ydb.Table.CsvSettings for CSV.
     FLUENT_SETTING_DEFAULT(std::string, FormatSettings, "");
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
     google::protobuf::Arena* Arena_ = nullptr;
     TBulkUpsertSettings& Arena(google::protobuf::Arena* arena) { Arena_ = arena; return *this; }
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
 };
 
 struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
@@ -1581,6 +1585,8 @@ class TTableClient {
     friend class TSessionPool;
     friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncBulkUpsertResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncReadRowsResult>;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
@@ -1610,6 +1616,9 @@ public:
 
     //! Returns the size of session pool
     int64_t GetCurrentPoolSize() const;
+
+    bool GetInRetryOperationContext() const;
+    void SetInRetryOperationContext(bool value);
 
     //! Returns new table builder
     TTableBuilder GetTableBuilder();

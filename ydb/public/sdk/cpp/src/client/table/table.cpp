@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_settings.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
@@ -1575,6 +1576,14 @@ int64_t TTableClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
 }
 
+bool TTableClient::GetInRetryOperationContext() const {
+    return Impl_->InRetryOperationContext_;
+}
+
+void TTableClient::SetInRetryOperationContext(bool value) {
+    Impl_->InRetryOperationContext_ = value;
+}
+
 TTableBuilder TTableClient::GetTableBuilder() {
     return TTableBuilder();
 }
@@ -1614,19 +1623,60 @@ NThreading::TFuture<void> TTableClient::Stop() {
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {
-    return Impl_->BulkUpsert(table, std::move(rows), settings);
+    const auto retrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::True);
+    const TValue rowsCopy = rows;
+
+    return NRetry::RunUnaryWithRetry(*this, retrySettings,
+        [this, table, rowsCopy, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->BulkUpsert(table, TValue{rowsCopy}, opSettings);
+        });
 }
 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataFormat format,
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings)
 {
-    return Impl_->BulkUpsert(table, format, data, schema, settings);
+    const auto retrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::True);
+
+    return NRetry::RunUnaryWithRetry(*this, retrySettings,
+        [this, table, format, data, schema, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->BulkUpsert(table, format, data, schema, opSettings);
+        });
 }
 
 TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& rows, const std::vector<std::string>& columns,
     const TReadRowsSettings& settings)
 {
-    return Impl_->ReadRows(table, std::move(rows), columns, settings);
+    const auto retrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::True);
+    const TValue keysCopy = rows;
+
+    return NRetry::RunUnaryWithRetry(*this, retrySettings,
+        [this, table, keysCopy, columns, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->ReadRows(table, TValue{keysCopy}, columns, opSettings);
+        });
 }
 
 TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const std::string& query, const TParams& params,

@@ -163,8 +163,8 @@ public:
         , const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr
     );
 
-public:
     TClientSettings Settings_;
+    bool InRetryOperationContext_ = false;
 
 private:
     static void SetParams(

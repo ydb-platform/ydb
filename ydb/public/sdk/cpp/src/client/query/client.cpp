@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_settings.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_client.h>
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
@@ -645,6 +646,9 @@ public:
         );
     }
 
+    TClientSettings Settings_;
+    bool InRetryOperationContext_ = false;
+
 private:
     std::shared_ptr<TQueryObservation> MakeObservation(const std::string& operationName) {
         return std::make_shared<TQueryObservation>(
@@ -662,7 +666,6 @@ private:
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram_;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram_;
 
-    TClientSettings Settings_;
     NSessionPool::TSessionPool SessionPool_;
 };
 
@@ -675,13 +678,39 @@ TQueryClient::TQueryClient(const TDriver& driver, const TClientSettings& setting
 TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(const std::string& query, const TTxControl& txControl,
     const TExecuteQuerySettings& settings)
 {
-    return Impl_->ExecuteQuery(query, txControl, {}, settings);
+    const auto retrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::False);
+
+    return NRetry::RunUnaryWithRetry(*this, retrySettings,
+        [this, query, txControl, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->ExecuteQuery(query, txControl, {}, opSettings);
+        });
 }
 
 TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(const std::string& query, const TTxControl& txControl,
     const TParams& params, const TExecuteQuerySettings& settings)
 {
-    return Impl_->ExecuteQuery(query, txControl, params, settings);
+    const auto retrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::False);
+
+    return NRetry::RunUnaryWithRetry(*this, retrySettings,
+        [this, query, txControl, params, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->ExecuteQuery(query, txControl, params, opSettings);
+        });
 }
 
 TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
@@ -697,21 +726,66 @@ TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const std::string& q
 }
 
 NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const std::string& script,
-    const TExecuteScriptSettings& settings)
+    const TExecuteScriptSettings& settings,
+    const std::optional<TRetryOperationSettings>& retrySettings)
 {
-    return Impl_->ExecuteScript(script, {}, settings);
+    const auto resolvedRetrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        retrySettings,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::False);
+
+    return NRetry::RunUnaryWithRetry(*this, resolvedRetrySettings,
+        [this, script, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->ExecuteScript(script, {}, opSettings);
+        });
 }
 
 NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const std::string& script,
-    const TParams& params, const TExecuteScriptSettings& settings)
+    const TParams& params, const TExecuteScriptSettings& settings,
+    const std::optional<TRetryOperationSettings>& retrySettings)
 {
-    return Impl_->ExecuteScript(script, params, settings);
+    const auto resolvedRetrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        retrySettings,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::False);
+
+    return NRetry::RunUnaryWithRetry(*this, resolvedRetrySettings,
+        [this, script, params, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->ExecuteScript(script, params, opSettings);
+        });
 }
 
 TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
-    const TFetchScriptResultsSettings& settings)
+    const TFetchScriptResultsSettings& settings,
+    const std::optional<TRetryOperationSettings>& retrySettings)
 {
-    return Impl_->FetchScriptResults(operationId, resultSetIndex, settings);
+    const auto resolvedRetrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        retrySettings,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::True);
+
+    return NRetry::RunUnaryWithRetry(*this, resolvedRetrySettings,
+        [this, operationId, resultSetIndex, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->FetchScriptResults(operationId, resultSetIndex, opSettings);
+        });
 }
 
 TAsyncCreateSessionResult TQueryClient::GetSession(const TCreateSessionSettings& settings)
@@ -729,6 +803,14 @@ int64_t TQueryClient::GetActiveSessionsLimit() const {
 
 int64_t TQueryClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
+}
+
+bool TQueryClient::GetInRetryOperationContext() const {
+    return Impl_->InRetryOperationContext_;
+}
+
+void TQueryClient::SetInRetryOperationContext(bool value) {
+    Impl_->InRetryOperationContext_ = value;
 }
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryResultFunc&& queryFunc, TRetryOperationSettings settings)

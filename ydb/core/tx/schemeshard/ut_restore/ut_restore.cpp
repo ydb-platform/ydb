@@ -167,6 +167,9 @@ namespace {
             case EDataFormat::Csv:
                 result << ".csv";
                 break;
+            case EDataFormat::Parquet:
+                result << ".parquet";
+                break;
             case EDataFormat::Invalid:
                 UNIT_ASSERT_C(false, "Invalid data format");
                 break;

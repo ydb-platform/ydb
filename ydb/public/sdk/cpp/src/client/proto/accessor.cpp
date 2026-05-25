@@ -164,4 +164,30 @@ NImport::EIndexPopulationMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS
     }
 }
 
+Ydb::Export::ExportToS3Settings::DataFormat TProtoAccessor::GetProto(NImport::EDataFormat value) {
+    switch (value) {
+    case NImport::EDataFormat::Unspecified:
+        return Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED;
+    case NImport::EDataFormat::Csv:
+        return Ydb::Export::ExportToS3Settings::CSV;
+    case NImport::EDataFormat::Parquet:
+        return Ydb::Export::ExportToS3Settings::PARQUET;
+    default:
+        return Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED;
+    }
+}
+
+NImport::EDataFormat TProtoAccessor::FromProto(Ydb::Export::ExportToS3Settings::DataFormat value) {
+    switch (value) {
+    case Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED:
+        return NImport::EDataFormat::Unspecified;
+    case Ydb::Export::ExportToS3Settings::CSV:
+        return NImport::EDataFormat::Csv;
+    case Ydb::Export::ExportToS3Settings::PARQUET:
+        return NImport::EDataFormat::Parquet;
+    default:
+        return NImport::EDataFormat::Unknown;
+    }
+}
+
 } // namespace NYdb

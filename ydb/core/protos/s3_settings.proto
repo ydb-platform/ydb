@@ -26,6 +26,11 @@ message TS3Settings {
         HTTPS = 1;
     }
 
+    enum EDataFormat {
+        CSV = 0;
+        PARQUET = 1;
+    }
+
     optional string Endpoint = 1;
     optional EScheme Scheme = 2 [default = HTTPS];
     optional string Bucket = 3;
@@ -41,11 +46,13 @@ message TS3Settings {
     optional TSecretableVariable SecretableAccessKey = 13;
     optional TSecretableVariable SecretableSecretKey = 14;
     optional bool UseVirtualAddressing = 15 [default = true];
+    optional EDataFormat DataFormat = 16 [default = CSV];
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
         optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
         reserved 3; // ReadBufferSizeLimit
+        optional uint32 RowGroupSize = 4 [default = 1000]; // Number of rows (Parquet)
     };
 
     optional TLimits Limits = 100;

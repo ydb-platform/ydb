@@ -256,6 +256,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
                 Y_ABORT("Unknown scheme");
             }
 
+            switch (settings.data_format()) {
+            case Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED:
+            case Ydb::Export::ExportToS3Settings::CSV:
+                restoreSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::CSV);
+                break;
+            case Ydb::Export::ExportToS3Settings::PARQUET:
+                restoreSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::PARQUET);
+                break;
+            default:
+                Y_ABORT("Unknown data format");
+            }
+
             if (const auto region = settings.region()) {
                 restoreSettings.SetRegion(region);
             }

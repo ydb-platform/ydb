@@ -4,14 +4,18 @@
 #include "datashard_impl.h"
 #include "extstorage_usage_config.h"
 #include "import_common.h"
+#include "import_data_parser.h"
+#include "import_parquet_s3_file.h"
 #include "import_s3.h"
 
+#include <ydb/core/base/events.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -19,7 +23,6 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
-#include <ydb/core/io_formats/ydb_dump/csv_ydb_dump.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <contrib/libs/zstd/include/zstd.h>
@@ -51,6 +54,17 @@ namespace {
 namespace NKikimr {
 namespace NDataShard {
 
+struct TEvS3ImportActor {
+    enum EEv {
+        EvParquetWork = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 200,
+        EvEnd,
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE));
+
+    struct TEvParquetWork : public TEventLocal<TEvParquetWork, EvParquetWork> {};
+};
+
 using namespace NBackup;
 using namespace NBackupRestoreTraits;
 
@@ -74,6 +88,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     //       4.b. Confirm() - update state
     //    }
     // 5. Repeat from 1. until the whole file is processed
+    class TReadControllerParquet;
+
     class IReadController {
     public:
         enum EDataStatus {
@@ -84,6 +100,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     public:
         virtual ~IReadController() = default;
+
+        virtual TReadControllerParquet* AsParquetController() {
+            return nullptr;
+        }
+
         virtual void Feed(TString&& portion, bool last) = 0;
         // Returns data (points to internal buffer) or error
         virtual EDataStatus TryGetData(TStringBuf& data, TString& error) = 0;
@@ -138,11 +159,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return TStringBuf(Buffer.Data(), size);
         }
 
-    private:
+    protected:
         const ui32 RangeSize;
         const ui64 BufferSizeLimit;
-
-    protected:
         TBuffer Buffer;
 
     }; // TReadController
@@ -306,6 +325,215 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         ui64 ReadyOutputPos = 0;
     };
 
+    class TReadControllerParquet: public TReadController {
+        enum class EPhase {
+            FooterTail,
+            FooterMetadata,
+            Data,
+            Done,
+            Error,
+        };
+
+    public:
+        using TReadController::TReadController;
+
+        void SetContentLength(ui64 contentLength) {
+            if (!SparseFile) {
+                SparseFile = std::make_shared<TParquetSparseFile>(contentLength);
+                FetchQueue.push_back(TParquetSparseFile::FooterTailRange(contentLength));
+                ActiveRange = &FetchQueue.front();
+            }
+        }
+
+        bool IsAwaitingS3() const {
+            return AwaitingS3;
+        }
+
+        void MarkAwaitingS3() const {
+            const_cast<TReadControllerParquet*>(this)->AwaitingS3 = true;
+        }
+
+        void Feed(TString&& portion, bool last) override {
+            Y_UNUSED(last);
+            Y_ENSURE(SparseFile && ActiveRange);
+            Y_ENSURE(ActiveRange->Fetched + portion.size() <= ActiveRange->Length);
+
+            SparseFile->PutRange(ActiveRange->Offset + ActiveRange->Fetched, std::move(portion));
+            ActiveRange->Fetched += portion.size();
+
+            if (ActiveRange->Fetched >= ActiveRange->Length) {
+                TString advanceError;
+                if (!AdvanceAfterRange(advanceError)) {
+                    Phase = EPhase::Error;
+                    ParquetError = std::move(advanceError);
+                }
+            }
+
+            AwaitingS3 = false;
+        }
+
+        bool HasParquetError(TString& error) const {
+            if (Phase != EPhase::Error) {
+                return false;
+            }
+
+            error = ParquetError;
+            return true;
+        }
+
+        TReadControllerParquet* AsParquetController() override {
+            return this;
+        }
+
+        bool IsDownloadComplete() const {
+            return Phase == EPhase::Done;
+        }
+
+        std::shared_ptr<arrow::io::RandomAccessFile> GetRandomAccessFile() const {
+            return SparseFile ? SparseFile->MakeRandomAccessFile(SparseFile) : nullptr;
+        }
+
+        void AppendChecksum(const std::function<void(TStringBuf)>& addChunk) const {
+            if (SparseFile) {
+                SparseFile->AppendChecksum(addChunk);
+            }
+        }
+
+        bool TryDrainLoadedRanges(TString& error) {
+            bool drained = false;
+            while (ActiveRange && SparseFile) {
+                const ui64 offset = ActiveRange->Offset + ActiveRange->Fetched;
+                const ui64 remaining = ActiveRange->Length - ActiveRange->Fetched;
+                if (remaining == 0 || !SparseFile->HasBytes(offset, remaining)) {
+                    break;
+                }
+
+                ActiveRange->Fetched = ActiveRange->Length;
+                if (!AdvanceAfterRange(error)) {
+                    return false;
+                }
+
+                drained = true;
+                if (Phase == EPhase::Done) {
+                    break;
+                }
+            }
+
+            return drained;
+        }
+
+        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 /* processedBytes */) const override {
+            Y_ENSURE(contentLength > 0);
+            const_cast<TReadControllerParquet*>(this)->SetContentLength(contentLength);
+
+            if (Phase == EPhase::Done || !ActiveRange) {
+                return {contentLength, contentLength - 1};
+            }
+
+            const ui64 start = ActiveRange->Offset + ActiveRange->Fetched;
+            const ui64 remaining = ActiveRange->Length - ActiveRange->Fetched;
+            const ui64 chunk = Min<ui64>(remaining, this->RangeSize);
+            return {start, start + chunk - 1};
+        }
+
+        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+            Y_UNUSED(data);
+            if (Phase != EPhase::Done) {
+                TString reason;
+                const size_t buffered = SparseFile ? static_cast<size_t>(SparseFile->BufferedBytes()) : 0;
+                if (!this->CanIncreaseBuffer(buffered, this->RangeSize, reason)) {
+                    error = reason;
+                    return IReadController::ERROR;
+                }
+
+                return IReadController::NOT_ENOUGH_DATA;
+            }
+
+            return IReadController::NOT_ENOUGH_DATA;
+        }
+
+        void Confirm(NKikimrBackup::TS3DownloadState&) override {
+            SparseFile.reset();
+            FetchQueue.clear();
+            ActiveRange = nullptr;
+            Phase = EPhase::FooterTail;
+            AwaitingS3 = false;
+        }
+
+        ui64 PendingBytes() const override {
+            return SparseFile ? SparseFile->BufferedBytes() : 0;
+        }
+
+        ui64 ReadyBytes() const override {
+            return Phase == EPhase::Done ? PendingBytes() : 0;
+        }
+
+    private:
+        bool AdvanceAfterRange(TString& error) {
+            Y_ENSURE(!FetchQueue.empty());
+            FetchQueue.erase(FetchQueue.begin());
+
+            if (Phase == EPhase::FooterTail) {
+                TMaybe<TParquetFetchRange> metadataRange;
+                if (!SparseFile->TryParseFooterMetadataRange(error, metadataRange)) {
+                    return false;
+                }
+
+                if (metadataRange) {
+                    FetchQueue.push_back(*metadataRange);
+                    Phase = EPhase::FooterMetadata;
+                } else if (SparseFile->HasBytes(0, SparseFile->GetFileSize())) {
+                    Phase = EPhase::Done;
+                    FetchQueue.clear();
+                    ActiveRange = nullptr;
+                } else {
+                    Phase = EPhase::Data;
+                    if (!PlanDataRanges(error)) {
+                        return false;
+                    }
+                }
+            } else if (Phase == EPhase::FooterMetadata) {
+                if (SparseFile->HasBytes(0, SparseFile->GetFileSize())) {
+                    Phase = EPhase::Done;
+                    FetchQueue.clear();
+                    ActiveRange = nullptr;
+                } else if (!PlanDataRanges(error)) {
+                    return false;
+                }
+            } else if (Phase == EPhase::Data && FetchQueue.empty()) {
+                Phase = EPhase::Done;
+            }
+
+            ActiveRange = FetchQueue.empty() ? nullptr : &FetchQueue.front();
+            return true;
+        }
+
+        bool PlanDataRanges(TString& error) {
+            TVector<TParquetFetchRange> ranges;
+            if (!SparseFile->PlanColumnChunkRanges(SparseFile, error, ranges)) {
+                return false;
+            }
+
+            FetchQueue = std::move(ranges);
+            if (FetchQueue.empty()) {
+                Phase = EPhase::Done;
+                ActiveRange = nullptr;
+            } else {
+                Phase = EPhase::Data;
+                ActiveRange = &FetchQueue.front();
+            }
+
+            return true;
+        }
+
+        std::shared_ptr<TParquetSparseFile> SparseFile;
+        mutable TVector<TParquetFetchRange> FetchQueue;
+        TParquetFetchRange* ActiveRange = nullptr;
+        EPhase Phase = EPhase::FooterTail;
+        TString ParquetError;
+        bool AwaitingS3 = false;
+    };
+
     class TEncryptionDeserializerController: public IReadController {
     public:
         TEncryptionDeserializerController(
@@ -317,6 +545,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             , DataController(std::move(deserializedDataController))
             , ReadBatchSize(readBatchSize)
         {
+        }
+
+        TReadControllerParquet* AsParquetController() override {
+            return DataController->AsParquetController();
         }
 
         void Feed(TString&& portion, bool last) override {
@@ -610,15 +842,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         }
 
         THolder<IReadController> reader;
-        switch (CompressionCodec) {
-        case NBackupRestoreTraits::ECompressionCodec::None:
-            reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+        switch (DataFormat) {
+        case NBackupRestoreTraits::EDataFormat::Csv:
+            switch (CompressionCodec) {
+            case NBackupRestoreTraits::ECompressionCodec::None:
+                reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+                break;
+            case NBackupRestoreTraits::ECompressionCodec::Zstd:
+                reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+                break;
+            case NBackupRestoreTraits::ECompressionCodec::Invalid:
+                Y_ENSURE(false, "unreachable");
+            }
+
             break;
-        case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+        case NBackupRestoreTraits::EDataFormat::Parquet:
+            reader.Reset(new TReadControllerParquet(ReadBatchSize, ReadBufferSizeLimit));
             break;
-        case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_ENSURE(false, "unreachable");
+        case NBackupRestoreTraits::EDataFormat::Invalid:
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": invalid data format");
         }
 
         if (Settings.EncryptionSettings.EncryptedBackup) {
@@ -734,6 +977,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         ReadBytes += msg.Body.size();
         Reader->Feed(std::move(msg.Body), ReadBytes >= ContentLength);
+        if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet) {
+            this->Send(this->SelfId(), new TEvS3ImportActor::TEvParquetWork());
+            return;
+        }
+
+        Process();
+    }
+
+    void Handle(TEvS3ImportActor::TEvParquetWork::TPtr&) {
         Process();
     }
 
@@ -768,6 +1020,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Process() {
+        if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet) {
+            return ProcessParquet();
+        }
+
         TStringBuf data;
         TString error;
 
@@ -802,8 +1058,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 Checksum->AddData(data);
             }
 
-            TMemoryPool pool(256);
-            while (ProcessData(data, pool));
+            if (!ProcessDataBlock(data)) {
+                return;
+            }
         }
 
         if (const auto processed = Reader->ReadyBytes()) { // has progress
@@ -821,48 +1078,132 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         UploadRows();
     }
 
-    bool ProcessData(TStringBuf& data, TMemoryPool& pool) {
-        pool.Clear();
+    void ProcessParquet() {
+        auto* parquetReader = Reader->AsParquetController();
+        Y_ENSURE(parquetReader, "Parquet import requires TReadControllerParquet");
 
-        TStringBuf line = data.NextTok('\n');
-        const TStringBuf origLine = line;
+        auto* parquetParser = AsParquetStreamParser(Parser.Get());
+        Y_ENSURE(parquetParser, "Parquet import requires IParquetStreamParser");
 
-        if (!line) {
-            if (data) {
-                return true; // skip empty line
+        TString error;
+
+        if (parquetReader->HasParquetError(error)) {
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": " << error);
+        }
+
+        if (!parquetReader->IsDownloadComplete()) {
+            parquetReader->TryDrainLoadedRanges(error);
+            if (parquetReader->HasParquetError(error)) {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": " << error);
             }
 
-            return false;
+            if (!parquetReader->IsDownloadComplete()) {
+                if (parquetReader->IsAwaitingS3()) {
+                    return;
+                }
+
+                parquetReader->MarkAwaitingS3();
+                Counters.LatencyRead.Start(Now());
+                return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
+                    Reader->NextRange(ContentLength, ProcessedBytes));
+            }
         }
 
-        std::vector<std::pair<i32, NScheme::TTypeInfo>> columnOrderTypes; // {keyOrder, PType}
-        columnOrderTypes.reserve(Scheme.GetColumns().size());
+        if (!parquetParser->HasOpenFile()) {
+            auto file = parquetReader->GetRandomAccessFile();
+            if (Checksum) {
+                parquetReader->AppendChecksum([&](TStringBuf chunk) {
+                    Checksum->AddData(chunk);
+                });
+            }
 
-        for (const auto& column : Scheme.GetColumns()) {
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), typeInfoMod.TypeInfo);
+            if (!parquetParser->OpenFile(file, error)) {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": " << error);
+            }
         }
 
-        TVector<TCell> keys;
-        TVector<TCell> values;
-        TString strError;
+        Counters.LatencyProcess.Start(Now());
 
-        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, PendingBytes)) {
+        while (true) {
+            RequestBuilder.New(TableInfo, Scheme);
+
+            TMemoryPool pool(256);
+            auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
+                if (!keys.empty() && !TableInfo.IsMyKey(keys)) {
+                    if (error.empty()) {
+                        error = "key is out of range";
+                    }
+
+                    return;
+                }
+
+                RequestBuilder.AddRow(keys, values);
+            };
+
+            const bool hasMore = parquetParser->ProcessNextBatch(pool, PendingBytes, PendingRows, addRow, error);
+            if (!error.empty()) {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": " << error);
+            }
+
+            if (PendingRows > 0) {
+                if (Checksum) {
+                    ProcessedChecksumState = Checksum->GetState();
+                }
+
+                WrittenBytes += std::exchange(PendingBytes, 0);
+                WrittenRows += std::exchange(PendingRows, 0);
+                Counters.LatencyProcess.Finish(Now());
+                Counters.LatencyWrite.Start(Now());
+
+                this->Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, RequestBuilder.GetRecord(), {
+                    ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
+                }));
+
+                return;
+            }
+
+            if (!hasMore) {
+                ProcessedBytes = ReadBytes;
+                DownloadState.Clear();
+                parquetReader->Confirm(DownloadState);
+                parquetParser->ResetFile();
+
+                if (!CheckChecksum()) {
+                    return;
+                }
+
+                return Finish();
+            }
+        }
+    }
+
+    bool ProcessDataBlock(TStringBuf data) {
+        Y_ENSURE(Parser);
+        TMemoryPool pool(256);
+        TString error;
+
+        auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
+            if (!keys.empty() && !TableInfo.IsMyKey(keys)) {
+                if (error.empty()) {
+                    error = "key is out of range";
+                }
+
+                return;
+            }
+
+            RequestBuilder.AddRow(keys, values);
+        };
+
+        const bool ok = Parser->ParseBlock(data, pool, PendingBytes, PendingRows, addRow, error);
+        if (!ok || !error.empty()) {
             Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": " << strError << " on line: " << origLine);
+                << ": " << error);
             return false;
         }
-
-        Y_ENSURE(!keys.empty());
-        if (!TableInfo.IsMyKey(keys) /* TODO: maybe skip */) {
-            Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": key is out of range on line: " << origLine);
-            return false;
-        }
-
-        RequestBuilder.AddRow(keys, values);
-        ++PendingRows;
 
         return true;
     }
@@ -1075,12 +1416,27 @@ public:
         return GetSettings(task).GetLimits().GetReadBatchSize();
     }
 
+    static NBackupRestoreTraits::EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TRestoreTask& task) {
+        if (!task.HasS3Settings()) {
+            return NBackupRestoreTraits::EDataFormat::Csv;
+        }
+
+        switch (task.GetS3Settings().GetDataFormat()) {
+        case NKikimrSchemeOp::TS3Settings::CSV:
+            return NBackupRestoreTraits::EDataFormat::Csv;
+        case NKikimrSchemeOp::TS3Settings::PARQUET:
+            return NBackupRestoreTraits::EDataFormat::Parquet;
+        }
+
+        return NBackupRestoreTraits::EDataFormat::Csv;
+    }
+
     explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
         , DataShard(dataShard)
         , TxId(txId)
         , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))
-        , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
+        , DataFormat(DataFormatFromTask(task))
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
@@ -1102,6 +1458,22 @@ public:
             return;
         }
 
+        switch (DataFormat) {
+        case NBackupRestoreTraits::EDataFormat::Csv:
+            Parser = CreateCsvDataParser();
+            break;
+        case NBackupRestoreTraits::EDataFormat::Parquet:
+            Parser = CreateParquetDataParser();
+            break;
+        case NBackupRestoreTraits::EDataFormat::Invalid:
+            return Finish(false, "Invalid data format in restore settings");
+        }
+
+        TString configureError;
+        if (!Parser->Configure(TableInfo, Scheme, configureError)) {
+            return Finish(false, TStringBuilder() << "failed to configure parser: " << configureError);
+        }
+
         AllocateResource();
     }
 
@@ -1116,6 +1488,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
+            hFunc(TEvS3ImportActor::TEvParquetWork, Handle);
 
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
             hFunc(TEvDataShard::TEvS3UploadRowsResponse, Handle);
@@ -1168,6 +1541,7 @@ private:
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;
     THolder<IReadController> Reader;
+    IDataParser::TPtr Parser;
     TUploadRowsRequestBuilder RequestBuilder;
 
     NBackup::IChecksum::TPtr Checksum;

@@ -91,6 +91,12 @@ message ExportToS3Settings {
         OUTPOSTS = 8;
     };
 
+    enum DataFormat {
+        DATA_FORMAT_UNSPECIFIED = 0;
+        CSV = 1;
+        PARQUET = 3;
+    }
+
     message Item {
         // Database path to a table/directory to be exported
         string source_path = 1 [(required) = true];

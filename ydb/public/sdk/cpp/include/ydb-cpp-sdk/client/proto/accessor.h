@@ -76,6 +76,8 @@ public:
     static NImport::EImportProgress FromProto(Ydb::Import::ImportProgress::Progress value);
     static Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetProto(NImport::EIndexPopulationMode value);
     static NImport::EIndexPopulationMode FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value);
+    static Ydb::Export::ExportToS3Settings::DataFormat GetProto(NImport::EDataFormat value);
+    static NImport::EDataFormat FromProto(Ydb::Export::ExportToS3Settings::DataFormat value);
 };
 
 } // namespace NYdb

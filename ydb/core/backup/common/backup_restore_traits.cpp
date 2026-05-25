@@ -55,6 +55,7 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     static THashMap<EDataFormat, TString> formats = {
         {EDataFormat::Csv, ".csv"},
+        {EDataFormat::Parquet, ".parquet"},
     };
 
     static THashMap<ECompressionCodec, TString> codecs = {

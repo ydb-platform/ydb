@@ -1,0 +1,1 @@
+SELECT id, amount FROM orders VIEW idx_customer WHERE customer_id = 1

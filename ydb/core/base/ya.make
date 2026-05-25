@@ -46,6 +46,7 @@ SRCS(
     logoblob.cpp
     logoblob.h
     memory_controller_iface.h
+    mon_auth.cpp
     nameservice.h
     nodestate.h
     path.cpp

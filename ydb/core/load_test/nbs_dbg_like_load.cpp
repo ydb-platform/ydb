@@ -29,7 +29,11 @@ namespace NKikimr::NNbsDbgLike {
 namespace {
 
 constexpr TDuration kDrainTimeout = TDuration::Seconds(30);
-constexpr ui64 kWakeupDrainTimeoutTag = 1;
+constexpr ui64 kWakeupDrainTimeoutTag  = 1;
+constexpr ui64 kWakeupInitTimeoutTag   = 2;
+constexpr ui64 kWakeupErrorBackoffTag  = 3;
+constexpr TDuration kInitTimeout        = TDuration::Seconds(15);
+constexpr TDuration kErrorBackoffDuration = TDuration::MilliSeconds(10);
 constexpr ui32 kPipeRetryLimit = 3;
 
 // Latency histogram bounds (spec §15.1). Up to ~134s, microsecond precision.
@@ -79,7 +83,7 @@ public:
         LOG_I("Bootstrap Tag# " << Tag
             << " TabletId# " << TabletId
             << " DurationSeconds# " << Config.GetDurationSeconds()
-            << " InFlightWrites# " << Config.GetInFlightWrites()
+            << " MaxInFlight# " << Config.GetMaxInFlight()
             << " ReadRatio# " << Config.GetReadRatio()
             << " Sequential# " << Config.GetSequential());
 
@@ -97,6 +101,7 @@ public:
         auto req = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummary>();
         NTabletPipe::SendData(SelfId(), PipeClient, req.release());
 
+        Schedule(kInitTimeout, new TEvents::TEvWakeup(kWakeupInitTimeoutTag));
         Become(&TNbsDbgLikeLoadActor::StateInit);
     }
 
@@ -109,6 +114,7 @@ private:
             ErrorReason = TStringBuilder()
                 << "GetSummary failed: status=" << rec.GetStatus()
                 << " reason=" << rec.GetErrorReason();
+            LOG_N("GetSummary error Tag# " << Tag << " " << ErrorReason);
             FinishRun();
             return;
         }
@@ -125,9 +131,17 @@ private:
 
         Validate();
         if (!ErrorReason.empty()) {
+            LOG_N("Validate error Tag# " << Tag << " " << ErrorReason);
             FinishRun();
             return;
         }
+
+        LOG_N("GetSummary OK Tag# " << Tag
+            << " EffectiveDbgCount# " << EffectiveDbgCount
+            << " VChunkSizeBytes# " << VChunkSizeBytes
+            << " TargetNumVChunks# " << TargetNumVChunks
+            << " IoSizeBytes# " << IoSizeBytes
+            << " — starting load");
 
         // Tell the tablet the per-run I/O size and DBG slice.
         {
@@ -165,6 +179,18 @@ private:
     void HandleInitPoison(TEvents::TEvPoisonPill::TPtr&) {
         ErrorReason = "stopped before start";
         FinishRun();
+    }
+
+    void HandleInitWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == kWakeupInitTimeoutTag) {
+            LOG_N("GetSummary timeout after " << kInitTimeout
+                << " Tag# " << Tag
+                << " TabletId# " << TabletId);
+            ErrorReason = TStringBuilder()
+                << "GetSummary timed out after " << kInitTimeout
+                << " (TabletId " << TabletId << ")";
+            FinishRun();
+        }
     }
 
     // ---- Helpers shared by both states ----
@@ -270,7 +296,7 @@ private:
         const ui32 readRatio = Config.GetReadRatio();
         const ui32 stopCount = Config.GetStopOnWritesDoneCount();
 
-        while (WriteInFlight + ReadInFlight < Config.GetInFlightWrites()) {
+        while (WriteInFlight + ReadInFlight < Config.GetMaxInFlight()) {
             const bool wantRead = readRatio > 0
                 && WritesIssued > 0
                 && (static_cast<double>(ReadsIssued)
@@ -371,7 +397,12 @@ private:
         }
 
         CheckDrainComplete();
-        SendNext();
+        if (!ok && !Draining && !ErrorBackoffScheduled) {
+            ErrorBackoffScheduled = true;
+            Schedule(kErrorBackoffDuration, new TEvents::TEvWakeup(kWakeupErrorBackoffTag));
+        } else {
+            SendNext();
+        }
     }
 
     void HandleReadResult(TEvLoad::TEvNbsReadResult::TPtr& ev) {
@@ -418,7 +449,12 @@ private:
         }
 
         CheckDrainComplete();
-        SendNext();
+        if (!ok && !Draining && !ErrorBackoffScheduled) {
+            ErrorBackoffScheduled = true;
+            Schedule(kErrorBackoffDuration, new TEvents::TEvWakeup(kWakeupErrorBackoffTag));
+        } else {
+            SendNext();
+        }
     }
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
@@ -431,6 +467,11 @@ private:
     }
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == kWakeupErrorBackoffTag) {
+            ErrorBackoffScheduled = false;
+            SendNext();
+            return;
+        }
         if (ev->Get()->Tag == kWakeupDrainTimeoutTag) {
             LOG_E("Drain timeout Tag# " << Tag
                 << " WriteInFlight# " << WriteInFlight
@@ -490,9 +531,12 @@ private:
                                   && now > MeasurementStartTime)
             ? (now - MeasurementStartTime).MilliSeconds() : 0;
 
+        // Compute percentiles before moving histograms into WorkerStats.
         const ui64 writeP50Us = WriteLatencyUs.GetValueAtPercentile(50.0);
+        const ui64 writeP95Us = WriteLatencyUs.GetValueAtPercentile(95.0);
         const ui64 writeP99Us = WriteLatencyUs.GetValueAtPercentile(99.0);
         const ui64 readP50Us  = ReadLatencyUs.GetValueAtPercentile(50.0);
+        const ui64 readP95Us  = ReadLatencyUs.GetValueAtPercentile(95.0);
         const ui64 readP99Us  = ReadLatencyUs.GetValueAtPercentile(99.0);
 
         LOG_I("Run finished Tag# " << Tag
@@ -513,7 +557,7 @@ private:
         auto report = MakeIntrusive<TEvLoad::TLoadReport>();
         report->Duration = TDuration::MilliSeconds(durationMs);
         report->Size = WriteBytes + ReadBytes;
-        report->InFlight = Config.GetInFlightWrites();
+        report->InFlight = Config.GetMaxInFlight();
         report->LoadType = TEvLoad::TLoadReport::LOAD_WRITE;
 
         auto* finishEv = new TEvLoad::TEvLoadTestFinished(
@@ -522,6 +566,7 @@ private:
             ErrorReason.empty() ? TString{} : ErrorReason);
 
         // Build a minimal JsonResult compatible with service_actor's aggregation.
+        // The service actor will further enrich this from WorkerStats below.
         const double durationSec = durationMs > 0 ? durationMs / 1000.0 : 1.0;
         const ui64 writeErrors = WritesIssued >= WritesOk ? (WritesIssued - WritesOk) : 0;
         const ui64 readErrors  = ReadsIssued  >= ReadsOk  ? (ReadsIssued  - ReadsOk)  : 0;
@@ -529,7 +574,26 @@ private:
         finishEv->JsonResult["rps"] = (WritesOk + ReadsOk) / durationSec;
         finishEv->JsonResult["errors"] = static_cast<double>(writeErrors + readErrors) / durationSec;
         finishEv->JsonResult["percentile"]["50"] = static_cast<double>(writeP50Us) / 1000.0;
+        finishEv->JsonResult["percentile"]["95"] = static_cast<double>(writeP95Us) / 1000.0;
         finishEv->JsonResult["percentile"]["99"] = static_cast<double>(writeP99Us) / 1000.0;
+
+        // Populate typed WorkerStats so the service actor can enrich JsonResult
+        // with split write/read keys consumed by the sweep table.
+        {
+            TNbsDbgLikeFinishStats stats;
+            stats.WritesIssued  = WritesIssued;
+            stats.WritesOk      = WritesOk;
+            stats.WritesErr     = writeErrors;
+            stats.WriteBytes    = WriteBytes;
+            stats.ReadsPbOk     = ReadsOk;   // load actor measures all reads together
+            stats.ReadsDDiskOk  = 0;
+            stats.RunningMs     = durationMs;
+            stats.MeasuredMs    = measuredMs;
+            stats.MaxInFlight   = Config.GetMaxInFlight();
+            stats.WriteE2eUs    = std::move(WriteLatencyUs);
+            stats.ReadPbUs      = std::move(ReadLatencyUs);
+            SetNbsDbgLikeFinishStats(*finishEv, std::move(stats));
+        }
 
         // Render a brief HTML summary as the "last page".
         {
@@ -537,13 +601,16 @@ private:
             html << "<b>NbsDbgLike run summary</b><br/>"
                 << "Tag: " << Tag << "<br/>"
                 << "TabletId: " << TabletId << "<br/>"
+                << "MaxInFlight: " << Config.GetMaxInFlight() << "<br/>"
                 << "Duration: " << durationMs << " ms (measured: " << measuredMs << " ms)<br/>"
                 << "WritesIssued: " << WritesIssued << " WritesOk: " << WritesOk
                 << " WriteBytes: " << WriteBytes << "<br/>"
-                << "WriteLatency p50=" << writeP50Us << "us p99=" << writeP99Us << "us<br/>"
+                << "WriteLatency p50=" << writeP50Us << "us p95=" << writeP95Us
+                << "us p99=" << writeP99Us << "us<br/>"
                 << "ReadsIssued: " << ReadsIssued << " ReadsOk: " << ReadsOk
                 << " ReadBytes: " << ReadBytes << "<br/>"
-                << "ReadLatency p50=" << readP50Us << "us p99=" << readP99Us << "us<br/>";
+                << "ReadLatency p50=" << readP50Us << "us p95=" << readP95Us
+                << "us p99=" << readP99Us << "us<br/>";
             if (!ErrorReason.empty()) {
                 html << "<b>Error:</b> " << ErrorReason << "<br/>";
             }
@@ -567,6 +634,7 @@ private:
         hFunc(TEvTabletPipe::TEvClientDestroyed, HandleInitPipeDestroyed)
         hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected)
         hFunc(TEvents::TEvPoisonPill, HandleInitPoison)
+        hFunc(TEvents::TEvWakeup, HandleInitWakeup)
     )
 
     STRICT_STFUNC(StateRunning,
@@ -650,6 +718,7 @@ private:
 
     bool Draining = false;
     bool Finished = false;
+    bool ErrorBackoffScheduled = false;
     TString ErrorReason;
 };
 

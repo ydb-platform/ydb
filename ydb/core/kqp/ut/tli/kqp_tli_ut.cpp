@@ -656,50 +656,37 @@ namespace {
         }
 
         void CreateTable(const TString& tableName) {
-            NKqp::AssertSuccessResult(Kikimr.RunCall([&] () {
-                return Session.ExecuteQuery(Sprintf(R"(CREATE TABLE `%s` (Key Uint64, Value String, PRIMARY KEY (Key));)", tableName.c_str()),
-                    TTxControl::NoTx()).GetValueSync();
-            }));
+            Kikimr.RunCall([&] () { return CreateTableInSession(Session, tableName); });
         }
 
         void SeedTable(const TString& tableName, const TVector<std::pair<ui64, TString>>& rows) {
-            for (const auto& [key, value] : rows) {
-                NKqp::AssertSuccessResult(Kikimr.RunCall([&] () {
-                    return Session.ExecuteQuery(Sprintf("UPSERT INTO `%s` (Key, Value) VALUES (%luu, \"%s\")", tableName.c_str(), key, value.c_str()),
-                        TTxControl::BeginTx().CommitTx()).GetValueSync();
-                }));
-            }
+            Kikimr.RunCall([&] () { return SeedTableInSession(Session, tableName, rows); });
         }
 
         void CreateAndSeedTables(int count) {
-            for (int i = 1; i <= count; ++i) {
-                const TString tablePath = NumberedTablePath(i);
-                CreateTable(tablePath);
-                SeedTable(tablePath, {{1, Sprintf("Init%d", i)}});
-            }
+            Kikimr.RunCall([&] () { return CreateAndSeedTablesInSession(Session, count); });
         }
 
         void CreateAndSeedTablesWithSecondKey(int count) {
-            for (int i = 1; i <= count; ++i) {
-                const TString tablePath = NumberedTablePath(i);
-                CreateTable(tablePath);
-                SeedTable(tablePath, {{1, Sprintf("Init%d", i)}, {2, Sprintf("Init%d_2", i)}});
-            }
+            Kikimr.RunCall([&] () { return CreateAndSeedTablesWithSecondKeyInSession(Session, count); });
         }
 
         void ExecuteQuery(const TString& query, bool sync = true) {
             if (sync) {
-                TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate>(*Kikimr.GetTestServer().GetRuntime()).Wait();
+                NActors::TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate> waiter(*Kikimr.GetTestServer().GetRuntime());
+                waiter.Wait(TDuration::Seconds(5));
             }
             NKqp::AssertSuccessResult(Kikimr.RunCall([&] () {
                 return Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             }));
         }
 
-        std::optional<TTransaction> BeginTx(TSession& session, const TString& query) {
+        TTransaction BeginTx(TSession& session, const TString& query) {
             auto result = Kikimr.RunCall([&] () { return session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync(); });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            return result.GetTransaction();
+            auto tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+            return *tx;
         }
 
         std::pair<EStatus, TString> CommitTxWithIssues(TTransaction& tx) {
@@ -1392,7 +1379,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Seed with initial data in the key range 1-10
         for (ui64 i = 2; i <= 10; ++i) {
-            ctx->SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%lu", i)}});
+            ctx->SeedTable("/Root/Tenant1/Table1", {{i, Sprintf("Initial%" PRIu64, i)}});
         }
 
         // Victim transaction: UPSERT...SELECT that reads and writes keys 1-5
@@ -1413,7 +1400,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx->ExecuteQuery(breakerUpsert);
 
         // Victim: try to commit - should be aborted due to MVCC conflict detection
-        auto [status, issues] = ctx->CommitTxWithIssues(*victimTx);
+        auto [status, issues] = ctx->CommitTxWithIssues(victimTx);
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
         ctx.reset();
 

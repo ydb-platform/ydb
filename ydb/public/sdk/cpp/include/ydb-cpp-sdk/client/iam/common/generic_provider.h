@@ -192,7 +192,6 @@ private:
                 std::lock_guard guard(Lock_);
                 LastRequestError_ = TStringBuilder() << "Request failed: " << CurrentExceptionMessage();
                 ResetContextImpl();
-                ContextReady_.notify_all();
                 return;
             }
 

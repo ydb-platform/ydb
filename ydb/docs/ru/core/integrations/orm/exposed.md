@@ -69,8 +69,6 @@ val db = Database.connect(
     url = "jdbc:ydb:grpc://localhost:2136/local",
     driver = "tech.ydb.jdbc.YdbDriver",
     databaseConfig = DatabaseConfig {
-        defaultIsolationLevel = Connection.TRANSACTION_SERIALIZABLE
-        defaultReadOnly = false
         useNestedTransactions = false
     }
 )
@@ -84,8 +82,6 @@ val db = Database.connect(
 
 Рекомендуемая конфигурация Exposed для YDB включает:
 
-- `defaultIsolationLevel = SERIALIZABLE`;
-- `defaultReadOnly = false`;
 - `useNestedTransactions = false` — это настройка на стороне Exposed, она запрещает Exposed эмулировать вложенные транзакции. YDB вложенные транзакции не поддерживает, поэтому такая эмуляция приводила бы к ошибкам;
 - регистрацию `YdbDialect` через `registerYdbDialect(...)` до открытия `Database`.
 

@@ -919,7 +919,6 @@ private:
         if (buildInfo.KMeans.Adaptive) {
             ev->Record.SetAdaptive(true);
             ev->Record.SetLevels(buildInfo.KMeans.Levels);
-            ev->Record.SetShards(buildInfo.Shards.size());
         }
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 

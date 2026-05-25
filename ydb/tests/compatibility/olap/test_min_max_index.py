@@ -11,7 +11,7 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         print(self.versions)
-        if min(self.versions) < (26, 1):
+        if min(self.versions) < (26, 2):
             pytest.skip("min_max index is available starting from 26.1")
 
         self.index_min_max_name = "idx_min_max"

@@ -49,7 +49,7 @@
 
 {% endcut %}
 
-{% include [import-aux-params-table.md](import-aux-params-table.md) %}
+{% include [import-aux-params-table.md](_includes/import-aux-params-table.md) %}
 | `--list` | Перечислить объекты в существующей выгрузке. |
 
 ## Выполнение загрузки {#exec}

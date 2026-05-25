@@ -18,11 +18,11 @@ any time without prior notice.
 | Stability of commands       | Backwards-compatible guarantees | No guarantees                     |
 | Experimental commands       | Hidden / unavailable            | Available under `experimental`    |
 
-`ydb_int` reuses the entire infrastructure of the public client
-([`ydb/public/lib/ydb_cli`](../../public/lib/ydb_cli)) and only **adds** the
-`experimental` (alias `exp`) command tree on top of it. All non-experimental
-behaviour (authentication options, profiles, output formats, etc.) is identical
-to the official `ydb` client.
+`ydb_int` is built on top of the same client infrastructure as the official
+`ydb` client ([`ydb/public/lib/ydb_cli`](../../public/lib/ydb_cli)) and adds
+the `experimental` (alias `exp`) command tree on top of it. The rest of the
+behaviour (authentication options, profiles, output formats, etc.) largely
+matches the official `ydb` client.
 
 ## Building
 

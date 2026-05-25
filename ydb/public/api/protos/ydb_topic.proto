@@ -778,6 +778,43 @@ message CommitOffsetResult {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// CommitTopicOffset
+
+
+// Commit topic offset request sent from client to server.
+message CommitTopicOffsetRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Topic path.
+    string path = 2;
+    // Path of consumer.
+    string consumer = 3;
+
+    // In each topic partition, the committed offset is moved to the start of the partition.
+    message PartitionStart {
+    }
+
+    // In each topic partition, the committed offset is moved to the end of the partition.
+    message PartitionEnd {
+    }
+
+    oneof position {
+        PartitionStart partition_start = 4;
+        PartitionEnd partition_end = 5;
+    }
+}
+
+// Commit topic offset response sent from server to client.
+message CommitTopicOffsetResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Commit offset result message inside CommitTopicOffsetResponse.operation.
+message CommitTopicOffsetResult {
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Control messages
 
 

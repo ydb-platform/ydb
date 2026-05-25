@@ -8,7 +8,7 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
 #include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
-#include <yt/yql/providers/yt/fmr/vanilla/tds_discovery/yql_yt_vanilla_tds_discovery.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/discovery/static/yql_yt_static_service_discovery.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NFmr {
@@ -195,12 +195,11 @@ void TFmrUserJob::InitializeFmrUserJob() {
         tableDataServiceDiscovery = Discovery_;
     } else if (VanillaInfo_.Defined()) {
         VanillaPeerTracker_ = std::make_unique<TStaticVanillaPeerTracker>(VanillaInfo_->Tracker);
-        auto vanillaDiscovery = MakeVanillaTdsDiscovery(*VanillaPeerTracker_, TVanillaTdsDiscoverySettings{
-            .TdsPort    = VanillaInfo_->TdsPort,
-            .MinIndex   = VanillaInfo_->TdsMinIndex
-        });
-        vanillaDiscovery->Start();
-        tableDataServiceDiscovery = vanillaDiscovery;
+        TStaticTableDataServiceDiscoverySettings settings;
+        for (ui32 i = VanillaInfo_->TdsMinIndex; i < VanillaInfo_->Tracker.PeerIps.size(); ++i) {
+            settings.Hosts.emplace_back(VanillaInfo_->Tracker.PeerIps[i], VanillaInfo_->TdsPort);
+        }
+        tableDataServiceDiscovery = MakeStaticTableDataServiceDiscovery(settings);
     } else {
         tableDataServiceDiscovery = MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFilePath_});
     }

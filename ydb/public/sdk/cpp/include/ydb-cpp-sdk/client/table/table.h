@@ -2314,7 +2314,7 @@ public:
     //! Returns new type builder
     TTypeBuilder GetTypeBuilder();
     //! Returns session id
-    std::string_view GetId() const;
+    const std::string& GetId() const;
 
     const std::optional<TDeadline>& GetPropagatedDeadline() const;
 
@@ -2439,7 +2439,7 @@ class TDataQuery {
     friend class TSession;
 
 public:
-    std::string_view GetId() const;
+    const std::string& GetId() const;
     const std::optional<std::string>& GetText() const;
     TParamsBuilder GetParamsBuilder() const;
     std::map<std::string, TType> GetParameterTypes() const;

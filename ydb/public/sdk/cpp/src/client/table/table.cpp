@@ -2094,7 +2094,7 @@ TTypeBuilder TSession::GetTypeBuilder() {
     return TTypeBuilder();
 }
 
-std::string_view TSession::GetId() const {
+const std::string& TSession::GetId() const {
     return SessionImpl_->GetId();
 }
 
@@ -2177,7 +2177,7 @@ TDataQuery::TDataQuery(const TSession& session, std::string_view text, std::stri
                       session.Client_->Settings_.AllowRequestMigration_, types))
 {}
 
-std::string_view TDataQuery::GetId() const {
+const std::string& TDataQuery::GetId() const {
     return Impl_->GetId();
 }
 

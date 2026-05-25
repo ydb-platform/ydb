@@ -806,7 +806,7 @@ void TSession::SetPropagatedDeadline(const TDeadline& deadline) {
     SessionImpl_->PropagatedDeadline_ = deadline;
 }
 
-std::string_view TSession::GetId() const {
+const std::string& TSession::GetId() const {
     return SessionImpl_->GetId();
 }
 

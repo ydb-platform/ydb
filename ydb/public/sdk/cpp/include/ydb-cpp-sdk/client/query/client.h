@@ -140,7 +140,7 @@ class TSession {
     friend class TExecuteQueryIterator;
     friend class NRetry::TRetryDeadlineHelper<TQueryClient>;
 public:
-    std::string_view GetId() const;
+    const std::string& GetId() const;
 
     const std::optional<TDeadline>& GetPropagatedDeadline() const;
 

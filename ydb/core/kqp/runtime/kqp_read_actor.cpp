@@ -79,7 +79,7 @@ public:
         size_t RetryAttempt = 0;
         size_t SuccessBatches = 0;
 
-        TMaybe<ui32> NodeId = {};
+        TMaybe<ui32> NodeId;
         bool IsFirst = false;
         bool IsFake = false;
 
@@ -770,8 +770,8 @@ public:
                 ResetRead(id);
                 return ResolveShard(state);
             }
+            ++state->RetryAttempt;
         }
-        ++state->RetryAttempt;
 
         auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry && !throttled); // TODO: account potential quota shortage
         if (delay == TDuration::Zero()) {

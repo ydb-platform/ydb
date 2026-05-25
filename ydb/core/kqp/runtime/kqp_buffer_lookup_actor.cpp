@@ -629,11 +629,13 @@ public:
             << ", shardId: " << failedRead.ShardId);
         failedRead.Blocked = true;
 
-        if (!isThrottled && failedRead.RetryAttempts >= MaxShardRetries()) {
-            return false;
+        if (!isThrottled) {
+            if (failedRead.RetryAttempts >= MaxShardRetries()) {
+                return false;
+            }
+            ++failedRead.RetryAttempts;
         }
 
-        ++failedRead.RetryAttempts;
         auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);

@@ -1,6 +1,7 @@
 #include "ut_utils.h"
 
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/library/security/util.h>
 
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -148,6 +149,10 @@ void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& 
         args.GroupSIDs = GroupSIDs;
     }
     TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+    userToken->SetSanitizedToken(NKikimr::MaskTicket(ev->Get()->Ticket));
+    if (ev->Get()->Ticket != ROOT_TOKEN) {
+        userToken->SetSubjectType(NACLibProto::SUBJECT_TYPE_USER);
+    }
     userToken->SaveSerializationInfo();
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,
         "Send TEvAuthorizeTicketResult success");

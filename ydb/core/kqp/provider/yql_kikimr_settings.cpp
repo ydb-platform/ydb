@@ -164,6 +164,10 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     /* CBO internal constants for tuning */
     REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
+
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinMult);
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinPow);
+
     REGISTER_SETTING(*this, OptCBOConstsSelMult);
     REGISTER_SETTING(*this, OptCBOConstsSelPow);
 

@@ -97,6 +97,10 @@ struct TKqpProviderContext : public TBaseProviderContext {
     bool BlockJoinEnabled;
 
     ui32 CONSTS_MAX_DEPTH = 4;
+
+    double CONSTS_CROSSJOIN_MULT = 1.0;
+    double CONSTS_CROSSJOIN_POW = 1.0;
+
     double CONSTS_SEL_MULT = 0.2;
     double CONSTS_SEL_POW = 0.2;
 

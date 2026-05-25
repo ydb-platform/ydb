@@ -117,6 +117,10 @@ public:
 
     /* Internal CBO constants for tuning */
     NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsCrossJoinMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsCrossJoinPow;
+
     NCommon::TConfSetting<double, Static> OptCBOConstsSelMult;
     NCommon::TConfSetting<double, Static> OptCBOConstsSelPow;
 

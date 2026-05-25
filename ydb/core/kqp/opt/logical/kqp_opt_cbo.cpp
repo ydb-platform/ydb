@@ -141,6 +141,10 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
 
 void TKqpProviderContext::SetConstants(const TKikimrConfiguration::TPtr& config) {
     CONSTS_MAX_DEPTH = config->OptCBOConstsMaxDepth.Get().GetOrElse(CONSTS_MAX_DEPTH);
+
+    CONSTS_CROSSJOIN_MULT = config->OptCBOConstsCrossJoinMult.Get().GetOrElse(CONSTS_CROSSJOIN_MULT);
+    CONSTS_CROSSJOIN_POW = config->OptCBOConstsCrossJoinPow.Get().GetOrElse(CONSTS_CROSSJOIN_POW);
+
     CONSTS_SEL_MULT = config->OptCBOConstsSelMult.Get().GetOrElse(CONSTS_SEL_MULT);
     CONSTS_SEL_POW = config->OptCBOConstsSelPow.Get().GetOrElse(CONSTS_SEL_POW);
 
@@ -563,7 +567,8 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
 
     if (isCrossJoin) {
         /* in case of cross join we broadcast the right part to the left */
-        cost += rightStats.Nrows * WeightedRowSize(rightStats.Nrows, rightStats.ByteSize, CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
+        double crossJoin = rightStats.Nrows * WeightedRowSize(rightStats.Nrows, rightStats.ByteSize, CONSTS_RIGHT_SIDE_BYTESIZE_FACTOR);
+        cost += CONSTS_CROSSJOIN_MULT * std::pow(crossJoin, CONSTS_CROSSJOIN_POW);
         // cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
         // cost += rightStats.Nrows * rightStats.Selectivity;
     }

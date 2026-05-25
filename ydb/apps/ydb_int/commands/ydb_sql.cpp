@@ -329,7 +329,7 @@ void TCommandSqlExperimental::Parse(TConfig& config) {
             "Relevant for execution mode only.";
     }
     if (ExplainMode && !CollectStatsMode.empty()) {
-        throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
+        throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode. "
             "Relevant for execution mode only.";
     }
     if ((ExplainAnalyzeMode || ExplainMode) && (AsyncWait || RunAsync)) {

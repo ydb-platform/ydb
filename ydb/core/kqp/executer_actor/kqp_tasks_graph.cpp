@@ -3,7 +3,7 @@
 #include "kqp_partition_helper.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/control.h>

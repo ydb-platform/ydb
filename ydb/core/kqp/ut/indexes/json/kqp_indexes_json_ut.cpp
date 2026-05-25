@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/ut/indexes/json/kqp_json_index_corpus.h>
 #include <ydb/core/kqp/ut/indexes/json/kqp_json_index_predicate.h>
 

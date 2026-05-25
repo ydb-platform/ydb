@@ -1,7 +1,7 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>

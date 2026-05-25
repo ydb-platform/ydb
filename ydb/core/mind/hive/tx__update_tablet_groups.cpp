@@ -319,9 +319,7 @@ public:
         }
         if (needToIncreaseGeneration) {
             tablet->IncreaseGeneration();
-            tablet->AddRestartTimestamp(TActivationContext::Now());
-            db.Table<Schema::Tablet>().Key(tablet->Id).Update(NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration),
-                                                              NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
+            db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration);
         }
         if (!tablet->TryToBoot()) {
             BLOG_NOTICE("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"

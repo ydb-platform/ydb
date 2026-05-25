@@ -3,7 +3,7 @@
 import sys
 import argparse
 import json
-import Self
+from typing import Self
 
 NEVER_INLINE = {
     'DqPhyStage',

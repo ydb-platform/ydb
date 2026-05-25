@@ -181,6 +181,7 @@ ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclInterruptInheritance
+ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnWithDefaultCancellation
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactPublicApi
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql+UseQueryService

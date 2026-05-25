@@ -2,6 +2,9 @@
 #include "helpers.h"
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
 
 using namespace NKikimr;
 using namespace NKikimr::NRepl;
@@ -81,7 +84,9 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             it->Next();
         }
 
-        LOG_INFO_S(ctx, NActorsServices::TEST, "numBlobs# " << numBlobs << " blobsSize# " << blobsSize);
+        YDB_LOG_CTX_INFO(ctx, "",
+            {"numBlobs", numBlobs},
+            {"blobsSize", blobsSize});
 
         Become(&TThis::StateFunc);
         ctx.Schedule(RepeatTimeout, new TEvents::TEvWakeup());
@@ -91,7 +96,8 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
         --Counter;
 
-        LOG_DEBUG_S(ctx, NActorsServices::TEST, "received reply " << ev->Get()->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "received reply",
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         ui32 ok = 0, notOk = 0, dataCorrupt = 0, miss = 0, noData = 0;
 
@@ -124,9 +130,13 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             }
         }
 
-        LOG_INFO_S(ctx, NActorsServices::TEST, "ok# " << ok << " notOk# " << notOk <<
-                " noData# " << noData << " dataCorrupt# " << dataCorrupt <<
-                " miss# " << miss << " remain# " << PendingReads.size());
+        YDB_LOG_CTX_INFO(ctx, "",
+            {"ok", ok},
+            {"notOk", notOk},
+            {"noData", noData},
+            {"dataCorrupt", dataCorrupt},
+            {"miss", miss},
+            {"remain", PendingReads.size()});
 
         if (!Counter && PendingReads.empty()) {
             if (ReadSet.empty()) {

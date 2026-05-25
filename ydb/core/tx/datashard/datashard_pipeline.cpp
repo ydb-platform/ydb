@@ -11,6 +11,9 @@
 #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/aclib/user_context.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -181,9 +184,10 @@ ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx,
         op = Self->TransQueue.FindTxInFly(txId);
 
         if (!op) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "TX [" << step << ":" << txId << "] is already executed or expired at tablet "
-                        << Self->TabletID());
+            YDB_LOG_CTX_ERROR(ctx, "TX [ ] is already executed or expired at tablet",
+                {"step", step},
+                {"txId", txId},
+                {"TabletID", Self->TabletID()});
 
             ui64 lastStep = LastPlannedTx.Step;
             Y_ENSURE(lastStep >= step,
@@ -211,9 +215,10 @@ ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx,
     switch (status) {
         case ECleanupStatus::None:
             if (!op || !CanRunOp(*op)) {
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "No cleanup at " << Self->TabletID() << " outdated step " << outdatedStep
-                    << " last cleanup " << LastCleanupTime);
+                YDB_LOG_CTX_TRACE(ctx, "No cleanup at outdated step last cleanup",
+                    {"TabletID", Self->TabletID()},
+                    {"outdatedStep", outdatedStep},
+                    {"LastCleanupTime", LastCleanupTime});
             }
             break;
 
@@ -242,10 +247,11 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
                      << " " << *op << " executing in " << op->GetCurrentUnit()
                      << " at " << Self->TabletID());
     if (op->IsInProgress()) {
-        LOG_CRIT_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                   "Found in-progress candidate operation " << op->GetKind()
-                   << " " << *op << " executing in " << op->GetCurrentUnit()
-                   << " at " << Self->TabletID());
+        YDB_LOG_CTX_CRIT(TActivationContext::AsActorContext(), "Found in-progress candidate operation executing in at",
+            {"GetKind", op->GetKind()},
+            {"#_*op", *op},
+            {"GetCurrentUnit", op->GetCurrentUnit()},
+            {"TabletID", Self->TabletID()});
         return false;
     }
 
@@ -253,9 +259,10 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
                      "Found finished candidate operation " << op->GetKind()
                      << " " << *op << " at " << Self->TabletID());
     if (op->IsExecutionPlanFinished()) {
-        LOG_CRIT_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                   "Found finished candidate operation " << op->GetKind()
-                   << " " << *op << " at " << Self->TabletID());
+        YDB_LOG_CTX_CRIT(TActivationContext::AsActorContext(), "Found finished candidate operation at",
+            {"GetKind", op->GetKind()},
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()});
         return false;
     }
 
@@ -265,13 +272,13 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
 
 TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 {
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                "GetNextActiveOp at " << Self->TabletID()
-                << (dryRun ? " (dry run)" : "")
-                << " active " << ActiveOps.size()
-                << " active planned " << ActivePlannedOps.size()
-                << " immediate " << ImmediateOps.size()
-                << " planned " << Self->TransQueue.TxInFly());
+    YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "GetNextActiveOp at active active planned immediate planned",
+        {"TabletID", Self->TabletID()},
+        {"#_num_0", (dryRun ? " (dry run)" : "")},
+        {"size", ActiveOps.size()},
+        {"#_size", ActivePlannedOps.size()},
+        {"#_size", ImmediateOps.size()},
+        {"TxInFly", Self->TransQueue.TxInFly()});
 
     THashSet<TOperation::TPtr> checkedOps;
     THashSet<EExecutionUnitKind> checkedUnits;
@@ -279,19 +286,20 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
     // Check if we have cached result from previous dry run.
     if (NextActiveOp) {
         if (IsReadyOp(NextActiveOp)) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Return cached ready operation " << *NextActiveOp << " at "
-                        << Self->TabletID());
+            YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Return cached ready operation at",
+                {"#_*NextActiveOp", *NextActiveOp},
+                {"TabletID", Self->TabletID()});
 
             TOperation::TPtr res = NextActiveOp;
             if (!dryRun)
                 NextActiveOp = nullptr;
             return res;
         } else {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Cached ready operation " << NextActiveOp->GetKind()
-                        << " " << *NextActiveOp << " is not ready anymore for "
-                        << NextActiveOp->GetCurrentUnit() << " at " << Self->TabletID());
+            YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Cached ready operation is not ready anymore for at",
+                {"GetKind", NextActiveOp->GetKind()},
+                {"#_*NextActiveOp", *NextActiveOp},
+                {"GetCurrentUnit", NextActiveOp->GetCurrentUnit()},
+                {"TabletID", Self->TabletID()});
 
             NextActiveOp = nullptr;
         }
@@ -304,17 +312,19 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
         CandidateOps.erase(CandidateOps.begin());
 
         if (IsReadyOp(op)) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Found ready candidate operation " << *op << " at "
-                        << Self->TabletID() << " for " << op->GetCurrentUnit());
+            YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Found ready candidate operation at for",
+                {"#_*op", *op},
+                {"TabletID", Self->TabletID()},
+                {"GetCurrentUnit", op->GetCurrentUnit()});
             if (dryRun)
                 NextActiveOp = op;
             return op;
         }
 
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Candidate operation " << *op << " at " << Self->TabletID()
-                    << " is not ready for " << op->GetCurrentUnit());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Candidate operation at is not ready for",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"GetCurrentUnit", op->GetCurrentUnit()});
 
         checkedOps.insert(op);
     }
@@ -325,22 +335,24 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
     while (!CandidateUnits.empty()) {
         auto &unit = GetExecutionUnit(*CandidateUnits.rbegin());
 
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Check candidate unit " << unit.GetKind() << " at " << Self->TabletID());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Check candidate unit at",
+            {"GetKind", unit.GetKind()},
+            {"TabletID", Self->TabletID()});
 
         auto op = unit.FindReadyOperation();
         if (op) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Found ready operation " << *op << " in " << unit.GetKind()
-                        << " unit at " << Self->TabletID());
+            YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Found ready operation in unit at",
+                {"#_*op", *op},
+                {"GetKind", unit.GetKind()},
+                {"TabletID", Self->TabletID()});
             if (dryRun)
                 NextActiveOp = op;
             return op;
         }
 
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Unit " << unit.GetKind() << " has no ready operations at "
-                    << Self->TabletID());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Unit has no ready operations at",
+            {"GetKind", unit.GetKind()},
+            {"TabletID", Self->TabletID()});
 
         checkedUnits.insert(unit.GetKind());
         CandidateUnits.erase(*CandidateUnits.rbegin());
@@ -358,9 +370,10 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
         if (checkedOps.contains(op) || op->IsInProgress())
             continue;
 
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Check active operation " << *op << " at " << Self->TabletID()
-                    << " on unit " << op->GetCurrentUnit());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Check active operation at on unit",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"GetCurrentUnit", op->GetCurrentUnit()});
 
         bool ready = IsReadyOp(op);
 
@@ -368,23 +381,26 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                          << " in " << op->GetCurrentUnit());
 
         if (ready) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "TryGetExistingTx at " << Self->TabletID() << " return waiting " << *op);
+            YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "TryGetExistingTx at return waiting",
+                {"TabletID", Self->TabletID()},
+                {"#_*op", *op});
             if (dryRun)
                 NextActiveOp = op;
             return op;
         }
 
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Active operation " << *op << " at " << Self->TabletID()
-                    << " is not ready for " << op->GetCurrentUnit());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Active operation at is not ready for",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"GetCurrentUnit", op->GetCurrentUnit()});
     }
 
     if (!checkedUnits.contains(EExecutionUnitKind::PlanQueue)) {
         auto &unit = GetExecutionUnit(EExecutionUnitKind::PlanQueue);
 
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Check unit " << unit.GetKind() << " at " << Self->TabletID());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Check unit at",
+            {"GetKind", unit.GetKind()},
+            {"TabletID", Self->TabletID()});
 
         auto op = unit.FindReadyOperation();
 
@@ -392,17 +408,18 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                          << " at " << Self->TabletID());
 
         if (op) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Found ready operation " << *op << " in " << unit.GetKind()
-                        << " unit at " << Self->TabletID());
+            YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "Found ready operation in unit at",
+                {"#_*op", *op},
+                {"GetKind", unit.GetKind()},
+                {"TabletID", Self->TabletID()});
             if (dryRun)
                 NextActiveOp = op;
             return op;
         }
 
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Unit " << unit.GetKind() << " has no ready operations at "
-                    << Self->TabletID());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Unit has no ready operations at",
+            {"GetKind", unit.GetKind()},
+            {"TabletID", Self->TabletID()});
     }
 
     return nullptr;
@@ -434,8 +451,9 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         {
             // This transaction would have been marked as logically complete
             if (!op->HasFlag(TTxFlags::BlockingImmediateOps)) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Adding BlockingImmediateOps for op " << *op << " at " << Self->TabletID());
+                YDB_LOG_TRACE("Adding BlockingImmediateOps for op at",
+                    {"#_*op", *op},
+                    {"TabletID", Self->TabletID()});
                 op->SetFlag(TTxFlags::BlockingImmediateOps);
             }
         } else if (version <= Self->SnapshotManager.GetIncompleteEdge() ||
@@ -443,8 +461,9 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         {
             // This transaction would have been marked as logically incomplete
             if (!op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
-                LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Adding BlockingImmediateWrites for op " << *op << " at " << Self->TabletID());
+                YDB_LOG_TRACE("Adding BlockingImmediateWrites for op at",
+                    {"#_*op", *op},
+                    {"TabletID", Self->TabletID()});
                 op->SetFlag(TTxFlags::BlockingImmediateWrites);
             }
         }
@@ -453,14 +472,16 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         Y_ENSURE(pr.first == std::prev(ActivePlannedOps.end()), "AddActiveOp must always add transactions in order");
         bool isComplete = op->HasFlag(TTxFlags::BlockingImmediateOps);
         if (ActivePlannedOpsLogicallyCompleteEnd == ActivePlannedOps.end() && !isComplete) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Operation " << *op << " is the new logically complete end at " << Self->TabletID());
+            YDB_LOG_TRACE("Operation is the new logically complete end at",
+                {"#_*op", *op},
+                {"TabletID", Self->TabletID()});
             ActivePlannedOpsLogicallyCompleteEnd = pr.first;
         }
         bool isIncomplete = isComplete || op->HasFlag(TTxFlags::BlockingImmediateWrites);
         if (ActivePlannedOpsLogicallyIncompleteEnd == ActivePlannedOps.end() && !isIncomplete) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Operation " << *op << " is the new logically incomplete end at " << Self->TabletID());
+            YDB_LOG_TRACE("Operation is the new logically incomplete end at",
+                {"#_*op", *op},
+                {"TabletID", Self->TabletID()});
             ActivePlannedOpsLogicallyIncompleteEnd = pr.first;
         }
     }
@@ -481,8 +502,9 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
                " cannot activate " << op->GetKind() << " operation " << *op << " at "
                << Self->TabletID() << " because it is already active");
 
-    LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                "Activated operation " << *op << " at " << Self->TabletID());
+    YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Activated operation at",
+        {"#_*op", *op},
+        {"TabletID", Self->TabletID()});
 
     AddCandidateUnit(EExecutionUnitKind::PlanQueue);
 }
@@ -593,9 +615,10 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
         // Remove tx from cache.
         ForgetTx(tx->GetTxId());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "LoadTxDetails at " << Self->TabletID() << " got data tx from cache "
-                    << tx->GetStep() << ":" << tx->GetTxId());
+        YDB_LOG_CTX_DEBUG(ctx, "LoadTxDetails at got data tx from cache",
+            {"TabletID", Self->TabletID()},
+            {"GetStep", tx->GetStep()},
+            {"GetTxId", tx->GetTxId()});
     } else if (tx->HasVolatilePrepareFlag()) {
         // Since transaction is volatile it was never stored on disk, and it
         // shouldn't have any artifacts yet.
@@ -604,10 +627,11 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
         ui32 keysCount = 0;
         keysCount = tx->ExtractKeys();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "LoadTxDetails at " << Self->TabletID() << " loaded tx from memory "
-                    << tx->GetStep() << ":" << tx->GetTxId() << " keys extracted: "
-                    << keysCount);
+        YDB_LOG_CTX_DEBUG(ctx, "LoadTxDetails at loaded tx from memory keys",
+            {"TabletID", Self->TabletID()},
+            {"GetStep", tx->GetStep()},
+            {"GetTxId", tx->GetTxId()},
+            {"extracted", keysCount});
     } else {
         NIceDb::TNiceDb db(txc.DB);
         TActorId target;
@@ -631,10 +655,11 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
         //if (Config.LimitActiveTx > 1)
         keysCount = tx->ExtractKeys();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "LoadTxDetails at " << Self->TabletID() << " loaded tx from db "
-                    << tx->GetStep() << ":" << tx->GetTxId() << " keys extracted: "
-                    << keysCount);
+        YDB_LOG_CTX_DEBUG(ctx, "LoadTxDetails at loaded tx from db keys",
+            {"TabletID", Self->TabletID()},
+            {"GetStep", tx->GetStep()},
+            {"GetTxId", tx->GetTxId()},
+            {"extracted", keysCount});
     }
 
     return true;
@@ -652,7 +677,10 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
         // Remove writeOp from cache.
         ForgetTx(writeOp->GetTxId());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " got data writeOp from cache " << writeOp->GetStep() << ":" << writeOp->GetTxId());
+        YDB_LOG_CTX_DEBUG(ctx, "LoadWriteDetails at got data writeOp from cache",
+            {"TabletID", Self->TabletID()},
+            {"GetStep", writeOp->GetStep()},
+            {"GetTxId", writeOp->GetTxId()});
     } else if (writeOp->HasVolatilePrepareFlag()) {
         // Since transaction is volatile it was never stored on disk, and it
         // shouldn't have any artifacts yet.
@@ -661,7 +689,11 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
         ui32 keysCount = 0;
         keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from memory " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
+        YDB_LOG_CTX_DEBUG(ctx, "LoadWriteDetails at loaded writeOp from memory keys",
+            {"TabletID", Self->TabletID()},
+            {"GetStep", writeOp->GetStep()},
+            {"GetTxId", writeOp->GetTxId()},
+            {"extracted", keysCount});
     } else {
         NIceDb::TNiceDb db(txc.DB);
         TActorId target;
@@ -683,7 +715,11 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
         //if (Config.LimitActiveTx > 1)
         keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "LoadWriteDetails at " << Self->TabletID() << " loaded writeOp from db " << writeOp->GetStep() << ":" << writeOp->GetTxId() << " keys extracted: " << keysCount);
+        YDB_LOG_CTX_DEBUG(ctx, "LoadWriteDetails at loaded writeOp from db keys",
+            {"TabletID", Self->TabletID()},
+            {"GetStep", writeOp->GetStep()},
+            {"GetTxId", writeOp->GetTxId()},
+            {"extracted", keysCount});
     }
 
     return true;
@@ -809,9 +845,12 @@ void TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         coverageList = pb.GetBalanceTrackList().SerializeAsString();
     }
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                "Save read set at " << Self->TabletID() << " for " << txId
-                << " origin=" << origin << " from=" << from << " to=" << to);
+    YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Save read set at for",
+        {"TabletID", Self->TabletID()},
+        {"txId", txId},
+        {"origin", origin},
+        {"from", from},
+        {"to", to});
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::InReadSets>().Key(txId, origin, from, to).Update(
@@ -838,15 +877,18 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
     // Create coverage builders to handle split/merge
     // of read set origins (datashards)
     for (const auto &kv : op->InReadSets()) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Prepare for loading readset for " << *op << " at " << Self->TabletID()
-                    << " source=" << kv.first.first <<  " target=" << kv.first.second);
+        YDB_LOG_CTX_TRACE(ctx, "Prepare for loading readset for at",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"source", kv.first.first},
+            {"target", kv.first.second});
         op->CoverageBuilders()[kv.first].reset(new TBalanceCoverageBuilder());
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Expected " << op->GetRemainReadSets() << " readsets for " << *op
-                << " at " << Self->TabletID());
+    YDB_LOG_CTX_TRACE(ctx, "Expected readsets for at",
+        {"GetRemainReadSets", op->GetRemainReadSets()},
+        {"#_*op", *op},
+        {"TabletID", Self->TabletID()});
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -869,10 +911,12 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
         TString body = rowset.GetValue<Schema::InReadSets::Body>();
         TString track = rowset.GetValue<Schema::InReadSets::BalanceTrackList>();
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Read readset for " << *op << " at " << Self->TabletID()
-                    << " from DB origin=" << origin << " from=" << from
-                    << " to=" << to);
+        YDB_LOG_CTX_TRACE(ctx, "Read readset for at from DB",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"origin", origin},
+            {"from", from},
+            {"to", to});
 
         // Parse track
         NKikimrTx::TBalanceTrackList balanceTrackList;
@@ -895,9 +939,10 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
     }
     op->DelayedInReadSets().clear();
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Remain " << op->GetRemainReadSets() << " read sets for " << *op
-                << " at " << Self->TabletID());
+    YDB_LOG_CTX_TRACE(ctx, "Remain read sets for at",
+        {"GetRemainReadSets", op->GetRemainReadSets()},
+        {"#_*op", *op},
+        {"TabletID", Self->TabletID()});
 
     op->SetLoadedInRSFlag();
 
@@ -1039,22 +1084,25 @@ void TPipeline::PlanTxImpl(ui64 step, ui64 txId, TTransactionContext &txc, const
                                             << ", expected min step: " << SchemaTx->MinStep
                                             << ", actual step: " << step;
         Y_VERIFY_DEBUG_S(SchemaTx->MinStep <= step, explain);
-        LOG_ALERT_S(ctx, NKikimrServices::TX_DATASHARD, explain);
+        YDB_LOG_CTX_ALERT(ctx, "",
+            {"explain", explain});
     }
 
     auto op = Self->TransQueue.FindTxInFly(txId);
     if (!op) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Ignoring PlanStep " << step << " for unknown txId "
-                    << txId << " at tablet " <<  Self->TabletID());
+        YDB_LOG_CTX_DEBUG(ctx, "Ignoring PlanStep for unknown txId at tablet",
+            {"step", step},
+            {"txId", txId},
+            {"TabletID", Self->TabletID()});
         return;
     }
 
     if (op->GetStep() && op->GetStep() != step) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Ignoring PlanStep " << step << " for txId " << txId
-                    << " which already has PlanStep " << op->GetStep()
-                    << " at tablet " << Self->TabletID());
+        YDB_LOG_CTX_WARN(ctx, "Ignoring PlanStep for txId which already has PlanStep at tablet",
+            {"step", step},
+            {"txId", txId},
+            {"GetStep", op->GetStep()},
+            {"TabletID", Self->TabletID()});
         return;
     }
 
@@ -1489,7 +1537,8 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
         tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
 
-        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "",
+            {"error", error});
     };
 
     auto badRequest = [&](const TString& error) {
@@ -1498,7 +1547,8 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             rec.GetTxKind(), Self->TabletID(), tx->GetTxId(), NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST));
         tx->Result()->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, error);
 
-        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "",
+            {"error", error});
     };
 
     if (tx->IsSchemeTx()) {
@@ -1586,9 +1636,10 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                                                                          NKikimrTxDataShard::TEvProposeTransactionResult::ERROR));
             tx->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
 
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Shard " << Self->TabletID() << " cannot parse tx "
-                        << tx->GetTxId() << ": " << dataTx->GetErrors());
+            YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "Shard cannot parse tx",
+                {"TabletID", Self->TabletID()},
+                {"GetTxId", tx->GetTxId()},
+                {"GetErrors", dataTx->GetErrors()});
 
             return tx;
         }
@@ -1616,16 +1667,16 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         // Make config checks for immediate tx.
         if (tx->IsImmediate()) {
             if (Config.NoImmediate() || (Config.ForceOnlineRW() && !dataTx->ReadOnly())) {
-                LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                           "Shard " << Self->TabletID() << " force immediate tx "
-                           << tx->GetTxId() << " to online according to config");
+                YDB_LOG_CTX_INFO(TActivationContext::AsActorContext(), "Shard force immediate tx to online according to config",
+                    {"TabletID", Self->TabletID()},
+                    {"GetTxId", tx->GetTxId()});
                 tx->SetForceOnlineFlag();
             } else if (tx->IsReadTable()) {
                 // Feature flag tells us txproxy supports immediate mode for ReadTable
             } else if (dataTx->RequirePrepare()) {
-                LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                           "Shard " << Self->TabletID() << " force immediate tx "
-                           << tx->GetTxId() << " to online because of SNAPSHOT_NOT_READY_YET status");
+                YDB_LOG_CTX_INFO(TActivationContext::AsActorContext(), "Shard force immediate tx to online because of SNAPSHOT_NOT_READY_YET status",
+                    {"TabletID", Self->TabletID()},
+                    {"GetTxId", tx->GetTxId()});
                 tx->SetForceOnlineFlag();
             } else {
                 if (Config.DirtyImmediate())
@@ -1684,7 +1735,8 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
 
     auto badRequest = [&](NKikimrDataEvents::TEvWriteResult::EStatus status, const TString& error) {
         writeOp->SetError(status, TStringBuilder() << error << " at tablet# " << Self->TabletID());
-        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "",
+            {"error", error});
     };
 
     switch (rec.GetLockMode()) {
@@ -1728,7 +1780,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     // Make config checks for immediate op.
     if (writeOp->IsImmediate()) {
         if (Config.NoImmediate() || (Config.ForceOnlineRW())) {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, "Force immediate writeOp " << writeOp->GetTxId() << " to online according to config, at tablet #" << Self->TabletID());
+            YDB_LOG_CTX_INFO(TActivationContext::AsActorContext(), "Force immediate writeOp to online according to config, at tablet",
+                {"GetTxId", writeOp->GetTxId()},
+                {"TabletID", Self->TabletID()});
             writeOp->SetForceOnlineFlag();
         } else {
             if (Config.DirtyImmediate())
@@ -1779,14 +1833,16 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
     Y_ENSURE(!op->IsExecutionPlanFinished());
     auto &unit = GetExecutionUnit(op->GetCurrentUnit());
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Trying to execute " << *op << " at " << Self->TabletID()
-                << " on unit " << unit.GetKind());
+    YDB_LOG_CTX_TRACE(ctx, "Trying to execute at on unit",
+        {"#_*op", *op},
+        {"TabletID", Self->TabletID()},
+        {"GetKind", unit.GetKind()});
 
     if (!unit.IsReadyToExecute(op)) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Operation " << *op << " at " << Self->TabletID()
-                    << " is not ready to execute on unit " << unit.GetKind());
+        YDB_LOG_CTX_TRACE(ctx, "Operation at is not ready to execute on unit",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"GetKind", unit.GetKind()});
         return EExecutionStatus::Continue;
     }
 
@@ -1794,9 +1850,10 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
     auto status = unit.Execute(op, txc, ctx);
     op->AddExecutionTime(timer.GetTime());
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Execution status for " << *op << " at " << Self->TabletID()
-                << " is " << status);
+    YDB_LOG_CTX_TRACE(ctx, "Execution status for at is",
+        {"#_*op", *op},
+        {"TabletID", Self->TabletID()},
+        {"status", status});
 
     if (status == EExecutionStatus::Executed
         || status == EExecutionStatus::ExecutedNoMoreRestarts
@@ -1816,14 +1873,16 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
     while (!op->IsExecutionPlanFinished()) {
         auto &unit = GetExecutionUnit(op->GetCurrentUnit());
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Trying to execute " << *op << " at " << Self->TabletID()
-                    << " on unit " << unit.GetKind());
+        YDB_LOG_CTX_TRACE(ctx, "Trying to execute at on unit",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"GetKind", unit.GetKind()});
 
         if (!unit.IsReadyToExecute(op)) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Operation " << *op << " at " << Self->TabletID()
-                        << " is not ready to execute on unit " << unit.GetKind());
+            YDB_LOG_CTX_TRACE(ctx, "Operation at is not ready to execute on unit",
+                {"#_*op", *op},
+                {"TabletID", Self->TabletID()},
+                {"GetKind", unit.GetKind()});
 
             return EExecutionStatus::Continue;
         }
@@ -1831,10 +1890,10 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         const bool mightRestart = unit.GetExecutionMightRestart();
 
         if (mightRestart && !canRestart) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Operation " << *op << " at " << Self->TabletID()
-                        << " cannot execute on unit " << unit.GetKind()
-                        << " because no more restarts are allowed");
+            YDB_LOG_CTX_TRACE(ctx, "Operation at cannot execute on unit because no more restarts are allowed",
+                {"#_*op", *op},
+                {"TabletID", Self->TabletID()},
+                {"GetKind", unit.GetKind()});
 
             return EExecutionStatus::Reschedule;
         }
@@ -1851,9 +1910,10 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
                     .EndOk();
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Execution status for " << *op << " at " << Self->TabletID()
-                    << " is " << status);
+        YDB_LOG_CTX_TRACE(ctx, "Execution status for at is",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"status", status});
 
         if (status == EExecutionStatus::Executed) {
             MoveToNextUnit(op);
@@ -1899,21 +1959,23 @@ void TPipeline::MoveToNextUnit(TOperation::TPtr op)
     Y_ENSURE(!op->IsExecutionPlanFinished());
     GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
 
-    LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                "Advance execution plan for " << *op << " at " << Self->TabletID()
-                << " executing on unit " << op->GetCurrentUnit());
+    YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Advance execution plan for at executing on unit",
+        {"#_*op", *op},
+        {"TabletID", Self->TabletID()},
+        {"GetCurrentUnit", op->GetCurrentUnit()});
 
     op->AdvanceExecutionPlan();
     if (!op->IsExecutionPlanFinished()) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Add " << *op << " at " << Self->TabletID() << " to execution unit "
-                    << op->GetCurrentUnit());
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Add at to execution unit",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"GetCurrentUnit", op->GetCurrentUnit()});
 
         GetExecutionUnit(op->GetCurrentUnit()).AddOperation(op);
     } else {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Execution plan for " << *op << " at " << Self->TabletID()
-                    << " has finished");
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Execution plan for at has finished",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()});
     }
 }
 
@@ -1922,9 +1984,10 @@ void TPipeline::RunCompleteList(TOperation::TPtr op,
                                 const TActorContext &ctx)
 {
     for (auto kind : completeList) {
-        LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Complete execution for " << *op << " at " << Self->TabletID()
-                    << " on unit " << kind);
+        YDB_LOG_CTX_TRACE(TActivationContext::AsActorContext(), "Complete execution for at on unit",
+            {"#_*op", *op},
+            {"TabletID", Self->TabletID()},
+            {"kind", kind});
 
         TInstant start = AppData()->TimeProvider->Now();
         GetExecutionUnit(kind).Complete(op, ctx);
@@ -2143,12 +2206,12 @@ async<bool> TPipeline::WaitForSnapshot(const TRowVersion& snapshot) {
 }
 
 void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ActivateWaitingTxOps for version# " << edge
-        << ", txOps: " << (WaitingDataTxOps.empty() ? "empty" : ToString(WaitingDataTxOps.begin()->first.Step))
-        << ", readIterators: "
-        << (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step))
-        << ", coroutines: "
-        << (WaitingCoroutines.Empty() ? "empty" : ToString(WaitingCoroutines.Top()->Snapshot.Step)));
+    YDB_LOG_CTX_TRACE(ctx, "ActivateWaitingTxOps for",
+        {"TabletID", Self->TabletID()},
+        {"version", edge},
+        {"txOps", (WaitingDataTxOps.empty() ? "empty" : ToString(WaitingDataTxOps.begin()->first.Step))},
+        {"readIterators", (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step))},
+        {"coroutines", (WaitingCoroutines.Empty() ? "empty" : ToString(WaitingCoroutines.Top()->Snapshot.Step))});
 
     bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty() && WaitingCoroutines.Empty();
     if (isEmpty)
@@ -2241,10 +2304,12 @@ void TPipeline::AddWaitingReadIterator(
         ActivateWaitingTxOps(unreadableEdge, ctx);
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " put read iterator# " << readId
-        << " to wait version# " << version
-        << ", waitStep# " << waitStep
-        << ", current unreliable edge# " << unreadableEdge);
+    YDB_LOG_CTX_TRACE(ctx, "put read to wait, current unreliable",
+        {"TabletID", Self->TabletID()},
+        {"iterator", readId},
+        {"version", version},
+        {"waitStep", waitStep},
+        {"edge", unreadableEdge});
 }
 
 bool TPipeline::HasWaitingReadIterator(const TReadIteratorId& readId) {

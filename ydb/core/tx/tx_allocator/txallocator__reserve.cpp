@@ -1,4 +1,7 @@
 #include "txallocator_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_ALLOCATOR
 
 namespace NKikimr {
 namespace NTxAllocator {
@@ -48,12 +51,11 @@ struct TTxAllocator::TTxReserve: public TTransactionBase<TTxAllocator> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_ALLOCATOR,
-                    "tablet# " << Self->TabletID() <<
-                    " TTxReserve Complete" <<
-                    " Successed# " << Successed <<
-                    " Reserved from# " << RangeBegin <<
-                    " Reserved to# " << RangeEnd);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxReserve Complete Reserved Reserved",
+            {"tablet", Self->TabletID()},
+            {"Successed", Successed},
+            {"from", RangeBegin},
+            {"to", RangeEnd});
 
         if (!Successed) {
             Self->ReplyImposible(Event, ctx);

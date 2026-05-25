@@ -9,6 +9,7 @@
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NSysView::NAuth {
 
@@ -90,14 +91,12 @@ protected:
         bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
         bool isAdmin = isClusterAdmin || isDatabaseAdmin;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "ProceedToScan,"
-            << " tenant name: " << TBase::TenantName
-            << " tenant owner: " << TBase::DatabaseOwner
-            << " subject sid: " << (UserToken ? UserToken->GetUserSID() : "empty")
-            << " require admin access: " << RequireUserAdministratorAccess
-            << " is admin: " << isAdmin
-        );
+        YDB_LOG_COMP_DEBUG(NKikimrServices::SYSTEM_VIEWS, "ProceedToScan, tenant tenant subject require admin is",
+            {"name", TBase::TenantName},
+            {"owner", TBase::DatabaseOwner},
+            {"sid", (UserToken ? UserToken->GetUserSID() : "empty")},
+            {"access", RequireUserAdministratorAccess},
+            {"admin", isAdmin});
 
         if (RequireUserAdministratorAccess && !isAdmin) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "Administrator access is required");
@@ -172,8 +171,8 @@ protected:
             return;
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got navigate: " << request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::SYSTEM_VIEWS, "Got",
+            {"navigate", request->ToString(*AppData()->TypeRegistry)});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
@@ -213,8 +212,8 @@ protected:
         entry.Operation = TSchemeCacheNavigate::OpList;
         entry.RedirectRequired = false;
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Navigate " << request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_COMP_TRACE(NKikimrServices::SYSTEM_VIEWS, "Navigate",
+            {"#_request->ToString(*AppData()->TypeRegistry)", request->ToString(*AppData()->TypeRegistry)});
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }

@@ -1,6 +1,9 @@
 #include "ic_storage_transport_actor.h"
 
 #include <ydb/library/actors/util/rope.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -814,11 +817,9 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleListPersistentBufferResult);
 
         default:
-            LOG_DEBUG_S(
-                TActivationContext::AsActorContext(),
-                NKikimrServices::NBS_PARTITION,
-                "Unhandled event type: " << ev->GetTypeRewrite()
-                                         << " event: " << ev->ToString());
+            YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Unhandled event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
             break;
     }
 }

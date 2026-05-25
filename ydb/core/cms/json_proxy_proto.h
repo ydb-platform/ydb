@@ -18,6 +18,7 @@
 #include <util/generic/serialized_enum.h>
 
 #include <unordered_map>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NCms {
 
@@ -37,8 +38,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyProto::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo());
+        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::CMS, "TJsonProxyProto::Bootstrap",
+            {"url", RequestEvent->Get()->Request.GetPathInfo()});
         ProcessRequest(ctx);
         Die(ctx);
     }
@@ -172,8 +173,8 @@ protected:
     }
 
     void Reply(const TString &json, const TActorContext &ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyProto reply with json '" << json << "'");
+        YDB_LOG_CTX_COMP_TRACE(ctx, NKikimrServices::CMS, "TJsonProxyProto reply with json ' '",
+            {"json", json});
 
         ctx.Send(RequestEvent->Sender, new NMon::TEvHttpInfoRes(TString(NMonitoring::HTTPOKJSON) + json, 0,
                                                                 NMon::IEvHttpInfoRes::EContentType::Custom));

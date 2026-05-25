@@ -3,6 +3,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
 
 
 namespace NKikimr {
@@ -53,8 +56,9 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded config:" << Endl << config.DebugString());
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded",
+                {"config", Endl},
+                {"DebugString", config.DebugString()});
         } else {
             Self->LoadConfigFromProto(NKikimrTenantSlotBroker::TConfig());
             LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "Using default config.");
@@ -74,8 +78,9 @@ public:
             auto count = tenantRowset.GetValue<Schema::RequiredSlots::Count>();
             tenant->AddSlotsAllocation(descr, count);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded required slots " << descr.ToString() << " for tenant " << tenantName);
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded required slots for tenant",
+                {"descr", descr.ToString()},
+                {"tenantName", tenantName});
 
             if (!tenantRowset.Next())
                 return false;
@@ -95,8 +100,9 @@ public:
             auto count = allocationRowset.GetValue<Schema::SlotsAllocations::Count>();
             tenant->AddSlotsAllocation(descr, count);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded required slots " << descr.ToString() << " for tenant " << tenantName);
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded required slots for tenant",
+                {"descr", descr.ToString()},
+                {"tenantName", tenantName});
 
             if (!allocationRowset.Next())
                 return false;
@@ -110,8 +116,9 @@ public:
             Y_ABORT_UNLESS(tenant);
             tenant->AddUnusedSlotLabel(label);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded slot label " << label << " for tenant " << tenantName);
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded slot label for tenant",
+                {"label", label},
+                {"tenantName", tenantName});
 
             if (!labelRowset.Next())
                 return false;
@@ -155,7 +162,8 @@ public:
                 Self->AttachSlotNoConfigureNoDb(slot, tenant, usedAs, label);
             }
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "Loaded " << slot->IdString(true));
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded",
+                {"#_slot->IdString(true)", slot->IdString(true)});
 
             if (!slotRowset.Next())
                 return false;
@@ -170,8 +178,8 @@ public:
 
         // Request node info to check slot's data center.
         for (auto &pr : Self->SlotsByNodeId) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Taking ownership of tenant pool on node " << pr.first);
+            YDB_LOG_CTX_DEBUG(ctx, "Taking ownership of tenant pool on node",
+                {"first", pr.first});
 
             ctx.Send(MakeTenantPoolID(pr.first), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
             ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(pr.first));

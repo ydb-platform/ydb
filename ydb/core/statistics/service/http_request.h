@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <unordered_map>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -59,8 +60,8 @@ private:
             hFunc(TEvStatistics::TEvGetStatisticsResult, Handle);
             IgnoreFunc(TEvStatistics::TEvAnalyzeResponse);
             default:
-                LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                    "NStat::THttpRequest: unexpected event# " << ev->GetTypeRewrite());
+                YDB_LOG_COMP_CRIT(NKikimrServices::STATISTICS, "NStat::THttpRequest: unexpected",
+                    {"event", ev->GetTypeRewrite()});
         }
     }
 

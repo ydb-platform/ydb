@@ -5,11 +5,9 @@
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -128,7 +126,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -148,8 +148,10 @@ public:
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             if (tabletId == InvalidTabletId) {
-                LOG_D(DebugHint() << "Shard is not created yet"
-                    << ": shardIdx# " << shard.Idx);
+                YDB_LOG_CTX_DEBUG(context.Ctx, "Shard is not created yet",
+                    {"TabletID", context.SS->TabletID()},
+                    {"DebugHint", DebugHint()},
+                    {"shardIdx", shard.Idx});
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
@@ -175,9 +177,11 @@ public:
                     location.SetMonitoringProjectId(it->second);
                 }
 
-                LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
-                    << ": tabletId# " << tabletId
-                    << ", ev# " << ev->ToString());
+                YDB_LOG_CTX_DEBUG(context.Ctx, "Send TEvCreateReplication to controller",
+                    {"TabletID", context.SS->TabletID()},
+                    {"DebugHint", DebugHint()},
+                    {"tabletId", tabletId},
+                    {"ev", ev->ToString()});
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
             }
 
@@ -188,7 +192,10 @@ public:
     }
 
     bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
@@ -198,9 +205,11 @@ public:
         case NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS:
             break;
         default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvCreateReplicationResult"
-                << " tabletId# " << tabletId
-                << " status# " << static_cast<int>(status));
+            YDB_LOG_CTX_WARN(context.Ctx, "Ignoring unexpected TEvCreateReplicationResult",
+                {"TabletID", context.SS->TabletID()},
+                {"DebugHint", DebugHint()},
+                {"tabletId", tabletId},
+                {"status", static_cast<int>(status)});
             return false;
         }
 
@@ -211,7 +220,9 @@ public:
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_W(DebugHint() << "Ignoring duplicate TEvCreateReplicationResult");
+            YDB_LOG_CTX_WARN(context.Ctx, "Ignoring duplicate TEvCreateReplicationResult",
+                {"TabletID", context.SS->TabletID()},
+                {"DebugHint", DebugHint()});
             return false;
         }
 
@@ -251,7 +262,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -264,8 +277,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"step", step});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -368,9 +383,11 @@ public:
         const auto& acl = Transaction.GetModifyACL().GetDiffACL();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        LOG_N("TCreateReplication Propose"
-            << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << name);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateReplication Propose /",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", workingDir},
+            {"name", name});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
@@ -546,9 +563,10 @@ public:
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TCreateReplication AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateReplication AbortUnsafe",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);
     }
 

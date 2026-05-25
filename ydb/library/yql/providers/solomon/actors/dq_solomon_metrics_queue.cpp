@@ -17,17 +17,6 @@
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 
-#define LOG_E(name, stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)
-#define LOG_W(name, stream) \
-    LOG_WARN_S (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)
-#define LOG_I(name, stream) \
-    LOG_INFO_S (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)
-#define LOG_D(name, stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)
-#define LOG_T(name, stream) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)
-
 namespace NYql::NDq {
 
 namespace {
@@ -99,7 +88,7 @@ public:
     void Bootstrap() {
         Schedule(PoisonTimeout, new NActors::TEvents::TEvPoison());
 
-        LOG_I("TDqSolomonMetricsQueueActor", "Bootstrap there are metrics to list, consumersCount=" << ConsumersCount);
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "Bootstrap there are metrics to list, consumersCount=" << ConsumersCount);
         Become(&TDqSolomonMetricsQueueActor::ThereAreMetricsToListState);
 
         NSo::TSelectors selectors;
@@ -172,12 +161,12 @@ private:
         ConnectedConsumers.insert(ev->Sender);
         if (const auto [it, inserted] = UpdatedConsumers.emplace(ev->Sender); inserted) {
             const ui64 delta = ev->Get()->Record.GetConsumersCountDelta();
-            LOG_D("TDqSolomonMetricsQueueActor",
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " <<
                 "HandleUpdateConsumersCount Reducing ConsumersCount by " << delta << ", received from " << ev->Sender);
             if (delta <= ConsumersCount) {
                 ConsumersCount -= delta;
             } else {
-                LOG_E("TDqSolomonMetricsQueueActor",
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " <<
                     "HandleUpdateConsumersCount delta=" << delta << " exceeds ConsumersCount=" << ConsumersCount << ", clamping to 0");
                 ConsumersCount = 0;
             }
@@ -188,17 +177,17 @@ private:
     void HandleGetNextBatch(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
         ConnectedConsumers.insert(ev->Sender);
         if (HasEnoughToSend()) {
-            LOG_I("TDqSolomonMetricsQueueActor", "HandleGetNextBatch has enough metrics to send, trying to send them");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandleGetNextBatch has enough metrics to send, trying to send them");
             TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
         } else {
-            LOG_I("TDqSolomonMetricsQueueActor", "HandleGetNextBatch doesn't have enough to send, trying to fetch");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandleGetNextBatch doesn't have enough to send, trying to fetch");
             ScheduleRequest(ev->Sender, ev->Get()->Record.GetTransportMeta());
             TryFetch();
         }
     }
 
     void HandleNextLabelsListingChunkReceived(TEvPrivatePrivate::TEvNextLabelsListingChunkReceived::TPtr& ev) {
-        LOG_D("TDqSolomonMetricsQueueActor", "HandleNextLabelsListingChunkReceived");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandleNextLabelsListingChunkReceived");
         auto& batch = *ev->Get();
         CurrentInflight--;
         DownloadedBytes += batch.Response.DownloadedBytes;
@@ -264,7 +253,7 @@ private:
     }
 
     void HandleNextMetricsListingChunkReceived(TEvPrivatePrivate::TEvNextMetricsListingChunkReceived::TPtr& ev) {
-        LOG_D("TDqSolomonMetricsQueueActor", "HandleNextMetricsListingChunkReceived");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandleNextMetricsListingChunkReceived");
         auto& batch = *ev->Get();
         CurrentInflight--;
         DownloadedBytes += batch.Response.DownloadedBytes;
@@ -281,7 +270,7 @@ private:
     }
 
     void HandleRoundRobinStageTimeout() {
-        LOG_T("TDqSolomonMetricsQueueActor", "Handle round robin stage timeout");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "Handle round robin stage timeout");
         if (!RoundRobinStageFinished) {
             RoundRobinStageFinished = true;
             AnswerPendingRequests();
@@ -294,29 +283,29 @@ private:
         // consumers are alive, we can safely ignore the timeout and let the normal
         // shutdown path run.
         if (ConnectedConsumers.size() == ConsumersCount) {
-            LOG_D("TDqSolomonMetricsQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandlePoison: consumers are active, ignoring PoisonTimeout");
             return;
         }
-        LOG_I("TDqSolomonMetricsQueueActor", "HandlePoison: no consumer messages received, shutting down");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandlePoison: no consumer messages received, shutting down");
         AnswerPendingRequests();
         PassAway();
     }
 
     void HandleGetNextBatchForEmptyState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
         ConnectedConsumers.insert(ev->Sender);
-        LOG_T("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForEmptyState giving away rest of Objects");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandleGetNextBatchForEmptyState giving away rest of Objects");
         TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
     }
 
     void HandleGetNextBatchForErrorState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
         ConnectedConsumers.insert(ev->Sender);
-        LOG_D("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForErrorState sending issues");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "HandleGetNextBatchForErrorState sending issues");
         Send(ev->Sender, new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
 
     void HandleConsumerFinished(TEvSolomonProvider::TEvConsumerFinished::TPtr& ev) {
-        LOG_I("TDqSolomonMetricsQueueActor",
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " <<
             "HandleConsumerFinished from " << ev->Sender << ", " << FinishedConsumers.size() + 1
             << "/" << ConsumersCount << " consumers finished");
         ConnectedConsumers.insert(ev->Sender);
@@ -327,7 +316,7 @@ private:
     }
 
     void PassAway() override {
-        LOG_I("TDqSolomonMetricsQueueActor", "PassAway, processed " << ProcessedMetrics << " metrics");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "PassAway, processed " << ProcessedMetrics << " metrics");
         // Explicitly cancel all in-flight gRPC requests before the actor dies.
         // ~TSolomonAccessorClient() calls GrpcClient->Stop() which drains the
         // completion queue; doing it here ensures cancellation happens before
@@ -338,16 +327,16 @@ private:
 
     void TransitToErrorState() {
         Y_ENSURE(MaybeIssues.Defined());
-        LOG_I("TDqSolomonMetricsQueueActor", "TransitToErrorState an error occurred, sending issues");
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TransitToErrorState an error occurred, sending issues");
         AnswerPendingRequests();
         Metrics.clear();
         Become(&TDqSolomonMetricsQueueActor::AnErrorOccurredState);
     }
 
     void SaveRetrievedResults(const NSo::TListMetricsResponse& response) {
-        LOG_T("TDqSolomonMetricsQueueActor", "SaveRetrievedResults");
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "SaveRetrievedResults");
 
-        LOG_D("TDqSolomonMetricsQueueActor", "SaveRetrievedResults saving: " << response.Result.Metrics.size() << " metrics");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "SaveRetrievedResults saving: " << response.Result.Metrics.size() << " metrics");
         for (const auto& metric : response.Result.Metrics) {
             NSo::MetricQueue::TMetric protoMetric;
             protoMetric.SetType(metric.Type);
@@ -358,12 +347,12 @@ private:
 
     bool TryFetch() {
         if (CurrentInflight >= MaxApiInflight) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, have " << CurrentInflight << " inflight requests, current limit: " << MaxApiInflight);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TryFetch can't start fetching, have " << CurrentInflight << " inflight requests, current limit: " << MaxApiInflight);
             return false;
         }
 
         if (PendingLabelRequests.empty() && PendingListingRequests.empty()) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch doesn't have anything to fetch yet, current inflight: " << CurrentInflight);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TryFetch doesn't have anything to fetch yet, current inflight: " << CurrentInflight);
 
             if (!CurrentInflight) {
                 Become(&TDqSolomonMetricsQueueActor::NoMoreMetricsState);
@@ -373,11 +362,11 @@ private:
         }
 
         if (Metrics.size() >= PrefetchSize) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, have " << Metrics.size() << " metrics stored, current limit: " << PrefetchSize);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TryFetch can't start fetching, have " << Metrics.size() << " metrics stored, current limit: " << PrefetchSize);
             return false;
         }
 
-        LOG_D("TDqSolomonMetricsQueueActor", "TryFetch fetching metrics");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TryFetch fetching metrics");
         Fetch();
         return true;
     }
@@ -471,10 +460,10 @@ private:
 
     void TrySendMetrics(const NActors::TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
         if (CanSendToConsumer(consumer)) {
-            LOG_I("TDqSolomonMetricsQueueActor", "TrySendMetrics can send metrics to consumer");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TrySendMetrics can send metrics to consumer");
             SendMetrics(consumer, transportMeta);
         } else {
-            LOG_I("TDqSolomonMetricsQueueActor", "TrySendMetrics can't send metrics to consumer, scheduling request");
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TrySendMetrics can't send metrics to consumer, scheduling request");
             ScheduleRequest(consumer, transportMeta);
         }
     }
@@ -491,7 +480,7 @@ private:
 
         while (TryFetch()) {}
 
-        LOG_D("TDqSolomonMetricsQueueActor", "SendMetrics Sending " << result.size() << " metrics to consumer with id " << consumer);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "SendMetrics Sending " << result.size() << " metrics to consumer with id " << consumer);
         Send(consumer, new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), DownloadedBytes, transportMeta));
         DownloadedBytes = 0;
 
@@ -512,9 +501,9 @@ private:
     }
 
     void TryFinish(const NActors::TActorId& consumer, ui64 seqNo) {
-        LOG_T("TDqSolomonMetricsQueueActor", "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TryFinish from consumer " << consumer << ", " << FinishedConsumers.size() << " consumers already finished, seqNo=" << seqNo);
         if (auto it = FinishingConsumerToLastSeqNo.find(consumer); it != FinishingConsumerToLastSeqNo.end()) {
-            LOG_T("TDqSolomonMetricsQueueActor", "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TDqSolomonMetricsQueueActor" << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
             if (it->second < seqNo || SelfId().NodeId() == consumer.NodeId()) {
                 FinishedConsumers.insert(consumer);
                 if (FinishedConsumers.size() == ConsumersCount) {

@@ -1,4 +1,7 @@
 #include "console_tenants_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 namespace NKikimr::NConsole {
 
@@ -18,25 +21,26 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxRevertPoolState for pool " << Pool->Config.GetName() << " of " << Tenant->Path);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRevertPoolState for pool of",
+            {"GetName", Pool->Config.GetName()},
+            {"Path", Tenant->Path});
 
         if (Tenant != Self->GetTenant(Tenant->Path)) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxRevertPoolState tenant " << Tenant->Path << " mismatch");
+            YDB_LOG_CTX_ERROR(ctx, "TTxRevertPoolState tenant mismatch",
+                {"Path", Tenant->Path});
             return true;
         }
 
         if (!Tenant->StoragePools.contains(Pool->Kind)
             || Pool != Tenant->StoragePools.at(Pool->Kind)) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
-                        "TTxRevertPoolState pool " << Pool->Config.GetName() << " mismatch");
+            YDB_LOG_CTX_ERROR(ctx, "TTxRevertPoolState pool mismatch",
+                {"GetName", Pool->Config.GetName()});
             return true;
         }
 
         if (Pool->Worker != Worker) {
-            LOG_NOTICE_S(ctx, NKikimrServices::CMS_TENANTS,
-                         "TTxRevertPoolState pool " << Pool->Config.GetName() << " worker mismatch");
+            YDB_LOG_CTX_NOTICE(ctx, "TTxRevertPoolState pool worker mismatch",
+                {"GetName", Pool->Config.GetName()});
             return true;
         }
 
@@ -50,8 +54,8 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxRevertPoolState complete for " << Pool->Config.GetName());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRevertPoolState complete for",
+            {"GetName", Pool->Config.GetName()});
 
         if (Update) {
             Tenant->Generation++;

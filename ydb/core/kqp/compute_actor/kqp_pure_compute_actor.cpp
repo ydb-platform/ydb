@@ -4,6 +4,9 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_TASKS_RUNNER
 
 namespace NKikimr {
 namespace NKqp {
@@ -47,8 +50,10 @@ void TKqpComputeActor::DoBootstrap() {
     TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem)) {
         logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
-                << ", task: " << taskId << ": " << message);
+            YDB_LOG_CTX_DEBUG(*actorSystem, "",
+                {"TxId", txId},
+                {"task", taskId},
+                {"message", message});
         };
     }
 

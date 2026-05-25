@@ -31,6 +31,9 @@
 #include <util/string/builder.h>
 
 #include <array>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NExternalSource {
 
@@ -652,9 +655,9 @@ private:
         if (!buildStatus.ok() || !finishStatus.ok()) {
             // Couldn't build the in-memory CSV buffer for partition values: fall back
             // to whatever types AppendPartitionColumns assigned (UTF8 by default).
-            LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_GATEWAY,
-                "couldn't build arrow buffer for partition column type inference: build="
-                << buildStatus.ToString() << " finish=" << finishStatus.ToString());
+            YDB_LOG_CTX_WARN(*ActorSystem, "couldn't build arrow buffer for partition column type inference:",
+                {"build", buildStatus.ToString()},
+                {"finish", finishStatus.ToString()});
             return result;
         }
 

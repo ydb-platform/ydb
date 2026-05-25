@@ -6,6 +6,9 @@
 
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -216,19 +219,19 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(ERespo
 }
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TMessageBusServerProxy::Handle");
+    YDB_LOG_CTX_TRACE(ctx, "TMessageBusServerProxy::Handle");
 
     TEvBusProxy::TEvPersQueue *msg = ev->Get();
     const auto& rec = static_cast<TBusPersQueue *>(msg->MsgContext.GetMessage())->Record;
     if (rec.HasMetaRequest() && (rec.GetMetaRequest().HasCmdCreateTopic()
                                  || rec.GetMetaRequest().HasCmdChangeTopic()
                                  || rec.GetMetaRequest().HasCmdDeleteTopic())) {
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TMessageBusServerProxy::Handle new TMessageBusServerSchemeRequest");
+        YDB_LOG_CTX_TRACE(ctx, "TMessageBusServerProxy::Handle new TMessageBusServerSchemeRequest");
 
         ctx.Register(new TMessageBusServerSchemeRequest<TBusPersQueue>(ev->Get()), TMailboxType::HTSwap, AppData()->UserPoolId);
         return;
     }
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TMessageBusServerProxy::Handle CreateMessageBusServerPersQueue");
+    YDB_LOG_CTX_TRACE(ctx, "TMessageBusServerProxy::Handle CreateMessageBusServerPersQueue");
 
     ctx.Register(CreateMessageBusServerPersQueue(msg->MsgContext, PqMetaCache));
 }

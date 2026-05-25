@@ -6,6 +6,9 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <util/system/hp_timer.h>
 #include <util/system/spinlock.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::EServiceCommon::TEST
 
 namespace NActors {
 
@@ -62,7 +65,8 @@ class TGopherMother : public TActorBootstrapped<TGopherMother> {
     void Response(const TActorContext &ctx) {
         if (--WaitFor == 0) {
             const TDuration roundTime = ctx.Now() - RoundStart;
-            LOG_INFO_S(ctx, NActorsServices::EServiceCommon::TEST, "Gopher Mother round for " << roundTime.ToString());
+            YDB_LOG_CTX_INFO(ctx, "Gopher Mother round for",
+                {"roundTime", roundTime.ToString()});
             Round(ctx);
         }
     }

@@ -7,6 +7,9 @@
 #include <util/generic/fwd.h>
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_REPL
 
 using namespace NKikimrServices;
 using namespace NKikimr::NRepl;
@@ -36,7 +39,8 @@ namespace NKikimr {
         TActorId TVDiskProxy::Run(const TActorId& parentId) {
             Y_VERIFY_DEBUG_S(State == Initial, ReplCtx->VCtx->VDiskLogPrefix);
             State = RunProxy;
-            STLOG(PRI_DEBUG, BS_REPL, BSVR19, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxy::Run"));
+            YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxy::Run"),
+                {"Marker", "BSVR19"});
             ParentId = parentId;
             ProxyId = TActivationContext::Register(CreateVDiskProxyActor(ReplCtx, std::move(Ids), VDiskId, ServiceId), ParentId);
             return ProxyId;
@@ -139,7 +143,8 @@ namespace NKikimr {
             friend class TActorBootstrapped<TVDiskProxyActor>;
 
             void Bootstrap(const TActorId& parentId) {
-                STLOG(PRI_DEBUG, BS_REPL, BSVR20, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Bootstrap"));
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Bootstrap"),
+                    {"Marker", "BSVR20"});
 
                 // remember parent actor id
                 Recipient = parentId;
@@ -199,7 +204,8 @@ namespace NKikimr {
                 // update stats
                 Stat.VDiskReqs++;
 
-                STLOG(PRI_DEBUG, BS_REPL, BSVR21, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::SendRequest"));
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::SendRequest"),
+                    {"Marker", "BSVR21"});
             }
 
             void Handle(TEvReplMemToken::TPtr& ev) {
@@ -212,7 +218,8 @@ namespace NKikimr {
             }
 
             void Handle(TEvReplProxyNext::TPtr& /*ev*/) {
-                STLOG(PRI_DEBUG, BS_REPL, BSVR22, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvReplProxyNext)"));
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvReplProxyNext)"),
+                    {"Marker", "BSVR22"});
 
                 // increase number of unsatisfied TEvReplProxyNext requests by one more request
                 Y_VERIFY_S(!RequestFromVDiskProxyPending, ReplCtx->VCtx->VDiskLogPrefix);
@@ -262,8 +269,9 @@ namespace NKikimr {
             }
 
             void Handle(TEvBlobStorage::TEvVGetResult::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_REPL, BSVR23, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvVGetResult)"),
-                    (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvVGetResult)"),
+                    {"Marker", "BSVR23"},
+                    {"Msg", ev->Get()->ToString()});
 
                 // update actual memory usage
                 const ui64 actualBytes = ev->Get()->GetCachedByteSize();
@@ -377,13 +385,15 @@ namespace NKikimr {
                             << "unexpected Status# " << EReplyStatus_Name(rec.GetStatus()) << " from BS_QUEUE");
                     default:
                         ++Stat.VDiskRespOther;
-                        STLOG(PRI_DEBUG, BS_REPL, BSVR24, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
-                            "TVDiskProxyActor::Handle(TEvVGetResult)"), (Status, rec.GetStatus()));
+                        YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Handle(TEvVGetResult)"),
+                            {"Marker", "BSVR24"},
+                            {"Status", rec.GetStatus()});
                         break;
                 }
                 if (portion.Status != TNextPortion::Ok) {
-                    STLOG(PRI_DEBUG, BS_REPL, BSVR25, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "EvVGet failed"),
-                        (Status, rec.GetStatus()));
+                    YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "EvVGet failed"),
+                        {"Marker", "BSVR25"},
+                        {"Status", rec.GetStatus()});
                     PutResponseQueueItem(std::move(portion));
                 } else {
                     // handle Ok status
@@ -410,7 +420,10 @@ namespace NKikimr {
                                     "Received incorrect data BlobId# %s Buffer.size# %zu;"
                                     " VDISK CAN NOT REPLICATE A BLOB BECAUSE HAS FOUND INCONSISTENCY IN BLOB SIZE",
                                     id.ToString().data(), buffer.size());
-                                STLOG(PRI_CRIT, BS_REPL, BSVR26, message, (BlobId, id), (BufferSize, buffer.size()));
+                                YDB_LOG_CRIT(message,
+                                    {"Marker", "BSVR26"},
+                                    {"BlobId", id},
+                                    {"BufferSize", buffer.size()});
                                 Y_DEBUG_ABORT_S(ReplCtx->VCtx->VDiskLogPrefix << message);
 
                                 // count this blob as erroneous one

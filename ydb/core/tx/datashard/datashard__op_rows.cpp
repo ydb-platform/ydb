@@ -1,6 +1,9 @@
 #include "datashard_impl.h"
 #include "datashard_direct_transaction.h"
 #include "datashard_txs.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -23,8 +26,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Execute"
-            << ": at tablet# " << Self->TabletID());
+        YDB_LOG_CTX_INFO(ctx, "TTxDirectBase( ) Execute",
+            {"GetTxType", GetTxType()},
+            {"at_tablet", Self->TabletID()});
 
         if (Self->IsFollower()) {
             return true; // TODO: report error
@@ -77,8 +81,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Complete"
-            << ": at tablet# " << Self->TabletID());
+        YDB_LOG_CTX_INFO(ctx, "TTxDirectBase( ) Complete",
+            {"GetTxType", GetTxType()},
+            {"at_tablet", Self->TabletID()});
 
         if (Op) {
             if (!CompleteList.empty()) {

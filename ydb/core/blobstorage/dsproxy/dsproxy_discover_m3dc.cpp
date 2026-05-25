@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -120,8 +121,7 @@ public:
             case NKikimrProto::OK:
                 // request has been successfully processed and we should put items into queue
                 if (record.GetIsRangeOverflow() && !record.ResultSize()) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PROXY_DISCOVER,
-                            "Don't know how to process RangeOverflow with ResultSize# 0. Marker# DSPDM10");
+                    YDB_LOG_COMP_CRIT(NKikimrServices::BS_PROXY_DISCOVER, "Don't know how to process RangeOverflow with ResultSize# 0. Marker# DSPDM10");
                     Finished = true;
                     Erroneous = true;
                 } else {

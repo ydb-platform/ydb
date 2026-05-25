@@ -30,6 +30,9 @@
 #include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
 
 #include <util/system/file.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NKqp {
 
@@ -56,7 +59,10 @@ namespace {
         const TString& path,
         bool addRoot) {
         if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            LOG_NOTICE_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_GATEWAY, "Skipped describe for path '" << path << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "'");
+            YDB_LOG_CTX_NOTICE(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path ' ' in external YDB database ' ' with endpoint ' '",
+                {"path", path},
+                {"database", database},
+                {"endpoint", endpoint});
             return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table}); 
         }
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
@@ -80,7 +86,8 @@ namespace {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, structuredTokenJson, p, true);
                     }
                     TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, message + describePathResult.GetIssues().ToString());
+                    YDB_LOG_CTX_WARN(*actorSystem, "",
+                        {"#_message + describePathResult.GetIssues().ToString()", message + describePathResult.GetIssues().ToString()});
                     auto rootIssue = NYql::TIssue(message);
                     for (const auto& issue : describePathResult.GetIssues()) {
                         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));

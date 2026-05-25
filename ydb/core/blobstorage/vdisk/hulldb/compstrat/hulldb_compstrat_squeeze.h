@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "hulldb_compstrat_utils.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
     namespace NHullComp {
@@ -76,8 +77,9 @@ namespace NKikimr {
                     TLevelSstPtr p = it.Get();
                     if (p.Level > 0) {
                         if (p.SstPtr->Info.CTime < SqueezeBefore) {
-                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                HullCtx->VCtx->VDiskLogPrefix << " TStrategySqueeze decided to compact Sst " << p.ToString());
+                            YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategySqueeze decided to compact Sst",
+                                {"#_HullCtx->VCtx->VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                {"p", p.ToString()});
                             // rewrite this SST squeezed
                             TUtils::SqueezeOneSst(LevelSnap.SliceSnap, p, Task->CompactSsts);
                             return ActCompactSsts;

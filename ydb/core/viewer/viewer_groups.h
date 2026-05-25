@@ -1547,7 +1547,7 @@ public:
                             }
                             group->EncryptionMode = pool->GetEncryptionMode();
                         } else {
-                            BLOG_W("Storage pool not found for group " << group->GroupId << " box " << group->BoxId << " pool " << group->PoolId);
+                            LOG_WARN_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Storage pool not found for group " << group->GroupId << " box " << group->BoxId << " pool " << group->PoolId);
                         }
                     }
                 }
@@ -1708,7 +1708,7 @@ public:
         }
         auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
         if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
-            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
             return RequestDone();
         }
         auto& navigateResult(itNavigateKeySetResult->second);

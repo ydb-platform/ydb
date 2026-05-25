@@ -15,6 +15,7 @@
 #include <util/generic/set.h>
 #include <util/generic/deque.h>
 #include <util/generic/queue.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NQuoter {
@@ -360,10 +361,9 @@ public:
             hFunc(TEvents::TEvWakeup, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event type# "
-                << ev->GetTypeRewrite()
-                << " event: "
-                << ev->ToString());
+            YDB_LOG_COMP_WARN(NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
             break;
         }
 

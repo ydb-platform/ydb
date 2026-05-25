@@ -1,6 +1,9 @@
 #include "defrag_rewriter.h"
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_VDISK_DEFRAG
 
 namespace NKikimr {
 
@@ -106,8 +109,9 @@ namespace NKikimr {
             const TDefragRecord &rec = Recs[RecToReadIdx++];
 
             if (msg->Status == NKikimrProto::CORRUPTED || (msg->Status == NKikimrProto::OK && !msg->Data.IsReadable())) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_VDISK_DEFRAG,
-                        "Defrag skipping corrupted blob #" << rec.LogoBlobId << " on " << rec.OldDiskPart.ToString());
+                YDB_LOG_CTX_WARN(ctx, "Defrag skipping corrupted blob on",
+                    {"LogoBlobId", rec.LogoBlobId},
+                    {"rec.OldDiskPart", rec.OldDiskPart.ToString()});
                 const TBlobStorageGroupType gtype = DCtx->VCtx->Top->GType;
                 Send(DCtx->SkeletonId,
                      new TEvRestoreCorruptedBlob(
@@ -163,8 +167,10 @@ namespace NKikimr {
             }
             Y_VERIFY_S(rope.size() == gtype.PartSize(rec.LogoBlobId), DCtx->VCtx->VDiskLogPrefix);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewriting BlobId# "
-                << rec.LogoBlobId << " from Location# " << rec.OldDiskPart);
+            YDB_LOG_CTX_DEBUG(ctx, "rewriting",
+                {"#_DCtx->VCtx->VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                {"BlobId", rec.LogoBlobId},
+                {"from_Location", rec.OldDiskPart});
 
             auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
@@ -180,11 +186,15 @@ namespace NKikimr {
             // FIXME: Handle NotOK, in case of RACE just cancel the job
 
             if (auto& record = ev->Get()->Record; record.GetStatus() != NKikimrProto::OK) {
-                LOG_WARN_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewrite failed BlobId# "
-                    << LogoBlobIDFromLogoBlobID(record.GetBlobID()) << " Record# " << SingleLineProto(record));
+                YDB_LOG_CTX_WARN(ctx, "rewrite failed",
+                    {"#_DCtx->VCtx->VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                    {"BlobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"Record", SingleLineProto(record)});
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewritten BlobId# "
-                    << LogoBlobIDFromLogoBlobID(record.GetBlobID()) << " to Location# " << ev->Get()->WrittenLocation);
+                YDB_LOG_CTX_DEBUG(ctx, "rewritten",
+                    {"#_DCtx->VCtx->VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
+                    {"BlobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"to_Location", ev->Get()->WrittenLocation});
 
                 ++RewrittenRecsCounter;
             }

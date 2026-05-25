@@ -1,15 +1,9 @@
 #include "tablet_impl.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
 namespace NKikimr {
 
@@ -61,7 +55,8 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         case NKikimrProto::TIMEOUT:
         case NKikimrProto::NO_GROUP:
         case NKikimrProto::BLOCKED:
-            BLOG_ERROR("Handle::TEvDiscoverResult, result status " << NKikimrProto::EReplyStatus_Name(msg->Status));
+            YDB_LOG_ERROR("Handle::TEvDiscoverResult, result status",
+                {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:
             Y_ABORT_UNLESS(false, "default case status %s", NKikimrProto::EReplyStatus_Name(msg->Status).c_str());

@@ -15,7 +15,7 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_STARTUP; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxStartup::Execute");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxStartup::Execute");
         NIceDb::TNiceDb db(txc.DB);
         {
             auto row = db.Table<Schema::State>().Key(TString("backend")).Select();
@@ -45,7 +45,7 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("TTxStartup::Complete");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxStartup::Complete");
         Self->OnReadyToWork();
     }
 };

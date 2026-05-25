@@ -30,10 +30,9 @@
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
 #include <util/system/hp_timer.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_BACKUP
 
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
@@ -241,7 +240,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Starting snapshot" << " Path# " << SnapshotPath);
+        YDB_LOG_NOTICE("Starting snapshot",
+            {"LogPrefix", LogPrefix()},
+            {"Path", SnapshotPath});
 
         DeleteOldBackups();
 
@@ -264,13 +265,16 @@ public:
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
             Send(Owner, new TEvSnapshotStats(stringOut.Size()));
-            LOG_D("Schema written" << " Bytes# " << stringOut.Size());
+            YDB_LOG_DEBUG("Schema written",
+                {"LogPrefix", LogPrefix()},
+                {"Bytes", stringOut.Size()});
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
-            LOG_D("No tables to scan, finalizing");
+            YDB_LOG_DEBUG("No tables to scan, finalizing",
+                {"LogPrefix", LogPrefix()});
             return Finalize();
         }
 
@@ -317,7 +321,9 @@ public:
                     continue;
                 }
     
-                LOG_N("Deleting incomplete backup" << " Path# " << child);
+                YDB_LOG_NOTICE("Deleting incomplete backup",
+                    {"LogPrefix", LogPrefix()},
+                    {"Path", child});
                 child.ForceDelete();
             }
 
@@ -326,11 +332,16 @@ public:
             });
 
             for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
-                LOG_N("Deleting old backup" << " Path# " << backups[i].second);
+                YDB_LOG_NOTICE("Deleting old backup",
+                    {"LogPrefix", LogPrefix()},
+                    {"Path", backups[i].second});
                 backups[i].second.ForceDelete();
             }
         } catch (const std::exception& e) {
-            LOG_E("Failed to delete old backups" << " Path# " << BackupPath << " Error# " << e.what());
+            YDB_LOG_ERROR("Failed to delete old backups",
+                {"LogPrefix", LogPrefix()},
+                {"Path", BackupPath},
+                {"Error", e.what()});
         }
     }
 
@@ -338,7 +349,9 @@ public:
         if (success) {
             Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
         } else {
-            LOG_E("Snapshot failed" << " Error# " << error);
+            YDB_LOG_ERROR("Snapshot failed",
+                {"LogPrefix", LogPrefix()},
+                {"Error", error});
             Send(Owner, new TEvSnapshotCompleted(error));
         }
 
@@ -353,7 +366,10 @@ public:
 
     void Handle(TEvWriteSnapshot::TPtr& ev) {
         const auto* msg = ev->Get();
-        LOG_D("Writing snapshot" << " TableId# " << msg->TableId << " Bytes# " << msg->SnapshotData.Size());
+        YDB_LOG_DEBUG("Writing snapshot",
+            {"LogPrefix", LogPrefix()},
+            {"TableId", msg->TableId},
+            {"Bytes", msg->SnapshotData.Size()});
 
         auto it = Tables.find(msg->TableId);
         if (it == Tables.end()) {
@@ -393,7 +409,10 @@ public:
 
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
-        LOG_D("Table scan done" << " Done# " << DoneTables.size() << " Total# " << Tables.size());
+        YDB_LOG_DEBUG("Table scan done",
+            {"LogPrefix", LogPrefix()},
+            {"Done", DoneTables.size()},
+            {"Total", Tables.size()});
         if (DoneTables.size() == Tables.size()) {
             return Finalize();
         }
@@ -478,7 +497,9 @@ public:
 
         DeleteOldBackups();
 
-        LOG_N("Snapshot finalized" << " Bytes# " << WrittenBytes);
+        YDB_LOG_NOTICE("Snapshot finalized",
+            {"LogPrefix", LogPrefix()},
+            {"Bytes", WrittenBytes});
         return ReplyAndDie();
     }
 
@@ -836,7 +857,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Starting changelog" << " Path# " << ChangelogPath);
+        YDB_LOG_NOTICE("Starting changelog",
+            {"LogPrefix", LogPrefix()},
+            {"Path", ChangelogPath});
 
         // writing initial changelog and checksum files
         BufferCreatedAt = TActivationContext::Monotonic();
@@ -860,7 +883,9 @@ public:
         NJson::TJsonWriter writer(&out, BackupJsonConfig());
 
         const auto* msg = ev->Get();
-        LOG_D("Writing changelog" << " Step# " << msg->Step);
+        YDB_LOG_DEBUG("Writing changelog",
+            {"LogPrefix", LogPrefix()},
+            {"Step", msg->Step});
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -988,10 +1013,11 @@ public:
             return ReplyAndDie(msg->Error);
         }
 
-        LOG_D("Changelog IO completed"
-            << " Bytes# " << IoInFlightBytes
-            << " Latency# " << msg->Latency
-            << " Lag# " << msg->Lag);
+        YDB_LOG_DEBUG("Changelog IO completed",
+            {"LogPrefix", LogPrefix()},
+            {"Bytes", IoInFlightBytes},
+            {"Latency", msg->Latency},
+            {"Lag", msg->Lag});
 
         Send(Owner, new TEvChangelogStats(IoInFlightBytes, msg->Latency, msg->Lag));
 
@@ -1000,7 +1026,10 @@ public:
         IoInProgress = false;
 
         if (NeedNewBackup()) {
-            LOG_N("Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
+            YDB_LOG_NOTICE("Requesting new backup",
+                {"LogPrefix", LogPrefix()},
+                {"ChangelogBytes", WrittenBytes},
+                {"SnapshotBytes", *SnapshotWrittenBytes});
             Send(Owner, new TEvStartNewBackup());
         }
 
@@ -1034,7 +1063,9 @@ public:
     }
 
     void StartIO(EOpenMode openMode = EOpenModeFlag::OpenExisting | EOpenModeFlag::ForAppend) {
-        LOG_D("Starting Changelog IO" << " Bytes# " << Buffer.Size());
+        YDB_LOG_DEBUG("Starting Changelog IO",
+            {"LogPrefix", LogPrefix()},
+            {"Bytes", Buffer.Size()});
 
         IoInFlightBytes = Buffer.Size();
         IoInProgress = true;
@@ -1069,7 +1100,9 @@ public:
     }
 
     void ReplyAndDie(const TString& error) {
-        LOG_E("Changelog failed" << " Error# " << error);
+        YDB_LOG_ERROR("Changelog failed",
+            {"LogPrefix", LogPrefix()},
+            {"Error", error});
         Send(Owner, new TEvChangelogFailed(error));
         PassAway();
     }

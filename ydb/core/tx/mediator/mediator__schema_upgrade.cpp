@@ -1,4 +1,7 @@
 #include "mediator_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_MEDIATOR
 
 namespace NKikimr {
 namespace NTxMediator {
@@ -36,12 +39,10 @@ struct TTxMediator::TTxUpgrade : public TTransactionBase<TTxMediator> {
         }
 
         UpgradeFail = true;
-        LOG_CRIT_S(ctx, NKikimrServices::TX_MEDIATOR,
-             "tablet# " << Self->Tablet() <<
-             " SEND to self TEvents::TEvPoisonPill" <<
-             " databaseVersion# " <<  databaseVersion <<
-             " CurrentDataBaseVersion# " << Schema::CurrentVersion <<
-             " reason# no realisation for upgrade scheme present");
+        YDB_LOG_CTX_CRIT(ctx, "SEND to self TEvents::TEvPoisonPill reason# no realisation for upgrade scheme present",
+            {"tablet", Self->Tablet()},
+            {"databaseVersion", databaseVersion},
+            {"CurrentDataBaseVersion", Schema::CurrentVersion});
         return true;
     }
 

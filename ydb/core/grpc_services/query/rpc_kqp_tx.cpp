@@ -9,6 +9,9 @@
 #include <ydb/core/kqp/common/simple/services.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
 
 namespace NKikimr::NGRpcService {
 
@@ -138,7 +141,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error,",
+            {"message", message});
 
         Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
         Reply(Ydb::StatusIds::INTERNAL_ERROR);
@@ -239,7 +243,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error,",
+            {"message", message});
 
         Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
         Reply(Ydb::StatusIds::INTERNAL_ERROR);

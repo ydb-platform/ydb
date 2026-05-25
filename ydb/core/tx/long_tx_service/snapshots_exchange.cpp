@@ -14,12 +14,14 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define TXLOG_LOG(priority, stream) \
     LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
 #define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
-#define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
-#define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
 
 namespace NKikimr {
 namespace NLongTxService {
@@ -103,7 +105,8 @@ namespace {
         void Bootstrap() {
             LogPrefix = TStringBuilder() << "TTreeNodeActor [Node " << TBase::SelfId().NodeId() << "] ";
             if (ChildToSubtree.empty()) {
-                TXLOG_DEBUG("Leaf node");
+                YDB_LOG(NActors::NLog::PRI_DEBUG, "Leaf node",
+                    {"LogPrefix", LogPrefix});
                 PassAway();
                 return;
             }
@@ -128,9 +131,11 @@ namespace {
         void Handle(TParentEvent::TPtr& ev) {
             AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const auto childActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
-            TXLOG_DEBUG("Handling TParentEvent from " << ev->Sender
-                << " (NodeId: " << ev->Sender.NodeId()
-                << ", ChildActorId: " << childActorId << ")");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TParentEvent from",
+                {"LogPrefix", LogPrefix},
+                {"Sender", ev->Sender},
+                {"(NodeId", ev->Sender.NodeId()},
+                {"ChildActorId", childActorId});
             if (!ChildToSubtree.contains(childActorId)) {
                 return;
             }
@@ -146,8 +151,10 @@ namespace {
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
             AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Get()->NodeId));
             const auto failedActorId = NodeIdToTreeNodeActorId.at(ev->Get()->NodeId);
-            TXLOG_DEBUG("Handling TEvNodeDisconnected for NodeId: " << ev->Get()->NodeId
-                << ". Failed actor ID: " << failedActorId);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TEvNodeDisconnected for. Failed actor",
+                {"LogPrefix", LogPrefix},
+                {"NodeId", ev->Get()->NodeId},
+                {"ID", failedActorId});
             if (!ChildToSubtree.contains(failedActorId)) {
                 return;
             }
@@ -162,7 +169,9 @@ namespace {
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
             AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const TActorId failedActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
-            TXLOG_DEBUG("Handling TEvents::TEvUndelivered from " << ev->Sender << ".");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TEvents::TEvUndelivered from .",
+                {"LogPrefix", LogPrefix},
+                {"Sender", ev->Sender});
             if (!ChildToSubtree.contains(failedActorId)) {
                 return;
             }
@@ -185,22 +194,27 @@ namespace {
             subtree.erase(newRoot);
             AFL_ENSURE(ChildToSubtree.emplace(newRoot, std::move(subtree)).second);
 
-            TXLOG_DEBUG("Retrying subtree for child actor " << childActorId
-                << ". New root for subtree: " << newRoot
-                << ". Subtree size: " << ChildToSubtree.at(newRoot).size() << ".");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Retrying subtree for child actor. New root for. Subtree .",
+                {"LogPrefix", LogPrefix},
+                {"childActorId", childActorId},
+                {"subtree", newRoot},
+                {"size", ChildToSubtree.at(newRoot).size()});
             SendChildEvent(newRoot, ChildToSubtree.at(newRoot));
             return true;
         }
 
         void SendChildEvent(const TActorId actorId, const THashSet<TActorId>& childActorIds) {
-            TXLOG_DEBUG("Sending child event to actor " << actorId << " with " << childActorIds.size() << " children");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Sending child event to actor with children",
+                {"LogPrefix", LogPrefix},
+                {"actorId", actorId},
+                {"size", childActorIds.size()});
             auto event = GetChildEvent();
 
             for (const auto& childActorId : childActorIds) {
                 auto childActorIdProto = event->Record.MutableTree()->AddChildrenActorIds();
                 ActorIdToProto(childActorId, childActorIdProto);
             }
-        
+
             TBase::Send(
                 actorId,
                 event.release(),
@@ -208,7 +222,9 @@ namespace {
         }
 
         void PassAway() final {
-            TXLOG_DEBUG("Passing away, sending parent event to " << ParentActorId);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Passing away, sending parent event to",
+                {"LogPrefix", LogPrefix},
+                {"ParentActorId", ParentActorId});
             auto event = GetParentEvent();
             TBase::Send(
                 ParentActorId,
@@ -220,7 +236,7 @@ namespace {
         TSubtreeSplitter SubtreeSplitter;
         THashMap<TActorId, THashSet<TActorId>> ChildToSubtree;
         THashMap<ui32, TActorId> NodeIdToTreeNodeActorId;
-    
+
     protected:
         TString LogPrefix;
 
@@ -243,7 +259,9 @@ namespace {
                 AddToCollectedSnapshots(remoteSnapshot);
             }
             LocalCollectionTime = AppData()->TimeProvider->Now();
-            TXLOG_DEBUG("Finished creating TSnapshotCollectorActor, local collection time: " << LocalCollectionTime.MilliSeconds());
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Finished creating TSnapshotCollectorActor, local collection",
+                {"LogPrefix", LogPrefix},
+                {"time", LocalCollectionTime.MilliSeconds()});
         }
 
         std::unique_ptr<TEvLongTxService::TEvCollectSnapshots> GetChildEvent() override {
@@ -251,9 +269,11 @@ namespace {
         }
 
         std::unique_ptr<TEvLongTxService::TEvCollectSnapshotsResult> GetParentEvent() override {
-            TXLOG_DEBUG("Creating TEvCollectSnapshotsResult event with "
-                << CollectedSnapshots.size() << " collected snapshots and border "
-                << SnapshotBorder.Step << ":" << SnapshotBorder.TxId);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Creating TEvCollectSnapshotsResult event with collected snapshots and border",
+                {"LogPrefix", LogPrefix},
+                {"size", CollectedSnapshots.size()},
+                {"Step", SnapshotBorder.Step},
+                {"TxId", SnapshotBorder.TxId});
             auto event = std::make_unique<TEvLongTxService::TEvCollectSnapshotsResult>();
             event->Record.MutableSnapshots()->SetBorderStep(SnapshotBorder.Step);
             event->Record.MutableSnapshots()->SetBorderTxId(SnapshotBorder.TxId);
@@ -296,12 +316,12 @@ namespace {
                 for (const auto& tableIdProto : snapshot.GetTableIds()) {
                     tableIds.emplace_back(tableIdProto.GetOwnerId(), tableIdProto.GetTableId(), tableIdProto.GetSchemaVersion());
                 }
-                
+
                 TRemoteSnapshotInfo remoteSnapshot(
                     TRowVersion(snapshot.GetSnapshotStep(), snapshot.GetSnapshotTxId()),
                     sessionActorId,
                     std::move(tableIds));
-                
+
                 AddToCollectedSnapshots(remoteSnapshot);
             }
 
@@ -312,9 +332,12 @@ namespace {
                 });
             }
 
-            TXLOG_DEBUG("Received TEvCollectSnapshotsResult from child with" << ev->Record.GetSnapshots().GetSnapshots().size()
-                << " snapshots. Nodes count: " << ev->Record.GetSnapshots().GetNodesCollectionInfo().size()
-                << ". Updated border to " << SnapshotBorder.Step << ":" << SnapshotBorder.TxId);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvCollectSnapshotsResult from child with snapshots. Nodes. Updated border to",
+                {"LogPrefix", LogPrefix},
+                {"size", ev->Record.GetSnapshots().GetSnapshots().size()},
+                {"count", ev->Record.GetSnapshots().GetNodesCollectionInfo().size()},
+                {"Step", SnapshotBorder.Step},
+                {"TxId", SnapshotBorder.TxId});
         }
 
     private:
@@ -343,9 +366,11 @@ namespace {
         TSnapshotPropagatorActor(TActorId parentActorId, TEvLongTxService::TEvPropagateSnapshots* event, const TSubtreeSplitter& subtreeSplitter)
             : TTreeNodeActor(parentActorId, event, subtreeSplitter) {
             Snapshots_ = event->Record.GetSnapshots();
-            TXLOG_DEBUG("Initialized propagator actor with " << Snapshots_.GetSnapshots().size()
-                << " snapshots and border " << Snapshots_.GetBorderStep()
-                << ":" << Snapshots_.GetBorderTxId());
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Initialized propagator actor with snapshots and border",
+                {"LogPrefix", LogPrefix},
+                {"size", Snapshots_.GetSnapshots().size()},
+                {"GetBorderStep", Snapshots_.GetBorderStep()},
+                {"GetBorderTxId", Snapshots_.GetBorderTxId()});
         }
 
         std::unique_ptr<TEvLongTxService::TEvPropagateSnapshots> GetChildEvent() override {
@@ -417,14 +442,17 @@ public:
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "TSnapshotsExchangerActor [Node " << SelfId().NodeId() << "] ";
-        TXLOG_DEBUG("Creating TSnapshotsExchangerActor with board path: " << BoardPath);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Creating TSnapshotsExchangerActor with board",
+            {"LogPrefix", LogPrefix},
+            {"path", BoardPath});
         UpdateBoardRetrySettings();
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
         TBase::Become(&TThis::StatePrepare);
     }
 
     void PassAway() {
-        TXLOG_DEBUG("Passing away TSnapshotsExchangerActor");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Passing away TSnapshotsExchangerActor",
+            {"LogPrefix", LogPrefix});
         if (Publisher) {
             Send(Publisher, new TEvents::TEvPoison);
         }
@@ -439,7 +467,7 @@ public:
     }
 
     STFUNC(StatePrepare) {
-        switch (ev->GetTypeRewrite()) {    
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
         }
@@ -460,7 +488,7 @@ public:
     }
 
     STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {    
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvLongTxService::TEvCollectSnapshots, Handle);
             hFunc(TEvLongTxService::TEvCollectSnapshotsResult, Handle);
             hFunc(TEvLongTxService::TEvPropagateSnapshots, Handle);
@@ -485,10 +513,13 @@ private:
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev) {
         if (const auto& node = ev->Get()->Node) {
             SelfDataCenterId = node->Location.GetDataCenterId();
-            TXLOG_DEBUG("Self data center ID: " << SelfDataCenterId);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Self data center",
+                {"LogPrefix", LogPrefix},
+                {"ID", SelfDataCenterId});
         } else {
             SelfDataCenterId = TString();
-            TXLOG_DEBUG("No node info, setting empty data center ID");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "No node info, setting empty data center ID",
+                {"LogPrefix", LogPrefix});
         }
 
         NKikimrLongTxService::TSnapshotExchangeBoardNodeInfo info;
@@ -591,12 +622,16 @@ private:
             }
         }
         AFL_ENSURE(PublisherIdToExchangeActorId.size() == ExchangeActorIdToDataCenterId.size());
-        TXLOG_DEBUG("Finished updating nodes, now know " << ExchangeActorIdToDataCenterId.size() << " other exchange actors");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Finished updating nodes, now know other exchange actors",
+            {"LogPrefix", LogPrefix},
+            {"size", ExchangeActorIdToDataCenterId.size()});
     }
 
     void Handle(TEvLongTxService::TEvCollectSnapshots::TPtr& ev) {
-        TXLOG_DEBUG("Handling TEvCollectSnapshots event from " << ev->Sender
-            << " with " << ev->Get()->Record.GetTree().GetChildrenActorIds().size() << " children");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TEvCollectSnapshots event from with children",
+            {"LogPrefix", LogPrefix},
+            {"Sender", ev->Sender},
+            {"size", ev->Get()->Record.GetTree().GetChildrenActorIds().size()});
         auto* collectorActor = CreateSnapshotCollectorActor(
             LocalSnapshotsStorage->View(),
             ev->Sender,
@@ -608,10 +643,12 @@ private:
     }
 
     void Handle(TEvLongTxService::TEvCollectSnapshotsResult::TPtr& ev) {
-        TXLOG_DEBUG("Handling TEvCollectSnapshotsResult event from " << ev->Sender
-            << " with " << ev->Get()->Record.GetSnapshots().GetSnapshots().size() << " snapshots"
-            << " and border " << ev->Get()->Record.GetSnapshots().GetBorderStep()
-            << ":" << ev->Get()->Record.GetSnapshots().GetBorderTxId());
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TEvCollectSnapshotsResult event from with snapshots and border",
+            {"LogPrefix", LogPrefix},
+            {"Sender", ev->Sender},
+            {"size", ev->Get()->Record.GetSnapshots().GetSnapshots().size()},
+            {"GetBorderStep", ev->Get()->Record.GetSnapshots().GetBorderStep()},
+            {"GetBorderTxId", ev->Get()->Record.GetSnapshots().GetBorderTxId()});
         // Finished collecting snapshots from cluster.
         AFL_ENSURE(UpdateInflight);
         AFL_ENSURE(ev->Sender.NodeId() == SelfId().NodeId());
@@ -630,12 +667,15 @@ private:
             }
             CollectionPropagationStarted = now;
         } else {
-            TXLOG_DEBUG("Snapshots locking is disabled, skipping propagation");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Snapshots locking is disabled, skipping propagation",
+                {"LogPrefix", LogPrefix});
         }
     }
 
     void Handle(TEvLongTxService::TEvPropagateSnapshots::TPtr& ev) {
-        TXLOG_DEBUG("Handling TEvPropagateSnapshots event from " << ev->Sender);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TEvPropagateSnapshots event from",
+            {"LogPrefix", LogPrefix},
+            {"Sender", ev->Sender});
         if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
             // Update remote snapshots storage and continue propagation
             THashMap<ui32, TInstant> nodeIdToCollectionTime;
@@ -649,7 +689,7 @@ private:
                     for (const auto& tableIdProto : snapshot.GetTableIds()) {
                         tableIds.emplace_back(tableIdProto.GetOwnerId(), tableIdProto.GetTableId(), tableIdProto.GetSchemaVersion());
                     }
-                    
+
                     remoteSnapshots.emplace_back(TRemoteSnapshotInfo{
                         TRowVersion(snapshot.GetSnapshotStep(), snapshot.GetSnapshotTxId()),
                         sessionActorId,
@@ -664,9 +704,12 @@ private:
             }
 
             TRowVersion border(ev->Get()->Record.GetSnapshots().GetBorderStep(), ev->Get()->Record.GetSnapshots().GetBorderTxId());
-            TXLOG_DEBUG("Updating remote snapshots storage with " << remoteSnapshots.size()
-                << " snapshots from " << nodeIdToCollectionTime.size() << "nodes."
-                << " Update border to " << border.Step << ":" << border.TxId);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Updating remote snapshots storage with snapshots from nodes. Update border to",
+                {"LogPrefix", LogPrefix},
+                {"size", remoteSnapshots.size()},
+                {"#_size", nodeIdToCollectionTime.size()},
+                {"Step", border.Step},
+                {"TxId", border.TxId});
             RemoteSnapshotsStorage->UpdateBorder(border);
             std::sort(std::begin(remoteSnapshots), std::end(remoteSnapshots),
                 TRemoteSnapshotInfo::TComparatorBySnapshotAndSessionId{});
@@ -677,7 +720,8 @@ private:
                 Counters.TimeSinceLastRemoteSnapshotsUpdateMs->Set(0);
             }
         } else {
-            TXLOG_DEBUG("Snapshots locking is disabled, skipping remote snapshots update");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Snapshots locking is disabled, skipping remote snapshots update",
+                {"LogPrefix", LogPrefix});
         }
 
         auto* propagatorActor = CreateSnapshotPropagatorActor(
@@ -690,7 +734,8 @@ private:
     }
 
     void Handle(TEvLongTxService::TEvPropagateSnapshotsResult::TPtr&) {
-        TXLOG_DEBUG("Handling TEvPropagateSnapshotsResult event");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TEvPropagateSnapshotsResult event",
+            {"LogPrefix", LogPrefix});
         // Finished propagating snapshots to cluster.
         AFL_ENSURE(UpdateInflight);
         UpdateInflight = false;
@@ -702,7 +747,9 @@ private:
     }
 
     void Handle(TEvLongTxService::TEvRemoteSnapshotsPrefill::TPtr& ev) {
-        TXLOG_DEBUG("Handling TEvRemoteSnapshotsPrefill from " << ev->Sender);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Handling TEvRemoteSnapshotsPrefill from",
+            {"LogPrefix", LogPrefix},
+            {"Sener", ev->Sender});
 
         auto resultEvent = std::make_unique<TEvLongTxService::TEvRemoteSnapshotsPrefillResult>();
 
@@ -717,7 +764,7 @@ private:
                 collectedSnapshots.erase(lastSnapshotIter);
             }
         };
-    
+
         for (const auto& remoteSnapshot : RemoteSnapshotsStorage->View()) {
             addToCollectedSnapshots(remoteSnapshot);
         }
@@ -759,7 +806,8 @@ private:
 
         const bool isLeader = IsLeader();
         if (AppData()->FeatureFlags.GetEnableSnapshotsLocking() && isLeader && !UpdateInflight) {
-            TXLOG_DEBUG("Starting snapshot collection");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Starting snapshot collection",
+                {"LogPrefix", LogPrefix});
             auto collectSnapshotsEvent = std::make_unique<TEvLongTxService::TEvCollectSnapshots>();
             FillTreeExchangeActors(collectSnapshotsEvent->Record.MutableTree());
 
@@ -768,21 +816,25 @@ private:
 
             CollectionPropagationStarted = AppData()->TimeProvider->Now();
         } else if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
-            TXLOG_DEBUG("Snapshots locking is disabled, skipping snapshot collection");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Snapshots locking is disabled, skipping snapshot collection",
+                {"LogPrefix", LogPrefix});
         } else if (!isLeader) {
-            TXLOG_DEBUG("Not a leader, skipping snapshot collection");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Not a leader, skipping snapshot collection",
+                {"LogPrefix", LogPrefix});
         } else {
             AFL_ENSURE(UpdateInflight);
-            TXLOG_DEBUG("Update already in flight, skipping snapshot collection");
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Update already in flight, skipping snapshot collection",
+                {"LogPrefix", LogPrefix});
         }
-        TXLOG_DEBUG("Scheduling next TEvRemoteSnapshotsUpdate in "
-            << AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds() << " seconds");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Scheduling next TEvRemoteSnapshotsUpdate in seconds",
+            {"LogPrefix", LogPrefix},
+            {"GetSnapshotsExchangeIntervalSeconds", AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds()});
         Schedule(
             TDuration::Seconds(AppData()->LongTxServiceConfig.GetSnapshotsExchangeIntervalSeconds()),
             new TEvPrivate::TEvRemoteSnapshotsUpdate());
     }
 
-    bool IsLeader() const {        
+    bool IsLeader() const {
         return std::all_of(ExchangeActorIdToDataCenterId.begin(), ExchangeActorIdToDataCenterId.end(), [this](const std::pair<TActorId, TString>& actorIdAndDataCenterId) {
             return actorIdAndDataCenterId.first < SelfId();
         });

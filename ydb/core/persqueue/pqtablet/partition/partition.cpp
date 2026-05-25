@@ -28,6 +28,9 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 #include <util/generic/overloaded.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT error.GetService()
 
 namespace NKafka {
 
@@ -1182,7 +1185,8 @@ void TPartition::LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMess
         Errors.pop_front();
     }
     Errors.push_back(error);
-    LOG_ERROR_S(ctx, error.GetService(), error.GetMessage());
+    YDB_LOG_CTX_ERROR(ctx, "",
+        {"GetMessage", error.GetMessage()});
 }
 
 void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx) {

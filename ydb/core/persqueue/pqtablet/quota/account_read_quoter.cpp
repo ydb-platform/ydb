@@ -12,6 +12,9 @@
 
 #include <util/string/join.h>
 #include <util/string/vector.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 
@@ -243,8 +246,9 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 
     auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
     if (topicParts.size() < 2) {
-        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
-                    "tablet " << tabletId << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
+        YDB_LOG_CTX_WARN(ctx, "tablet topic ' ' Bad topic name. Disable quoting for topic",
+            {"tabletId", tabletId},
+            {"topicPath", topicPath});
         return params;
     }
     topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic

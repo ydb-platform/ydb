@@ -14,6 +14,9 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/string/cast.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -56,7 +59,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvPrivate::TEvAllowCreateStream::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         CreateStream();
     }
 
@@ -84,22 +89,27 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry CreateStream");
+                YDB_LOG_DEBUG("Retry CreateStream",
+                    {"LogPrefix", LogPrefix});
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error"
-                << ": status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Error",
+                {"LogPrefix", LogPrefix},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
             return Reply(std::move(result));
         } else {
-            LOG_I("Success"
-                << ": issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_INFO("Success",
+                {"LogPrefix", LogPrefix},
+                {"issues", result.GetIssues().ToOneLineString()});
             return CreateConsumer();
         }
     }
@@ -136,7 +146,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
         if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
@@ -145,16 +157,19 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry CreateConsumer");
+                YDB_LOG_DEBUG("Retry CreateConsumer",
+                    {"LogPrefix", LogPrefix});
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error"
-                << ": status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Error",
+                {"LogPrefix", LogPrefix},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
         } else {
-            LOG_I("Success"
-                << ": issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_INFO("Success",
+                {"LogPrefix", LogPrefix},
+                {"issues", result.GetIssues().ToOneLineString()});
         }
 
         Reply(std::move(result));
@@ -176,16 +191,24 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_W("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Retry.");
+                YDB_LOG_WARN("Error of resolving topic '. Retry.",
+                    {"LogPrefix", LogPrefix},
+                    {"BuildStreamPath", BuildStreamPath()},
+                    {"'", ev->Get()->ToString()});
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Stop.");
+            YDB_LOG_ERROR("Error of resolving topic '. Stop.",
+                {"LogPrefix", LogPrefix},
+                {"BuildStreamPath", BuildStreamPath()},
+                {"'", ev->Get()->ToString()});
             NYdb::NIssue::TIssues issues = result.GetIssues();
             return Reply(NYdb::TStatus(result.GetStatus(), std::move(issues)));
         }

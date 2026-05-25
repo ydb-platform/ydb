@@ -1,6 +1,9 @@
 #include "datashard_txs.h"
 
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -10,9 +13,9 @@ namespace NKikimr::NDataShard {
     {}
 
     bool TDataShard::TTxReadSet::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TTxReadSet::Execute at " << Self->TabletID() << " got read set: "
-                    << Ev->Get()->ToString().data());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxReadSet::Execute at got read",
+            {"TabletID", Self->TabletID()},
+            {"set", Ev->Get()->ToString().data()});
 
         DoExecute(txc, ctx);
 
@@ -87,8 +90,8 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TTxReadSet::Complete at " << Self->TabletID());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxReadSet::Complete at",
+            {"TabletID", Self->TabletID()});
 
         // If it was read set for non-active tx we should send ACK back after successful save in DB
         // Note that, active tx will send "delayed" ACK after tx complete

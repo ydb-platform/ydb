@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -121,7 +122,8 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                     }
                 }
 
-                LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+                YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::DATA_INTEGRITY, "",
+                    {"Str", ss.Str()});
             }
         }
     }
@@ -149,7 +151,8 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"logFn", logFn()});
 }
 
 template <typename TxResult>
@@ -168,7 +171,8 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"logFn", logFn()});
 }
 
 }

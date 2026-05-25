@@ -21,8 +21,6 @@
 
 #include <util/system/hostname.h>
 
-#define MLOG_D(stream) LOG_DEBUG_S((NMVP::InstanceMVP->ActorSystem), EService::MVP, stream)
-
 using namespace NMVP;
 using namespace NActors;
 

@@ -1,5 +1,8 @@
 #include "skeleton_oos_logic.h"
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SKELETON
 
 namespace NKikimr {
 
@@ -215,18 +218,16 @@ namespace NKikimr {
             {
                 TEvAnubisOsirisPut *msg = ev->Get();
                 if (msg->IsAnubis()) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                            << "OUT OF SPACE while removing LogoBlob we got from Anubis;"
-                            << " LogoBlobId# " << msg->LogoBlobId
-                            << " Marker# BSVSOOSL01");
+                    YDB_LOG_CTX_ERROR(ctx, "OUT OF SPACE while removing LogoBlob we got from Anubis; Marker# BSVSOOSL01",
+                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                        {"LogoBlobId", msg->LogoBlobId});
                     return stat.NotAllow();
                 } else {
                     // We MUST allow Osiris writes. W/o Osiris we can't work.
                     // There should not be too much of them.
-                    LOG_ERROR_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                            << "OUT OF SPACE while adding resurrected by Osiris LogoBlob;"
-                            << " FORCING addition: LogoBlobId# " << msg->LogoBlobId
-                            << " Marker# BSVSOOSL02");
+                    YDB_LOG_CTX_ERROR(ctx, "OUT OF SPACE while adding resurrected by Osiris LogoBlob; FORCING addition: Marker# BSVSOOSL02",
+                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                        {"LogoBlobId", msg->LogoBlobId});
                     return stat.Allow();
                 }
             }

@@ -19,24 +19,9 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_E || \
-    defined LOG_C
-#error log macro redefinition
-#endif
-
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[DistEraser] " << SelfId() << " " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -162,9 +147,13 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             << ", error# " << error;
 
         if (status == TEvResponse::OK) {
-            LOG_D(done);
+            YDB_LOG_DEBUG("[DistEraser]",
+                {"SelfId", SelfId()},
+                {"done", done});
         } else {
-            LOG_E(done);
+            YDB_LOG_ERROR("[DistEraser]",
+                {"SelfId", SelfId()},
+                {"done", done});
         }
 
         auto response = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
@@ -296,9 +285,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 continue;
             }
 
-            LOG_D("Cancel proposal"
-                << ": txId# " << TxId
-                << ", shard# " << shardId);
+            YDB_LOG_DEBUG("[DistEraser] Cancel proposal",
+                {"SelfId", SelfId()},
+                {"txId", TxId},
+                {"shard", shardId});
 
             auto cancel = MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(TxId);
             Send(LeaderPipeCache, new TEvPipeCache::TEvForward(cancel.Release(), shardId, false));
@@ -308,7 +298,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     /// Allocate tx id
 
     void AllocateTxId() {
-        LOG_D("AllocateTxId");
+        YDB_LOG_DEBUG("[DistEraser] AllocateTxId",
+            {"SelfId", SelfId()});
 
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
         Become(&TThis::StateAllocateTxId);
@@ -323,7 +314,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_D("Handle TEvTxUserProxy::TEvAllocateTxIdResult");
+        YDB_LOG_DEBUG("[DistEraser] Handle TEvTxUserProxy::TEvAllocateTxIdResult",
+            {"SelfId", SelfId()});
 
         TxId = ev->Get()->TxId;
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -335,8 +327,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     /// Resolve tables
 
     void ResolveTables() {
-        LOG_D("Resolve tables"
-            << ": txId# " << TxId);
+        YDB_LOG_DEBUG("[DistEraser] Resolve tables",
+            {"SelfId", SelfId()},
+            {"txId", TxId});
 
         auto request = MakeHolder<TNavigate>();
         request->DatabaseName = DatabaseName;
@@ -361,8 +354,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         const auto& request = ev->Get()->Request;
         const TStringBuf marker = "ResolveTables";
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("[DistEraser] Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"SelfId", SelfId()},
+            {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(request, marker)) {
             return;
@@ -489,8 +483,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     /// Resolve keys
 
     void ResolveKeys() {
-        LOG_D("Resolve keys"
-            << ": txId# " << TxId);
+        YDB_LOG_DEBUG("[DistEraser] Resolve keys",
+            {"SelfId", SelfId()},
+            {"txId", TxId});
 
         Y_ENSURE(!TableInfos.empty());
 
@@ -527,8 +522,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         const auto& request = ev->Get()->Request;
         const TStringBuf marker = "ResolveKeys";
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult"
-            << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("[DistEraser] Handle TEvTxProxySchemeCache::TEvResolveKeySetResult",
+            {"SelfId", SelfId()},
+            {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(request, marker)) {
             return;
@@ -570,12 +566,14 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     }
 
     void Store(TEvDataShard::TEvEraseRowsRequest::TPtr& ev) {
-        LOG_D("Store TEvDataShard::TEvEraseRowsRequest");
+        YDB_LOG_DEBUG("[DistEraser] Store TEvDataShard::TEvEraseRowsRequest",
+            {"SelfId", SelfId()});
         Request = ev;
     }
 
     void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev) {
-        LOG_D("Handle TEvDataShard::TEvEraseRowsRequest");
+        YDB_LOG_DEBUG("[DistEraser] Handle TEvDataShard::TEvEraseRowsRequest",
+            {"SelfId", SelfId()});
 
         const auto& record = ev->Get()->Record;
 
@@ -737,12 +735,13 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     dependency.SetPresentRows(SerializeBitMap(shardKeys.GetPresentRows()));
                 }
 
-                LOG_D("Propose tx"
-                    << ": txId# " << TxId
-                    << ", shard# " << shardId
-                    << ", keys# " << request.KeyColumnsSize()
-                    << ", dependents# " << tx.DependentsSize()
-                    << ", dependencies# " << tx.DependenciesSize());
+                YDB_LOG_DEBUG("[DistEraser] Propose tx",
+                    {"SelfId", SelfId()},
+                    {"txId", TxId},
+                    {"shard", shardId},
+                    {"keys", request.KeyColumnsSize()},
+                    {"dependents", tx.DependentsSize()},
+                    {"dependencies", tx.DependenciesSize()});
 
                 auto propose = MakeHolder<TEvDataShard::TEvProposeTransaction>(
                     NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE, SelfId(), TxId, tx.SerializeAsString()
@@ -781,10 +780,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         const auto status = msg->GetStatus();
-        LOG_D("HandlePropose TEvDataShard::TEvProposeTransactionResult"
-            << ": txId# " << TxId
-            << ", shard# " << shardId
-            << ", status# " << static_cast<ui32>(status));
+        YDB_LOG_DEBUG("[DistEraser] HandlePropose TEvDataShard::TEvProposeTransactionResult",
+            {"SelfId", SelfId()},
+            {"txId", TxId},
+            {"shard", shardId},
+            {"status", static_cast<ui32>(status)});
 
         auto error = [&](TEvResponse::EStatus code, const TStringBuf header) {
             return Reply(code, TStringBuilder() << header
@@ -898,10 +898,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     void RegisterPlan() {
         Y_ENSURE(SelectedCoordinator);
 
-        LOG_D("Register plan"
-            << ": txId# " << TxId
-            << ", minStep# " << AggrMinStep
-            << ", maxStep# " << AggrMaxStep);
+        YDB_LOG_DEBUG("[DistEraser] Register plan",
+            {"SelfId", SelfId()},
+            {"txId", TxId},
+            {"minStep", AggrMinStep},
+            {"maxStep", AggrMaxStep});
 
         auto propose = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
             SelectedCoordinator, TxId, 0, AggrMinStep, AggrMaxStep);
@@ -934,9 +935,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
     void HandlePlan(TEvTxProxy::TEvProposeTransactionStatus::TPtr& ev) {
         const auto status = ev->Get()->GetStatus();
-        LOG_D("Handle TEvTxProxy::TEvProposeTransactionStatus"
-            << ": txId# " << TxId
-            << ", status# " << static_cast<ui32>(status));
+        YDB_LOG_DEBUG("[DistEraser] Handle TEvTxProxy::TEvProposeTransactionStatus",
+            {"SelfId", SelfId()},
+            {"txId", TxId},
+            {"status", static_cast<ui32>(status)});
 
         switch (status) {
         case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
@@ -975,10 +977,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         const auto status = msg->GetStatus();
-        LOG_D("HandlePlan TEvDataShard::TEvProposeTransactionResult"
-            << ": txId# " << TxId
-            << ", shard# " << shardId
-            << ", status# " << static_cast<ui32>(status));
+        YDB_LOG_DEBUG("[DistEraser] HandlePlan TEvDataShard::TEvProposeTransactionResult",
+            {"SelfId", SelfId()},
+            {"txId", TxId},
+            {"shard", shardId},
+            {"status", static_cast<ui32>(status)});
 
         auto error = [&](TEvResponse::EStatus code, const TStringBuf header) {
             return Reply(code, TStringBuilder() << header

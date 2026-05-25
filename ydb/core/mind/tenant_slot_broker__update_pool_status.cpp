@@ -1,6 +1,9 @@
 #include "tenant_slot_broker_impl.h"
 
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
 
 namespace NKikimr {
 namespace NTenantSlotBroker {
@@ -19,7 +22,8 @@ public:
         ui32 nodeId = Event->Sender.NodeId();
         auto &rec = Event->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdatePoolStatus execute for node " << nodeId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdatePoolStatus execute for node",
+            {"nodeId", nodeId});
 
         TString dc = ANY_DATA_CENTER;
         if (Self->NodeIdToDataCenter.contains(nodeId))
@@ -38,8 +42,8 @@ public:
 
                 Self->AddSlot(slot, txc, ctx);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                            "New slot connected " << slot->IdString(true));
+                YDB_LOG_CTX_DEBUG(ctx, "New slot connected",
+                    {"#_slot->IdString(true)", slot->IdString(true)});
 
                 if (slot->IsFree())
                     NewFreeSlot = true;
@@ -55,8 +59,8 @@ public:
                 Self->SlotConnected(slot);
                 slot->LastRequestId = 0;
 
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                            "Reconnected to " << slot->IdString(true));
+                YDB_LOG_CTX_DEBUG(ctx, "Reconnected to",
+                    {"#_slot->IdString(true)", slot->IdString(true)});
 
                 if (slot->IsFree()) {
                     Self->FreeSlots.Add(slot);
@@ -83,7 +87,8 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         ui32 nodeId = Event->Sender.NodeId();
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdatePoolStatus complete for node " << nodeId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdatePoolStatus complete for node",
+            {"nodeId", nodeId});
 
         for (auto &slot : ToConfigure) {
             Self->SendConfigureSlot(slot, ctx);

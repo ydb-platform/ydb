@@ -6,20 +6,6 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 
-#define LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
-#define LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
-#define LOG_N(s) \
-    LOG_NOTICE_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
-#define LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
-#define LOG_C(s) \
-    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
-#define LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
-
-
 namespace NYql::NDq {
 
 using namespace NActors;
@@ -118,7 +104,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
         channelData.Proto.MutableData()->SetRows(channelData.Proto.GetData().GetChunks());
     }
 
-    LOG_T("Received input for channelId: " << channelId
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Received input for channelId: " << channelId
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.Proto.GetData().GetRaw().size()
         << ", chunks: " << channelData.Proto.GetData().GetChunks()
@@ -129,7 +115,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
         << ", expected seqNo: " << (inputChannel.LastRecvSeqNo + 1));
 
     if (record.GetSeqNo() != inputChannel.LastRecvSeqNo + 1) {
-        LOG_E("Unexpected input channelId: " << channelId << " seqNo: " << record.GetSeqNo()
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Unexpected input channelId: " << channelId << " seqNo: " << record.GetSeqNo()
             << ", expected: " << (inputChannel.LastRecvSeqNo + 1));
         return;
     }
@@ -150,17 +136,17 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
     }
 
     if (inputChannel.RetryState && !inputChannel.InFlight.empty()) {
-        LOG_D("Received all retried messages for input channelId: " << channelId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Received all retried messages for input channelId: " << channelId);
         inputChannel.RetryState.reset();
     }
 
     if (inputChannel.RetryState) {
-        LOG_D("Waiting for input channelId: " << channelId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Waiting for input channelId: " << channelId
             << " messages: " << InFlightMessagesStr(inputChannel.InFlight));
     }
 
     if (channelData.Proto.GetFinished()) {
-        LOG_D("Finish input channelId: " << channelId << ", from: " << *inputChannel.Peer);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Finish input channelId: " << channelId << ", from: " << *inputChannel.Peer);
         inputChannel.Finished = true;
     }
 
@@ -172,7 +158,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
 
     TOutputChannelState& outputChannel = OutCh(record.GetChannelId());
 
-    LOG_T("Received channel data ack for channelId: " << record.GetChannelId()
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Received channel data ack for channelId: " << record.GetChannelId()
         << ", seqNo: " << record.GetSeqNo()
         << ", lastSentSeqNo: " << outputChannel.LastSentSeqNo
         << ", freeSpace: " << record.GetFreeSpace()
@@ -202,39 +188,39 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
 
     outputChannel.PeerState.ActualizeFreeSpace(record.GetFreeSpace());
 
-    LOG_T("PeerState, peerState:(" << outputChannel.PeerState.DebugString() << ")"
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"PeerState, peerState:(" << outputChannel.PeerState.DebugString() << ")"
         << ", sentSeqNo: " << outputChannel.LastSentSeqNo
         << ", ackSeqNo: " << record.GetSeqNo());
 
     if (outputChannel.RetryState && outputChannel.InFlight.empty()) {
-        LOG_D("Received all retried messages for output channelId: " << record.GetChannelId());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Received all retried messages for output channelId: " << record.GetChannelId());
         outputChannel.RetryState.reset();
     }
 
     if (outputChannel.RetryState) {
-        LOG_D("Waiting for output channelId: " << record.GetChannelId()
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Waiting for output channelId: " << record.GetChannelId()
             << " messages: " << InFlightMessagesStr(outputChannel.InFlight));
         return;
     }
 
-    LOG_T("Resume compute actor");
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Resume compute actor");
     Cbs->ResumeExecution(EResumeSource::ChannelsHandleWork);
 }
 
 void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr& ev) {
     auto* msg = ev->Get();
-    LOG_T("Resend channel data events for output channelId: " << msg->ChannelId
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Resend channel data events for output channelId: " << msg->ChannelId
         << ", seqNo: [" << msg->FromSeqNo << ".." << msg->ToSeqNo << ']');
 
     TOutputChannelState& outputChannel = OutCh(msg->ChannelId);
 
     if (!outputChannel.RetryState) {
-        LOG_D("Output channelId: " << msg->ChannelId << " does not have retry state");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Output channelId: " << msg->ChannelId << " does not have retry state");
         return;
     }
 
     if (!outputChannel.RetryState->RetryScheduled) {
-        LOG_E("Output channelId: " << msg->ChannelId << " does not have scheduled retry event");
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Output channelId: " << msg->ChannelId << " does not have scheduled retry event");
         return;
     }
 
@@ -246,7 +232,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
         ui64 seqNo = inFlight.first;
 
         if (seqNo < msg->FromSeqNo || seqNo > msg->ToSeqNo) {
-            LOG_E("Output channelId: " << msg->ChannelId << " has unexpected inflight message seqNo: " << seqNo);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Output channelId: " << msg->ChannelId << " has unexpected inflight message seqNo: " << seqNo);
         }
 
         auto retryEv = MakeHolder<TEvDqCompute::TEvChannelData>();
@@ -262,7 +248,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
         data->SetChannelId(msg->ChannelId);
         data->SetFinished(inFlight.second.Finished);
 
-        LOG_D("Resending data chunk, channelId: " << msg->ChannelId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Resending data chunk, channelId: " << msg->ChannelId
             << ", peer: " << *outputChannel.Peer
             << ", data size: " << inFlight.second.Data.PayloadSize()
             << ", seqNo: " << seqNo
@@ -276,18 +262,18 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr
 
 void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelDataAck::TPtr& ev) {
     auto* msg = ev->Get();
-    LOG_D("Resend channel data ack events for input channelId: " << msg->ChannelId
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Resend channel data ack events for input channelId: " << msg->ChannelId
         << ", seqNo: [" << msg->FromSeqNo << ".." << msg->ToSeqNo << ']');
 
     TInputChannelState& inputChannel = InCh(msg->ChannelId);
 
     if (!inputChannel.RetryState) {
-        LOG_E("Input channelId: " << msg->ChannelId << " does not have retry state");
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Input channelId: " << msg->ChannelId << " does not have retry state");
         return;
     }
 
     if (!inputChannel.RetryState->RetryScheduled) {
-        LOG_E("Input channelId: " << msg->ChannelId << " does not have scheduled retry event");
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Input channelId: " << msg->ChannelId << " does not have scheduled retry event");
         return;
     }
 
@@ -296,7 +282,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelDataAck::T
     for (auto& inFlight : inputChannel.InFlight) {
         ui64 seqNo = inFlight.first;
         if (seqNo < msg->FromSeqNo || seqNo > msg->ToSeqNo) {
-            LOG_E("Input channelId: " << msg->ChannelId << " has unexpected inflight message seqNo: " << seqNo);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Input channelId: " << msg->ChannelId << " has unexpected inflight message seqNo: " << seqNo);
         }
 
         if (Y_UNLIKELY(inputChannel.Stats)) {
@@ -308,7 +294,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelDataAck::T
         retryEv->Record.SetChannelId(msg->ChannelId);
         retryEv->Record.SetFreeSpace(Cbs->GetInputChannelFreeSpace(msg->ChannelId));
 
-        LOG_D("Resending data chunk ack, channelId: " << msg->ChannelId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Resending data chunk ack, channelId: " << msg->ChannelId
             << ", peer: " << *inputChannel.Peer
             << ", seqNo: " << seqNo
             << ", freeSpace: " << retryEv->Record.GetFreeSpace());
@@ -331,7 +317,7 @@ void TDqComputeActorChannels::HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     if (sourceType == TEvDq::TEvAbortExecution::EventType) {
-        LOG_N("Ignoring undelivered event: " << sourceType << ", cookie: " << ev->Cookie << ", reason: " << reason);
+        LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Ignoring undelivered event: " << sourceType << ", cookie: " << ev->Cookie << ", reason: " << reason);
         return;
     }
 
@@ -339,13 +325,13 @@ void TDqComputeActorChannels::HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
         << ", cookie: " << ev->Cookie
         << ", reason: " << reason;
 
-    LOG_E(message);
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<message);
     return InternalError(message);
 }
 
 void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     ui32 nodeId = ev->Get()->NodeId;
-    LOG_E("Handle node disconnect: " << nodeId);
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Handle node disconnect: " << nodeId);
 
     if (TrackingNodes.erase(nodeId) == 0) {
         return;
@@ -364,7 +350,7 @@ void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::T
 
         inputChannel.second.PollRequest.reset();
 
-        LOG_E("Disconnected node for input channelId: " << inputChannel.first
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Disconnected node for input channelId: " << inputChannel.first
             << ", retry inflight events: " << InFlightMessagesStr(inputChannel.second.InFlight));
 
         if (!inputChannel.second.InFlight.empty()) {
@@ -381,7 +367,7 @@ void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::T
             continue;
         }
 
-        LOG_E("Disconnected node for output channelId: " << outputChannel.first
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Disconnected node for output channelId: " << outputChannel.first
             << ", retry inflight events: " << InFlightMessagesStr(outputChannel.second.InFlight));
 
         if (!outputChannel.second.InFlight.empty()) {
@@ -398,13 +384,13 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, NAc
     TOutputChannelState& outputChannel = OutCh(channelId);
 
     if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) {
-        LOG_I("Ignore undelivered TEvChannelData event due to early finish, channelId: " << channelId);
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Ignore undelivered TEvChannelData event due to early finish, channelId: " << channelId);
         outputChannel.InFlight.clear();
         Cbs->ResumeExecution(EResumeSource::ChannelsHandleUndeliveredData);
         return;
     }
 
-    LOG_N("Handle undelivered event: TEvChannelData, channelId: " << channelId << ", reason: " << reason);
+    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Handle undelivered event: TEvChannelData, channelId: " << channelId << ", reason: " << reason);
 
     if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
         return RuntimeError("Output channel actor is unavailable");
@@ -428,14 +414,14 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, 
     inputChannel.PollRequest.reset();
 
     if (inputChannel.Finished && !SupportCheckpoints) {
-        LOG_I("Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason
             << ". Ignore, channel is finished.");
         inputChannel.InFlight.clear();
         Cbs->ResumeExecution(EResumeSource::ChannelsHandleUndeliveredAck);
         return;
     }
 
-    LOG_N("Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason);
+    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason);
 
     if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
         return RuntimeError("Input channel actor is unavailable");
@@ -462,7 +448,7 @@ bool TDqComputeActorChannels::ScheduleRetryForChannel(TChannelState& channel, TI
 
     auto retryAt = channel.RetryState->CalcNextRetry(now);
     if (!retryAt) {
-        LOG_E("Delivery interval exceeded for channelId: " << channel.ChannelId);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Delivery interval exceeded for channelId: " << channel.ChannelId);
         RuntimeError("channel delivery interval exceeded");
         return false;
     }
@@ -472,7 +458,7 @@ bool TDqComputeActorChannels::ScheduleRetryForChannel(TChannelState& channel, TI
     if (!channel.RetryState->RetryScheduled) {
         channel.RetryState->RetryScheduled = true;
         auto retryAfter = *retryAt - now;
-        LOG_D("Retry #" << channel.RetryState->AttemptNo << " scheduled on " << retryAt
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Retry #" << channel.RetryState->AttemptNo << " scheduled on " << retryAt
             << ", deadline: " << channel.RetryState->Deadline);
         Schedule(retryAfter, new TRetryEvent(channel.ChannelId, channel.InFlight.begin()->first,
             channel.InFlight.rbegin()->first));
@@ -485,18 +471,18 @@ STATEFN(TDqComputeActorChannels::DeadState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvents::TEvPoison, HandlePoison);
         default: {
-            LOG_E("Skip unexpected event " << ev->GetTypeRewrite() << " at DeadState");
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Skip unexpected event " << ev->GetTypeRewrite() << " at DeadState");
         }
     }
 }
 
 void TDqComputeActorChannels::HandlePoison(TEvents::TEvPoison::TPtr&) {
-    LOG_D("pass away");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"pass away");
     PassAway();
 }
 
 void TDqComputeActorChannels::RuntimeError(const TString& message) {
-    LOG_E(message);
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<message);
 
     auto ev = TEvDq::TEvAbortExecution::Unavailable(message);
     Send(Owner, ev.Release());
@@ -505,7 +491,7 @@ void TDqComputeActorChannels::RuntimeError(const TString& message) {
 }
 
 void TDqComputeActorChannels::InternalError(const TString& message) {
-    LOG_C(message);
+    LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<message);
 
     auto ev = TEvDq::TEvAbortExecution::InternalError(message);
     Send(Owner, ev.Release());
@@ -556,7 +542,7 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     const ui32 dataChunks = channelData.ChunkCount();
     const bool finished = channelData.Proto.GetFinished();
 
-    LOG_T("SendChannelData, channelId: " << channelData.Proto.GetChannelId()
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"SendChannelData, channelId: " << channelData.Proto.GetChannelId()
         << ", peer: " << *outputChannel.Peer
         << ", chunks: " << dataChunks
         << ", bytes: " << dataBytes
@@ -600,7 +586,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
     if (!inputChannel.Peer || (inputChannel.Finished && !SupportCheckpoints) || inputChannel.RetryState ||
         inputChannel.LastRecvSeqNo == 0 || freeSpace <= 0)
     {
-        LOG_T("no poll, channelId: " << channelId << ", hasPeer: " << inputChannel.Peer.has_value()
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"no poll, channelId: " << channelId << ", hasPeer: " << inputChannel.Peer.has_value()
             << ", finished: " << inputChannel.Finished << ", retry: " << inputChannel.RetryState.has_value()
             << ", lastSeqNo: " << inputChannel.LastRecvSeqNo << ", freeSpace: " << freeSpace);
         return false;
@@ -610,7 +596,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
         if (inputChannel.PollRequest->SeqNo == inputChannel.LastRecvSeqNo &&
             inputChannel.PollRequest->FreeSpace == freeSpace)
         {
-            LOG_T("no poll, channelId: " << channelId << ", has poll request"
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"no poll, channelId: " << channelId << ", has poll request"
                 << " with same seqNo: " << inputChannel.PollRequest->SeqNo
                 << " and freeSpace: " << inputChannel.PollRequest->FreeSpace);
             return false;
@@ -619,13 +605,13 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
         if (!inputChannel.InFlight.empty()) {
             i64 lastFreeSpace = inputChannel.InFlight.rbegin()->second.FreeSpace;
             if (lastFreeSpace >= freeSpace) {
-                LOG_T("no poll, channelId: " << channelId
+                LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"no poll, channelId: " << channelId
                     << ", has inflight messages: " << InFlightMessagesStr(inputChannel.InFlight)
                     << ", last with freeSpace: " << lastFreeSpace
                     << ", current freeSpace: " << freeSpace);
                 return false;
             } else {
-                LOG_T("do poll, channelId: " << channelId << ", last freeSpace: " << lastFreeSpace
+                LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"do poll, channelId: " << channelId << ", last freeSpace: " << lastFreeSpace
                     << ", current freeSpace: " << freeSpace << ", seqNo: " << inputChannel.LastRecvSeqNo);
             }
         }
@@ -633,7 +619,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
 
     inputChannel.PollRequest.emplace(inputChannel.LastRecvSeqNo, freeSpace);
 
-    LOG_T("Poll input channelId: " << channelId
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Poll input channelId: " << channelId
         << ", from: " << *inputChannel.Peer
         << ", seqNo: " << inputChannel.LastRecvSeqNo
         << ", freeSpace: " << freeSpace);
@@ -653,11 +639,11 @@ bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) const {
     for (auto& inputChannel: InputChannelsMap) {
         if (!inputChannel.second.InFlight.empty()) {
             if (inputChannel.second.Finished) {
-                LOG_D(prefix << ", don't wait for ack delivery in input channelId: "
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<prefix << ", don't wait for ack delivery in input channelId: "
                     << inputChannel.first << ", seqNo: " << InFlightMessagesStr(inputChannel.second.InFlight));
                 continue;
             }
-            LOG_D(prefix << ", waiting for ack delivery in input channelId: "
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<prefix << ", waiting for ack delivery in input channelId: "
                 << inputChannel.first << ", seqNo: " << InFlightMessagesStr(inputChannel.second.InFlight));
             return false;
         }
@@ -665,13 +651,13 @@ bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) const {
 
     for (auto& outputChannel : OutputChannelsMap) {
         if (!outputChannel.second.InFlight.empty()) {
-            LOG_D(prefix << ", waiting for chunk delivery in output channelId: "
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<prefix << ", waiting for chunk delivery in output channelId: "
                 << outputChannel.first << ", seqNo: " << InFlightMessagesStr(outputChannel.second.InFlight));
             return false;
         }
     }
 
-    LOG_D(prefix);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<prefix);
     return true;
 }
 
@@ -683,7 +669,7 @@ bool TDqComputeActorChannels::FinishInputChannels() {
         auto& inputChannel = pair.second;
 
         if (!inputChannel.Peer) {
-            LOG_D("Can not finish input channelId: " << channelId << " prematurely, peer not set yet");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Can not finish input channelId: " << channelId << " prematurely, peer not set yet");
             result = false;
             continue;
         }
@@ -692,7 +678,7 @@ bool TDqComputeActorChannels::FinishInputChannels() {
             continue;
         }
 
-        LOG_D("Finish input channelId: " << channelId << " prematurely");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Finish input channelId: " << channelId << " prematurely");
 
         inputChannel.Finished = true;
 
@@ -729,7 +715,7 @@ void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) {
 }
 
 void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChannel, i64 freeSpace) {
-    LOG_T("Sending channel data ack to"
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " <<"Sending channel data ack to"
         << " channelId: " << inputChannel.ChannelId
         << ", peer: " << *inputChannel.Peer
         << ", from: " << Owner

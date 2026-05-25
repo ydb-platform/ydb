@@ -5,9 +5,9 @@
 #include "schemeshard_impl.h"
 
 #include <algorithm>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -40,7 +40,9 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
     auto plan = MakeHolder<TDropPlan>();
     plan->BackupCollectionId = bcPath.Base()->PathId;
     
-    LOG_I("DropPlan: Starting collection for backup collection: " << bcPath.PathString());
+    YDB_LOG_CTX_INFO(context.Ctx, "DropPlan: Starting collection for backup",
+        {"TabletID", context.SS->TabletID()},
+        {"collection", bcPath.PathString()});
     
     // 1. Find CDC streams on source tables (these are OUTSIDE the backup collection)
     // Group them by table for efficient multi-stream drops
@@ -131,7 +133,9 @@ TTxTransaction CreateTableDropTransaction(const TPath& tablePath) {
 
 // TODO: replace UGLY scan
 void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOperationContext& context, NIceDb::TNiceDb& db) {
-    LOG_I("CleanupIncrementalRestoreState for backup collection pathId: " << backupCollectionPathId);
+    YDB_LOG_CTX_INFO(context.Ctx, "CleanupIncrementalRestoreState for backup collection",
+        {"TabletID", context.SS->TabletID()},
+        {"pathId", backupCollectionPathId});
 
     TVector<ui64> statesToCleanup;
 
@@ -175,7 +179,9 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
         }
     }
 
-    LOG_I("CleanupIncrementalRestoreState: Cleaned up " << statesToCleanup.size() << " incremental restore states");
+    YDB_LOG_CTX_INFO(context.Ctx, "CleanupIncrementalRestoreState: Cleaned up incremental restore states",
+        {"TabletID", context.SS->TabletID()},
+        {"size", statesToCleanup.size()});
 }
 
 class TPropose : public TSubOperationState {
@@ -185,7 +191,9 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -197,7 +205,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan:",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"step", step});
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -335,7 +346,11 @@ public:
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
-        LOG_N("TDropBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropBackupCollection Propose: /",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", rootPathStr},
+            {"name", name});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -380,9 +395,11 @@ public:
                 // but hasn't yet marked the path as "under deleting"
                 
                 for (const auto& [txId, txState] : context.SS->TxInFlight) {
-                    LOG_I("DropPlan: Found TxInFlight - txId: " << txId.GetTxId() 
-                         << ", targetPathId: " << txState.TargetPathId 
-                         << ", txType: " << (int)txState.TxType);
+                    YDB_LOG_CTX_INFO(context.Ctx, "DropPlan: Found TxInFlight -",
+                        {"TabletID", context.SS->TabletID()},
+                        {"txId", txId.GetTxId()},
+                        {"targetPathId", txState.TargetPathId},
+                        {"txType", (int)txState.TxType});
                          
                     if (txState.TargetPathId == dstPath.Base()->PathId && 
                         txId.GetTxId() != OperationId.GetTxId()) {
@@ -433,11 +450,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TDropBackupCollection AbortPropose: opId# " << OperationId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropBackupCollection AbortPropose:",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TDropBackupCollection AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TDropBackupCollection AbortUnsafe:",
+            {"TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", forceDropTxId});
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -451,7 +473,9 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()});
 
         NIceDb::TNiceDb db(context.GetDB());
         
@@ -464,7 +488,10 @@ public:
         }
         
         for (ui64 opId : operationsToCleanup) {
-            LOG_I(DebugHint() << "Cleaning up incremental restore state for operation: " << opId);
+            YDB_LOG_CTX_INFO(context.Ctx, "Cleaning up incremental restore state for",
+                {"TabletID", context.SS->TabletID()},
+                {"DebugHint", DebugHint()},
+                {"operation", opId});
             
             db.Table<Schema::IncrementalRestoreOperations>()
                 .Key(opId)
@@ -495,7 +522,10 @@ public:
             }
         }
         
-        LOG_I(DebugHint() << "Cleaned up " << operationsToCleanup.size() << " incremental restore operations");
+        YDB_LOG_CTX_INFO(context.Ctx, "Cleaned up incremental restore operations",
+            {"TabletID", context.SS->TabletID()},
+            {"DebugHint", DebugHint()},
+            {"size", operationsToCleanup.size()});
         
         return true;
     }

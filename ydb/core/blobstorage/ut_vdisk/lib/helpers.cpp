@@ -8,6 +8,9 @@
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
 
 using namespace NKikimr;
 
@@ -2130,8 +2133,11 @@ class TManyPutsToCorrespondingVDisksActor : public TActorBootstrapped<TManyPutsT
             double blobsPerSecond = (double)deltaBlobs / secs;
             double bytesPerSecond = (double)deltaBytes / secs;
 
-            LOG_INFO_S(ctx, NActorsServices::TEST, "BlobsSent# " << BlobsSent << " BytesSent# " << BytesSent <<
-                        " blobsPerSecond# " << blobsPerSecond << " bytesPerSecond# " << bytesPerSecond);
+            YDB_LOG_CTX_INFO(ctx, "",
+                {"BlobsSent", BlobsSent},
+                {"BytesSent", BytesSent},
+                {"blobsPerSecond", blobsPerSecond},
+                {"bytesPerSecond", bytesPerSecond});
 
             PrevTimestamp = time;
             UpdateTimestamp += Period;

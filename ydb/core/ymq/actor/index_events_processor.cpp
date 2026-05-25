@@ -1,5 +1,8 @@
 #include "index_events_processor.h"
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 
 namespace NKikimr::NSQS {
 using namespace NActors;
@@ -78,8 +81,8 @@ void TSearchEventsProcessor::HandleWakeup(TEvWakeup::TPtr&, const TActorContext&
 void TSearchEventsProcessor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        LOG_ERROR_S(ctx, NKikimrServices::SQS,
-                    "YC Search events processor: Got error trying to perform request: " << record);
+        YDB_LOG_CTX_ERROR(ctx, "YC Search events processor: Got error trying to perform",
+            {"request", record});
         HandleFailure(ctx);
         return;
     }

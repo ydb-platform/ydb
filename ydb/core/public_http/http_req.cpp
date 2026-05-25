@@ -6,6 +6,9 @@
 
 #include <util/generic/guid.h>
 #include <util/string/ascii.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PUBLIC_HTTP
 
 namespace NKikimr::NPublicHttp {
     constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
@@ -218,19 +221,18 @@ namespace NKikimr::NPublicHttp {
 
     void THttpRequestContext::DoResponse(TStringBuf status, TStringBuf message, TStringBuf body, TStringBuf contentType) const {
         const TDuration elapsed = TInstant::Now() - StartedAt;
-        LOG_INFO_S(*ActorSystem, NKikimrServices::PUBLIC_HTTP,
-                "HTTP response -> code: " << status <<
-                ", method: " << Request->Method <<
-                ", url: " << Request->URL <<
-                ", content type: " << ContentType <<
-                ", request body size: " << Request->Body.size() <<
-                ", response body size: " << body.size() <<
-                ", elapsed: " << elapsed <<
-                ", from: " << Request->Address <<
-                ", forwarded for: " << ForwardedFor <<
-                ", request id: " << RequestId <<
-                ", idempotency key: " << IdempotencyKey
-                );
+        YDB_LOG_CTX_INFO(*ActorSystem, "HTTP response ->, content, request body, response body, forwarded, request, idempotency",
+            {"code", status},
+            {"method", Request->Method},
+            {"url", Request->URL},
+            {"type", ContentType},
+            {"size", Request->Body.size()},
+            {"#_size", body.size()},
+            {"elapsed", elapsed},
+            {"from", Request->Address},
+            {"for", ForwardedFor},
+            {"id", RequestId},
+            {"key", IdempotencyKey});
 
         auto group = Counters;
         if (Db) {

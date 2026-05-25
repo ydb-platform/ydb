@@ -20,15 +20,12 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_SERVICE
 
 
 namespace NKikimr::NKqp {
-
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
 
 struct TEvPrivate {
     enum EEv {
@@ -303,20 +300,22 @@ public:
         MaxConcurrentCompilations = std::max<ui32>(1u, Config.MaxConcurrentCompilations);
         HardDeadlineTimestamp = TActivationContext::Now() + hardDeadline;
 
-        LOG_I("Warmup actor started, database: " << Database
-              << ", softDeadline: " << softDeadline
-              << ", hardDeadline: " << hardDeadline
-              << (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")
-              << ", maxConcurrent: " << MaxConcurrentCompilations
-              << (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")
-              << ", waiting for TEvStartWarmup from KqpProxy");
+        YDB_LOG_INFO("Warmup actor started,, waiting for TEvStartWarmup from KqpProxy",
+            {"LogPrefix", LogPrefix()},
+            {"database", Database},
+            {"softDeadline", softDeadline},
+            {"hardDeadline", hardDeadline},
+            {"#_num_0", (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")},
+            {"maxConcurrent", MaxConcurrentCompilations},
+            {"#_num_1", (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")});
 
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
         Schedule(softDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
 
         if (Database.empty()) {
-            LOG_I("Database is empty, skipping warmup");
+            YDB_LOG_INFO("Database is empty, skipping warmup",
+                {"LogPrefix", LogPrefix()});
             SkipReason = "Skipped: empty database";
             ScheduleComplete();
             return;
@@ -340,7 +339,9 @@ private:
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateWaitingComplete: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateWaitingComplete: unexpected event",
+                {"LogPrefix", LogPrefix()},
+                {"GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -352,7 +353,9 @@ private:
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadlineInWaitingStart);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateWaitingStart: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateWaitingStart: unexpected event",
+                {"LogPrefix", LogPrefix()},
+                {"GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -365,7 +368,9 @@ private:
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateFetching: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateFetching: unexpected event",
+                {"LogPrefix", LogPrefix()},
+                {"GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -377,7 +382,9 @@ private:
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateCompiling: unexpected event " << ev->GetTypeRewrite());
+            YDB_LOG_WARN("StateCompiling: unexpected event",
+                {"LogPrefix", LogPrefix()},
+                {"GetTypeRewrite", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -396,24 +403,29 @@ private:
             Counters->WarmupQueriesTruncated->Set(ev->Get()->Count);
             Counters->WarmupQueriesEmptyQueryType->Set(ev->Get()->EmptyQueryTypeCount);
         }
-        LOG_I("Truncated queries in cache: " << ev->Get()->Count
-              << ", empty QueryType: " << ev->Get()->EmptyQueryTypeCount
-              << ", success: " << ev->Get()->Success);
+        YDB_LOG_INFO("Truncated queries, empty",
+            {"LogPrefix", LogPrefix()},
+            {"in_cache", ev->Get()->Count},
+            {"QueryType", ev->Get()->EmptyQueryTypeCount},
+            {"success", ev->Get()->Success});
     }
 
     void HandleStartWarmup(TEvStartWarmup::TPtr& ev) {
         const auto discoveredNodes = ev->Get()->DiscoveredNodesCount;
         NodeIds = ev->Get()->NodeIds;
         if (discoveredNodes <= 1) {
-            LOG_I("Received TEvStartWarmup with single node, skipping warmup");
+            YDB_LOG_INFO("Received TEvStartWarmup with single node, skipping warmup",
+                {"LogPrefix", LogPrefix()});
             Complete(true, "Skipped: single node");
             return;
         }
 
-        LOG_I("Received TEvStartWarmup, discovered nodes: " << discoveredNodes
-              << ", nodeIds count: " << NodeIds.size()
-              << ", maxNodesToQuery: " << Config.MaxNodesToRequest
-              << ", scheduling soft deadline: " << Config.SoftDeadline);
+        YDB_LOG_INFO("Received TEvStartWarmup, discovered, nodeIds, scheduling soft",
+            {"LogPrefix", LogPrefix()},
+            {"nodes", discoveredNodes},
+            {"count", NodeIds.size()},
+            {"maxNodesToQuery", Config.MaxNodesToRequest},
+            {"deadline", Config.SoftDeadline});
         // Cancel bootstrap soft deadline (discovery wait) and schedule compilation soft deadline
         SoftDeadlineCookieHolder.Detach();
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
@@ -431,7 +443,9 @@ private:
             PartialShuffle(NodeIds.begin(), NodeIds.end(), maxNodesToQuery, *AppData()->RandomProvider);
         }
 
-        LOG_I("Spawning fetch cache actor, filtering by " << std::min<size_t>(maxNodesToQuery, NodeIds.size()) << " nodes");
+        YDB_LOG_INFO("Spawning fetch cache actor, filtering by nodes",
+            {"LogPrefix", LogPrefix()},
+            {"#_std::min<size_t>(maxNodesToQuery, NodeIds.size())", std::min<size_t>(maxNodesToQuery, NodeIds.size())});
         const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
             ? Config.MaxCompilationDurationMs
             : Config.SoftDeadline.MilliSeconds() / 2;
@@ -444,13 +458,17 @@ private:
         auto* result = ev->Get();
 
         if (!result->Success) {
-            LOG_W("Fetch failed, skipping warmup: " << result->Error);
+            YDB_LOG_WARN("Fetch failed, skipping",
+                {"LogPrefix", LogPrefix()},
+                {"warmup", result->Error});
             Complete(false, "Fetch failed: " + result->Error);
             return;
         }
 
         QueriesToCompile = std::move(result->Queries);
-        LOG_I("Fetched " << QueriesToCompile.size() << " queries from compile cache");
+        YDB_LOG_INFO("Fetched queries from compile cache",
+            {"LogPrefix", LogPrefix()},
+            {"size", QueriesToCompile.size()});
 
         if (Counters) {
             Counters->WarmupQueriesFetched->Add(QueriesToCompile.size());
@@ -487,10 +505,12 @@ private:
         if (auto it = PendingQueriesByCookie.find(cookie); it != PendingQueriesByCookie.end()) {
             auto& query = it->second;
             if (success) {
-                LOG_I("Query compiled successfully, user: " << query.UserSID
-                      << ", has_metadata: " << !query.Metadata.empty()
-                      << ", query: " << query.QueryText.substr(0, 200)
-                      << (query.QueryText.size() > 200 ? "..." : ""));
+                YDB_LOG_INFO("Query compiled successfully,",
+                    {"LogPrefix", LogPrefix()},
+                    {"user", query.UserSID},
+                    {"has_metadata", !query.Metadata.empty()},
+                    {"query", query.QueryText.substr(0, 200)},
+                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
             } else {
                 TString errorMsg;
                 const auto& issues = record.GetResponse().GetQueryIssues();
@@ -502,17 +522,21 @@ private:
                         errorMsg += issue.message();
                     }
                 }
-                LOG_W("Query compilation failed, user: " << query.UserSID
-                      << ", has_metadata: " << !query.Metadata.empty()
-                      << ", status: " << Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())
-                      << ", error: " << errorMsg
-                      << ", query: " << query.QueryText.substr(0, 200)
-                      << (query.QueryText.size() > 200 ? "..." : ""));
+                YDB_LOG_WARN("Query compilation failed,",
+                    {"LogPrefix", LogPrefix()},
+                    {"user", query.UserSID},
+                    {"has_metadata", !query.Metadata.empty()},
+                    {"status", Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())},
+                    {"error", errorMsg},
+                    {"query", query.QueryText.substr(0, 200)},
+                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
             }
             PendingQueriesByCookie.erase(it);
         } else {
-            LOG_W("Received response for unknown cookie: " << cookie
-                  << ", success: " << success);
+            YDB_LOG_WARN("Received response for unknown",
+                {"LogPrefix", LogPrefix()},
+                {"cookie", cookie},
+                {"success", success});
         }
 
         if (success) {
@@ -598,10 +622,12 @@ private:
             timeout = TDuration::MilliSeconds(100);
         }
 
-        LOG_D("Sending PREPARE request for user: " << query.UserSID
-              << ", query length: " << query.QueryText.size()
-              << ", has_metadata: " << !query.Metadata.empty()
-              << ", timeout: " << timeout);
+        YDB_LOG_DEBUG("Sending PREPARE request for, query",
+            {"LogPrefix", LogPrefix()},
+            {"user", query.UserSID},
+            {"length", query.QueryText.size()},
+            {"has_metadata", !query.Metadata.empty()},
+            {"timeout", timeout});
 
         auto request = CreatePrepareRequest(Database, query.QueryText, query.UserSID,
                                             timeout, query.Metadata, query.QueryType, query.Syntax);
@@ -620,8 +646,10 @@ private:
         }
 
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
-            LOG_I("All compilations finished, loaded: " << EntriesLoaded
-                  << ", failed: " << EntriesFailed);
+            YDB_LOG_INFO("All compilations finished,",
+                {"LogPrefix", LogPrefix()},
+                {"loaded", EntriesLoaded},
+                {"failed", EntriesFailed});
             TString msg = TStringBuilder() << "Compiled " << EntriesLoaded << " queries"
                 << (SoftDeadlineReached ? " (soft deadline)" : "");
             Complete(true, msg);
@@ -630,9 +658,11 @@ private:
 
 
     void HandleHardDeadline() {
-        LOG_I("Hard deadline reached, compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed
-              << ", pending: " << PendingCompilations);
+        YDB_LOG_INFO("Hard deadline reached,",
+            {"LogPrefix", LogPrefix()},
+            {"compiled", EntriesLoaded},
+            {"failed", EntriesFailed},
+            {"pending", PendingCompilations});
 
         PendingQueriesByCookie.clear();
         PendingCompilations = 0;
@@ -644,24 +674,30 @@ private:
         SoftDeadlineReached = true;
         QueriesToCompile.clear();
 
-        LOG_I("Soft deadline reached, compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed
-              << ", pending: " << PendingCompilations);
+        YDB_LOG_INFO("Soft deadline reached,",
+            {"LogPrefix", LogPrefix()},
+            {"compiled", EntriesLoaded},
+            {"failed", EntriesFailed},
+            {"pending", PendingCompilations});
 
         if (PendingCompilations == 0) {
             Complete(true, TStringBuilder() << "Soft deadline: compiled " << EntriesLoaded << " queries");
         } else {
-            LOG_I("Waiting for " << PendingCompilations << " in-flight compilations to finish");
+            YDB_LOG_INFO("Waiting for in-flight compilations to finish",
+                {"LogPrefix", LogPrefix()},
+                {"PendingCompilations", PendingCompilations});
         }
     }
 
     void HandleSoftDeadlineInWaitingStart() {
-        LOG_I("Soft deadline reached while waiting for warmup start signal - no peer nodes discovered, skipping warmup");
+        YDB_LOG_INFO("Soft deadline reached while waiting for warmup start signal - no peer nodes discovered, skipping warmup",
+            {"LogPrefix", LogPrefix()});
         Complete(false, "Warmup incomplete: no peer nodes discovered within soft deadline");
     }
 
     void HandlePoison() {
-        LOG_D("Received poison, stop warmup");
+        YDB_LOG_DEBUG("Received poison, stop warmup",
+            {"LogPrefix", LogPrefix()});
         PassAway();
     }
 
@@ -671,7 +707,10 @@ private:
         }
         Completed = true;
 
-        LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
+        YDB_LOG_INFO("Warmup",
+            {"LogPrefix", LogPrefix()},
+            {"#_num_0", (success ? "completed" : "finished")},
+            {"message", message});
 
         for (const auto& actorId : NotifyActorIds) {
             Send(actorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded, EntriesFailed));

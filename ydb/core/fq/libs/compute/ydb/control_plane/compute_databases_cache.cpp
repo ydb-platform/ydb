@@ -10,12 +10,9 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_W(stream) LOG_WARN_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_I(stream) LOG_INFO_S( *NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ComputeDatabaseCache]: " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -76,7 +73,8 @@ public:
     static constexpr char ActorName[] = "FQ_COMPUTE_DATABASES_CACHE_ACTOR";
 
     void Bootstrap() {
-        LOG_E("Cache Bootstrap, client " << DatabaseClientActorId.ToString());
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "[ydb] [ComputeDatabaseCache]: Cache Bootstrap, client",
+            {"DatabaseClientActorId", DatabaseClientActorId.ToString()});
         InFlight = true;
         Counters.CacheReload.InFly->Inc();
         Send(DatabaseClientActorId, new TEvYdbCompute::TEvListDatabasesRequest());
@@ -94,7 +92,9 @@ public:
         TInstant startTime = TInstant::Now();
         Counters.CheckDatabaseRequest.InFly->Inc();
         const auto& path = ev->Get()->Path;
-        LOG_D("CheckDatabaseRequest, path: " << path << ", ready: " << Ready);
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "[ydb] [ComputeDatabaseCache]: CheckDatabaseRequest,",
+            {"path", path},
+            {"ready", Ready});
         if (!Ready) {
             PendingRequests.push_back({startTime, ev});
             return;
@@ -113,7 +113,8 @@ public:
 
         if (issues) {
             NotifyPendingRequests(issues);
-            LOG_E("ListDatabasesResponse was failed with issues: " << issues.ToOneLineString());
+            YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "[ydb] [ComputeDatabaseCache]: ListDatabasesResponse was failed with",
+                {"issues", issues.ToOneLineString()});
             Counters.CacheReload.Error->Inc();
             Counters.CacheReload.InFly->Dec();
             Counters.CacheReload.LatencyMs->Collect(DeltaMs(StartCacheReload));
@@ -123,7 +124,8 @@ public:
         Databases = response.Paths;
         Ready = true;
         NotifyPendingRequests();
-        LOG_D("Updated list of databases, count = " << Databases.size());
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "[ydb] [ComputeDatabaseCache]: Updated list of databases, count",
+            {"size", Databases.size()});
         Counters.CacheReload.Ok->Inc();
         Counters.CacheReload.InFly->Dec();
         Counters.CacheReload.LatencyMs->Collect(DeltaMs(StartCacheReload));
@@ -133,7 +135,9 @@ public:
         TInstant startTime = TInstant::Now();
         Counters.AddDatabaseRequest.InFly->Inc();
         const auto& path = ev->Get()->Path;
-        LOG_D("AddDatabaseRequest, path: " << path << ", ready: " << Ready);
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "[ydb] [ComputeDatabaseCache]: AddDatabaseRequest,",
+            {"path", path},
+            {"ready", Ready});
         Databases.insert(path);
         Send(ev->Sender, new TEvYdbCompute::TEvAddDatabaseResponse{}, 0, ev->Cookie);
         Counters.AddDatabaseRequest.InFly->Dec();

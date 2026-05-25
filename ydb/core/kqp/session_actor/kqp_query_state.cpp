@@ -2,19 +2,13 @@
 
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SESSION
 
 namespace NKikimr::NKqp {
 
 using namespace NSchemeCache;
-
-#define LOG_C(msg) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-#define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
-
 
 TKqpQueryState::TQueryTxId::TQueryTxId(const TQueryTxId& other) {
     YQL_ENSURE(!Id);
@@ -49,8 +43,8 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
             case TSchemeCacheNavigate::EStatus::Ok: {
                 auto expectedVersion = TableVersions.FindPtr(TTableId(entry.TableId.PathId));
                 if (!expectedVersion) {
-                    LOG_W("Unexpected tableId in scheme cache navigate reply"
-                        << ", tableId: " << entry.TableId);
+                    YDB_LOG_WARN("Unexpected tableId in scheme cache navigate reply",
+                        {"tableId", entry.TableId});
                     continue;
                 }
 
@@ -60,10 +54,10 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                 }
 
                 if (entry.TableId.SchemaVersion && entry.TableId.SchemaVersion != *expectedVersion) {
-                    LOG_I("Scheme version mismatch"
-                        << ", pathId: " << entry.TableId.PathId
-                        << ", expected version: " << *expectedVersion
-                        << ", actual version: " << entry.TableId.SchemaVersion);
+                    YDB_LOG_INFO("Scheme version mismatch, expected, actual",
+                        {"pathId", entry.TableId.PathId},
+                        {"version", *expectedVersion},
+                        {"#_version", entry.TableId.SchemaVersion});
                     return false;
                 }
 
@@ -73,9 +67,9 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
             case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
             case TSchemeCacheNavigate::EStatus::PathNotTable:
             case TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-                LOG_I("Scheme error"
-                    << ", pathId: " << entry.TableId.PathId
-                    << ", status: " << entry.Status);
+                YDB_LOG_INFO("Scheme error",
+                    {"pathId", entry.TableId.PathId},
+                    {"status", entry.Status});
                 return false;
 
             case TSchemeCacheNavigate::EStatus::LookupError:
@@ -87,9 +81,9 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
             default:
                 // Unexpected reply, do not invalidate the query as it may block the query execution.
                 // Hard validation will be performed later during the query execution.
-                LOG_E("Unexpected reply from scheme cache"
-                    << ", pathId: " << entry.TableId.PathId
-                    << ", status: " << entry.Status);
+                YDB_LOG_ERROR("Unexpected reply from scheme cache",
+                    {"pathId", entry.TableId.PathId},
+                    {"status", entry.Status});
                 break;
         }
     }

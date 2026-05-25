@@ -13,6 +13,9 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
@@ -25,8 +28,12 @@ static constexpr TDuration MaxPlanTickDelay = TDuration::Seconds(30);
 
 static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus status,
         ui64 txid, ui64 stepId, const TActorContext &ctx, ui64 tabletId) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << tabletId << " txid# " << txid
-        << " step# " << stepId << " Status# " << status << " SEND to# " << proxy.ToString() << " Proxy marker# C1");
+    YDB_LOG_CTX_DEBUG(ctx, "SEND Proxy marker# C1",
+        {"tablet", tabletId},
+        {"txid", txid},
+        {"step", stepId},
+        {"Status", status},
+        {"to", proxy.ToString()});
     ctx.Send(proxy, new TEvTxProxy::TEvProposeTransactionStatus(status, txid, stepId));
 }
 
@@ -179,8 +186,9 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
 
 void TTxCoordinator::Handle(TEvTxProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
     TTransactionProposal proposal = MakeTransactionProposal(ev, MonCounters.TxIn);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " txid# " << proposal.TxId
-        << " HANDLE EvProposeTransaction marker# C0");
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvProposeTransaction marker# C0",
+        {"tablet", TabletID()},
+        {"txid", proposal.TxId});
     PlanTx(std::move(proposal), ctx);
 }
 
@@ -188,8 +196,9 @@ void TTxCoordinator::HandleEnqueue(TEvTxProxy::TEvProposeTransaction::TPtr &ev, 
     TryInitMonCounters(ctx);
 
     TTransactionProposal proposal = MakeTransactionProposal(ev, MonCounters.TxIn);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " txid# " << proposal.TxId
-        << " HANDLE Enqueue EvProposeTransaction");
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE Enqueue EvProposeTransaction",
+        {"tablet", TabletID()},
+        {"txid", proposal.TxId});
 
     if (Y_UNLIKELY(Stopping)) {
         return SendTransactionStatus(proposal.Proxy,
@@ -264,8 +273,11 @@ void TTxCoordinator::SchedulePlanTick() {
     TDuration delay = Min(TInstant::MilliSeconds(next) - now, MaxPlanTickDelay);
 
     // Schedule using an absolute deadline so we don't wake up early due to stale timer
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COORDINATOR,
-        "Coordinator# " << TabletID() << " scheduling step " << next << " in " << delay << " at " << (monotonic + delay));
+    YDB_LOG_TRACE("scheduling step in at",
+        {"Coordinator", TabletID()},
+        {"next", next},
+        {"delay", delay},
+        {"#_(monotonic + delay)", (monotonic + delay)});
     if (delay > TDuration::Zero()) {
         Schedule(monotonic + delay, new TEvPrivate::TEvPlanTick(next));
     } else {
@@ -289,8 +301,11 @@ void TTxCoordinator::SchedulePlanTickExact(ui64 next) {
 
     TDuration delay = Min(TInstant::MilliSeconds(next) - now, MaxPlanTickDelay);
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COORDINATOR,
-        "Coordinator# " << TabletID() << " scheduling step " << next << " in " << delay << " at " << (monotonic + delay));
+    YDB_LOG_TRACE("scheduling step in at",
+        {"Coordinator", TabletID()},
+        {"next", next},
+        {"delay", delay},
+        {"#_(monotonic + delay)", (monotonic + delay)});
     if (delay > TDuration::Zero()) {
         Schedule(monotonic + delay, new TEvPrivate::TEvPlanTick(next));
     } else {
@@ -318,7 +333,9 @@ ui64 TTxCoordinator::AlignPlanStep(ui64 step, bool volatilePlan) {
 }
 
 void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx) {
-    //LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " HANDLE EvPlanTick LastPlanned " << VolatileState.LastPlanned);
+    //YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvPlanTick LastPlanned",
+    //      {"tablet", TabletID()},
+    //      {"LastPlanned", VolatileState.LastPlanned});
 
     if (VolatileState.Preserved) {
         // Avoid planning any new transactions, wait until we are stopped
@@ -393,23 +410,26 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
 
 void TTxCoordinator::Handle(TEvMediatorQueueConfirmations::TPtr &ev, const TActorContext &ctx) {
     TEvMediatorQueueConfirmations *msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID()
-        << " HANDLE EvMediatorQueueConfirmations MediatorId# " << msg->Confirmations->MediatorId);
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvMediatorQueueConfirmations",
+        {"tablet", TabletID()},
+        {"MediatorId", msg->Confirmations->MediatorId});
     Execute(CreateTxMediatorConfirmations(std::move(msg->Confirmations)), ctx);
 }
 
 void TTxCoordinator::Handle(TEvMediatorQueueStop::TPtr &ev, const TActorContext &ctx) {
     const TEvMediatorQueueStop *msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID()
-        << " HANDLE EvMediatorQueueStop MediatorId# " << msg->MediatorId);
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvMediatorQueueStop",
+        {"tablet", TabletID()},
+        {"MediatorId", msg->MediatorId});
     TMediator &mediator = Mediator(msg->MediatorId, ctx);
     mediator.Active = false;
 }
 
 void TTxCoordinator::Handle(TEvMediatorQueueRestart::TPtr &ev, const TActorContext &ctx) {
     const TEvMediatorQueueRestart *msg = ev->Get();
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID()
-        << " HANDLE EvMediatorQueueRestart MediatorId# " << msg->MediatorId);
+    YDB_LOG_CTX_NOTICE(ctx, "HANDLE EvMediatorQueueRestart",
+        {"tablet", TabletID()},
+        {"MediatorId", msg->MediatorId});
 
     TMediator &mediator = Mediator(msg->MediatorId, ctx);
     mediator.Active = true;
@@ -419,9 +439,12 @@ void TTxCoordinator::Handle(TEvMediatorQueueRestart::TPtr &ev, const TActorConte
 void TTxCoordinator::SendStepConfirmations(TCoordinatorStepConfirmations &confirmations, const TActorContext &ctx) {
     while (!confirmations.Queue.empty()) {
         auto &x = confirmations.Queue.front();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " txid# " << x.TxId
-            << " stepId# " << x.Step << " Status# " << x.Status
-            << " SEND EvProposeTransactionStatus to# " << x.ProxyId.ToString() << " Proxy");
+        YDB_LOG_CTX_DEBUG(ctx, "SEND EvProposeTransactionStatus Proxy",
+            {"tablet", TabletID()},
+            {"txid", x.TxId},
+            {"stepId", x.Step},
+            {"Status", x.Status},
+            {"to", x.ProxyId.ToString()});
         ctx.Send(x.ProxyId, new TEvTxProxy::TEvProposeTransactionStatus(x.Status, x.TxId, x.Step));
         if (VolatileState.LastConfirmedStep < x.Step) {
             VolatileState.LastConfirmedStep = x.Step;
@@ -434,10 +457,9 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
 
     if(0 == record.MediatorsSize()) {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR
-                     , "tablet# " << TabletID()
-                    << " HANDLE EvCoordinatorConfiguration Version# " << record.GetVersion()
-                    << " recive empty mediators set");
+        YDB_LOG_CTX_ERROR(ctx, "HANDLE EvCoordinatorConfiguration recive empty mediators set",
+            {"tablet", TabletID()},
+            {"Version", record.GetVersion()});
         Y_ABORT("empty mediators set");
         return;
     }
@@ -455,9 +477,9 @@ void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const
 
 void TTxCoordinator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_COORDINATOR
-                 , "tablet# " << TabletID()
-                << " HANDLE TEvConfigure Version# " << record.GetVersion());
+    YDB_LOG_CTX_NOTICE(ctx, "HANDLE TEvConfigure",
+        {"tablet", TabletID()},
+        {"Version", record.GetVersion()});
 
     DoConfiguration(*ev->Get(), ctx, ev->Sender);
 }
@@ -575,9 +597,11 @@ void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &
         }
 
         for (const auto& tx: it->Transactions) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Send from# " << TabletID()
-                << " to mediator# " << it->MediatorId << ", step# " << it->Step
-                << ", txid# " << tx.TxId << " marker# C2");
+            YDB_LOG_CTX_DEBUG(ctx, "Send marker# C2",
+                {"from", TabletID()},
+                {"to_mediator", it->MediatorId},
+                {"step", it->Step},
+                {"txid", tx.TxId});
         }
 
         if (VolatileState.LastSentStep < it->Step) {
@@ -612,7 +636,9 @@ bool TTxCoordinator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const
 void TTxCoordinator::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
     const auto* msg = ev->Get();
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR, "OnTabletStop: " << TabletID() << " reason = " << msg->GetReason());
+    YDB_LOG_CTX_INFO(ctx, "reason",
+        {"OnTabletStop", TabletID()},
+        {"GetReason", msg->GetReason()});
 
     switch (msg->GetReason()) {
         case TEvTablet::TEvTabletStop::ReasonStop:

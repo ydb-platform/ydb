@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -19,17 +22,21 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESPONSE_TABLET_SEQUENCE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxResponseTabletSequence()::Execute");
+        YDB_LOG_DEBUG("THive::TTxResponseTabletSequence()::Execute",
+            {"GetLogPrefix", GetLogPrefix()});
         const auto& pbRecord(Event->Get()->Record);
         if (!pbRecord.HasOwner()) {
-            BLOG_ERROR("Invalid response received");
+            YDB_LOG_ERROR("Invalid response received",
+                {"GetLogPrefix", GetLogPrefix()});
             return true;
         }
         if (pbRecord.GetBeginId() != pbRecord.GetEndId()) {
             Y_ABORT_UNLESS(pbRecord.GetOwner().GetOwner() == Self->TabletID());
             Owner = {TSequencer::NO_OWNER, pbRecord.GetOwner().GetOwnerIdx()};
             Sequence = {pbRecord.GetBeginId(), pbRecord.GetEndId()};
-            BLOG_D("Received sequence " << Sequence);
+            YDB_LOG_DEBUG("Received sequence",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"Sequence", Sequence});
             if (Self->Sequencer.AddFreeSequence(Owner, Sequence)) {
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Sequences>()
@@ -41,11 +48,14 @@ public:
                         .Key(Sequence.Begin, Sequence.End)
                         .Update<Schema::TabletOwners::OwnerId>(Self->TabletID());
             } else {
-                BLOG_D("This sequence " << Sequence << " already exists");
+                YDB_LOG_DEBUG("This sequence already exists",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Sequence", Sequence});
                 Sequence.Clear();
             }
         } else {
-            BLOG_D("Received empty sequence");
+            YDB_LOG_DEBUG("Received empty sequence",
+                {"GetLogPrefix", GetLogPrefix()});
         }
         if (pbRecord.GetOwner().GetOwnerIdx() >= Self->RequestingSequenceIndex) {
             Self->RequestingSequenceNow = false;
@@ -54,7 +64,8 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxResponseTabletSequence()::Complete");
+        YDB_LOG_DEBUG("THive::TTxResponseTabletSequence()::Complete",
+            {"GetLogPrefix", GetLogPrefix()});
         if (!Sequence.Empty()) {
             Self->ProcessPendingOperations();
         }

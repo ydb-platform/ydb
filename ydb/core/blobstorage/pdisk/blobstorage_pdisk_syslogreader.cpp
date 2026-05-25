@@ -5,6 +5,7 @@
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
 #include "blobstorage_pdisk_syslogreader.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -323,8 +324,11 @@ void TSysLogReader::FindTheBestRecord() {
             BestRecordLastOffset = idx + LoopOffset;
         }
     }
-    P_LOG(PRI_INFO, BPD01, "SysLogReader found the best record", (BestRecordFirstOffset, BestRecordFirstOffset),
-            (BestRecordLastOffset, BestRecordLastOffset), (BestNonce, BestNonce));
+    YDB_LOG_P_LOG(PRI_INFO, "SysLogReader found the best record",
+        {"Marker", "BPD01"},
+        {"BestRecordFirstOffset", BestRecordFirstOffset},
+        {"BestRecordLastOffset", BestRecordLastOffset},
+        {"BestNonce", BestNonce});
     VerboseCheck(BestNonce > 0, "No best record found! Marker# BPS06");
     // Can become replied at this point
 }
@@ -391,7 +395,8 @@ void TSysLogReader::PrepareResult() {
 
 void TSysLogReader::Reply() {
     if (!IsReplied) {
-        P_LOG(PRI_DEBUG, BPD01, Result->ToString());
+        YDB_LOG_P_LOG(PRI_DEBUG, Result->ToString(),
+            {"Marker", "BPD01"});
         PCtx->ActorSystem->Send(PCtx->PDiskActor, Result.Release());
         IsReplied = true;
     }
@@ -406,7 +411,9 @@ bool TSysLogReader::VerboseCheck(bool condition, const char *desctiption) {
             str << desctiption << " ";
             DumpDebugInfo(str, true);
             Result->ErrorReason = str.Str();
-            P_LOG(PRI_ERROR, BPD01, "SysLogRead check failed", (Result, Result->ToString()));
+            YDB_LOG_P_LOG(PRI_ERROR, "SysLogRead check failed",
+                {"Marker", "BPD01"},
+                {"Result", Result->ToString()});
             Reply();
         }
     }

@@ -1,4 +1,7 @@
 #include "console_configs_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -15,7 +18,8 @@ public:
                const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "Cannot remove subscription: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot remove",
+            {"subscription", error});
 
         Response->Record.MutableStatus()->SetCode(code);
         Response->Record.MutableStatus()->SetReason(error);
@@ -30,7 +34,8 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxRemoveConfigSubscription Execute: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveConfigSubscription",
+            {"Execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
@@ -64,8 +69,8 @@ public:
                                                          Request->Cookie);
             Self->ApplyPendingSubscriptionModifications(ctx, ev);
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Send TEvRemoveConfigSubscriptionResponse: " << Response->Record.ShortDebugString());
+            YDB_LOG_CTX_TRACE(ctx, "Send",
+                {"TEvRemoveConfigSubscriptionResponse", Response->Record.ShortDebugString()});
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
         }
 

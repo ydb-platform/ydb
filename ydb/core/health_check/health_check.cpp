@@ -37,6 +37,9 @@
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HEALTH
 
 static decltype(auto) make_vslot_tuple(const NKikimrBlobStorage::TVSlotId& id) {
     return std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
@@ -56,10 +59,6 @@ struct std::hash<NKikimrBlobStorage::TVSlotId> {
         return std::hash<decltype(tp)>()(tp);
     }
 };
-
-#define BLOG_CRIT(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::HEALTH, stream)
 
 namespace NKikimr::NHealthCheck {
 
@@ -922,7 +921,8 @@ public:
 
                     auto groupId = vDisk.GetVDiskID().GetGroupID();
                     if (NeedWhiteboardInfoForGroup(groupId)) {
-                        BLOG_D("Requesting whiteboard for group " << groupId);
+                        YDB_LOG_DEBUG("Requesting whiteboard for group",
+                            {"groupId", groupId});
                         RequestStorageNode(vDisk.GetVDiskLocation().GetNodeID());
                     }
                 }
@@ -1006,12 +1006,15 @@ public:
 
     void RequestDone(const char* name) {
         --Requests;
-        BLOG_TRACE("RequestDone(" << name << "): remaining " << Requests);
+        YDB_LOG_TRACE("RequestDone( ): remaining",
+            {"name", name},
+            {"Requests", Requests});
         if (Requests == 0) {
             ReplyAndPassAway();
         }
         if (Requests < 0) {
-            BLOG_CRIT("Requests < 0 in RequestDone(" << name << ")");
+            YDB_LOG_CRIT("Requests < 0 in RequestDone(",
+                {"name", name});
         }
     }
 
@@ -1762,7 +1765,8 @@ public:
                 }
             }
         } else {
-            BLOG_D("TEvNavigateKeySetResult error: " << response.GetError());
+            YDB_LOG_DEBUG("TEvNavigateKeySetResult",
+                {"error", response.GetError()});
             if (response.GetError() == "PathErrorUnknown") {
                 auto result = MakeHolder<TEvSelfCheckResult>();
                 result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_UNSPECIFIED);
@@ -2971,7 +2975,9 @@ public:
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
         checker.ReportStatus(context);
 
-        BLOG_D("Group " << groupId << " has status " << context.GetOverallStatus());
+        YDB_LOG_DEBUG("Group has status",
+            {"groupId", groupId},
+            {"GetOverallStatus", context.GetOverallStatus()});
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 

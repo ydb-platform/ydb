@@ -3,6 +3,9 @@
 #include "execution_unit_ctors.h"
 
 #include <ydb/core/tx/locks/time_counters.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -102,9 +105,9 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
                 if (DataShard.TryCaptureTxCache(mem)) {
                     tx->SetTxCacheUsage(mem);
                 } else {
-                    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                               "TBuildAndWaitDependenciesUnit at " << DataShard.TabletID()
-                               << " released data for tx " << tx->GetTxId());
+                    YDB_LOG_CTX_INFO(ctx, "TBuildAndWaitDependenciesUnit at released data for tx",
+                        {"TabletID", DataShard.TabletID()},
+                        {"GetTxId", tx->GetTxId()});
 
                     DataShard.IncCounter(COUNTER_INACTIVE_TX_DATA_RELEASES);
                     tx->ReleaseTxData(txc, ctx);

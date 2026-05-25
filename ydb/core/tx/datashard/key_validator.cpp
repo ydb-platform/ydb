@@ -6,6 +6,9 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 
 
@@ -30,7 +33,9 @@ void TKeyValidator::AddReadRange(const TTableId& tableId, const TVector<NTable::
         columnOps.emplace_back(std::move(op));
     }
 
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD, "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
+    YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "--",
+        {"AddReadRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
+        {"table", tableId});
 
     auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse);
 
@@ -51,7 +56,9 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
         columnOps.emplace_back(std::move(op));
     }
 
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD, "-- AddWriteRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
+    YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "--",
+        {"AddWriteRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
+        {"table", tableId});
 
     auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
     auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);

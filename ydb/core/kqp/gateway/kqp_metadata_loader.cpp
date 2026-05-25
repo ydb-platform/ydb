@@ -16,6 +16,9 @@
 
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NKqp {
 
@@ -873,18 +876,19 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
         const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index);
         for (const auto& implTablePath : implTablePaths) {
             if (!index.SchemaVersion) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
+                YDB_LOG_CTX_DEBUG(*ActorSystem, "Load index metadata without schema version check",
+                    {"index", index.Name});
                 children.push_back(
                     LoadTableMetadata(cluster, implTablePath,
                         TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken)
                 );
             } else {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata with schema version check"
-                    << "index: " << index.Name
-                    << "pathId: " << index.LocalPathId
-                    << "ownerId: " << index.PathOwnerId
-                    << "schemaVersion: " << index.SchemaVersion
-                    << "tableOwnerId: " << tableOwnerId);
+                YDB_LOG_CTX_DEBUG(*ActorSystem, "Load index metadata with schema version check",
+                    {"index", index.Name},
+                    {"pathId", index.LocalPathId},
+                    {"ownerId", index.PathOwnerId},
+                    {"schemaVersion", index.SchemaVersion},
+                    {"tableOwnerId", tableOwnerId});
                 auto ownerId = index.PathOwnerId ? index.PathOwnerId : tableOwnerId; //for compat with 20-2
                 children.push_back(
                     LoadIndexMetadataByPathId(cluster,
@@ -1064,7 +1068,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const auto externalEntry = resolveEntityInsideDataSource ? std::optional<NavigateEntryResult>{} : externalEntryItem;
     const ui64 expectedSchemaVersion = GetExpectedVersion(entityName);
 
-    LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load table metadata from cache by path, request" << GetDebugString(entityName));
+    YDB_LOG_CTX_DEBUG(*ActorSystem, "Load table metadata from cache by path, request",
+        {"#_GetDebugString(entityName)", GetDebugString(entityName)});
 
     auto navigate = MakeHolder<TNavigate>();
     navigate->ResultSet.emplace_back(entry);

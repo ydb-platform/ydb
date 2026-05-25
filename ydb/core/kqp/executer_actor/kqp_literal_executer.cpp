@@ -9,6 +9,10 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr {
 namespace NKqp {
@@ -101,29 +105,46 @@ public:
             CancelAt = StartTime + *Request.CancelAfter;
         }
 
-        KQP_STLOG_D(KQPLIT, "Begin literal execution",
-            (operation_timeout, Request.Timeout),
-            (cancel_after, Request.CancelAfter),
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG(".. Begin literal execution",
+            {"Marker", "KQPLIT"},
+            {"ActorId", SelfId()},
+            {"TxId", TxId},
+            {"Ctx", *GetUserRequestContext()},
+            {"operation_timeout", Request.Timeout},
+            {"cancel_after", Request.CancelAfter},
+            {"trace_id", TraceId()});
     }
 
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral() {
         try {
             ExecuteLiteralImpl();
         } catch (const TMemoryLimitExceededException&) {
-            KQP_STLOG_W(KQPLIT, "TKqpLiteralExecuter, memory limit exceeded.",
-                (trace_id, TraceId()));
+            YDB_LOG_WARN(".. TKqpLiteralExecuter, memory limit exceeded.",
+                {"Marker", "KQPLIT"},
+                {"ActorId", SelfId()},
+                {"TxId", TxId},
+                {"Ctx", *GetUserRequestContext()},
+                {"trace_id", TraceId()});
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
         } catch (const NMiniKQL::TKqpEnsureFail& e) {
-            KQP_STLOG_E(KQPLIT, "TKqpLiteralExecuter, TKqpEnsure failed.",
-                (trace_id, TraceId()));
+            YDB_LOG_ERROR(".. TKqpLiteralExecuter, TKqpEnsure failed.",
+                {"Marker", "KQPLIT"},
+                {"ActorId", SelfId()},
+                {"TxId", TxId},
+                {"Ctx", *GetUserRequestContext()},
+                {"trace_id", TraceId()});
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, EYqlIssueCode(e.GetCode()), e.GetMessage()));
         } catch (...) {
             auto msg = CurrentExceptionMessage();
-            KQP_STLOG_C(KQPLIT, "TKqpLiteralExecuter, unexpected exception caught: " << msg,
-                (trace_id, TraceId()));
+            YDB_LOG_CRIT(".. TKqpLiteralExecuter, unexpected exception",
+                {"Marker", "KQPLIT"},
+                {"ActorId", SelfId()},
+                {"TxId", TxId},
+                {"Ctx", *GetUserRequestContext()},
+                {"caught", msg},
+                {"trace_id", TraceId()});
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, msg));
         }
@@ -136,9 +157,13 @@ public:
             Stats->StartTs = TInstant::Now();
         }
 
-        KQP_STLOG_D(KQPLIT, "Begin literal execution",
-            (transactions_count, Request.Transactions.size()),
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG(".. Begin literal execution",
+            {"Marker", "KQPLIT"},
+            {"ActorId", SelfId()},
+            {"TxId", TxId},
+            {"Ctx", *GetUserRequestContext()},
+            {"transactions_count", Request.Transactions.size()},
+            {"trace_id", TraceId()});
 
         TasksGraph.BuildLiteralTasks();
 
@@ -205,8 +230,10 @@ public:
         }
 
         auto log = [as = TlsActivationContext->ActorSystem(), txId = TxId, taskId = task.Id](const TString& message) {
-            LOG_DEBUG_S(*as, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId << ", task: " << taskId << ". "
-                << message);
+            YDB_LOG_CTX_COMP_DEBUG(*as, NKikimrServices::KQP_TASKS_RUNNER, ".",
+                {"TxId", txId},
+                {"task", taskId},
+                {"message", message});
         };
 
         auto taskRunner = MakeDqTaskRunner(alloc, context, settings, log);
@@ -280,9 +307,13 @@ public:
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
         LiteralExecuterSpan.EndOk();
         CleanupCtx();
-        KQP_STLOG_D(KQPLIT, "Execution is complete",
-            (results_size, ResponseEv->ResultsSize()),
-            (trace_id, TraceId()));
+        YDB_LOG_DEBUG(".. Execution is complete",
+            {"Marker", "KQPLIT"},
+            {"ActorId", SelfId()},
+            {"TxId", TxId},
+            {"Ctx", *GetUserRequestContext()},
+            {"results_size", ResponseEv->ResultsSize()},
+            {"trace_id", TraceId()});
     }
 
 private:
@@ -306,8 +337,12 @@ private:
         auto now = AppData()->TimeProvider->Now();
 
         if (Deadline && *Deadline <= now) {
-            KQP_STLOG_I(KQPLIT, "Timeout exceeded.",
-                (trace_id, TraceId()));
+            YDB_LOG_INFO(".. Timeout exceeded.",
+                {"Marker", "KQPLIT"},
+                {"ActorId", SelfId()},
+                {"TxId", TxId},
+                {"Ctx", *GetUserRequestContext()},
+                {"trace_id", TraceId()});
 
             CreateErrorResponse(Ydb::StatusIds::TIMEOUT,
                 YqlIssue({}, TIssuesIds::KIKIMR_TIMEOUT, "Request timeout exceeded."));
@@ -315,8 +350,12 @@ private:
         }
 
         if (CancelAt && *CancelAt <= now) {
-            KQP_STLOG_I(KQPLIT, "CancelAt exceeded.",
-                (trace_id, TraceId()));
+            YDB_LOG_INFO(".. CancelAt exceeded.",
+                {"Marker", "KQPLIT"},
+                {"ActorId", SelfId()},
+                {"TxId", TxId},
+                {"Ctx", *GetUserRequestContext()},
+                {"trace_id", TraceId()});
 
             CreateErrorResponse(Ydb::StatusIds::CANCELLED,
                 YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_CANCELLED, "Request timeout exceeded."));
@@ -332,8 +371,13 @@ private:
     }
 
     void InternalError(const TString& message) {
-        KQP_STLOG_E(KQPLIT, message,
-            (trace_id, TraceId()));
+        YDB_LOG_ERROR(". .",
+            {"Marker", "KQPLIT"},
+            {"ActorId", SelfId()},
+            {"TxId", TxId},
+            {"Ctx", *GetUserRequestContext()},
+            {"message", message},
+            {"trace_id", TraceId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         issue.AddSubIssue(MakeIntrusive<TIssue>(message));
         CreateErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, issue);

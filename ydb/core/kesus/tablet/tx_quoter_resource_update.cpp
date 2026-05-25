@@ -1,4 +1,7 @@
 #include "tablet_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -28,10 +31,13 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxQuoterResourceUpdate::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", id=" << Record.GetResource().GetResourceId() << ", path=\"" << Record.GetResource().GetResourcePath()
-                    << "\", config=" << Record.GetResource().GetHierarchicalDRRResourceConfig() << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxQuoterResourceUpdate::Execute, path= ,",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie},
+            {"id", Record.GetResource().GetResourceId()},
+            {"GetResourcePath", Record.GetResource().GetResourcePath()},
+            {"config", Record.GetResource().GetHierarchicalDRRResourceConfig()});
 
         const auto& resourceDesc = Record.GetResource();
         TQuoterResourceTree* resource = resourceDesc.GetResourceId() ?
@@ -56,9 +62,10 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
         db.Table<Schema::QuoterResources>().Key(resource->GetResourceId()).Update(
             NIceDb::TUpdate<Schema::QuoterResources::Props>(resource->GetProps()));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] Updated quoter resource "
-                << resource->GetResourceId() << " \"" << resource->GetPath() << "\"");
+        YDB_LOG_CTX_DEBUG(ctx, "] Updated quoter resource",
+            {"TabletID", Self->TabletID()},
+            {"GetResourceId", resource->GetResourceId()},
+            {"GetPath", resource->GetPath()});
 
         ReplyOk(resource->GetResourceId());
 
@@ -70,9 +77,10 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxQuoterResourceUpdate::Complete (sender=" << Sender
-                    << ", cookie=" << Cookie << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxQuoterResourceUpdate::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, std::move(Reply), 0, Cookie);

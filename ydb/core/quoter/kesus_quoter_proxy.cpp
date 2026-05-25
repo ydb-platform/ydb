@@ -22,23 +22,9 @@
 
 #include <limits>
 #include <cmath>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#if defined PLOG_TRACE || defined PLOG_DEBUG || defined PLOG_INFO || defined PLOG_WARN || defined PLOG_ERROR \
-    || defined KESUS_PROXY_LOG_TRACE || defined KESUS_PROXY_LOG_DEBUG || defined KESUS_PROXY_LOG_INFO || defined KESUS_PROXY_LOG_WARN || defined KESUS_PROXY_LOG_ERROR
-#error log macro definition clash
-#endif
-
-#define PLOG_TRACE(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_PROXY, stream)
-#define PLOG_DEBUG(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_PROXY, stream)
-#define PLOG_INFO(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_PROXY, stream)
-#define PLOG_WARN(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_PROXY, stream)
-#define PLOG_ERROR(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_PROXY, stream)
-
-#define KESUS_PROXY_LOG_TRACE(stream) PLOG_TRACE(LogPrefix << stream)
-#define KESUS_PROXY_LOG_DEBUG(stream) PLOG_DEBUG(LogPrefix << stream)
-#define KESUS_PROXY_LOG_INFO(stream) PLOG_INFO(LogPrefix << stream)
-#define KESUS_PROXY_LOG_WARN(stream) PLOG_WARN(LogPrefix << stream)
-#define KESUS_PROXY_LOG_ERROR(stream) PLOG_ERROR(LogPrefix << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::QUOTER_PROXY
 
 namespace NKikimr {
 namespace NQuoter {
@@ -403,7 +389,10 @@ private:
     }
 
     void SendProxySessionError(TEvQuota::TEvProxySession::EResult code, const TString& resourcePath) {
-        KESUS_PROXY_LOG_TRACE("ProxySession(\"" << resourcePath << "\", Error: " << code << ")");
+        YDB_LOG_TRACE("ProxySession( ,",
+            {"LogPrefix", LogPrefix},
+            {"resourcePath", resourcePath},
+            {"Error", code});
         Send(QuoterServiceId,
              new TEvQuota::TEvProxySession(
                  code,
@@ -429,7 +418,10 @@ private:
     void SendProxySessionIfNotSent(TResourceState* resState) {
         if (!resState->ProxySessionWasSent) {
             resState->ProxySessionWasSent = true;
-            KESUS_PROXY_LOG_TRACE("ProxySession(\"" << resState->Resource << "\", " << resState->ResId << ")");
+            YDB_LOG_TRACE("ProxySession( ,",
+                {"LogPrefix", LogPrefix},
+                {"Resource", resState->Resource},
+                {"ResId", resState->ResId});
             Send(QuoterServiceId,
                 new TEvQuota::TEvProxySession(
                     TEvQuota::TEvProxySession::Success,
@@ -551,14 +543,18 @@ private:
 
     void Handle(TEvQuota::TEvProxyRequest::TPtr& ev) {
         TEvQuota::TEvProxyRequest* msg = ev->Get();
-        KESUS_PROXY_LOG_INFO("ProxyRequest \"" << msg->Resource << "\"");
+        YDB_LOG_INFO("ProxyRequest",
+            {"LogPrefix", LogPrefix},
+            {"Resource", msg->Resource});
         Y_ABORT_UNLESS(ev->Sender == QuoterServiceId);
 
         auto resourceIt = Resources.find(msg->Resource);
         if (resourceIt == Resources.end()) {
             const TString canonPath = NKesus::CanonizeQuoterResourcePath(msg->Resource);
             if (canonPath != msg->Resource) {
-                KESUS_PROXY_LOG_WARN("Resource \"" << msg->Resource << "\" has incorrect name. Maybe this was some error on client side.");
+                YDB_LOG_WARN("Resource has incorrect name. Maybe this was some error on client side.",
+                    {"LogPrefix", LogPrefix},
+                    {"Resource", msg->Resource});
                 SendProxySessionError(TEvQuota::TEvProxySession::GenericError, msg->Resource);
                 return;
             }
@@ -582,7 +578,9 @@ private:
 
     void InitiateNewSessionToResource(const TString& resourcePath) {
         if (Connected) {
-            KESUS_PROXY_LOG_DEBUG("Subscribe on resource \"" << resourcePath << "\"");
+            YDB_LOG_DEBUG("Subscribe on resource",
+                {"LogPrefix", LogPrefix},
+                {"resourcePath", resourcePath});
             auto ev = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
             ev->Record.SetProtocolVersion(NKesus::NQuoter::QUOTER_PROTOCOL_VERSION);
             ActorIdToProto(SelfId(), ev->Record.MutableActorID());
@@ -659,17 +657,23 @@ private:
 
         if (Connected) {
             if (UpdateEv) {
-                KESUS_PROXY_LOG_TRACE("UpdateConsumptionState(" << UpdateEv->Record << ")");
+                YDB_LOG_TRACE("UpdateConsumptionState(",
+                    {"LogPrefix", LogPrefix},
+                    {"Record", UpdateEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, UpdateEv.Release());
             }
 
             if (AccountEv && AccountEv->Record.GetResourcesInfo().size() > 0) {
-                KESUS_PROXY_LOG_TRACE("AccountResources(" << AccountEv->Record << ")");
+                YDB_LOG_TRACE("AccountResources(",
+                    {"LogPrefix", LogPrefix},
+                    {"Record", AccountEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, AccountEv.Release());
             }
 
             if (ReplicationEv && ReplicationEv->Record.GetResourcesInfo().size() > 0) {
-                KESUS_PROXY_LOG_TRACE("ReportResources(" << ReplicationEv->Record << ")");
+                YDB_LOG_TRACE("ReportResources(",
+                    {"LogPrefix", LogPrefix},
+                    {"Record", ReplicationEv->Record});
                 NTabletPipe::SendData(SelfId(), KesusPipeClient, ReplicationEv.Release());
             }
         }
@@ -690,7 +694,10 @@ private:
 
         if (!Connected) {
             for (auto&& alloc : OfflineAllocationEvSchedule) {
-                KESUS_PROXY_LOG_TRACE("Schedule offline allocation in " << alloc.first << ": " << PrintResources(*alloc.second));
+                YDB_LOG_TRACE("Schedule offline allocation in",
+                    {"LogPrefix", LogPrefix},
+                    {"first", alloc.first},
+                    {"#_PrintResources(*alloc.second)", PrintResources(*alloc.second)});
                 TAutoPtr<IEventHandle> h = new IEventHandle(SelfId(), SelfId(), alloc.second.Release(), 0, OfflineAllocationCookie);
                 TActivationContext::Schedule(alloc.first, std::move(h));
             }
@@ -713,10 +720,13 @@ private:
         TDuration averageDuration;
         double averageAmount;
         std::tie(averageDuration, averageAmount) = res.AverageAllocationParams;
-        KESUS_PROXY_LOG_TRACE("Mark \"" << res.Resource << "\" for offline allocation. Connected: " << Connected
-                              << ", SessionIsActive: " << res.SessionIsActive
-                              << ", AverageDuration: " << averageDuration
-                              << ", AverageAmount: " << averageAmount);
+        YDB_LOG_TRACE("Mark for offline allocation.",
+            {"LogPrefix", LogPrefix},
+            {"Resource", res.Resource},
+            {"Connected", Connected},
+            {"SessionIsActive", res.SessionIsActive},
+            {"AverageDuration", averageDuration},
+            {"AverageAmount", averageAmount});
         if (!Connected && res.SessionIsActive && averageDuration && averageAmount) {
             const TDuration when =
                 res.LastAllocated + averageDuration <= now ?
@@ -738,7 +748,11 @@ private:
 
     void ActivateSession(TResourceState& res, bool activate = true) {
         Y_ASSERT(res.SessionIsActive != activate);
-        KESUS_PROXY_LOG_INFO((activate ? "Activate" : "Deactivate") << " session to \"" << res.Resource << "\". Connected: " << Connected);
+        YDB_LOG_INFO("session to .",
+            {"LogPrefix", LogPrefix},
+            {"#_num_0", (activate ? "Activate" : "Deactivate")},
+            {"Resource", res.Resource},
+            {"Connected", Connected});
 
         res.SessionIsActive = activate;
         if (Connected) {
@@ -777,7 +791,10 @@ private:
                     resInfo->AddAmount(amount);
                 }
             }
-            KESUS_PROXY_LOG_INFO("Report session to \"" << res.Resource << "\". Total amount: " << totalAmount);
+            YDB_LOG_INFO("Report session to. Total",
+                {"LogPrefix", LogPrefix},
+                {"Resource", res.Resource},
+                {"amount", totalAmount});
             if (hasNonZeroAmount) {
                 resInfo->SetResourceId(res.ResId);
                 resInfo->SetStartUs(start.MicroSeconds());
@@ -809,7 +826,9 @@ private:
 
     void Handle(TEvQuota::TEvProxyStats::TPtr& ev) {
         TEvQuota::TEvProxyStats* msg = ev->Get();
-        KESUS_PROXY_LOG_TRACE("ProxyStats(" << PrintResources(*ev->Get()) << ")");
+        YDB_LOG_TRACE("ProxyStats(",
+            {"LogPrefix", LogPrefix},
+            {"#_PrintResources(*ev->Get())", PrintResources(*ev->Get())});
         for (const TEvQuota::TProxyStat& stat : msg->Stats) {
             const auto indexIt = ResIndex.find(stat.ResourceId);
             if (indexIt != ResIndex.end()) {
@@ -830,7 +849,11 @@ private:
                     *res.Counters.QueueSize = static_cast<i64>(stat.QueueSize);
                     *res.Counters.QueueWeight = static_cast<i64>(stat.QueueWeight);
                 }
-                KESUS_PROXY_LOG_TRACE("Set info for resource \"" << res.Resource << "\": { Available: " << res.Available << ", QueueWeight: " << res.QueueWeight << " }");
+                YDB_LOG_TRACE("Set info for resource : {",
+                    {"LogPrefix", LogPrefix},
+                    {"Resource", res.Resource},
+                    {"Available", res.Available},
+                    {"QueueWeight", res.QueueWeight});
                 CheckState(res);
                 AddResourceUpdate(res);
             }
@@ -867,7 +890,10 @@ private:
 
     void Handle(TEvQuota::TEvProxyCloseSession::TPtr& ev) {
         TEvQuota::TEvProxyCloseSession* msg = ev->Get();
-        KESUS_PROXY_LOG_TRACE("ProxyCloseSession(\"" << msg->Resource << "\", " << msg->ResourceId << ")");
+        YDB_LOG_TRACE("ProxyCloseSession( ,",
+            {"LogPrefix", LogPrefix},
+            {"Resource", msg->Resource},
+            {"ResourceId", msg->ResourceId});
         DeleteResourceInfo(msg->Resource, msg->ResourceId);
     }
 
@@ -877,20 +903,25 @@ private:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status == NKikimrProto::OK) {
-            KESUS_PROXY_LOG_DEBUG("Successfully connected to tablet");
+            YDB_LOG_DEBUG("Successfully connected to tablet",
+                {"LogPrefix", LogPrefix});
             Connected = true;
             KesusReconnectCount = 0;
             SubscribeToAllResources();
         } else {
             if (ev->Get()->Dead) {
-                KESUS_PROXY_LOG_WARN("Tablet doesn't exist");
+                YDB_LOG_WARN("Tablet doesn't exist",
+                    {"LogPrefix", LogPrefix});
                 SendToService(CreateUpdateEvent(TEvQuota::EUpdateState::Broken));
             } else {
-                KESUS_PROXY_LOG_WARN("Failed to connect to tablet. Status: " << ev->Get()->Status);
+                YDB_LOG_WARN("Failed to connect to tablet.",
+                    {"LogPrefix", LogPrefix},
+                    {"Status", ev->Get()->Status});
                 if (++KesusReconnectCount <= KesusReconnectLimit) {
                     ConnectToKesus(true);
                 } else {
-                    KESUS_PROXY_LOG_WARN("Too many reconnect attempts in a row, assuming kesus dead");
+                    YDB_LOG_WARN("Too many reconnect attempts in a row, assuming kesus dead",
+                        {"LogPrefix", LogPrefix});
                     SendToService(CreateUpdateEvent(TEvQuota::EUpdateState::Broken));
                     KesusReconnectCount = 0;
                 }
@@ -901,7 +932,8 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         Y_ABORT_UNLESS(ev->Get()->TabletId == GetKesusTabletId(),
                  "Got EvClientDestroyed with tablet %" PRIu64 ", but kesus tablet is %" PRIu64, ev->Get()->TabletId, GetKesusTabletId());
-        KESUS_PROXY_LOG_WARN("Disconnected from tablet");
+        YDB_LOG_WARN("Disconnected from tablet",
+            {"LogPrefix", LogPrefix});
         ConnectToKesus(true);
         DisconnectTime = TActivationContext::Now();
         OfflineAllocationCookie = NextCookie++;
@@ -917,7 +949,9 @@ private:
         if (!resourcePaths.empty()) {
             const auto& result = ev->Get()->Record;
             ServerVersion = result.GetProtocolVersion();
-            KESUS_PROXY_LOG_TRACE("SubscribeOnResourceResult(" << result << ")");
+            YDB_LOG_TRACE("SubscribeOnResourceResult(",
+                {"LogPrefix", LogPrefix},
+                {"result", result});
             Y_ABORT_UNLESS(result.ResultsSize() == resourcePaths.size(), "Expected %" PRISZT " resources, but got %" PRISZT, resourcePaths.size(), result.ResultsSize());
             for (size_t i = 0; i < resourcePaths.size(); ++i) {
                 const auto& resResult = result.GetResults(i);
@@ -927,7 +961,9 @@ private:
                     Y_ABORT_UNLESS(resState != nullptr);
                     const Ydb::StatusIds::StatusCode resStatus = resResult.GetError().GetStatus();
                     if (resStatus == Ydb::StatusIds::SUCCESS) {
-                        KESUS_PROXY_LOG_INFO("Initialized new session with resource \"" << resourcePaths[i] << "\"");
+                        YDB_LOG_INFO("Initialized new session with resource",
+                            {"LogPrefix", LogPrefix},
+                            {"#_resourcePaths[i]", resourcePaths[i]});
                         if (resState->ResId != Max<ui64>() && resState->ResId != resResult.GetResourceId()) { // Kesus was disconnected and then resource was recreated.
                             BreakResource(*resState, GetProxyUpdateEv());
                             ResIndex[resState->ResId] = Resources.end();
@@ -944,9 +980,15 @@ private:
                     } else {
                         // TODO: make cache with error results.
                         if (resStatus == Ydb::StatusIds::NOT_FOUND) {
-                            KESUS_PROXY_LOG_INFO("Resource \"" << resourcePaths[i] << "\" session initialization error: " << KesusErrorToString(resResult.GetError()));
+                            YDB_LOG_INFO("Resource session initialization",
+                                {"LogPrefix", LogPrefix},
+                                {"#_resourcePaths[i]", resourcePaths[i]},
+                                {"error", KesusErrorToString(resResult.GetError())});
                         } else {
-                            KESUS_PROXY_LOG_ERROR("Resource \"" << resourcePaths[i] << "\" session initialization error: " << KesusErrorToString(resResult.GetError()));
+                            YDB_LOG_ERROR("Resource session initialization",
+                                {"LogPrefix", LogPrefix},
+                                {"#_resourcePaths[i]", resourcePaths[i]},
+                                {"error", KesusErrorToString(resResult.GetError())});
                         }
                         ProcessSubscribeResourceError(resResult.GetError().GetStatus(), resState);
                     }
@@ -956,7 +998,9 @@ private:
     }
 
     void Handle(NKesus::TEvKesus::TEvResourcesAllocated::TPtr& ev) {
-        KESUS_PROXY_LOG_TRACE("ResourcesAllocated(" << ev->Get()->Record << ")");
+        YDB_LOG_TRACE("ResourcesAllocated(",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->Record", ev->Get()->Record});
         const TInstant now = TActivationContext::Now();
         for (const NKikimrKesus::TEvResourcesAllocated::TResourceInfo& allocatedInfo : ev->Get()->Record.GetResourcesInfo()) {
             TResourceState* res = FindResource(allocatedInfo.GetResourceId());
@@ -965,7 +1009,10 @@ private:
             }
             if (allocatedInfo.GetStateNotification().GetStatus() == Ydb::StatusIds::SUCCESS) {
                 const auto amount = allocatedInfo.GetAmount();
-                KESUS_PROXY_LOG_TRACE("Kesus allocated {\"" << res->Resource << "\", " << amount << "}");
+                YDB_LOG_TRACE("Kesus allocated { ,",
+                    {"LogPrefix", LogPrefix},
+                    {"Resource", res->Resource},
+                    {"amount", amount});
                 if (allocatedInfo.HasEffectiveProps()) { // changed
                     SetResProps(res, allocatedInfo.GetEffectiveProps());
                 }
@@ -978,7 +1025,10 @@ private:
                 CheckState(*res);
                 AddResourceUpdate(*res);
             } else {
-                KESUS_PROXY_LOG_WARN("Resource [" << res->Resource << "] is broken: " << KesusErrorToString(allocatedInfo.GetStateNotification()));
+                YDB_LOG_WARN("Resource [ ] is",
+                    {"LogPrefix", LogPrefix},
+                    {"Resource", res->Resource},
+                    {"broken", KesusErrorToString(allocatedInfo.GetStateNotification())});
                 BreakResource(*res, GetProxyUpdateEv());
             }
         }
@@ -989,7 +1039,9 @@ private:
             return;
         }
 
-        KESUS_PROXY_LOG_TRACE("OfflineResourceAllocation(" << PrintResources(*ev->Get()) << ")");
+        YDB_LOG_TRACE("OfflineResourceAllocation(",
+            {"LogPrefix", LogPrefix},
+            {"#_PrintResources(*ev->Get())", PrintResources(*ev->Get())});
         const TInstant now = TActivationContext::Now();
         for (const TEvPrivate::TEvOfflineResourceAllocation::TResourceInfo& allocatedInfo : ev->Get()->Resources) {
             TResourceState* res = FindResource(allocatedInfo.ResourceId);
@@ -997,7 +1049,10 @@ private:
                 continue;
             }
             const bool wasActive = res->SessionIsActive;
-            KESUS_PROXY_LOG_TRACE("Allocated {\"" << res->Resource << "\", " << allocatedInfo.Amount << "} offline");
+            YDB_LOG_TRACE("Allocated {, } offline",
+                {"LogPrefix", LogPrefix},
+                {"Resource", res->Resource},
+                {"Amount", allocatedInfo.Amount});
             res->SetAvailable(res->Available + allocatedInfo.Amount);
             res->LastAllocated = now;
             CheckState(*res);
@@ -1014,7 +1069,9 @@ private:
     }
 
     void Handle(NKesus::TEvKesus::TEvSyncResources::TPtr& ev) {
-        KESUS_PROXY_LOG_TRACE("SyncResources(" << ev->Get()->Record << ")");
+        YDB_LOG_TRACE("SyncResources(",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->Record", ev->Get()->Record});
         const TInstant now = TActivationContext::Now();
         for (const NKikimrKesus::TEvSyncResources::TResourceInfo& syncInfo : ev->Get()->Record.GetResourcesInfo()) {
             TResourceState* res = FindResource(syncInfo.GetResourceId());
@@ -1023,7 +1080,10 @@ private:
             }
 
             const auto available = syncInfo.GetAvailable();
-            KESUS_PROXY_LOG_TRACE("Kesus sync {\"" << res->Resource << "\", " << available << "}");
+            YDB_LOG_TRACE("Kesus sync { ,",
+                {"LogPrefix", LogPrefix},
+                {"Resource", res->Resource},
+                {"available", available});
             while (!res->ReportHistory.empty() && res->ReportHistory.front().ReportId < syncInfo.GetLastReportId()) {
                res->ReportHistory.pop_front();
             }
@@ -1038,7 +1098,9 @@ private:
 
     void Handle(NKesus::TEvKesus::TEvAccountResourcesAck::TPtr& ev) {
         const auto& result = ev->Get()->Record;
-        KESUS_PROXY_LOG_TRACE("AccountResourcesAck(" << result << ")");
+        YDB_LOG_TRACE("AccountResourcesAck(",
+            {"LogPrefix", LogPrefix},
+            {"result", result});
         for (int i = 0; i < result.GetResourcesInfo().size(); ++i) {
             const auto& resInfo = result.GetResourcesInfo(i);
             if (TResourceState* res = FindResource(resInfo.GetResourceId())) {
@@ -1111,7 +1173,10 @@ private:
     }
 
     void SendToService(THolder<TEvQuota::TEvProxyUpdate>&& ev) {
-        KESUS_PROXY_LOG_TRACE("ProxyUpdate(" << ev->QuoterState << ", " << PrintResources(*ev) << ")");
+        YDB_LOG_TRACE("ProxyUpdate(",
+            {"LogPrefix", LogPrefix},
+            {"QuoterState", ev->QuoterState},
+            {"#_PrintResources(*ev)", PrintResources(*ev)});
         Send(QuoterServiceId, std::move(ev));
     }
 
@@ -1176,7 +1241,9 @@ public:
     }
 
     void Bootstrap() {
-        KESUS_PROXY_LOG_INFO("Created kesus quoter proxy. Tablet id: " << GetKesusTabletId());
+        YDB_LOG_INFO("Created kesus quoter proxy. Tablet",
+            {"LogPrefix", LogPrefix},
+            {"id", GetKesusTabletId()});
         Counters.Init(CanonizePath(Path));
         if (AppData()->Icb) {
             TControlBoard::RegisterSharedControl(QuoterProxyProtocolVersion,
@@ -1203,10 +1270,10 @@ public:
             hFunc(NKesus::TEvKesus::TEvSyncResources, Handle);
             IgnoreFunc(NKesus::TEvKesus::TEvReportResourcesAck);
             default:
-                KESUS_PROXY_LOG_WARN("TKesusQuoterProxy::StateFunc unexpected event type# "
-                    << ev->GetTypeRewrite()
-                    << " event: "
-                    << ev->ToString());
+                YDB_LOG_WARN("TKesusQuoterProxy::StateFunc unexpected event",
+                    {"LogPrefix", LogPrefix},
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
                 Y_DEBUG_ABORT("Unknown event");
                 break;
         }
@@ -1237,9 +1304,11 @@ public:
 
     void ConnectToKesus(bool reconnection) {
         if (reconnection) {
-            KESUS_PROXY_LOG_INFO("Reconnecting to kesus");
+            YDB_LOG_INFO("Reconnecting to kesus",
+                {"LogPrefix", LogPrefix});
         } else {
-            KESUS_PROXY_LOG_DEBUG("Connecting to kesus");
+            YDB_LOG_DEBUG("Connecting to kesus",
+                {"LogPrefix", LogPrefix});
         }
         CleanupPreviousConnection();
 

@@ -14,6 +14,9 @@
 #include <util/generic/hash_set.h>
 
 #include <queue>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_MEDIATOR_TIMECAST
 
 namespace NKikimr {
 
@@ -272,8 +275,10 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         }
 
         const auto& client = MediatorPipe(mediator, ctx);
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-            << " SEND to Mediator# " << mediator.TabletId << " " << req->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "SEND",
+            {"Actor", ctx.SelfID},
+            {"to_Mediator", mediator.TabletId},
+            {"req", req->ToString()});
         NTabletPipe::SendData(ctx, client, req.release());
     }
 
@@ -300,8 +305,10 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         req->Record.AddAddTablets(tabletId);
 
         const auto& client = MediatorPipe(mediator, ctx);
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-            << " SEND to Mediator# " << mediator.TabletId << " " << req->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "SEND",
+            {"Actor", ctx.SelfID},
+            {"to_Mediator", mediator.TabletId},
+            {"req", req->ToString()});
         NTabletPipe::SendData(ctx, client, req.release());
     }
 
@@ -326,8 +333,10 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
         req->Record.AddRemoveTablets(tabletId);
 
         const auto& client = MediatorPipe(mediator, ctx);
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-            << " SEND to Mediator# " << mediator.TabletId << " " << req->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "SEND",
+            {"Actor", ctx.SelfID},
+            {"to_Mediator", mediator.TabletId},
+            {"req", req->ToString()});
         NTabletPipe::SendData(ctx, client, req.release());
     }
 
@@ -357,8 +366,10 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
 
         if (req->Record.BucketSize()) {
             const auto& client = MediatorPipe(mediator, ctx);
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-                << " SEND to Mediator# " << mediator.TabletId << " " << req->ToString());
+            YDB_LOG_CTX_DEBUG(ctx, "SEND",
+                {"Actor", ctx.SelfID},
+                {"to_Mediator", mediator.TabletId},
+                {"req", req->ToString()});
             NTabletPipe::SendData(ctx, client, req.release());
         }
     }
@@ -374,8 +385,10 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             auto req = std::make_unique<TEvMediatorTimecast::TEvWatch>(bucketId);
 
             const auto& client = MediatorPipe(mediator, ctx);
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-                << " SEND to Mediator# " << mediator.TabletId << " " << req->ToString());
+            YDB_LOG_CTX_DEBUG(ctx, "SEND",
+                {"Actor", ctx.SelfID},
+                {"to_Mediator", mediator.TabletId},
+                {"req", req->ToString()});
             NTabletPipe::SendData(ctx, client, req.release());
 
             bucket.WatchSent = true;
@@ -456,8 +469,9 @@ public:
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr& ev, const TActorContext& ctx) {
     const TEvMediatorTimecast::TEvRegisterTablet* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << msg->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"msg", msg->ToString()});
     const ui64 tabletId = msg->TabletId;
     const NKikimrSubDomains::TProcessingParams& processingParams = msg->ProcessingParams;
 
@@ -504,15 +518,18 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr
 
     TAutoPtr<TEvMediatorTimecast::TEvRegisterTabletResult> result(
         new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, tabletInfo.Entry));
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " SEND to Sender# " << ev->Sender << " " << result->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "SEND",
+        {"Actor", ctx.SelfID},
+        {"to_Sender", ev->Sender},
+        {"result", result->ToString()});
     ctx.Send(ev->Sender, result.Release());
 }
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnregisterTablet::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << msg->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"msg", msg->ToString()});
     const ui64 tabletId = msg->TabletId;
 
     auto it = Tablets.find(tabletId);
@@ -534,8 +551,9 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnregisterTablet::TP
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvWaitPlanStep::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << msg->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"msg", msg->ToString()});
     const ui64 tabletId = msg->TabletId;
     const ui64 planStep = msg->PlanStep;
 
@@ -580,8 +598,8 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvWaitPlanStep::TPtr& 
 }
 
 void TMediatorTimecastProxy::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE EvClientConnected");
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvClientConnected",
+        {"Actor", ctx.SelfID});
     TEvTabletPipe::TEvClientConnected* msg = ev->Get();
     if (msg->Status != NKikimrProto::OK) {
         TryResync(msg->ClientId, msg->TabletId, ctx);
@@ -589,16 +607,17 @@ void TMediatorTimecastProxy::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 }
 
 void TMediatorTimecastProxy::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE EvClientDestroyed");
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvClientDestroyed",
+        {"Actor", ctx.SelfID});
     TEvTabletPipe::TEvClientDestroyed* msg = ev->Get();
     TryResync(msg->ClientId, msg->TabletId, ctx);
 }
 
 void TMediatorTimecastProxy::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE EvDeliveryProblem " << msg->TabletId);
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvDeliveryProblem",
+        {"Actor", ctx.SelfID},
+        {"TabletId", msg->TabletId});
     auto it = MediatorCoordinators.find(msg->TabletId);
     if (it != MediatorCoordinators.end()) {
         Y_DEBUG_ABORT_UNLESS(!it->second.RetryPending);
@@ -610,8 +629,9 @@ void TMediatorTimecastProxy::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, 
 
 void TMediatorTimecastProxy::Handle(TEvPrivate::TEvRetryCoordinator::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE EvRetryCoordinator " << msg->Coordinator);
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvRetryCoordinator",
+        {"Actor", ctx.SelfID},
+        {"Coordinator", msg->Coordinator});
     auto it = MediatorCoordinators.find(msg->Coordinator);
     if (it != MediatorCoordinators.end() && it->second.RetryPending) {
         it->second.RetryPending = false;
@@ -627,8 +647,9 @@ void TMediatorTimecastProxy::Handle(TEvPrivate::TEvRetryCoordinator::TPtr& ev, c
 }
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << ev->Get()->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
     const NKikimrTxMediatorTimecast::TEvUpdate& record = ev->Get()->Record;
 
@@ -694,8 +715,9 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr& ev, co
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvGranularUpdate::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << msg->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"msg", msg->ToString()});
 
     const ui64 mediatorTabletId = msg->Record.GetMediator();
     auto it = Mediators.find(mediatorTabletId);
@@ -708,9 +730,11 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvGranularUpdate::TPtr
     auto& mediator = it->second;
     const ui32 bucketId = msg->Record.GetBucket();
     if (bucketId >= mediator.BucketsSz) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-            << " got update from Mediator# " << mediatorTabletId << " Bucket# " << bucketId
-            << " expecting only " << mediator.BucketsSz << " buckets");
+        YDB_LOG_CTX_CRIT(ctx, "got update expecting only buckets",
+            {"Actor", ctx.SelfID},
+            {"from_Mediator", mediatorTabletId},
+            {"Bucket", bucketId},
+            {"BucketsSz", mediator.BucketsSz});
         return;
     }
 
@@ -721,9 +745,10 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvGranularUpdate::TPtr
     }
 
     if (msg->Record.FrozenTabletsSize() != msg->Record.FrozenStepsSize()) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-            << " got update from Mediator# " << mediatorTabletId << " Bucket# " << bucketId
-            << " with mismatched frozen records");
+        YDB_LOG_CTX_CRIT(ctx, "got update with mismatched frozen records",
+            {"Actor", ctx.SelfID},
+            {"from_Mediator", mediatorTabletId},
+            {"Bucket", bucketId});
         return;
     }
 
@@ -797,10 +822,11 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvGranularUpdate::TPtr
         // mediator time jumping backwards for running instances we will ignore
         // this update. Note that the current state is already updated, it's
         // just not published yet, and will be published later.
-        LOG_CRIT_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-            << " got update from Mediator# " << mediatorTabletId
-            << " with LatestStep# " << latestStep
-            << " previous LatestStep# " << bucket.LatestStep->Get());
+        YDB_LOG_CTX_CRIT(ctx, "got update with previous",
+            {"Actor", ctx.SelfID},
+            {"from_Mediator", mediatorTabletId},
+            {"LatestStep", latestStep},
+            {"#_LatestStep", bucket.LatestStep->Get()});
         return;
     }
 
@@ -918,8 +944,9 @@ void TMediatorTimecastProxy::UnsubscribeCoordinator(ui64 coordinatorId, TCoordin
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvSubscribeReadStep::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << msg->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"msg", msg->ToString()});
 
     const ui64 coordinatorId = msg->CoordinatorId;
     auto& subscriber = CoordinatorSubscribers[ev->Sender];
@@ -934,8 +961,9 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvSubscribeReadStep::T
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnsubscribeReadStep::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << msg->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"msg", msg->ToString()});
 
     auto& subscriber = CoordinatorSubscribers[ev->Sender];
     if (msg->CoordinatorId == 0) {
@@ -966,8 +994,9 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUnsubscribeReadStep:
 
 void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvWaitReadStep::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE " << msg->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE",
+        {"Actor", ctx.SelfID},
+        {"msg", msg->ToString()});
 
     const ui64 coordinatorId = msg->CoordinatorId;
     auto itCoordinator = Coordinators.find(coordinatorId);
@@ -995,8 +1024,9 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvWaitReadStep::TPtr& 
 
 void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE TEvSubscribeReadStepResult " << record.ShortDebugString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE TEvSubscribeReadStepResult",
+        {"Actor", ctx.SelfID},
+        {"ShortDebugString", record.ShortDebugString()});
 
     const ui64 coordinatorId = record.GetCoordinatorID();
     auto itCoordinator = Coordinators.find(coordinatorId);
@@ -1045,8 +1075,9 @@ void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepResult::TPtr
 
 void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepUpdate::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID
-        << " HANDLE TEvSubscribeReadStepUpdate " << record.ShortDebugString());
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE TEvSubscribeReadStepUpdate",
+        {"Actor", ctx.SelfID},
+        {"ShortDebugString", record.ShortDebugString()});
 
     const ui64 coordinatorId = record.GetCoordinatorID();
     auto itCoordinator = Coordinators.find(coordinatorId);

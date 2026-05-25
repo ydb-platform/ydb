@@ -1,4 +1,7 @@
 #include "console_configs_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -16,21 +19,20 @@ public:
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
         auto &rec = Request->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TTxUpdateLastProvidedConfig Execute: " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateLastProvidedConfig",
+            {"Execute", rec.ShortDebugString()});
 
         Y_ABORT_UNLESS(Self->PendingSubscriptionModifications.IsEmpty());
 
         auto subscription = Self->SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
         if (!subscription) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Config notification response for missing subscription id="
-                        << rec.GetSubscriptionId());
+            YDB_LOG_CTX_DEBUG(ctx, "Config notification response for missing subscription",
+                {"id", rec.GetSubscriptionId()});
             return true;
         }
         if (Request->Cookie != subscription->Cookie) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "Config notification response cookie mismatch for"
-                        << " subscription id=" << rec.GetSubscriptionId());
+            YDB_LOG_CTX_DEBUG(ctx, "Config notification response cookie mismatch for subscription",
+                {"id", rec.GetSubscriptionId()});
             Y_ABORT_UNLESS(subscription->Subscriber.ServiceId,
                      "%s  ==>  %s",
                      rec.ShortDebugString().c_str(),

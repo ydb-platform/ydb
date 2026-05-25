@@ -17,22 +17,9 @@
 #include "audit_log_item_builder.h"
 #include "audit_log_service.h"
 #include "audit_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_E
-# error log macro redefinition
-#endif
-
-#define LOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, stream)
-#define LOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, stream)
-#define LOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, stream)
-#define LOG_N(stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, stream)
-#define LOG_W(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, stream)
-#define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::AUDIT_LOG_WRITER, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::AUDIT_LOG_WRITER
 
 namespace NKikimr::NAudit {
 
@@ -77,7 +64,8 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
                 log.length()
             ));
         } catch (const std::exception& e) {
-            LOG_E("WriteLog: unable to write audit log (error: " << e.what() << ")");
+            YDB_LOG_ERROR("WriteLog: unable to write audit log",
+                {"(error", e.what()});
         }
     }
 }
@@ -240,10 +228,9 @@ private:
     }
 
     void HandleUnexpectedEvent(STFUNC_SIG) {
-        LOG_W("TAuditLogActor:"
-            << " unhandled event type: " << ev->GetTypeRewrite()
-            << " event: " << ev->GetTypeName()
-        );
+        YDB_LOG_WARN("TAuditLogActor: unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->GetTypeName()});
     }
 };
 

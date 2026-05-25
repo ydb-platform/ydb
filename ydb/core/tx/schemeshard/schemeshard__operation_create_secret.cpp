@@ -2,10 +2,9 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -49,7 +48,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_CTX_INFO(context.Ctx, "ProgressState",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"DebugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -62,8 +63,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_CTX_INFO(context.Ctx, "HandleReply TEvOperationPlan",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"DebugHint", DebugHint()},
+            {"step", step});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -146,18 +149,20 @@ public:
 
         const TString& secretName = createSecretProto.GetName();
 
-        LOG_N("TCreateSecret Propose"
-            << ", path: " << parentPathStr << "/" << secretName
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateSecret Propose /",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"path", parentPathStr},
+            {"secretName", secretName},
+            {"opId", OperationId});
 
         auto secretDescrWithoutSecretParts = createSecretProto;
         secretDescrWithoutSecretParts.ClearValue();
-        LOG_D("TCreateSecret Propose"
-            << ", path: " << parentPathStr << "/" << secretName
-            << ", opId: " << OperationId
-            << ", secretDescription (without secret parts): " << secretDescrWithoutSecretParts.ShortDebugString()
-        );
+        YDB_LOG_CTX_DEBUG(context.Ctx, "TCreateSecret Propose /, secretDescription (without secret",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"path", parentPathStr},
+            {"secretName", secretName},
+            {"opId", OperationId},
+            {"parts)", secretDescrWithoutSecretParts.ShortDebugString()});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -290,11 +295,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateSecret AbortPropose" << ", opId: " << OperationId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateSecret AbortPropose",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateSecret AbortUnsafe" << ", opId: " << OperationId << ", forceDropId: " << forceDropTxId);
+        YDB_LOG_CTX_NOTICE(context.Ctx, "TCreateSecret AbortUnsafe",
+            {"SelfTabletId", context.SS->SelfTabletId()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId});
 
         context.OnComplete.DoneOperation(OperationId);
     }

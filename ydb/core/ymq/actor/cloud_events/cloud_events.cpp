@@ -2,6 +2,9 @@
 
 #include <ydb/core/audit/audit_log.h>
 #include <google/protobuf/util/time_util.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 
 namespace NKikimr::NSQS {
 namespace NCloudEvents {
@@ -396,7 +399,8 @@ namespace NCloudEvents {
                 error += issue.message() + "\n";
             }
 
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::SQS, error);
+            YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "",
+                {"error", error});
 
             PutToSleep();
             return;
@@ -426,7 +430,8 @@ namespace NCloudEvents {
                 error += issue.message() + "\n";
             }
 
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::SQS, error);
+            YDB_LOG_CTX_ERROR(TActivationContext::AsActorContext(), "",
+                {"error", error});
 
             StopSession();
             MakeDeleteResponse();

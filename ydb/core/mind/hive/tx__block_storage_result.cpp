@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -20,7 +23,10 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
-        BLOG_D("THive::TTxBlockStorageResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Execute(",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", TabletId},
+            {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             NIceDb::TNiceDb db(txc.DB);
@@ -31,7 +37,10 @@ public:
                     || msg->Status == NKikimrProto::NO_GROUP) {
                 if (tablet->IsDeleting()) {
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
-                        BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
+                        YDB_LOG_WARN("THive::TTxBlockStorageResult Complete status was for TabletId",
+                            {"GetLogPrefix", GetLogPrefix()},
+                            {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                            {"Id", tablet->Id});
                     }
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
                         follower.InitiateStop(SideEffects);
@@ -48,7 +57,11 @@ public:
                     }
                 }
             } else {
-                BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status) << ": " << msg->ErrorReason);
+                YDB_LOG_WARN("THive::TTxBlockStorageResult retrying for because of",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"TabletId", TabletId},
+                    {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                    {"ErrorReason", msg->ErrorReason});
                 if (tablet->IsDeleting()) {
                     --Self->DeleteTabletInProgress;
                     Self->UpdateCounterTabletsDeleting();
@@ -61,7 +74,10 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
-        BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        YDB_LOG_DEBUG("THive::TTxBlockStorageResult::Complete(",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", TabletId},
+            {"#_NKikimrProto::EReplyStatus_Name(msg->Status)", NKikimrProto::EReplyStatus_Name(msg->Status)});
         SideEffects.Complete(ctx);
     }
 };

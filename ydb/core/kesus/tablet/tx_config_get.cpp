@@ -1,4 +1,7 @@
 #include "tablet_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -18,9 +21,10 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_CONFIG_GET; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxConfigGet::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxConfigGet::Execute",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie});
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistStrictMarker(db);
@@ -39,9 +43,10 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxConfigGet::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxConfigGet::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie});
         Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, Reply.Release(), 0, Cookie);
     }

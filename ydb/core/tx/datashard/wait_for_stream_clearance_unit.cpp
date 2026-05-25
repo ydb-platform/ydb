@@ -1,6 +1,9 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -94,9 +97,10 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
         op->SetWaitingForStreamClearanceFlag();
         op->SetProcessDisconnectsFlag();
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Requested stream clearance from " << tx->GetStreamSink()
-                    << " for " << *op << " at " << DataShard.TabletID());
+        YDB_LOG_CTX_TRACE(ctx, "Requested stream clearance from for at",
+            {"GetStreamSink", tx->GetStreamSink()},
+            {"#_*op", *op},
+            {"TabletID", DataShard.TabletID()});
     }
 
     while (op->HasPendingInputEvents()) {
@@ -123,9 +127,9 @@ void TWaitForStreamClearanceUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &
         OHFunc(TEvents::TEvUndelivered, Handle);
         IgnoreFunc(TEvTxProcessing::TEvStreamClearancePending);
     default:
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TWaitForStreamClearanceUnit::ProcessEvent unhandled event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString());
+        YDB_LOG_CTX_ERROR(ctx, "TWaitForStreamClearanceUnit::ProcessEvent unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         Y_DEBUG_ABORT("unexpected event %" PRIu64, (ui64)ev->GetTypeRewrite());
     }
 }
@@ -152,8 +156,9 @@ void TWaitForStreamClearanceUnit::Handle(TEvTxProcessing::TEvStreamClearanceResp
 {
     if (op->IsWaitingForStreamClearance()) {
         if (ev->Get()->Record.GetCleared()) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Got stream clearance for " << *op << " at " << DataShard.TabletID());
+            YDB_LOG_CTX_TRACE(ctx, "Got stream clearance for at",
+                {"#_*op", *op},
+                {"TabletID", DataShard.TabletID()});
             op->ResetWaitingForStreamClearanceFlag();
         } else {
             Abort(TStringBuilder() << "Got stream clearance reject for " << *op
@@ -198,7 +203,8 @@ void TWaitForStreamClearanceUnit::Abort(const TString &err,
         tx->SetScanSnapshotId(0);
     }
 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+    YDB_LOG_CTX_NOTICE(ctx, "",
+        {"err", err});
 
     op->ResetWaitingForStreamClearanceFlag();
 }

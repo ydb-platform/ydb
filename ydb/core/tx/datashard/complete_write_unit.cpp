@@ -6,6 +6,9 @@
 #include "probes.h"
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 LWTRACE_USING(DATASHARD_PROVIDER)
 
@@ -68,8 +71,8 @@ void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext&
 
     if (DataShard.GetDataTxProfileLogThresholdMs()
         && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   op->ExecutionProfileLogString(DataShard.TabletID()));
+        YDB_LOG_CTX_WARN(ctx, "",
+            {"#_op->ExecutionProfileLogString(DataShard.TabletID())", op->ExecutionProfileLogString(DataShard.TabletID())});
     }
 
     if (DataShard.GetDataTxProfileBufferThresholdMs()

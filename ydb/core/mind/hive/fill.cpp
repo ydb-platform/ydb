@@ -2,6 +2,12 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 #include "node_info.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -22,7 +28,10 @@ protected:
     }
 
     void PassAway() override {
-        BLOG_I("Fill " << SelfId() << " finished with " << Movements << " movements made");
+        YDB_LOG_INFO("Fill finished with movements made",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"SelfId", SelfId()},
+            {"Movements", Movements});
         Hive->RemoveSubActor(this);
         Hive->BalancerNodes.erase(NodeId);
         return IActor::PassAway();
@@ -61,9 +70,12 @@ protected:
                         tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                         ++KickInFlight;
                         ++Movements;
-                        BLOG_D("Fill " << SelfId() << " moving tablet " << tablet->ToString()
-                               << " from node " << tablet->Node->Id
-                               << " to node " << node->Id);
+                        YDB_LOG_DEBUG("Fill moving tablet from node to node",
+                            {"GetLogPrefix", GetLogPrefix()},
+                            {"SelfId", SelfId()},
+                            {"tablet", tablet->ToString()},
+                            {"#_tablet->Node->Id", tablet->Node->Id},
+                            {"Id", node->Id});
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_FILL_EXECUTED].Increment(1);
                         Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
                         Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id), ctx);
@@ -78,7 +90,11 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev, const TActorContext& ctx) {
-        BLOG_D("Fill " << SelfId() << " received " << ev->Get()->Status << " for tablet " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("Fill received for tablet",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"SelfId", SelfId()},
+            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
         --KickInFlight;
         KickNextTablet(ctx);
     }
@@ -121,7 +137,9 @@ public:
             }
             NextKick = Tablets.begin();
             Become(&THiveFill::StateWork, ctx, TDuration::MilliSeconds(TIMEOUT), new TEvents::TEvWakeup());
-            LOG_INFO_S(ctx, NKikimrServices::HIVE, "Fill " << SelfId() << " started for node " << NodeId);
+            YDB_LOG_CTX_INFO(ctx, "Fill started for node",
+                {"SelfId", SelfId()},
+                {"NodeId", NodeId});
             KickNextTablet(ctx);
         } else {
             ReplyAndDie(NKikimrProto::ERROR, ctx);
@@ -143,7 +161,9 @@ void THive::StartHiveFill(TNodeId nodeId, const TActorId& initiator) {
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
     } else {
-        BLOG_W("It's not possible to start fill on node " << nodeId << ", the node is already busy");
+        YDB_LOG_WARN("It's not possible to start fill on node, the node is already busy",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"nodeId", nodeId});
         Send(initiator, new TEvHive::TEvFillNodeResult(NKikimrProto::ALREADY));
     }
 }

@@ -100,33 +100,6 @@
 
 #endif
 
-#define LOG_E(name, stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_W(name, stream) \
-    LOG_WARN_S (*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_I(name, stream) \
-    LOG_INFO_S (*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_D(name, stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_T(name, stream) \
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-
-#define LOG_CORO_E(stream) \
-    LOG_ERROR_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_W(stream) \
-    LOG_WARN_S (GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_I(stream) \
-    LOG_INFO_S (GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_D(stream) \
-    LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-#define LOG_CORO_T(stream) \
-    LOG_TRACE_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
-    << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
-
 #define THROW_ARROW_NOT_OK(code, status)                               \
     do                                                                 \
     {                                                                  \
@@ -416,7 +389,7 @@ public:
     };
 
     void RunClickHouseParserOverHttp() {
-        LOG_CORO_D("RunClickHouseParserOverHttp");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunClickHouseParserOverHttp");
 
         std::unique_ptr<NDB::ReadBuffer> coroBuffer = AsyncDecompressing ? std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroDecompressorBuffer>(this)) : std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroReadBuffer>(this));
         std::unique_ptr<NDB::ReadBuffer> decompressorBuffer;
@@ -448,16 +421,16 @@ public:
                 StartCycleCount = GetCycleCountFast();
             }
             if (isCancelled) {
-                LOG_CORO_D("RunClickHouseParserOverHttp - STOPPED ON SATURATION");
+                LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunClickHouseParserOverHttp - STOPPED ON SATURATION");
                 break;
             }
         }
 
-        LOG_CORO_D("RunClickHouseParserOverHttp - FINISHED");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunClickHouseParserOverHttp - FINISHED");
     }
 
     void RunClickHouseParserOverFile() {
-        LOG_CORO_D("RunClickHouseParserOverFile");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunClickHouseParserOverFile");
         YQL_ENSURE(!AsyncDecompressing, "Async decompression is not supported for file input");
 
         TString fileName = Url.substr(7) + Path;
@@ -489,13 +462,13 @@ public:
                 StartCycleCount = GetCycleCountFast();
             }
             if (isCancelled) {
-                LOG_CORO_D("RunClickHouseParserOverFile STOPPED ON SATURATION");
+                LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunClickHouseParserOverFile STOPPED ON SATURATION");
                 break;
             }
         }
         IngressBytes += GetFileLength(fileName);
 
-        LOG_CORO_D("RunClickHouseParserOverFile FINISHED");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunClickHouseParserOverFile FINISHED");
     }
 
     struct TReadCache {
@@ -558,12 +531,12 @@ public:
                             std::bind(&OnResult, GetActorSystem(), SelfActorId, range, ++RangeCookie, std::placeholders::_1),
                             {},
                             RetryStuff->RetryPolicy);
-        LOG_CORO_D("Download STARTED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie);
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"Download STARTED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie);
         auto& result = RangeCache[range];
         if (result.Cookie) {
             // may overwrite old range in case of desync?
             if (result.RowGroupIndex) {
-                LOG_CORO_W("RangeInfo DISCARDED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie << ", rowGroup " << *result.RowGroupIndex);
+                LOG_WARN_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RangeInfo DISCARDED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie << ", rowGroup " << *result.RowGroupIndex);
                 DecreaseRowGroupInflight(*result.RowGroupIndex);
             }
         }
@@ -593,18 +566,18 @@ public:
             ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << event.Get()->Issues.ToOneLineString();
         }
         auto readyRange = event.Get()->ReadRange;
-        LOG_CORO_D("Download FINISHED [" << readyRange.Offset << "-" << readyRange.Length << "], cookie: " << event.Cookie);
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"Download FINISHED [" << readyRange.Offset << "-" << readyRange.Length << "], cookie: " << event.Cookie);
         IngressBytes += readyRange.Length;
 
         auto it = RangeCache.find(readyRange);
 
         if (it == RangeCache.end()) {
-            LOG_CORO_W("Download completed for unknown/discarded range [" << readyRange.Offset << "-" << readyRange.Length << "]");
+            LOG_WARN_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"Download completed for unknown/discarded range [" << readyRange.Offset << "-" << readyRange.Length << "]");
             return;
         }
 
         if (it->second.Cookie != event.Cookie) {
-            LOG_CORO_W("Mismatched cookie for range [" << readyRange.Offset << "-" << readyRange.Length << "], received " << event.Cookie << ", expected " << it->second.Cookie);
+            LOG_WARN_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"Mismatched cookie for range [" << readyRange.Offset << "-" << readyRange.Length << "], received " << event.Cookie << ", expected " << it->second.Cookie);
             return;
         }
 
@@ -613,7 +586,7 @@ public:
         it->second.Ready = true;
         if (it->second.RowGroupIndex) {
             if (!DecreaseRowGroupInflight(*it->second.RowGroupIndex)) {
-                LOG_CORO_D("RowGroup #" << *it->second.RowGroupIndex << " is READY");
+                LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RowGroup #" << *it->second.RowGroupIndex << " is READY");
                 ReadyRowGroups.push(*it->second.RowGroupIndex);
             }
             ReadInflightSize[*it->second.RowGroupIndex] += size;
@@ -624,7 +597,7 @@ public:
     }
 
     arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) {
-        LOG_CORO_D("ReadAt STARTED [" << position << "-" << nbytes << "]");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"ReadAt STARTED [" << position << "-" << nbytes << "]");
         TEvS3Provider::TReadRange range { .Offset = position, .Length = nbytes };
         auto& cache = GetOrCreate(range);
 
@@ -640,13 +613,13 @@ public:
         TString data = cache.Data;
         RangeCache.erase(range);
 
-        LOG_CORO_D("ReadAt FINISHED [" << position << "-" << nbytes << "] #" << data.size());
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"ReadAt FINISHED [" << position << "-" << nbytes << "] #" << data.size());
 
         return arrow::Buffer::FromString(data);
     }
 
     void RunCoroBlockArrowParserOverHttp() {
-        LOG_CORO_D("RunCoroBlockArrowParserOverHttp");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverHttp");
 
         ui64 readerCount = 1;
 
@@ -759,7 +732,7 @@ public:
 
                 std::shared_ptr<arrow::Table> table;
 
-                LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
+                LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
                 ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
                 readyGroupCount++;
 
@@ -803,18 +776,18 @@ public:
                     readers[readyReaderIndex].reset();
                 }
                 if (isCancelled) {
-                    LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
+                    LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
                                SourceContext->GetDownloadedBytes() << " bytes");
                     break;        
                 }
             }
         }
 
-        LOG_CORO_D("RunCoroBlockArrowParserOverHttp - FINISHED");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverHttp - FINISHED");
     }
 
     void RunCoroBlockArrowParserOverFile() {
-        LOG_CORO_D("RunCoroBlockArrowParserOverFile");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverFile");
 
         std::shared_ptr<arrow::io::RandomAccessFile> arrowFile =
             std::make_shared<TRandomAccessFileTrafficCounter>(this,
@@ -841,10 +814,10 @@ public:
 
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
-                LOG_CORO_D("RunCoroBlockArrowParserOverFile - PAUSED " << SourceContext->GetValue());
+                LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverFile - PAUSED " << SourceContext->GetValue());
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                 HandleEvent(*ev);
-                LOG_CORO_D("RunCoroBlockArrowParserOverFile - CONTINUE " << SourceContext->GetValue());
+                LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverFile - CONTINUE " << SourceContext->GetValue());
                 StartCycleCount = GetCycleCountFast();
             }
 
@@ -875,12 +848,12 @@ public:
             ThrowParquetNotOk(status);
             SourceContext->UpdateProgress(downloadedBytes, decodedBytes, table->num_rows());
             if (isCancelled) {
-                LOG_CORO_D("RunCoroBlockArrowParserOverFile - STOPPED ON SATURATION");
+                LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverFile - STOPPED ON SATURATION");
                 break;
             }
         }
 
-        LOG_CORO_D("RunCoroBlockArrowParserOverFile - FINISHED");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"RunCoroBlockArrowParserOverFile - FINISHED");
     }
 
     STRICT_STFUNC(StateFunc,
@@ -921,7 +894,7 @@ public:
         RetryStuff->SizeLimit -= InputBuffer.size();
         LastOffset = RetryStuff->Offset;
         LastData = InputBuffer;
-        LOG_CORO_T("TEvDownloadData (" << (deferred ? "deferred" : "instant") << "), size: " << InputBuffer.size());
+        LOG_TRACE_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"TEvDownloadData (" << (deferred ? "deferred" : "instant") << "), size: " << InputBuffer.size());
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
@@ -940,7 +913,7 @@ public:
     void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
         HttpResponseCode = ev->Get()->HttpResponseCode;
         CurlResponseCode = ev->Get()->CurlResponseCode;
-        LOG_CORO_D("TEvDownloadStart, Http code: " << HttpResponseCode);
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"TEvDownloadStart, Http code: " << HttpResponseCode);
     }
 
     void Handle(TEvS3Provider::TEvDownloadData::TPtr& ev) {
@@ -965,7 +938,7 @@ public:
                     ErrorText.append(TruncatedSuffix);
                 }
             }
-            LOG_CORO_W("TEvDownloadData, ERROR: " << ErrorText << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
+            LOG_WARN_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"TEvDownloadData, ERROR: " << ErrorText << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
         }
     }
 
@@ -1006,7 +979,7 @@ public:
 
         if (Issues) {
             RetryStuff->NextRetryDelay = RetryStuff->GetRetryState()->GetNextRetryDelay(CurlResponseCode, HttpResponseCode);
-            LOG_CORO_D("TEvDownloadFinish with Issues (try to retry): " << Issues.ToOneLineString());
+            LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"TEvDownloadFinish with Issues (try to retry): " << Issues.ToOneLineString());
             if (RetryStuff->NextRetryDelay) {
                 // inplace retry: report problem to TransientIssues and repeat
                 OnRetriableError(Issues);
@@ -1015,7 +988,7 @@ public:
                 RetryStuff->RetryState = nullptr;
                 InputFinished = true;
                 FinishDecompressor(/* force */ true);
-                LOG_CORO_W("ReadError: " << Issues.ToOneLineString() << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
+                LOG_WARN_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"ReadError: " << Issues.ToOneLineString() << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
             }
         }
@@ -1031,7 +1004,7 @@ public:
                 DeferredDataParts.swap(tmp);
             }
         } else {
-            LOG_CORO_D("TEvDownloadFinish, LastOffset: " << LastOffset << ", Error: " << ServerReturnedError);
+            LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"TEvDownloadFinish, LastOffset: " << LastOffset << ", Error: " << ServerReturnedError);
             InputFinished = true;
             if (ServerReturnedError) {
                 FinishDecompressor(/* force */ true);
@@ -1044,7 +1017,7 @@ public:
     }
 
     void HandleEvent(TEvS3Provider::TEvContinue::THandle&) {
-        LOG_CORO_D("TEvContinue");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"TEvContinue");
         Paused = false;
     }
 
@@ -1057,7 +1030,7 @@ public:
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
-        LOG_CORO_D("TEvPoison");
+        LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"TEvPoison");
         RetryStuff->Cancel();
         FinishDecompressor(/* force */ true);
         throw TS3ReadAbort();
@@ -1189,13 +1162,13 @@ private:
                     }
                 } catch (const TS3ReadError&) {
                     // Just to avoid parser error after transport failure
-                    LOG_CORO_D("S3 read ERROR");
+                    LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"S3 read ERROR");
                 } catch (const NDB::Exception& ex) {
                     Issues.AddIssue(TIssue(ex.message()));
                     FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                     RetryStuff->Cancel();
                 } catch (const TCodeLineException& ex) {
-                    LOG_CORO_D(ex.what());
+                    LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<ex.what());
                     Issues.AddIssue(ex.GetRawMessage());
                     FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(ex.Code);
                     RetryStuff->Cancel();
@@ -1203,13 +1176,13 @@ private:
             }
         } catch (const TS3ReadAbort&) {
             // Poison handler actually
-            LOG_CORO_D("S3 read ABORT");
+            LOG_DEBUG_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<"S3 read ABORT");
         } catch (const TDtorException&) {
             // Stop any activity instantly
             RetryStuff->Cancel();
             return;
         } catch (const TCodeLineException& err) {
-            LOG_CORO_E(err.what());
+            LOG_ERROR_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " <<err.what());
             Issues.AddIssue(err.GetRawMessage());
             FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(err.Code);
             RetryStuff->Cancel();
@@ -1418,7 +1391,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3StreamReadActor", "Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Bootstrap");
 
         // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
         // After exact mem control implementation, this allocation should be deleted
@@ -1519,7 +1492,7 @@ public:
         if (TaskCounters) {
             HttpInflightLimit->Add(Gateway->GetBuffersSizePerStream());
         }
-        LOG_D("TS3StreamReadActor", "RegisterCoro with path " << object.GetPath() << " with pathIndex " << pathIndex);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "RegisterCoro with path " << object.GetPath() << " with pathIndex " << pathIndex);
 
         TActorId actorId;
         const auto& authInfo = Credentials.GetAuthInfo();
@@ -1698,7 +1671,7 @@ private:
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         if (Bootstrapped) {
-            LOG_D("TS3StreamReadActor", "PassAway");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway");
             if (Counters) {
                 QueueBlockCount->Sub(Blocks.size());
                 QueueDataLimit->Sub(ReadActorFactoryCfg.DataInflight);
@@ -1712,14 +1685,14 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
-            LOG_T("TS3StreamReadActor", "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
             FileQueueEvents.Unsubscribe();
 
             ClearMkqlData();
 
             MemoryQuotaManager->FreeQuota(ReadActorFactoryCfg.DataInflight);
         } else {
-            LOG_W("TS3StreamReadActor", "PassAway w/o Bootstrap");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway w/o Bootstrap");
         }
 
         MemoryQuotaManager.reset();
@@ -1756,7 +1729,7 @@ private:
         ListedFiles += objectBatch.GetObjectPaths().size();
         IsFileQueueEmpty = objectBatch.GetNoMoreFiles();
         if (IsFileQueueEmpty && !IsConfirmedFileQueueFinish) {
-            LOG_T("TS3StreamReadActor", "Sending finish confirmation to FileQueue");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Sending finish confirmation to FileQueue");
             SendPathBatchRequest();
             IsConfirmedFileQueueFinish = true;
         }
@@ -1765,9 +1738,8 @@ private:
                 std::make_move_iterator(objectBatch.MutableObjectPaths()->begin()),
                 std::make_move_iterator(objectBatch.MutableObjectPaths()->end()));
         }
-        LOG_D(
-            "TS3StreamReadActor",
-            "HandleObjectPathBatch of size " << objectBatch.GetObjectPaths().size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". "
+            << "HandleObjectPathBatch of size " << objectBatch.GetObjectPaths().size());
         while (TryRegisterCoro()) {}
 
         if (LastFileWasProcessed()) {
@@ -1782,13 +1754,13 @@ private:
 
         IsFileQueueEmpty = true;
         if (!IsConfirmedFileQueueFinish) {
-            LOG_T("TS3StreamReadActor", "Sending finish confirmation to FileQueue");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Sending finish confirmation to FileQueue");
             SendPathBatchRequest();
             IsConfirmedFileQueueFinish = true;
         }
         TIssues issues;
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
-        LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
         OnFatalError(std::move(issues), result->Get()->Record.GetFatalCode());
     }
@@ -1879,17 +1851,17 @@ private:
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        LOG_T("TS3StreamReadActor", "Handle disconnected FileQueue " << ev->Get()->NodeId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Handle disconnected FileQueue " << ev->Get()->NodeId);
         FileQueueEvents.HandleNodeDisconnected(ev->Get()->NodeId);
     }
 
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-        LOG_T("TS3StreamReadActor", "Handle connected FileQueue " << ev->Get()->NodeId);
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Handle connected FileQueue " << ev->Get()->NodeId);
         FileQueueEvents.HandleNodeConnected(ev->Get()->NodeId);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("TS3StreamReadActor", "Handle undelivered FileQueue ");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Handle undelivered FileQueue ");
         if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::UNAVAILABLE);
@@ -1911,7 +1883,7 @@ private:
 
         *RowsRemained = SubtractSaturating(*RowsRemained, consumedRows);
         if (*RowsRemained == 0) {
-            LOG_T("TS3StreamReadActor", "StopLoadsIfEnough(consumedRows = " << consumedRows << ") sends poison");
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3StreamReadActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "StopLoadsIfEnough(consumedRows = " << consumedRows << ") sends poison");
             for (const auto actorId : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }

@@ -18,6 +18,9 @@
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/json/json_reader.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_METACACHE
 
 namespace NKikimr::NMsgBusProxy {
 
@@ -99,7 +102,8 @@ public:
             tenant.SkipPrefix("/");
             tenant.ChopSuffix("/");
             if (tenant != "Root") {
-                LOG_NOTICE_S(ctx, NKikimrServices::PQ_METACACHE, "Started on tenant = '" << tenant << "', will not request hive");
+                YDB_LOG_CTX_NOTICE(ctx, "Started on tenant = ' ', will not request hive",
+                    {"tenant", tenant});
                 OnDynNode = true;
             } else {
                 StartHivePipe(ctx);
@@ -117,7 +121,7 @@ private:
     }
 
     void SubscribeToClustersUpdate(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Subscribe to cluster tracker");
+        YDB_LOG_CTX_DEBUG(ctx, "Subscribe to cluster tracker");
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
 
@@ -125,9 +129,9 @@ private:
             NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev,
             const TActorContext& ctx
     ) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleClustersUpdate");
+        YDB_LOG_CTX_DEBUG(ctx, "HandleClustersUpdate");
         if (!LocalCluster.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleClustersUpdate LocalCluster !LocalCluster.empty()");
+            YDB_LOG_CTX_DEBUG(ctx, "HandleClustersUpdate LocalCluster !LocalCluster.empty()");
             return;
         }
         for (const auto& cluster : ev->Get()->ClustersList->Clusters) {
@@ -147,7 +151,8 @@ private:
 
     void StartHivePipe(const TActorContext& ctx) {
         auto hiveTabletId = GetHiveTabletId(ctx);
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Start pipe to hive tablet: " << hiveTabletId);
+        YDB_LOG_CTX_DEBUG(ctx, "Start pipe to hive",
+            {"tablet", hiveTabletId});
         auto pipeRetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         pipeRetryPolicy.MaxRetryTime = TDuration::Seconds(1);
         NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = pipeRetryPolicy};
@@ -164,12 +169,12 @@ private:
             default:
                 return HandlePipeDestroyed(ctx);
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Hive pipe connected");
+        YDB_LOG_CTX_DEBUG(ctx, "Hive pipe connected");
         ProcessNodesInfoWork(ctx);
     }
 
     void HandlePipeDestroyed(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Hive pipe destroyed");
+        YDB_LOG_CTX_DEBUG(ctx, "Hive pipe destroyed");
         NTabletPipe::CloseClient(ctx, HivePipeClient);
         HivePipeClient = TActorId();
         StartHivePipe(ctx);
@@ -279,7 +284,7 @@ private:
     }
 
     void HandleDescribeTopics(TEvPqNewMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle describe topics");
+        YDB_LOG_CTX_DEBUG(ctx, "Handle describe topics");
         const auto& msg = *ev->Get();
 
         for (auto& t : ev->Get()->Topics) {
@@ -291,7 +296,7 @@ private:
     }
 
     void HandleDescribeTopicsByName(TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle describe topics by name");
+        YDB_LOG_CTX_DEBUG(ctx, "Handle describe topics by name");
 
         if (!ConverterFactory) {
             PendingTopicsRequests.emplace_back(ev);
@@ -325,7 +330,7 @@ private:
 
     void SendSchemeCacheRequest(std::shared_ptr<TWaiter> waiter) {
         const auto& ctx = ActorContext();
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "SendSchemeCacheRequest");
+        YDB_LOG_CTX_DEBUG(ctx, "SendSchemeCacheRequest");
 
         auto reqId = ++RequestId;
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(reqId);
@@ -351,8 +356,10 @@ private:
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
         if (db) schemeCacheRequest->DatabaseName = *db;
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "send request for "
-                             << waiter->GetTopics().size() << " topics, got " << DescribeTopicsWaiters.size() << " requests infly, db = \"" << db << "\"");
+        YDB_LOG_CTX_DEBUG(ctx, "send request for topics, got requests infly, db =",
+            {"size", waiter->GetTopics().size()},
+            {"#_size", DescribeTopicsWaiters.size()},
+            {"db", db});
 
         ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()), 0, 0, waiter->Span.GetTraceId());
     }
@@ -360,8 +367,8 @@ private:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         std::shared_ptr<TSchemeCacheNavigate> result(ev->Get()->Request.Release());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE,
-            "Handle SchemeCache response: result# " << result->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_CTX_DEBUG(ctx, "Handle SchemeCache response:",
+            {"result", result->ToString(*AppData()->TypeRegistry)});
 
         bool needLogError = AnyOf(result->ResultSet, [](const auto& entry) {
             switch (entry.Status) {
@@ -380,8 +387,8 @@ private:
             }
         });
         if (needLogError) {
-            LOG_ERROR_S(ctx, NKikimrServices::PQ_METACACHE,
-                "Handle SchemeCache response: result# " << result->ToString(*AppData()->TypeRegistry));
+            YDB_LOG_CTX_ERROR(ctx, "Handle SchemeCache response:",
+                {"result", result->ToString(*AppData()->TypeRegistry)});
         }
 
         auto waiterIter = DescribeTopicsWaiters.find(result->Instant);
@@ -406,7 +413,7 @@ private:
             auto* response = new TEvPqNewMetaCache::TEvDescribeTopicsResponse{
                     std::move(waiter->Topics), navigate
             };
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Got describe topics SC response");
+            YDB_LOG_CTX_DEBUG(ctx, "Got describe topics SC response");
             ctx.Send(waiter->WaiterId, response);
         }
     }
@@ -456,13 +463,14 @@ private:
             param->SetValue("json");
         }
         info.SetPath("/app");
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Send Hive nodes state request");
+        YDB_LOG_CTX_DEBUG(ctx, "Send Hive nodes state request");
         NTabletPipe::SendData(ctx, HivePipeClient, new NActors::NMon::TEvRemoteHttpInfo(info));
     }
 
     void HandleHiveMonResponse(NMon::TEvRemoteJsonInfoRes::TPtr& ev, const TActorContext& ctx) {
         ResetHiveRequestState(ctx);
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Got Hive landing data response: '" << ev->Get()->Json << "'");
+        YDB_LOG_CTX_DEBUG(ctx, "Got Hive landing data response: ' '",
+            {"#_ev->Get()->Json", ev->Get()->Json});
         TStringInput input(ev->Get()->Json);
         auto jsonValue = NJson::ReadJsonTree(&input, true);
         const auto& rootMap = jsonValue.GetMap();

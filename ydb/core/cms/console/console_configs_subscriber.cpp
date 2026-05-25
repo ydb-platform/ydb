@@ -14,15 +14,9 @@
 #include <util/generic/ptr.h>
 
 #include <utility>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -152,7 +146,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionResponse");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionResponse");
 
             return;
         }
@@ -202,7 +196,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionNotification");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionNotification");
 
             return;
         }
@@ -210,7 +204,7 @@ public:
         Y_ABORT_UNLESS(Pipe);
 
         if (rec.GetOrder() != (LastOrder + 1)) {
-            BLOG_I("Order mismatch, will resubscribe");
+            YDB_LOG_INFO("Order mismatch, will resubscribe");
 
             Subscribe(ctx);
 
@@ -302,7 +296,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionCanceled");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionCanceled");
 
             return;
         }

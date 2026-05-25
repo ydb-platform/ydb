@@ -4,6 +4,9 @@
 #include "execution_unit_ctors.h"
 
 #include <ydb/library/aclib/user_context.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -151,9 +154,9 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     const auto version = alterTableTx.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to ALTER TABLE at " << DataShard.TabletID()
-               << " version " << version);
+    YDB_LOG_CTX_INFO(ctx, "Trying to ALTER TABLE at version",
+        {"TabletID", DataShard.TabletID()},
+        {"version", version});
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {

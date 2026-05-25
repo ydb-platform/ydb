@@ -34,17 +34,6 @@
 #include <library/cpp/xml/document/xml-document.h>
 
 
-#define LOG_E(name, stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_W(name, stream) \
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_I(name, stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_D(name, stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-#define LOG_T(name, stream) \
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", TxId: " << TxId << ". " << stream)
-
 namespace NYql::NDq {
 
 using namespace NActors;
@@ -165,7 +154,7 @@ public:
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
-        LOG_D("TS3FileWriteActor", "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
         try {
             BeginPartsUpload(Credentials.GetAuthInfo());
         } catch (...) {
@@ -206,9 +195,9 @@ public:
     void PassAway() override {
         if (InFlight || !Parts->Empty()) {
             SafeAbortMultipartUpload();
-            LOG_W("TS3FileWriteActor", "PassAway: but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size() << ", Sealed: " << Parts->IsSealed() << ", request id: [" << RequestId << "]");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway: but NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size() << ", Sealed: " << Parts->IsSealed() << ", request id: [" << RequestId << "]");
         } else {
-            LOG_D("TS3FileWriteActor", "PassAway: request id: [" << RequestId << "]");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway: request id: [" << RequestId << "]");
         }
         TActorBootstrapped<TS3FileWriteActor>::PassAway();
     }
@@ -436,7 +425,7 @@ private:
         try {
             AbortMultipartUpload(Credentials.GetAuthInfo());
         } catch (...) {
-            LOG_W("TS3FileWriteActor", "Failed to abort multipart upload, error: " << CurrentExceptionMessage());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3FileWriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Failed to abort multipart upload, error: " << CurrentExceptionMessage());
         }
     }
 
@@ -539,7 +528,7 @@ public:
     static constexpr char ActorName[] = "S3_WRITE_ACTOR";
 
     void Bootstrap() {
-        LOG_D("TS3WriteActor", "Bootstrap");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3WriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Bootstrap");
         Become(&TS3WriteActorBase::StateFunc);
     }
 
@@ -648,13 +637,13 @@ private:
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
         auto status = result->Get()->Status;
         auto issues = std::move(result->Get()->Issues);
-        LOG_W("TS3WriteActor", "TEvUploadError, status: " << NDqProto::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString());
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3WriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "TEvUploadError, status: " << NDqProto::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString());
         OnFatalError(std::move(issues), status);
     }
 
     void FinishIfNeeded() const {
         if (FileWriteActors.empty() && Finished) {
-            LOG_D("TS3WriteActor", "Finished, notify owner");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3WriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Finished, notify owner");
             Callbacks->OnAsyncOutputFinished(OutputIndex);
         }
     }
@@ -684,7 +673,7 @@ private:
             return;
         }
         if (GetFreeSpace() > 0) {
-            LOG_D("TS3WriteActor", "Has free space, notify owner");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3WriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "Has free space, notify owner");
             Callbacks->ResumeExecution();
             return;
         }
@@ -731,9 +720,9 @@ private:
         FileWritesInProgress.clear();
 
         if (fileWriterCount) {
-            LOG_W("TS3WriteActor", "PassAway: " << " with " << fileWriterCount << " NOT finished FileWriter(s)");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3WriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway: " << " with " << fileWriterCount << " NOT finished FileWriter(s)");
         } else {
-            LOG_D("TS3WriteActor", "PassAway");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TS3WriteActor" << ": " << this->SelfId() << ", TxId: " << TxId << ". " << "PassAway");
         }
 
         TBase::PassAway();

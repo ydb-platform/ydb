@@ -20,6 +20,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -138,25 +139,25 @@ private:
             };
 
             if (Verbose) {
-                LOG_NOTICE_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
-                    << ": uuid# " << ctx->GetUUID()
-                    << ", response# " << outcome);
+                YDB_LOG_CTX_COMP_NOTICE(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response",
+                    {"uuid", ctx->GetUUID()},
+                    {"response", outcome});
             } else {
-                LOG_INFO_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
-                    << ": uuid# " << ctx->GetUUID()
-                    << ", response# " << outcome);
+                YDB_LOG_CTX_COMP_INFO(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response",
+                    {"uuid", ctx->GetUUID()},
+                    {"response", outcome});
             }
             ctx->Reply(request, outcome);
         };
 
         if (Verbose) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
-                << ": uuid# " << ctx->GetUUID()
-                << ", request# " << ev->Get()->GetRequest());
+            YDB_LOG_COMP_NOTICE(NKikimrServices::S3_WRAPPER, "Request",
+                {"uuid", ctx->GetUUID()},
+                {"request", ev->Get()->GetRequest()});
         } else {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
-                << ": uuid# " << ctx->GetUUID()
-                << ", request# " << ev->Get()->GetRequest());
+            YDB_LOG_COMP_INFO(NKikimrServices::S3_WRAPPER, "Request",
+                {"uuid", ctx->GetUUID()},
+                {"request", ev->Get()->GetRequest()});
         }
         func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);
 

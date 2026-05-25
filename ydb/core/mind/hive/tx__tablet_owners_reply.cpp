@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -17,14 +20,18 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvTabletOwnersReply& request(Request->Get()->Record);
-        BLOG_D("THive::TTxTabletOwnersReply::Execute");
+        YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Execute",
+            {"GetLogPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         for (const NKikimrHive::TTabletOwnerRecord& protoTabletOwner : request.GetTabletOwners()) {
             TOwnershipKeeper::TOwnerType ownerId = protoTabletOwner.GetOwnerID();
             TSequencer::TSequence seq(protoTabletOwner.GetBegin(), protoTabletOwner.GetEnd());
             if (Self->Keeper.AddOwnedSequence(ownerId, seq)) {
-                BLOG_D("THive::TTxTabletOwnersReply::Execute - add new owned sequence ("
-                    << seq.Begin << "," << seq.End << ") = " << ownerId);
+                YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Execute - add new owned sequence (",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Begin", seq.Begin},
+                    {"End", seq.End},
+                    {"ownerId", ownerId});
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(ownerId);
             }
         }
@@ -34,7 +41,8 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxTabletOwnersReply::Complete");
+        YDB_LOG_DEBUG("THive::TTxTabletOwnersReply::Complete",
+            {"GetLogPrefix", GetLogPrefix()});
     }
 };
 

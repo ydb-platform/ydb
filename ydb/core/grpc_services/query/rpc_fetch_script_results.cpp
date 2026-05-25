@@ -14,6 +14,9 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
 
 namespace NKikimr::NGRpcService {
 
@@ -98,8 +101,10 @@ private:
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, Ydb::Query::FetchScriptResultsResponse&& result, const NYql::TIssues& issues = {}) {
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::RPC_REQUEST, "Fetch script results, status: "
-            << Ydb::StatusIds::StatusCode_Name(status) << (issues ? ". Issues: " : "") << issues.ToOneLineString());
+        YDB_LOG_CTX_INFO(TActivationContext::AsActorContext(), "Fetch script results,",
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"#_num_0", (issues ? ". Issues: " : "")},
+            {"ToOneLineString", issues.ToOneLineString()});
 
         for (const auto& issue : issues) {
             auto item = result.add_issues();

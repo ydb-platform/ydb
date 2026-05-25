@@ -5,6 +5,9 @@
 #include <ydb/core/testlib/test_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
 namespace NGRpcServer {
@@ -139,7 +142,8 @@ public:
     }
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvReadFinished, success = " << ev->Get()->Success);
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvReadFinished, success",
+            {"#_ev->Get()->Success", ev->Get()->Success});
         Context->Write(MakeResponse(ev->Get()->Record.GetRequestCookie()));
         Context->Finish(grpc::Status::OK);
         PassAway();
@@ -178,20 +182,22 @@ public:
     }
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvReadFinished, success = " << ev->Get()->Success);
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvReadFinished, success",
+            {"#_ev->Get()->Success", ev->Get()->Success});
         Y_ABORT_UNLESS(!ev->Get()->Success, "Unexpected read success");
         Step();
     }
 
     void Handle(IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvWriteFinished, success = " << ev->Get()->Success);
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvWriteFinished, success",
+            {"#_ev->Get()->Success", ev->Get()->Success});
         Y_ABORT_UNLESS(ev->Get()->Success, "Unexpected write failure");
         Step();
     }
 
     void Handle(IContext::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvNotifiedWhenDone");
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvNotifiedWhenDone");
         Step();
     }
 
@@ -227,7 +233,7 @@ public:
 
     void Handle(IContext::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvNotifiedWhenDone");
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvNotifiedWhenDone");
         ActorFinished.Signal();
         PassAway();
     }
@@ -262,7 +268,8 @@ public:
     }
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvReadFinished, success = " << ev->Get()->Success);
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvReadFinished, success",
+            {"#_ev->Get()->Success", ev->Get()->Success});
         if (++Counter == 1) {
             ActorFinished.Signal();
             PassAway();
@@ -299,7 +306,8 @@ public:
     }
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvReadFinished, success = " << ev->Get()->Success);
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvReadFinished, success",
+            {"#_ev->Get()->Success", ev->Get()->Success});
         Y_ABORT_UNLESS(ev->Get()->Success == false, "Unexpected Read success");
         ReadFinished.Signal();
 
@@ -309,7 +317,7 @@ public:
 
     void Handle(IContext::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvNotifiedWhenDone");
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvNotifiedWhenDone");
         PassAway();
     }
 
@@ -344,7 +352,8 @@ public:
     }
 
     void Handle(IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER, "Received TEvWriteFinished, success = " << ev->Get()->Success);
+        YDB_LOG_CTX_DEBUG(ctx, "Received TEvWriteFinished, success",
+            {"#_ev->Get()->Success", ev->Get()->Success});
         if (++Counter == 2) {
             PassAway();
         }

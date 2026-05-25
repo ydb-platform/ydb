@@ -3,6 +3,9 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <util/random/random.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -175,9 +178,10 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
             .GetDomainState()
             .GetDiskQuotaExceeded();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
-            << " at datashard " << TabletID());
+        YDB_LOG_CTX_DEBUG(ctx, "Discovered subdomain state, outOfSpace at datashard",
+            {"PathId", msg->PathId},
+            {"outOfSpace", outOfSpace},
+            {"TabletID", TabletID()});
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
     }

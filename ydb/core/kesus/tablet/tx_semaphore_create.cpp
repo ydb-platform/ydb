@@ -1,4 +1,7 @@
 #include "tablet_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -26,10 +29,12 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreCreate::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", name=" << Record.GetName().Quote()
-                << ", limit=" << Record.GetLimit() << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSemaphoreCreate::Execute",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie},
+            {"name", Record.GetName().Quote()},
+            {"limit", Record.GetLimit()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -99,17 +104,19 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
             NIceDb::TUpdate<Schema::Semaphores::Limit>(semaphore->Limit),
             NIceDb::TUpdate<Schema::Semaphores::Ephemeral>(semaphore->Ephemeral));
         Self->TabletCounters->Simple()[COUNTER_SEMAPHORE_COUNT].Add(1);
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] Created new semaphore "
-                << semaphoreId << " " << Record.GetName().Quote());
+        YDB_LOG_CTX_DEBUG(ctx, "] Created new semaphore",
+            {"TabletID", Self->TabletID()},
+            {"semaphoreId", semaphoreId},
+            {"Quote", Record.GetName().Quote()});
         ReplyOk();
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreCreate::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSemaphoreCreate::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 
         Y_ABORT_UNLESS(Reply);

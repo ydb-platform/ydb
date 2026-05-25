@@ -1,4 +1,7 @@
 #include "console_tenants_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 namespace NKikimr::NConsole {
 
@@ -16,7 +19,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot remove tenant: " << error);
+        YDB_LOG_CTX_DEBUG(ctx, "Cannot remove",
+            {"tenant", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -49,8 +53,8 @@ public:
         auto &token = Request->Get()->Record.GetUserToken();
         auto &peer = Request->Get()->Record.GetPeerName();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxRemoveTenant: "
-                    << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"TTxRemoveTenant", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvRemoveTenantResponse;
 
@@ -96,7 +100,8 @@ public:
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                                COUNTER_REMOVE_RESPONSES);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
+        YDB_LOG_CTX_TRACE(ctx, "",
+            {"Send", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

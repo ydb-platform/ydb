@@ -33,6 +33,9 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -361,8 +364,8 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::CMS,
-                "Check request: " << request.ShortDebugString());
+    YDB_LOG_CTX_INFO(ctx, "Check",
+        {"request", request.ShortDebugString()});
 
     switch (request.GetAvailabilityMode()) {
     case MODE_MAX_AVAILABILITY:
@@ -767,8 +770,9 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
-                                                                 << "; State: " << TStateStorageRingInfo::RingStateToString(state));
+        YDB_LOG_DEBUG("",
+            {"Ring", ringInfo->RingId},
+            {"State", TStateStorageRingInfo::RingStateToString(state)});
         
         if (state == TStateStorageRingInfo::RestartByThisRequest) {
             hasRestartRingsByThisRequest = true;
@@ -1114,11 +1118,11 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
         auto &permission = *resp.MutablePermissions(i);
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
         State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner, priority));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission"
-            << ": id# " << permission.GetId()
-            << ", requestId# " << requestId
-            << ", owner# " << owner
-            << ", priority# " << priority);
+        YDB_LOG_DEBUG("Accepting permission",
+            {"id", permission.GetId()},
+            {"requestId", requestId},
+            {"owner", owner},
+            {"priority", priority});
         ClusterInfo->AddLocks(permission, requestId, owner, priority, &ctx);
 
         if (!check) {
@@ -1146,7 +1150,8 @@ void TCms::ScheduleCleanup(TInstant time, const TActorContext &ctx)
         && ScheduledCleanups.top() <= (time + TDuration::Seconds(1)))
         return;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Schedule cleanup at " << time);
+    YDB_LOG_CTX_DEBUG(ctx, "Schedule cleanup at",
+        {"time", time});
 
     ScheduledCleanups.push(time);
     ctx.Schedule(time - now, new TEvPrivate::TEvCleanupExpired);
@@ -1230,7 +1235,7 @@ void TCms::DoPermissionsCleanup(const TActorContext &ctx)
 
 void TCms::CleanupWalleTasks(const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS, "Running CleanupWalleTasks");
+    YDB_LOG_CTX_DEBUG(ctx, "Running CleanupWalleTasks");
 
     // Wall-E tasks are updated separately from its request and
     // permissions which means we might have some Wall-E requests
@@ -1573,8 +1578,8 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvCms::TEvPermissionResponse, Handle);
                 default:
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS,
-                                "Unexpected event type: " << ev->GetTypeName());
+                    YDB_LOG_ERROR("Unexpected event",
+                        {"type", ev->GetTypeName()});
                     break;
             }
         }
@@ -1935,8 +1940,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
     TabletCounters->Percentile()[COUNTER_LATENCY_INFO_COLLECTOR].IncrementFor((ctx.Now() - InfoCollectorStartTime).MilliSeconds());
 
     if (!ev->Get()->Success) {
-        LOG_NOTICE_S(ctx, NKikimrServices::CMS,
-                     "Couldn't collect cluster state.");
+        YDB_LOG_CTX_NOTICE(ctx, "Couldn't collect cluster state.");
 
         if (!ClusterInfo) {
             State->ClusterInfo = new TClusterInfo;
@@ -2574,9 +2578,9 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        LOG_ERROR_S(ctx, NKikimrServices::CMS,
-                    "Cannot subscribe for config updates: " << rec.GetStatus().GetCode()
-                    << " " << rec.GetStatus().GetReason());
+        YDB_LOG_CTX_ERROR(ctx, "Cannot subscribe for config",
+            {"updates", rec.GetStatus().GetCode()},
+            {"GetReason", rec.GetStatus().GetReason()});
 
         SubscribeForConfig(ctx);
         return;
@@ -2584,8 +2588,8 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 
     ConfigSubscriptionId = rec.GetSubscriptionId();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Got config subscription id=" << ConfigSubscriptionId);
+    YDB_LOG_CTX_DEBUG(ctx, "Got config subscription",
+        {"id", ConfigSubscriptionId});
 }
 
 void TCms::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev,

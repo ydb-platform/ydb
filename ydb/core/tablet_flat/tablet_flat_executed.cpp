@@ -4,6 +4,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_EXECUTOR
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -24,9 +27,11 @@ bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
         // is expected to always succeed.
         if (auto* actor = dynamic_cast<IActor*>(this)) {
             auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
-            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR,
-                "Tablet " << TabletID() << " unhandled exception " << TypeName(e) << ": " << e.what()
-                << '\n' << TBackTrace::FromCurrentException().PrintToString());
+            YDB_LOG_CRIT("Tablet unhandled exception \n",
+                {"TabletID", TabletID()},
+                {"#_TypeName(e)", TypeName(e)},
+                {"what", e.what()},
+                {"PrintToString", TBackTrace::FromCurrentException().PrintToString()});
 
             GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 
@@ -249,7 +254,8 @@ bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, 
 }
 
 void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::TABLET_EXECUTOR, "RenderHtmlPage for tablet " << TabletID());
+    YDB_LOG_CTX_NOTICE(ctx, "RenderHtmlPage for tablet",
+        {"TabletID", TabletID()});
     auto cgi = ev->Get()->Cgi();
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();

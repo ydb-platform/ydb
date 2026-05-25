@@ -432,7 +432,7 @@ public:
                 json["PathDescription"]["ExternalTableDescription"]["Content"][key] = array;
             }
         } catch (...) {
-            BLOG_CRIT("Сan't unpack content for external table: " << sourceType << ", error: " << CurrentExceptionMessage());
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Сan't unpack content for external table: " << sourceType << ", error: " << CurrentExceptionMessage());
         }
     }
 

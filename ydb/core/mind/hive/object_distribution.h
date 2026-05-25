@@ -85,7 +85,7 @@ struct TObjectDistribution {
             RemoveFromSortedDistribution({value, node.Id});
         }
         if (diff + value < 0) {
-            BLOG_ERROR("UpdateObjectCount: new value " << diff + value << " is negative");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::HIVE, GetLogPrefix() <<"UpdateObjectCount: new value " << diff + value << " is negative");
         }
         Y_DEBUG_ABORT_UNLESS(diff + value >= 0);
         value += diff;

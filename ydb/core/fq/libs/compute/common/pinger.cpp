@@ -18,11 +18,9 @@
 #include <util/generic/utility.h>
 
 #include <deque>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PINGER, "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_PINGER
 
 namespace NFq {
 
@@ -168,7 +166,9 @@ public:
     static constexpr char ActorName[] = "YQ_PINGER";
 
     void Bootstrap() {
-        LOG_T("Start Pinger");
+        YDB_LOG_TRACE("Start Pinger",
+            {"QueryId", Id},
+            {"Owner", OwnerId});
         StartLeaseTime = TActivationContext::Now(); // Not accurate value, but it allows us to retry the first unsuccessful ping request.
         ScheduleNextPing();
         Become(&TPingerActor::StateFunc);
@@ -184,7 +184,9 @@ private:
     )
 
     void PassAway() override {
-        LOG_T("Stop Pinger");
+        YDB_LOG_TRACE("Stop Pinger",
+            {"QueryId", Id},
+            {"Owner", OwnerId});
         NActors::TActorBootstrapped<TPingerActor>::PassAway();
     }
 
@@ -197,7 +199,9 @@ private:
 
     void Wakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
         if (FatalError) {
-            LOG_D("Got wakeup after fatal error. Ignore");
+            YDB_LOG_DEBUG("Got wakeup after fatal error. Ignore",
+                {"QueryId", Id},
+                {"Owner", OwnerId});
             return;
         }
 
@@ -237,7 +241,10 @@ private:
     void Handle(TEvents::TEvForwardPingRequest::TPtr& ev) {
         Y_ABORT_UNLESS(ev->Cookie != ContinueLeaseRequestCookie);
         if (Finishing) {
-            LOG_E("Attempt to send a ping request to the terminating actor " << ev->Get()->Request);
+            YDB_LOG_ERROR("Attempt to send a ping request to the terminating actor",
+                {"QueryId", Id},
+                {"Owner", OwnerId},
+                {"#_ev->Get()->Request", ev->Get()->Request});
             Send(ReplyToSender ? ev->Sender : Parent, new TEvents::TEvForwardPingResponse(false, FederatedQuery::QueryAction::QUERY_ACTION_UNSPECIFIED), 0, ev->Cookie);
             return;
         }
@@ -247,10 +254,15 @@ private:
             SchedulerCookieHolder.Reset(nullptr);
         }
 
-        LOG_T("Forward ping request: " << ev->Get()->Request);
+        YDB_LOG_TRACE("Forward ping",
+            {"QueryId", Id},
+            {"Owner", OwnerId},
+            {"request", ev->Get()->Request});
         if (FatalError) {
             if (Finishing) {
-                LOG_D("Got final ping request after fatal error");
+                YDB_LOG_DEBUG("Got final ping request after fatal error",
+                    {"QueryId", Id},
+                    {"Owner", OwnerId});
                 PassAway();
             }
         } else {
@@ -286,7 +298,9 @@ private:
 
     void Handle(TEvInternalService::TEvPingTaskResponse::TPtr& ev) {
         if (FatalError) {
-            LOG_D("Got ping response after fatal error. Ignore");
+            YDB_LOG_DEBUG("Got ping response after fatal error. Ignore",
+                {"QueryId", Id},
+                {"Owner", OwnerId});
             return;
         }
 
@@ -335,11 +349,17 @@ private:
         }
 
         if (success) {
-            LOG_T("Ping response success: " << ev->Get()->Result);
+            YDB_LOG_TRACE("Ping response",
+                {"QueryId", Id},
+                {"Owner", OwnerId},
+                {"success", ev->Get()->Result});
             StartLeaseTime = now;
             auto action = ev->Get()->Result.action();
             if (action != FederatedQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
-                LOG_D("Query action: " << FederatedQuery::QueryAction_Name(action));
+                YDB_LOG_DEBUG("Query",
+                    {"QueryId", Id},
+                    {"Owner", OwnerId},
+                    {"action", FederatedQuery::QueryAction_Name(action)});
                 SendQueryAction(action);
             }
 
@@ -355,14 +375,23 @@ private:
                 }
             }
         } else if (retryAfter) {
-            LOG_W("Ping response error: " << errorMessage << ". Retry after: " << *retryAfter);
+            YDB_LOG_WARN("Ping response. Retry",
+                {"QueryId", Id},
+                {"Owner", OwnerId},
+                {"error", errorMessage},
+                {"after", *retryAfter});
             Schedule(*retryAfter, new NActors::TEvents::TEvWakeup(continueLeaseRequest ? RetryContinueLeaseWakeupTag : RetryForwardPingRequestWakeupTag));
         } else {
             TRetryState* retryStateForLogging = retryState;
             if (!retryStateForLogging) {
                 retryStateForLogging = continueLeaseRequest ? &RetryState : &ForwardRequests.front().RetryState;
             }
-            LOG_E("Ping response error: " << errorMessage << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
+            YDB_LOG_ERROR("Ping response. Retried times during",
+                {"QueryId", Id},
+                {"Owner", OwnerId},
+                {"error", errorMessage},
+                {"GetRetriesCount", retryStateForLogging->GetRetriesCount()},
+                {"#_retryStateForLogging->GetRetryTime(now)", retryStateForLogging->GetRetryTime(now)});
             auto action = ev->Get()->Status.IsSuccess() ? ev->Get()->Result.action() : FederatedQuery::QUERY_ACTION_UNSPECIFIED;
             if (ReplyToSender) {
                 for (const auto& forwardRequest: ForwardRequests) {
@@ -376,7 +405,9 @@ private:
         }
 
         if (Finishing && ForwardRequests.empty() && !Requested) {
-            LOG_D("Query finished");
+            YDB_LOG_DEBUG("Query finished",
+                {"QueryId", Id},
+                {"Owner", OwnerId});
             PassAway();
         }
     }
@@ -390,14 +421,20 @@ private:
             if (!retry && !reqInfo.RetryState) {
                 reqInfo.RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
             }
-            LOG_T((retry ? "Retry forward" : "Forward") << " request Private::PingTask");
+            YDB_LOG_TRACE("request Private::PingTask",
+                {"QueryId", Id},
+                {"Owner", OwnerId},
+                {"#_num_0", (retry ? "Retry forward" : "Forward")});
 
             Ping(reqInfo.Request->Get()->Request, reqInfo.Request->Cookie);
         }
     }
 
     void Ping(bool retry = false) {
-        LOG_T((retry ? "Retry request" : "Request") << " Private::PingTask");
+        YDB_LOG_TRACE("Private::PingTask",
+            {"QueryId", Id},
+            {"Owner", OwnerId},
+            {"#_num_0", (retry ? "Retry request" : "Request")});
 
         Y_ABORT_UNLESS(!Requested);
         Requested = true;

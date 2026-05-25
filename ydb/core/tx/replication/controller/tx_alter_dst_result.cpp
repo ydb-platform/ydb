@@ -1,4 +1,7 @@
 #include "controller_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -18,31 +21,36 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"LogPrefix", LogPrefix},
+            {"Execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown replication",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown target",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
         if (target->GetDstState() != TReplication::EDstState::Alter) {
-            CLOG_W(ctx, "Dst state mismatch"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", state# " << target->GetDstState());
+            YDB_LOG_CTX_WARN(ctx, "Dst state mismatch",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid},
+                {"state", target->GetDstState()});
             return true;
         }
 
@@ -50,14 +58,16 @@ public:
             target->SetDstState(NextState(Replication->GetDesiredState()));
             target->UpdateConfig(Replication->GetConfig());
 
-            CLOG_N(ctx, "Target dst altered"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_CTX_NOTICE(ctx, "Target dst altered",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
 
             if (Replication->CheckAlterDone()) {
-                CLOG_N(ctx, "Replication altered"
-                    << ": rid# " << rid
-                    << ", state# " << Replication->GetDesiredState());
+                YDB_LOG_CTX_NOTICE(ctx, "Replication altered",
+                    {"LogPrefix", LogPrefix},
+                    {"rid", rid},
+                    {"state", Replication->GetDesiredState()});
                 Replication->SetState(Replication->GetDesiredState());
             }
         } else {
@@ -69,11 +79,12 @@ public:
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
                 << ": " << target->GetIssue());
 
-            CLOG_E(ctx, "Alter dst error"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
-                << ", " << Ev->Get()->Error);
+            YDB_LOG_CTX_ERROR(ctx, "Alter dst error",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid},
+                {"#_NKikimrScheme::EStatus_Name(Ev->Get()->Status)", NKikimrScheme::EStatus_Name(Ev->Get()->Status)},
+                {"#_Ev->Get()->Error", Ev->Get()->Error});
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -109,7 +120,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

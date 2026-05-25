@@ -8,6 +8,9 @@
 #include "sock_listener.h"
 #include "sock_config.h"
 #include "sock64.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NRawSocket {
 
@@ -62,17 +65,22 @@ public:
 
             err = Socket->Listen(LISTEN_QUEUE);
             if (err == 0) {
-                LOG_INFO_S(*NActors::TlsActivationContext, Service,
-                           "Listening on " << bindAddress->ToString() << (endpoint->SecureContext ? " (ssl)" : ""));
+                YDB_LOG_CTX_INFO(*NActors::TlsActivationContext, "Listening on",
+                    {"bindAddress", bindAddress->ToString()},
+                    {"#_num_0", (endpoint->SecureContext ? " (ssl)" : "")});
                 Socket->SetNonBlock();
                 Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 Become(&TThis::StateWorking);
                 return;
             } else {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString() << ". Error: " << strerror(-err));
+                YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Failed to listen on .",
+                    {"bindAddress", bindAddress->ToString()},
+                    {"Error", strerror(-err)});
             }
         } else {
-            LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to bind " << bindAddress->ToString() << ". Error: " << strerror(-err));
+            YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Failed to bind .",
+                {"bindAddress", bindAddress->ToString()},
+                {"Error", strerror(-err)});
         }
 
         switch(ErrorAction) {

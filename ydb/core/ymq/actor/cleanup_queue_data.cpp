@@ -3,6 +3,9 @@
 #include <ydb/core/ymq/actor/cfg/cfg.h>
 #include <ydb/core/ymq/base/run_query.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 
 
 
@@ -97,7 +100,7 @@ namespace NKikimr::NSQS {
     }
 
     void TCleanupQueueDataActor::RunGetQueuesQuery(EState state, TDuration sendAfter, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] getting queues...");
+        YDB_LOG_CTX_DEBUG(ctx, "[cleanup removed queues] getting queues...");
         State = state;
 
         NYdb::TParams params = NYdb::TParamsBuilder()
@@ -135,7 +138,7 @@ namespace NKikimr::NSQS {
                 Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
                 NYdb::TResultSetParser parser(response.GetYdbResults(0));
                 if (parser.RowsCount() == 0) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] there are no queues to delete");
+                    YDB_LOG_CTX_DEBUG(ctx, "[cleanup removed queues] there are no queues to delete");
                     LockQueueToRemove(IDLE_TIMEOUT, ctx);
                     return;
                 }
@@ -159,7 +162,8 @@ namespace NKikimr::NSQS {
                 break;
             }
             case EState::Finish: {
-                LOG_INFO_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] queue data (queue_id_number=" << QueueIdNumber << ") removed successfuly.");
+                YDB_LOG_CTX_INFO(ctx, "[cleanup removed queues] queue data ) removed successfuly.",
+                    {"(queue_id_number", QueueIdNumber});
                 MonitoringCounters->CleanupRemovedQueuesDone->Inc();
                 LockQueueToRemove(TDuration::Zero(), ctx);
                 break;
@@ -171,7 +175,8 @@ namespace NKikimr::NSQS {
         MonitoringCounters->CleanupRemovedQueuesErrors->Inc();
         auto runAfter = RetryPeriod;
         RetryPeriod = Min(RetryPeriod * 2, RETRY_PERIOD_MAX);
-        LOG_ERROR_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got an error while deleting data : " << error);
+        YDB_LOG_CTX_ERROR(ctx, "[cleanup removed queues] got an error while deleting data",
+            {"error", error});
         LockQueueToRemove(runAfter, ctx);
     }
 
@@ -196,7 +201,7 @@ namespace NKikimr::NSQS {
     }
 
     void TCleanupQueueDataActor::UpdateLock(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] update queue lock...");
+        YDB_LOG_CTX_DEBUG(ctx, "[cleanup removed queues] update queue lock...");
         State = EState::UpdateLockQueue;
 
         NYdb::TParamsBuilder paramsBuilder;
@@ -229,8 +234,9 @@ namespace NKikimr::NSQS {
         // Select RemoveTimestamp, QueueIdNumber, FifoQueue, Shards, TablesFormat
         ui64 queueIdNumber = *parser.ColumnParser(1).GetOptionalUint64();
         if (queueIdNumber != QueueIdNumber) {
-            LOG_WARN_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to continue remove data queue_id_number=" << queueIdNumber
-                << ", but was locked queue_id_number=" << QueueIdNumber);
+            YDB_LOG_CTX_WARN(ctx, "[cleanup removed queues] got queue to continue remove data, but was locked",
+                {"queue_id_number", queueIdNumber},
+                {"#_queue_id_number", QueueIdNumber});
             StartRemoveData(parser, ctx);
             return;
         }
@@ -250,8 +256,10 @@ namespace NKikimr::NSQS {
         Shards = *parser.ColumnParser(3).GetOptionalUint32();
         TablesFormat = *parser.ColumnParser(4).GetOptionalUint32();
 
-        LOG_INFO_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to remove data: removed at " << RemoveQueueTimetsamp
-            << " queue_id_number=" << QueueIdNumber << " tables_format=" << TablesFormat);
+        YDB_LOG_CTX_INFO(ctx, "[cleanup removed queues] got queue to remove data: removed at",
+            {"RemoveQueueTimetsamp", RemoveQueueTimetsamp},
+            {"queue_id_number", QueueIdNumber},
+            {"tables_format", TablesFormat});
         if (TablesFormat == 0) {
             Finish(ctx); // TODO move code for removing directories
         } else {
@@ -260,9 +268,10 @@ namespace NKikimr::NSQS {
     }
 
     void TCleanupQueueDataActor::OnRemovedData(ui64 removedRows, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] removed rows " << removedRows
-            << ", cleared tables " << ClearedTablesCount << ", shards to remove " << ShardsToRemove
-        );
+        YDB_LOG_CTX_DEBUG(ctx, "[cleanup removed queues] removed rows, cleared tables, shards to remove",
+            {"removedRows", removedRows},
+            {"ClearedTablesCount", ClearedTablesCount},
+            {"ShardsToRemove", ShardsToRemove});
         MonitoringCounters->CleanupRemovedQueuesRows->Add(removedRows);
         if (removedRows == 0) {
             if (ShardsToRemove) {

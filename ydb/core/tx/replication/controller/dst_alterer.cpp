@@ -8,6 +8,9 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -28,7 +31,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -67,7 +72,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
@@ -82,18 +89,23 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
-            << ": txId# " << txId);
+        YDB_LOG_DEBUG("Subscribe tx",
+            {"LogPrefix", LogPrefix},
+            {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         Success();
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
 
         if (SchemeShardId == ev->Get()->TabletId) {
             return;
@@ -103,28 +115,33 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         Retry();
     }
 
     void Success() {
-        LOG_I("Success");
+        YDB_LOG_INFO("Success",
+            {"LogPrefix", LogPrefix});
 
         Send(Parent, new TEvPrivate::TEvAlterDstResult(ReplicationId, TargetId));
         PassAway();
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
-        LOG_E("Error"
-            << ": status# " << status
-            << ", reason# " << error);
+        YDB_LOG_ERROR("Error",
+            {"LogPrefix", LogPrefix},
+            {"status", status},
+            {"reason", error});
 
         Send(Parent, new TEvPrivate::TEvAlterDstResult(ReplicationId, TargetId, status, error));
         PassAway();
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry",
+            {"LogPrefix", LogPrefix});
         Schedule(RetryInterval, new TEvents::TEvWakeup);
     }
 

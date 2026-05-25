@@ -13,6 +13,7 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -283,8 +284,10 @@ void TKqpScanComputeActor::DoBootstrap() {
     NDq::TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
         logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](const TString& message) {
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
-                << ", task: " << taskId << ": " << message);
+            YDB_LOG_CTX_COMP_DEBUG(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "",
+                {"TxId", txId},
+                {"task", taskId},
+                {"message", message});
         };
     }
 

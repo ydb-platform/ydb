@@ -59,6 +59,7 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -1495,8 +1496,8 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
                 value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
                 Status = static_cast<NKikimrPQ::ETopicPartitionStatus>(value);
             } else {
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Read unknown topic partition status value " << value);
+                YDB_LOG_CTX_COMP_ERROR(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Read unknown topic partition status value",
+                    {"value", value});
                 Status = NKikimrPQ::ETopicPartitionStatus::Active;
             }
         }

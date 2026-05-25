@@ -1,5 +1,8 @@
 #include "hulldb_recovery.h"
 #include <google/protobuf/messagext.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLRECS
 
 namespace NKikimr {
 
@@ -369,8 +372,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                << "Db# LogoBlobs action# sync_data_batch mode# " << OpMode2Str(mode) << " lsn# " << seg);
+        YDB_LOG_CTX_DEBUG(ctx, "Db# LogoBlobs action# sync_data_batch",
+            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+            {"mode", OpMode2Str(mode)},
+            {"lsn", seg});
 
         Y_VERIFY_S(logoBlobs && (seg.Last - seg.First + 1 == logoBlobs->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -383,8 +388,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                << "Db# Blocks action# sync_data_batch mode# " << OpMode2Str(mode) << " lsn# " << seg);
+        YDB_LOG_CTX_DEBUG(ctx, "Db# Blocks action# sync_data_batch",
+            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+            {"mode", OpMode2Str(mode)},
+            {"lsn", seg});
 
         Y_VERIFY_S(blocks && (seg.Last - seg.First + 1 == blocks->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -398,8 +405,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                << "Db# Barriers action# sync_data_batch mode# " << OpMode2Str(mode) << " lsn# " << seg);
+        YDB_LOG_CTX_DEBUG(ctx, "Db# Barriers action# sync_data_batch",
+            {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+            {"mode", OpMode2Str(mode)},
+            {"lsn", seg});
 
         Y_VERIFY_S(barriers && (seg.Last - seg.First + 1 == barriers->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);

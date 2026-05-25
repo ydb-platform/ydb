@@ -6,10 +6,9 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_C(stream) LOG_CRIT_S (::NActors::TActivationContext::AsActorContext(), NKikimrServices::FQ_LOG_UPDATER, stream)
-#define LOG_E(stream) LOG_ERROR_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::FQ_LOG_UPDATER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(::NActors::TActivationContext::AsActorContext(), NKikimrServices::FQ_LOG_UPDATER, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_LOG_UPDATER
 
 namespace NKikimr {
 
@@ -52,15 +51,16 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_C("Failed to deliver subscription request to config dispatcher.");
+                YDB_LOG_CTX_CRIT(::NActors::TActivationContext::AsActorContext(), "Failed to deliver subscription request to config dispatcher.");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response.");
+                YDB_LOG_CTX_ERROR(::NActors::TActivationContext::AsActorContext(), "Failed to deliver config notification response.");
                 break;
 
             default:
-                LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                YDB_LOG_CTX_ERROR(::NActors::TActivationContext::AsActorContext(), "Undelivered event with unexpected source",
+                    {"type", ev->Get()->SourceType});
                 break;
         }
     }
@@ -68,13 +68,13 @@ private:
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev) {
         Y_UNUSED(ev);
 
-        LOG_D("Subscribed for config changes.");
+        YDB_LOG_CTX_DEBUG(::NActors::TActivationContext::AsActorContext(), "Subscribed for config changes.");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
 
-        LOG_D("Updated table service config.");
+        YDB_LOG_CTX_DEBUG(::NActors::TActivationContext::AsActorContext(), "Updated table service config.");
 
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
@@ -90,7 +90,8 @@ private:
             if (entry.GetComponent() == kqpYqlName && entry.HasLevel()) {
                 auto yqlPriority = static_cast<NActors::NLog::EPriority>(entry.GetLevel());
                 NYql::NDq::SetYqlLogLevels(yqlPriority);
-                LOG_D("Updated YQL logs priority: " << (ui32)yqlPriority);
+                YDB_LOG_CTX_DEBUG(::NActors::TActivationContext::AsActorContext(), "Updated YQL logs",
+                    {"priority", (ui32)yqlPriority});
                 return;
             }
         }
@@ -99,7 +100,8 @@ private:
         ui8 currentLevel = TActivationContext::AsActorContext().LoggerSettings()->GetComponentSettings(NKikimrServices::KQP_YQL).Raw.X.Level;
         auto yqlPriority = static_cast<NActors::NLog::EPriority>(currentLevel);
 
-        LOG_D("Updated YQL logs priority to current level: " << (ui32)yqlPriority);
+        YDB_LOG_CTX_DEBUG(::NActors::TActivationContext::AsActorContext(), "Updated YQL logs priority to",
+            {"current_level", (ui32)yqlPriority});
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 

@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -21,7 +24,9 @@ public:
         TEvHive::TEvUpdateTabletsObject* msg = Event->Get();
         auto objectId = msg->Record.GetObjectId();
 
-        BLOG_D("THive::TTxUpdateTabletsObject::Execute(" << objectId << ")");
+        YDB_LOG_DEBUG("THive::TTxUpdateTabletsObject::Execute(",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"objectId", objectId});
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 tabletsUpdated = 0;
@@ -81,7 +86,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletsObject Complete");
+        YDB_LOG_DEBUG("THive::TTxUpdateTabletsObject Complete",
+            {"GetLogPrefix", GetLogPrefix()});
         SideEffects.Complete(ctx);
     }
 };

@@ -34,33 +34,6 @@
 #include <queue>
 #include <variant>
 
-#define LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
-#define LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_N(s) \
-    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_C(s) \
-    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, s)
-#define LOG_PRIO(prio, s) \
-    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, s)
-
-
-#define SINK_LOG_T(s) LOG_T(LogPrefix << s)
-#define SINK_LOG_D(s) LOG_D(LogPrefix << s)
-#define SINK_LOG_I(s) LOG_I(LogPrefix << s)
-#define SINK_LOG_W(s) LOG_W(LogPrefix << s)
-#define SINK_LOG_N(s) LOG_N(LogPrefix << s)
-#define SINK_LOG_E(s) LOG_E(LogPrefix << s)
-#define SINK_LOG_C(s) LOG_C(LogPrefix << s)
-#define SINK_LOG_PRIO(prio, s) LOG_PRIO(prio, LogPrefix << s)
-
 namespace NYql::NDq {
 
 using namespace NActors;
@@ -200,7 +173,7 @@ public:
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
-        SINK_LOG_T("SendData. Batch: " << batch.RowCount()
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix <<"SendData. Batch: " << batch.RowCount()
             << ". Checkpoint: " << checkpoint.Defined()
             << ". Finished: " << finished);
         Y_UNUSED(dataSize);
@@ -228,7 +201,7 @@ public:
             TString data(dataCol.AsStringRef());
 
             LWPROBE(PqWriteDataToSend, TString(TStringBuilder() << TxId), SinkParams.GetTopicPath(), data);
-            SINK_LOG_T("Received data for sending: " << data);
+            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix <<"Received data for sending: " << data);
 
             const auto messageSize = GetItemSize(data);
             if (messageSize > MaxMessageSize) {
@@ -247,11 +220,11 @@ public:
 
         if (checkpoint) {
             if (Buffer.empty() && WaitingAcks.empty()) {
-                SINK_LOG_D(MakeStringForLog(*checkpoint) << "Send checkpoint state immediately");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix <<MakeStringForLog(*checkpoint) << "Send checkpoint state immediately");
                 Callbacks->OnAsyncOutputStateSaved(BuildState(*checkpoint), OutputIndex, *checkpoint);
             } else {
                 ui64 seqNo = NextSeqNo + Buffer.size() - 1;
-                SINK_LOG_D(MakeStringForLog(*checkpoint) << "Defer sending the checkpoint, seqNo: " << seqNo);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix <<MakeStringForLog(*checkpoint) << "Defer sending the checkpoint, seqNo: " << seqNo);
                 Metrics.InFlyCheckpoints->Inc();
                 DeferredCheckpoints.emplace(seqNo, *checkpoint);
             }
@@ -275,7 +248,7 @@ public:
         if (data.Version == StateVersion) { // Current version
             NPq::NProto::TDqPqTopicSinkState stateProto;
             YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
-            SINK_LOG_D("Load state: " << stateProto);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix <<"Load state: " << stateProto);
             SourceId = stateProto.GetSourceId();
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
             NextSeqNo = ConfirmedSeqNo + 1;
@@ -433,7 +406,7 @@ private:
         auto& data = sinkState.Data;
         data.Version = StateVersion;
         data.Blob = serializedState;
-        SINK_LOG_T("Save checkpoint " << checkpoint << " state: " << stateProto);
+        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix <<"Save checkpoint " << checkpoint << " state: " << stateProto);
         return sinkState;
     }
 
@@ -466,7 +439,7 @@ private:
 
         std::optional<TIssues> operator()(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& ev) {
             if (ev.Acks.empty()) {
-                LOG_D(Self.LogPrefix << "Empty ack");
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE,Self.LogPrefix << "Empty ack");
                 return std::nullopt;
             }
 
@@ -474,7 +447,7 @@ private:
 
             for (auto it = ev.Acks.begin(); it != ev.Acks.end(); ++it) {
                 //Y_ABORT_UNLESS(it == ev.Acks.begin() || it->SeqNo == std::prev(it)->SeqNo + 1);
-                LOG_T(Self.LogPrefix << "Ack seq no (from TAcksEvent) " << it->SeqNo);
+                LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE,Self.LogPrefix << "Ack seq no (from TAcksEvent) " << it->SeqNo);
                 if (it->State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_DISCARDED) {
                     TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Message with seqNo " << it->SeqNo << " was discarded");
@@ -490,13 +463,13 @@ private:
                 Self.Metrics.InFlyData->Dec();
                 Self.FreeSpace += ackInfo.MessageSize;
                 ui64 seqNo = ackInfo.SeqNo;        // use seqNo stored on our side because without deduplication we do not specify SeqNo on Write().
-                LOG_T(Self.LogPrefix << "Ack seq no (from WaitingAcks) " << seqNo);
+                LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE,Self.LogPrefix << "Ack seq no (from WaitingAcks) " << seqNo);
                 Self.WaitingAcks.pop();
 
                 if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == seqNo) {
                     Self.ConfirmedSeqNo = seqNo;
                     const auto& checkpoint = std::get<1>(Self.DeferredCheckpoints.front());
-                    LOG_D(Self.LogPrefix << MakeStringForLog(checkpoint) << "Send a deferred checkpoint, seqNo: " << seqNo);
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE,Self.LogPrefix << MakeStringForLog(checkpoint) << "Send a deferred checkpoint, seqNo: " << seqNo);
                     Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(checkpoint), Self.OutputIndex, checkpoint);
                     Self.DeferredCheckpoints.pop();
                     Self.Metrics.InFlyCheckpoints->Dec();

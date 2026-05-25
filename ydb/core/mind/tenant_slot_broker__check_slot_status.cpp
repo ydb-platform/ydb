@@ -1,4 +1,7 @@
 #include "tenant_slot_broker_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
 
 namespace NKikimr {
 namespace NTenantSlotBroker {
@@ -20,17 +23,17 @@ public:
         if (!slot->IsConnected) {
             SlotsToRemove.push_back(slot);
         } else {
-            LOG_WARN_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                       "Repeat timeouted request " << RequestId << " for " << slot->IdString(true));
+            YDB_LOG_CTX_WARN(ctx, "Repeat timeouted request for",
+                {"RequestId", RequestId},
+                {"#_slot->IdString(true)", slot->IdString(true)});
             Self->SendConfigureSlot(slot, ctx);
         }
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "TTxCheckSlotStatus Execute "
-                    << (Slot ? Slot->IdString() : TString("all slots")));
+        YDB_LOG_CTX_DEBUG(ctx, "TTxCheckSlotStatus Execute",
+            {"#_num_0", (Slot ? Slot->IdString() : TString("all slots"))});
 
         if (Slot) {
             // Check slot wasn't re-created.
@@ -45,8 +48,8 @@ public:
         }
 
         for (auto &slot : SlotsToRemove) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Removing slot " << slot->IdString() << " due to connection timeout");
+            YDB_LOG_CTX_DEBUG(ctx, "Removing slot due to connection timeout",
+                {"IdString", slot->IdString()});
             if (slot->AssignedTenant)
                 ReassignSlots = true;
             Self->RemoveSlot(slot, txc, ctx);

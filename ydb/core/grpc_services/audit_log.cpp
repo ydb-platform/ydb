@@ -5,6 +5,9 @@
 
 #include "base/base.h"
 #include "audit_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -27,12 +30,11 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
     );
 
     // and transitional, to be removed, output to the common log
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, "AUDIT: "
-        << "request name: " << ctx->GetRequestName()
-        << ", database: " << database
-        << ", peer: " << ctx->GetPeerName()
-        << ", subject: " << (userSID ? userSID : "no subject")
-    );
+    YDB_LOG_NOTICE("AUDIT: request",
+        {"name", ctx->GetRequestName()},
+        {"database", database},
+        {"peer", ctx->GetPeerName()},
+        {"subject", (userSID ? userSID : "no subject")});
 }
 
 void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts)

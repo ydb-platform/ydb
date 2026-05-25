@@ -41,9 +41,6 @@ namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
 static const bool TESTS_LARGE = getenv("TESTS_LARGE") != nullptr;
 
-#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
-#define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
-
 void SegmentationFaultHandler(int) {
     Cerr << "segmentation fault call stack:" << Endl;
     FormatBackTrace(&Cerr);
@@ -421,7 +418,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         // IsPersistent
         // EnableSpilling
         TLogFunc logFunc = [this](const TString& msg) {
-            LOG_D(msg);
+            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
         TDqChannelSettings settings = {
@@ -534,7 +531,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     TUnboxedValueBatch CreateRow(ui32 value, ui64 ts) {
-        LOG_D("create " << value << " " << ts);
+        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"create " << value << " " << ts);
         if (IsWide) {
             TUnboxedValueBatch result(WideRowType);
             result.PushRow([&](ui32 idx) {
@@ -573,7 +570,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         if (!ev) {
             throw yexception() << "Failed";
         }
-        LOG_D("Got " << ev->Get()->Record.DebugString());
+        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Got " << ev->Get()->Record.DebugString());
         auto& channelData = *ev->Get()->Record.MutableChannelData();
 
         TDqSerializedBatch data;
@@ -596,7 +593,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         while (dqInputChannel->Pop(batch, watermark)) {
             if (IsWide) {
                 if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
-                    LOG_D("WideRow:");
+                    LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"WideRow:");
                     if (row) {
                         UNIT_ASSERT_EQUAL(width, columns);
                         for (ui32 col = 0; col < width; ++col) {
@@ -606,7 +603,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                             }
                         }
                     } else {
-                        LOG_D("null");
+                        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"null");
                         UNIT_ASSERT(false);
                     }
                     return true;
@@ -615,7 +612,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 }
             } else {
                 if (!batch.ForEachRow([this, cb, columns](const NUdf::TUnboxedValue& row) {
-                    LOG_D("Row:");
+                    LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Row:");
                     if (row) {
                         for (ui32 col = 0; col < columns; ++col) {
                             const auto& item = row.GetElement(col);
@@ -624,10 +621,10 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                             }
                         }
                     } else {
-                        LOG_D("null");
+                        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"null");
                         UNIT_ASSERT(false);
                     }
-                    LOG_D("/");
+                    LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"/");
                     return true;
                 })) {
                     return false;
@@ -654,12 +651,12 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     void WaitForChannelDataAck(ui64 channelId, ui32 seqNo) {
         for (;;) {
             auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelDataAck>(SrcEdgeActor[channelId]);
-            LOG_D("Got ack " << ev->Get()->Record);
+            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Got ack " << ev->Get()->Record);
             UNIT_ASSERT_EQUAL(ev->Get()->Record.GetChannelId(), channelId);
             if (ev->Get()->Record.GetSeqNo() == seqNo) {
                 break;
             }
-            LOG_D("...but waiting for " << seqNo);
+            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"...but waiting for " << seqNo);
         }
     }
 
@@ -717,7 +714,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 noAck = false; // final packet must be acked
             }
             evInputChannelData->Record.SetNoAck(noAck);
-            LOG_D("Sending " << packet << "/" << packets << " "  << chData);
+            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Sending " << packet << "/" << packets << " "  << chData);
             ActorSystem.Send(syncCA, SrcEdgeActor[channelId], evInputChannelData.Release());
             if ((dqOutputChannel->IsFinished() || waitIntermediateAcks) && !noAck) {
                 WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
@@ -733,7 +730,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         chData.SetChannelId(channelId);
         chData.SetFinished(true);
         evInputChannelData->Record.SetNoAck(false);
-        LOG_D("Sending FINISH " << chData);
+        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Sending FINISH " << chData);
         ActorSystem.Send(syncCA, SrcEdgeActor[channelId], evInputChannelData.Release());
         WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
     }
@@ -744,10 +741,10 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 #define WEAK_UNIT_ASSERT_EQUAL_C UNIT_ASSERT_EQUAL_C
 #define WEAK_UNIT_ASSERT UNIT_ASSERT
 #else
-#define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_LE_C(A, B, C) do { if (!((A) <= (B))) LOG_E("Assert " #A " <= " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
-#define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
+#define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Assert " #A " > " #B " failed " << C); } while(0)
+#define WEAK_UNIT_ASSERT_LE_C(A, B, C) do { if (!((A) <= (B))) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Assert " #A " <= " #B " failed " << C); } while(0)
+#define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Assert " #A " == " #B " failed " << C); } while(0)
+#define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Assert " #A " failed "); } while(0)
 #endif
     void BasicMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         LogPrefix = TStringBuilder() << "Square Test for:"
@@ -781,7 +778,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (watermarkPeriod && packet % watermarkPeriod == 0) {
-                LOG_D("push watermark " << packet);
+                LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"push watermark " << packet);
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
@@ -819,20 +816,20 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                     }
                     UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
                     auto data = val.Get<i32>();
-                    LOG_D(data);
+                    LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<data);
                     ++receivedData[data];
                     return true;
                 },
                 [this, &watermark](const auto& receivedWatermark) {
                     watermark = receivedWatermark;
-                    LOG_D("Got watermark " << *watermark);
+                    LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Got watermark " << *watermark);
                 },
                 [this, &syncCA]() {
                     DumpMonPage(syncCA, [this](auto&& str) {
                         UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
                         UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
                         // TODO add validation
-                        LOG_D(str);
+                        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<str);
                     });
                 },
                 dqInputChannel))
@@ -847,9 +844,9 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             if (watermark) {
                 UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
                 WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
-                LOG_D("Last watermark " << *watermark);
+                LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Last watermark " << *watermark);
             } else {
-                LOG_E("NO WATERMARK");
+                LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"NO WATERMARK");
             }
         } else {
             UNIT_ASSERT(!watermark);
@@ -948,14 +945,14 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                     if (columnName == "e.id") {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
-                        LOG_D(column << " id = " << val.Get<i32>());
+                        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<column << " id = " << val.Get<i32>());
                         col0 = val.Get<i32>();
                         ++receivedData[val.Get<i32>()];
                     } else if (columnName == "e.ts") {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
                         auto ts = val.Get<ui64>();
-                        LOG_D(column << " ts = " << ts);
+                        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<column << " ts = " << ts);
                         if (watermark) {
                             UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
                         }
@@ -966,11 +963,11 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                             UNIT_ASSERT(!!cval);
                             UNIT_ASSERT(cval.IsEmbedded());
                             auto data = cval.Get<i32>();
-                            LOG_D(column << " key = " << data);
+                            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<column << " key = " << data);
                             UNIT_ASSERT_EQUAL_C(data, col0, data << "!=" << col0);
                         } else {
                             UNIT_ASSERT_C(!val, "null (1) expected for " << col0);
-                            LOG_D(column << " key IS NULL");
+                            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<column << " key IS NULL");
                         }
                     } else if (columnName == "u.data") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
@@ -978,11 +975,11 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                             const auto cval = val.GetOptionalValue();
                             UNIT_ASSERT(!!cval);
                             auto ref = TString(cval.AsStringRef());
-                            LOG_D(column << " data = '" << ref << "'");
+                            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<column << " data = '" << ref << "'");
                             UNIT_ASSERT_EQUAL(ref, ToString(col0));
                         } else {
                             UNIT_ASSERT_C(!val, "null (2) expected for " << col0);
-                            LOG_D(column << " data IS NULL");
+                            LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<column << " data IS NULL");
                         }
                     } else {
                         UNIT_ASSERT_C(false, "Unexpected column " << column << " name " << columnName);
@@ -991,14 +988,14 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 },
                 [this, &watermark](const auto& receivedWatermark) {
                     watermark = receivedWatermark;
-                    LOG_D("Got watermark " << *watermark);
+                    LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Got watermark " << *watermark);
                 },
                 [this, &syncCA]() {
                     DumpMonPage(syncCA, [this](auto&& str) {
                         UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
                         UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
                         // TODO add validation
-                        LOG_D(str);
+                        LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<str);
                     });
                 },
                 dqInputChannel))
@@ -1012,9 +1009,9 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             if (watermark) {
                 UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
                 WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
-                LOG_D("Last watermark " << *watermark);
+                LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"Last watermark " << *watermark);
             } else {
-                LOG_E("NO WATERMARK");
+                LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix <<"NO WATERMARK");
             }
         } else {
             UNIT_ASSERT(!watermark);

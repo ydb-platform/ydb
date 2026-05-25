@@ -2,17 +2,6 @@
 
 #include <ydb/library/actors/core/log.h>
 
-#define LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
-#define LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
-#define LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
-#define LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
-#define LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
-
 namespace NYql::NDq {
 
 using namespace NActors;
@@ -40,27 +29,27 @@ void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId, TDuration idleT
 
 void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime)
 {
-    LOG_D("Register " << (isChannel ? "channel" : "async input") << " " << inputId << ", idle timeout: " << idleTimeout);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<"Register " << (isChannel ? "channel" : "async input") << " " << inputId << ", idle timeout: " << idleTimeout);
     auto registered = Impl.RegisterInput(TInputKey {inputId, isChannel}, systemTime, idleTimeout);
     if (!registered) {
-        LOG_E("Repeated registration " << inputId <<" " << (isChannel ? "channel" : "async input"));
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<"Repeated registration " << inputId <<" " << (isChannel ? "channel" : "async input"));
     }
 }
 
 void TDqComputeActorWatermarks::UnregisterInputChannel(ui64 inputId, bool silent) {
-    LOG_D("Unregister input channel " << inputId);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<"Unregister input channel " << inputId);
     UnregisterInput(inputId, true, silent);
 }
 
 void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId, bool silent) {
-    LOG_D("Unregister async input " << inputId);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<"Unregister async input " << inputId);
     UnregisterInput(inputId, false, silent);
 }
 
 void TDqComputeActorWatermarks::UnregisterInput(ui64 inputId, bool isChannel, bool silent) {
     auto result = Impl.UnregisterInput(TInputKey {inputId, isChannel});
     if (!result && !silent) {
-        LOG_E("Unregistered " << (isChannel ? "input channel" : "async input") << " " << inputId << " was not found");
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<"Unregistered " << (isChannel ? "input channel" : "async input") << " " << inputId << " was not found");
     }
 }
 
@@ -73,7 +62,7 @@ bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, 
 }
 
 bool TDqComputeActorWatermarks::NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime) {
-    LOG_T((isChannel ? "Channel " : "Async input ") << inputId << " notified about watermark " << watermark);
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<(isChannel ? "Channel " : "Async input ") << inputId << " notified about watermark " << watermark);
     if (MaxWatermark < watermark) {
         MaxWatermark = watermark;
     }
@@ -92,15 +81,15 @@ bool TDqComputeActorWatermarks::NotifyWatermarkWasSent(TInstant watermark) {
         return TStringBuilder() << "Output notified about watermark '" << watermark << "'";
     };
 
-    LOG_T(logPrefix());
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<logPrefix());
 
     if (watermark < PendingWatermark) {
-        LOG_D(logPrefix() << " before '" << PendingWatermark << "'");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<logPrefix() << " before '" << PendingWatermark << "'");
         return false;
     }
 
     if (watermark > PendingWatermark) {
-        LOG_E(logPrefix() << " when '" << PendingWatermark << "' was expected");
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<logPrefix() << " when '" << PendingWatermark << "' was expected");
         // We will try to ignore this error, but something strange happened
         return false;
     }
@@ -141,7 +130,7 @@ bool TDqComputeActorWatermarks::ProcessIdlenessCheck(TInstant notifyTime) {
 }
 
 void TDqComputeActorWatermarks::PopPendingWatermark() {
-    LOG_T("Watermark " << *PendingWatermark << " was popped. ");
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " <<"Watermark " << *PendingWatermark << " was popped. ");
     PendingWatermark = Nothing();
 }
 

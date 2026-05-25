@@ -10,6 +10,9 @@
 #include <ydb/core/security/token_manager/token_manager_log.h>
 #include <ydb/core/security/token_manager/private_events.h>
 #include <ydb/core/security/token_manager/token_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TOKEN_MANAGER
 
 namespace NKikimr {
 
@@ -44,7 +47,8 @@ void TTokenManager::BootstrapTokenProviders() {
             .RequestTimeout = TDuration::Parse(tokenProviderSettings.GetRequestTimeout())
         };
         for (const auto& vmMetadataInfo : vmMetadataProvider.GetProvidersInfo()) {
-            BLOG_TRACE("Initialize token provider# " << vmMetadataInfo.GetId());
+            YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "Initialize token",
+                {"provider", vmMetadataInfo.GetId()});
             TokenProviders[vmMetadataInfo.GetId()] = std::make_shared<NTokenManager::TVmMetadataTokenProvider>(this->SelfId(),
                                                         VmMetadataProviderSettings,
                                                         httpProxyId,
@@ -63,11 +67,12 @@ void TTokenManager::StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
 }
 
 void TTokenManager::HandleRefreshCheck() {
-    BLOG_TRACE("Handle refresh tokens");
+    YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "Handle refresh tokens");
     while (!RefreshQueue.empty() && RefreshQueue.top().RefreshTime <= NActors::TlsActivationContext->Now()) {
         std::shared_ptr<NTokenManager::TTokenProvider> provider = RefreshQueue.top().Provider;
         RefreshQueue.pop();
-        BLOG_D("Refresh token for provider# " << provider->GetId());
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Refresh token for",
+            {"provider", provider->GetId()});
         Register(provider->CreateTokenProviderHandler());
     }
     Schedule(RefreshCheckPeriod, new NActors::TEvents::TEvWakeup());
@@ -84,47 +89,54 @@ void TTokenManager::RefreshAllTokens() {
 }
 
 void TTokenManager::NotifySubscribers(const std::shared_ptr<NTokenManager::TTokenProvider>& provider) const {
-    BLOG_TRACE("Handle NotifySubscribers");
+    YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "Handle NotifySubscribers");
     auto it = Subscribers.find(provider->GetId());
     if (it != Subscribers.end()) {
-        BLOG_D("Notify subscribers# " << provider->GetId());
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Notify",
+            {"subscribers", provider->GetId()});
         for (const auto& subscriber : it->second) {
             Send(subscriber, new TEvTokenManager::TEvUpdateToken(provider->GetId(), provider->GetToken(), provider->GetStatus()));
         }
     } else {
-        BLOG_ERROR("Can not find subscribers# " << provider->GetId());
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Can not find",
+            {"subscribers", provider->GetId()});
     }
 }
 
 void TTokenManager::Handle(NTokenManager::TEvPrivate::TEvUpdateToken::TPtr& ev) {
-    BLOG_TRACE("Handle TEvPrivate::TEvUpdateToken");
+    YDB_LOG_CTX_TRACE(*NActors::TlsActivationContext, "Handle TEvPrivate::TEvUpdateToken");
     const TString& tokenProviderId = ev->Get()->Id;
     auto it = TokenProviders.find(tokenProviderId);
     if (it != TokenProviders.end()) {
         if (ev->Get()->Status.Code == TEvTokenManager::TStatus::ECode::SUCCESS) {
-            BLOG_D("Update token for provider# " << tokenProviderId);
+            YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Update token for",
+                {"provider", tokenProviderId});
             it->second->UpdateToken(ev->Get()->Token, ev->Get()->RefreshPeriod);
         } else {
-            BLOG_D("Can not update token for provider# " << tokenProviderId << " (" << ev->Get()->Status.Message << ")");
+            YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Can not update token for",
+                {"provider", tokenProviderId},
+                {"Message", ev->Get()->Status.Message});
             it->second->SetError(ev->Get()->Status, ev->Get()->RefreshPeriod);
         }
         RefreshQueue.push({.RefreshTime = it->second->GetRefreshTime(), .Provider = it->second});
         NotifySubscribers(it->second);
     } else {
-        BLOG_ERROR("TEvPrivate::TEvUpdateToken: Can not find token provider");
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "TEvPrivate::TEvUpdateToken: Can not find token provider");
     }
 }
 
 void TTokenManager::Handle(TEvTokenManager::TEvSubscribeUpdateToken::TPtr& ev) {
     TString id = ev->Get()->Id;
-    BLOG_D("Handle TEvTokenManager::TEvSubscribeUpdateToken to token provider# " << id);
+    YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Handle TEvTokenManager::TEvSubscribeUpdateToken to token",
+        {"provider", id});
     auto it = TokenProviders.find(id);
     if (it != TokenProviders.end()) {
         Subscribers[id].insert(ev->Sender);
         Send(ev->Sender, new TEvTokenManager::TEvUpdateToken(id, it->second->GetToken(), it->second->GetStatus()));
     } else {
         const TString errorMessage = "Token provider " + id + " was not found";
-        BLOG_ERROR("Handle TEvSTokenManager::TEvSubscribeUpdateToken: " << errorMessage);
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Handle",
+            {"TEvSTokenManager::TEvSubscribeUpdateToken", errorMessage});
         Send(ev->Sender, new TEvTokenManager::TEvUpdateToken(id, "", {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = errorMessage}));
     }
 }

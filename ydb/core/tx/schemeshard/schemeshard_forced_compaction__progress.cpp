@@ -1,8 +1,8 @@
 
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_T(stream) LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -18,9 +18,10 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
     }
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoExecute"
-            << ", ForcedCompactionsDoneShardsToPersist size: " << Self->ForcedCompactionsDoneShardsToPersist.size()
-            << ", CancellingForcedCompactions size: " << Self->CancellingForcedCompactions.size());
+        YDB_LOG_CTX_NOTICE(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress DoExecute, ForcedCompactionsDoneShardsToPersist, CancellingForcedCompactions",
+            {"SelfTabletId", Self->SelfTabletId()},
+            {"size", Self->ForcedCompactionsDoneShardsToPersist.size()},
+            {"#_size", Self->CancellingForcedCompactions.size()});
         THashSet<TForcedCompactionInfo::TPtr> compactionsToPersist;
         compactionsToPersist.reserve(Self->ForcedCompactionsDoneShardsToPersist.size() + Self->CancellingForcedCompactions.size());
         NIceDb::TNiceDb db(txc.DB);
@@ -67,9 +68,10 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoComplete"
-            << ", ForcedCompactionsDoneShardsToPersist size: " << Self->ForcedCompactionsDoneShardsToPersist.size()
-            << ", CancellingForcedCompactions size: " << Self->CancellingForcedCompactions.size());
+        YDB_LOG_CTX_NOTICE(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress DoComplete, ForcedCompactionsDoneShardsToPersist, CancellingForcedCompactions",
+            {"SelfTabletId", Self->SelfTabletId()},
+            {"size", Self->ForcedCompactionsDoneShardsToPersist.size()},
+            {"#_size", Self->CancellingForcedCompactions.size()});
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
@@ -79,9 +81,10 @@ private:
             return;
         }
 
-        LOG_T("TForcedCompaction::TTxProgress SendNotifications: "
-            << ": id# " << info.Id
-            << ", subscribers count# " << info.Subscribers.size());
+        YDB_LOG_CTX_TRACE(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress SendNotifications:, subscribers",
+            {"SelfTabletId", Self->SelfTabletId()},
+            {"id", info.Id},
+            {"count", info.Subscribers.size()});
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info.Subscribers);

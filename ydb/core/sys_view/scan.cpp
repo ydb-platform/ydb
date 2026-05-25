@@ -31,6 +31,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr {
 namespace NSysView {
@@ -126,13 +129,13 @@ public:
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Got abort execution event, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerId
-                << ", scan id: " << ScanId
-                << ", table id: " << TableId
-                << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
-                << ", error: " << ev->Get()->GetIssues().ToOneLineString());
+        YDB_LOG_ERROR("Got abort execution event,, scan, table",
+            {"actor", TBase::SelfId()},
+            {"owner", OwnerId},
+            {"id", ScanId},
+            {"#_id", TableId},
+            {"code", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
+            {"error", ev->Get()->GetIssues().ToOneLineString()});
 
         if (ScanActorId) {
             Send(*ScanActorId, THolder(ev->Release().Release()));

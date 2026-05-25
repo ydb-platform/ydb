@@ -24,6 +24,9 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
     AFL_ENSURE(blob.SeqNo <= (ui64)Max<i64>())("SeqNo is too big", blob.SeqNo);
@@ -1015,26 +1018,22 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         return;
     }
 
-    LOG_DEBUG_S(
-            ctx, NKikimrServices::PERSQUEUE,
-            "Topic '" << TopicConverter->GetClientsideName() << "'" <<
-            " partition " << Partition <<
-            " user " << ReadingForUser <<
-            " readTimeStamp done, result " << userInfo->WriteTimestamp.MilliSeconds() <<
-            " queuesize " << UpdateUserInfoTimestamp.size() <<
-            " startOffset " << GetStartOffset()
-    );
+    YDB_LOG_CTX_DEBUG(ctx, "Topic ' ' partition user readTimeStamp done, result queuesize startOffset",
+        {"GetClientsideName", TopicConverter->GetClientsideName()},
+        {"Partition", Partition},
+        {"ReadingForUser", ReadingForUser},
+        {"MilliSeconds", userInfo->WriteTimestamp.MilliSeconds()},
+        {"size", UpdateUserInfoTimestamp.size()},
+        {"GetStartOffset", GetStartOffset()});
     PQ_ENSURE(userInfo->ReadScheduled);
     userInfo->ReadScheduled = false;
     PQ_ENSURE(ReadingForUser != "");
 
     if (!userInfo->ActualTimestamps) {
-        LOG_INFO_S(
-            ctx,
-            NKikimrServices::PERSQUEUE,
-            "Reading Timestamp failed for offset " << ReadingForOffset << " ( "<< userInfo->Offset << " ) "
-                                                   << ev->Get()->Response->DebugString()
-        );
+        YDB_LOG_CTX_INFO(ctx, "Reading Timestamp failed for offset",
+            {"ReadingForOffset", ReadingForOffset},
+            {"Offset", userInfo->Offset},
+            {"#_ev->Get()->Response->DebugString()", ev->Get()->Response->DebugString()});
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&

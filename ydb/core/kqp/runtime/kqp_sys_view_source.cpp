@@ -20,6 +20,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 namespace NKikimr::NKqp {
 
@@ -31,9 +34,6 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 
 #define LOG_PREFIX "TKqpSysViewSource "
-#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " << msg)
-#define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " << msg)
-#define LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LOG_PREFIX << SelfId() << " " << msg)
 
 class TKqpSysViewSource : public TActorBootstrapped<TKqpSysViewSource>, public IDqComputeActorAsyncInput {
 public:
@@ -56,7 +56,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("Bootstrap");
+        YDB_LOG_DEBUG("Bootstrap",
+            {"LOG_PREFIX", LOG_PREFIX},
+            {"SelfId", SelfId()});
 
         const auto& table = Settings->GetTable();
         TTableId tableId(table.GetOwnerId(), table.GetTableId(), table.GetSysView());
@@ -112,7 +114,10 @@ public:
         if (!scanActor) {
             auto issue = TStringBuilder()
                 << "Failed to create system view scan, table id: " << tableId;
-            LOG_E(issue);
+            YDB_LOG_ERROR("",
+                {"LOG_PREFIX", LOG_PREFIX},
+                {"SelfId", SelfId()},
+                {"issue", issue});
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex,
                 TIssues({TIssue(issue)}),
                 NDqProto::StatusIds::INTERNAL_ERROR));
@@ -120,7 +125,10 @@ public:
         }
 
         ScanActorId = Register(scanActor.Release());
-        LOG_D("Registered scan actor: " << ScanActorId);
+        YDB_LOG_DEBUG("Registered scan",
+            {"LOG_PREFIX", LOG_PREFIX},
+            {"SelfId", SelfId()},
+            {"actor", ScanActorId});
 
         // Send initial ack to start data flow
         Send(ScanActorId, new TEvKqpCompute::TEvScanDataAck(BufferSize));
@@ -138,13 +146,18 @@ public:
             hFunc(TEvKqpCompute::TEvScanData, Handle);
             hFunc(TEvKqpCompute::TEvScanError, Handle);
             default:
-                LOG_W("Unexpected event: " << ev->GetTypeRewrite());
+                YDB_LOG_WARN("Unexpected",
+                    {"LOG_PREFIX", LOG_PREFIX},
+                    {"SelfId", SelfId()},
+                    {"event", ev->GetTypeRewrite()});
         }
     }
 
 private:
     void Handle(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-        LOG_D("Got scan init actor event");
+        YDB_LOG_DEBUG("Got scan init actor event",
+            {"LOG_PREFIX", LOG_PREFIX},
+            {"SelfId", SelfId()});
         // Respond with ack so the scan actor knows we're ready
         Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(BufferSize));
     }
@@ -152,9 +165,12 @@ private:
     void Handle(TEvKqpCompute::TEvScanData::TPtr& ev) {
         auto& msg = *ev->Get();
 
-        LOG_D("Got scan data, rows: " << msg.Rows.size()
-            << ", finished: " << msg.Finished
-            << ", from: " << ev->Sender);
+        YDB_LOG_DEBUG("Got scan data,",
+            {"LOG_PREFIX", LOG_PREFIX},
+            {"SelfId", SelfId()},
+            {"rows", msg.Rows.size()},
+            {"finished", msg.Finished},
+            {"from", ev->Sender});
 
         if (!msg.Rows.empty()) {
             auto guard = Guard(*Alloc);
@@ -164,7 +180,9 @@ private:
         }
 
         if (msg.ArrowBatch && msg.ArrowBatch->num_rows() > 0) {
-            LOG_W("Arrow batches not supported in sys view source, ignoring");
+            YDB_LOG_WARN("Arrow batches not supported in sys view source, ignoring",
+                {"LOG_PREFIX", LOG_PREFIX},
+                {"SelfId", SelfId()});
         }
 
         if (msg.Finished) {
@@ -181,8 +199,11 @@ private:
         Ydb::StatusIds::StatusCode status = msg.GetStatus();
         IssuesFromMessage(msg.GetIssues(), issues);
 
-        LOG_E("Got scan error, status: " << Ydb::StatusIds::StatusCode_Name(status)
-            << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_ERROR("Got scan error,",
+            {"LOG_PREFIX", LOG_PREFIX},
+            {"SelfId", SelfId()},
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"issues", issues.ToOneLineString()});
 
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues,
             NYql::NDq::YdbStatusToDqStatus(status, NYql::NDq::EStatusCompatibilityLevel::WithUnauthorized)));

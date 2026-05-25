@@ -11,15 +11,11 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_SESSION
 
 namespace NKikimr::NKqp {
-
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, stream)
 
 using namespace NThreading;
 
@@ -120,7 +116,8 @@ private:
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         if (navigate->ErrorCount != 0) {
-            LOG_E(TStringBuilder() << "Navigate errors: " << navigate->ErrorCount);
+            YDB_LOG_ERROR("Navigate",
+                {"errors", navigate->ErrorCount});
         }
 
         for (const auto& entry : navigate->ResultSet) {
@@ -136,7 +133,8 @@ private:
                     }
                 }
             } else {
-                LOG_E(TStringBuilder() << "Navigate error. Entry: " << entry.ToString());
+                YDB_LOG_ERROR("Navigate error.",
+                    {"Entry", entry.ToString()});
             }
         }
 

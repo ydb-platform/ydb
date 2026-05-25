@@ -1,4 +1,7 @@
 #include "console_tenants_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
 
 namespace NKikimr::NConsole {
 
@@ -22,9 +25,9 @@ public:
         // (subdomain removal) fails.
         Y_ABORT_UNLESS(Tenant->State == TTenant::REMOVING_SUBDOMAIN);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "TTxRemoveTenantFailed for tenant " << Tenant->Path
-                    << " txid=" << Tenant->TxId);
+        YDB_LOG_CTX_DEBUG(ctx, "TTxRemoveTenantFailed for tenant",
+            {"Path", Tenant->Path},
+            {"txid", Tenant->TxId});
 
         Self->DbUpdateTenantState(Tenant, TTenant::RUNNING, txc, ctx);
         Self->DbUpdateRemovedTenant(Tenant, Code, txc, ctx);

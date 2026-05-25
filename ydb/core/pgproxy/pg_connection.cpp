@@ -5,6 +5,9 @@
 #include "pg_log_impl.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/raw_socket/sock_config.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PGWIRE
 
 namespace NPG {
 
@@ -58,7 +61,8 @@ public:
     void Bootstrap() {
         Become(&TPGConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        BLOG_D("incoming connection opened");
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "incoming connection opened",
+            {"LogPrefix", LogPrefix()});
         OnAccept();
     }
 
@@ -238,7 +242,13 @@ protected:
                 prefix << "<- [" << OutgoingSequenceNumber << "] ";
                 break;
         }
-        BLOG_D(prefix << "'" << message.Message << "' \"" << GetMessageName(direction, message) << "\" Size(" << message.GetDataSize() << ") " << GetMessageDump(direction, message));
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "' ' Size(",
+            {"LogPrefix", LogPrefix()},
+            {"prefix", prefix},
+            {"Message", message.Message},
+            {"#_GetMessageName(direction, message)", GetMessageName(direction, message)},
+            {"GetDataSize", message.GetDataSize()},
+            {"#_GetMessageDump(direction, message)", GetMessageDump(direction, message)});
     }
 
     template<typename TMessage>
@@ -342,7 +352,8 @@ protected:
                 }
                 RequestPoller();
             } else {
-                BLOG_D("<- 'N' \"Decline SSL\"");
+                YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "<- 'N' \"Decline SSL",
+                    {"LogPrefix", LogPrefix()});
                 BufferOutput.Append('N');
                 if (!FlushOutput()) {
                     return;
@@ -353,7 +364,8 @@ protected:
             return;
         }
         if (protocol == 0x2e16d204) { // 80877102 cancellation message
-            BLOG_D("cancellation message");
+            YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "cancellation message",
+                {"LogPrefix", LogPrefix()});
             TPGInitial::TPGBackendData backendData = message->GetBackendData();
             if (IsValidBackendData(backendData)) {
                 Send(DatabaseProxy, new TEvPGEvents::TEvCancelRequest(backendData.Pid ^ BACKEND_DATA_MASK, backendData.Key ^ BACKEND_DATA_MASK));
@@ -362,7 +374,9 @@ protected:
             return;
         }
         if (protocol != 0x300) {
-            BLOG_W("invalid protocol version (" << Hex(protocol) << ")");
+            YDB_LOG_CTX_WARN(*NActors::TlsActivationContext, "invalid protocol version (",
+                {"LogPrefix", LogPrefix()},
+                {"#_Hex(protocol)", Hex(protocol)});
             CloseConnection = true;
             return;
         }
@@ -501,7 +515,9 @@ protected:
 
     template<typename TEvent>
     void PostponeEvent(TAutoPtr<TEvent>& ev) {
-        BLOG_D("Postpone event " << ev->Cookie);
+        YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "Postpone event",
+            {"LogPrefix", LogPrefix()},
+            {"Cookie", ev->Cookie});
         TAutoPtr<IEventHandle> evb(ev.Release());
         auto it = std::upper_bound(PostponedEvents.begin(), PostponedEvents.end(), evb, TEventsComparator());
         PostponedEvents.insert(it, evb);
@@ -567,7 +583,8 @@ protected:
                 BecomeReadyForQuery();
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
-                BLOG_ERROR("unable to create connection");
+                YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "unable to create connection",
+                    {"LogPrefix", LogPrefix()});
                 CloseConnection = true;
                 FlushAndPoll();
             }
@@ -779,7 +796,10 @@ protected:
                 if (need == 0) {
                     size_t capacity = BufferInput.Capacity() * 2;
                     if (capacity > MAX_BUFFER_SIZE) {
-                        BLOG_ERROR("connection closed - not enough buffer size (" << capacity << " > " << MAX_BUFFER_SIZE << ")");
+                        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "connection closed - not enough buffer size ( >",
+                            {"LogPrefix", LogPrefix()},
+                            {"capacity", capacity},
+                            {"MAX_BUFFER_SIZE", MAX_BUFFER_SIZE});
                         return PassAway();
                     }
                     BufferInput.Reserve(capacity);
@@ -827,7 +847,9 @@ protected:
                                 HandleMessage(static_cast<const TPGFlush*>(message));
                                 break;
                             default:
-                                BLOG_ERROR("invalid message (" << message->Message << ")");
+                                YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "invalid message (",
+                                    {"LogPrefix", LogPrefix()},
+                                    {"Message", message->Message});
                                 CloseConnection = true;
                                 break;
                         }
@@ -842,17 +864,24 @@ protected:
                     continue;
                 } else if (res == 0) {
                     // connection closed
-                    BLOG_ERROR("connection was gracefully closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
+                    YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "connection was gracefully closed",
+                        {"LogPrefix", LogPrefix()},
+                        {"iSQ", IncomingSequenceNumber},
+                        {"oSQ", OutgoingSequenceNumber},
+                        {"sSQ", SyncSequenceNumber});
                     return PassAway();
                 } else {
-                    BLOG_ERROR("connection closed - error in recv: " << strerror(-res));
+                    YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "connection closed - error",
+                        {"LogPrefix", LogPrefix()},
+                        {"in_recv", strerror(-res)});
                     return PassAway();
                 }
             }
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
                 if (passed >= InactivityTimeout) {
-                    BLOG_ERROR("connection closed by inactivity timeout");
+                    YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "connection closed by inactivity timeout",
+                        {"LogPrefix", LogPrefix()});
                     return PassAway(); // timeout
                 } else {
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -882,13 +911,16 @@ protected:
             } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
                 break;
             } else {
-                BLOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res));
+                YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "connection closed - error",
+                    {"LogPrefix", LogPrefix()},
+                    {"in_FlushOutput", strerror(-res)});
                 PassAway();
                 return false;
             }
         }
         if (CloseConnection && BufferOutput.Empty()) {
-            BLOG_D("connection closed");
+            YDB_LOG_CTX_DEBUG(*NActors::TlsActivationContext, "connection closed",
+                {"LogPrefix", LogPrefix()});
             PassAway();
             return false;
         }
@@ -898,7 +930,9 @@ protected:
     bool UpgradeToSecure() {
         int res = Socket->TryUpgradeToSecure(NKikimrServices::PGYDB);
         if (res < 0) {
-            BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+            YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "connection closed - error",
+                {"LogPrefix", LogPrefix()},
+                {"in_UpgradeToSecure", strerror(-res)});
             PassAway();
             return false;
         }

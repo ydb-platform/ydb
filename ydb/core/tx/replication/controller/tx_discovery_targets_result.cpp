@@ -2,6 +2,9 @@
 #include "target_transfer.h"
 
 #include <util/string/join.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -21,21 +24,25 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"LogPrefix", LogPrefix},
+            {"Execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown replication",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Ready) {
-            CLOG_W(ctx, "Replication state mismatch"
-                << ": rid# " << rid
-                << ", state# " << Replication->GetState());
+            YDB_LOG_CTX_WARN(ctx, "Replication state mismatch",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"state", Replication->GetState()});
             return true;
         }
 
@@ -63,20 +70,22 @@ public:
                     NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
 
-                CLOG_N(ctx, "Add target"
-                    << ": rid# " << rid
-                    << ", tid# " << tid
-                    << ", kind# " << target.Kind
-                    << ", srcPath# " << target.Config->GetSrcPath()
-                    << ", dstPath# " << target.Config->GetDstPath());
+                YDB_LOG_CTX_NOTICE(ctx, "Add target",
+                    {"LogPrefix", LogPrefix},
+                    {"rid", rid},
+                    {"tid", tid},
+                    {"kind", target.Kind},
+                    {"srcPath", target.Config->GetSrcPath()},
+                    {"dstPath", target.Config->GetDstPath()});
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Discovery error: " << error);
 
-            CLOG_E(ctx, "Discovery error"
-                << ": rid# " << rid
-                << ", error# " << error);
+            YDB_LOG_CTX_ERROR(ctx, "Discovery error",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"error", error});
         }
 
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
@@ -89,7 +98,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

@@ -18,6 +18,9 @@
 
 #include <google/protobuf/util/json_util.h>
 #include <google/protobuf/util/time_util.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr::NPQ::NCloudEvents {
 
@@ -325,8 +328,7 @@ template<typename TEvent>
 TString SerializeEventToProtobuf(const TEvent& ev) {
     TString data;
     if (!ev.SerializeToString(&data)) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "SerializeToString failed");
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "SerializeToString failed");
         return TString();
     }
     return data;
@@ -339,8 +341,7 @@ TString SerializeEventToJson(const TEvent& ev) {
     opts.preserve_proto_field_names = true;
     opts.always_print_primitive_fields = true;
     if (!google::protobuf::util::MessageToJsonString(ev, &data, opts).ok()) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "MessageToJsonString failed");
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "MessageToJsonString failed");
         return TString();
     }
     return data;
@@ -412,8 +413,7 @@ void TCloudEventsActor::Bootstrap() {
 
 void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
     if (!EventsWriter) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "No events writer configured");
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "No events writer configured");
         PassAway();
         return;
     }
@@ -421,15 +421,14 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
     try {
         TString data = BuildTopicCloudEvent(ev.Get()->Get()->Info);
         if (data.empty()) {
-            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-                "Failed to build cloud event");
+            YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Failed to build cloud event");
             PassAway();
             return;
         }
         EventsWriter->Write(data);
     } catch (const std::exception& e) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "Failed to write cloud event: " << e.what());
+        YDB_LOG_CTX_ERROR(*NActors::TlsActivationContext, "Failed to write cloud",
+            {"event", e.what()});
     }
 
     PassAway();

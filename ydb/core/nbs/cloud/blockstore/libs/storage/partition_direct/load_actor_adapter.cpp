@@ -12,6 +12,9 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
 
 using namespace NThreading;
 using namespace NActors;
@@ -163,11 +166,9 @@ STFUNC(TLoadActorAdapter::StateWork)
         HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
 
         default:
-            LOG_DEBUG_S(
-                TActivationContext::AsActorContext(),
-                NKikimrServices::NBS_PARTITION,
-                "Unhandled event type: " << ev->GetTypeRewrite()
-                                         << " event: " << ev->ToString());
+            YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Unhandled event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
             break;
     }
 }

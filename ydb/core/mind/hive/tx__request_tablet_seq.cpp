@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -20,7 +23,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_SEQUENCE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxRequestTabletSequence()::Execute");
+        YDB_LOG_DEBUG("THive::TTxRequestTabletSequence()::Execute",
+            {"GetLogPrefix", GetLogPrefix()});
         const auto& pbRecord(Event->Get()->Record);
         Size = pbRecord.GetSize();
         if (Size == 0) {
@@ -53,11 +57,18 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxRequestTabletSequence()::Complete");
+        YDB_LOG_DEBUG("THive::TTxRequestTabletSequence()::Complete",
+            {"GetLogPrefix", GetLogPrefix()});
         if (Sequence == TSequencer::NO_SEQUENCE) {
-            BLOG_CRIT("Could not allocate sequence of " << Size << " elements for " << Owner);
+            YDB_LOG_CRIT("Could not allocate sequence of elements for",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"Size", Size},
+                {"Owner", Owner});
         } else {
-            BLOG_D("Respond with sequence " << Sequence << " to " << Owner);
+            YDB_LOG_DEBUG("Respond with sequence to",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"Sequence", Sequence},
+                {"Owner", Owner});
             THolder<TEvHive::TEvResponseTabletIdSequence> response = MakeHolder<TEvHive::TEvResponseTabletIdSequence>();
             const auto& pbRecord(Event->Get()->Record);
             response->Record.MutableOwner()->CopyFrom(pbRecord.GetOwner());

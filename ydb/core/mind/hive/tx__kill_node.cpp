@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -19,7 +22,9 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_KILL_NODE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxKillNode(" << NodeId << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxKillNode( )::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"NodeId", NodeId});
         SideEffects.Reset(Self->SelfId());
         TInstant now = TActivationContext::Now();
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -47,7 +52,9 @@ public:
                 Self->RemoveRegisteredDataCentersNode(node->Location.GetDataCenterId(), node->Id);
             }
             for (const TActorId& pipeServer : node->PipeServers) {
-                BLOG_TRACE("THive::TTxKillNode - killing pipe server " << pipeServer);
+                YDB_LOG_TRACE("THive::TTxKillNode - killing pipe server",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"pipeServer", pipeServer});
                 SideEffects.Send(pipeServer, new TEvents::TEvPoisonPill());
             }
             node->PipeServers.clear();
@@ -62,12 +69,17 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxKillNode(" << NodeId << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxKillNode( )::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"NodeId", NodeId});
         SideEffects.Complete(ctx);
         if (Local) {
             TNodeInfo* node = Self->FindNode(Local.NodeId());
             if (node == nullptr || node->IsDisconnected()) {
-                BLOG_D("THive::TTxKillNode(" << NodeId << ")::Complete - send Reconnect to " << Local);
+                YDB_LOG_DEBUG("THive::TTxKillNode( )::Complete - send Reconnect to",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"NodeId", NodeId},
+                    {"Local", Local});
                 Self->SendReconnect(Local); // defibrillation
             }
         }

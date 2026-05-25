@@ -1,4 +1,7 @@
 #include "datashard_txs.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -26,22 +29,22 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
                                                               const TActorContext &ctx)
 {
     if (Self->IsFollower()) {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Unexpected TTxCancelTransactionProposal at tablet follower "
-                    << Self->TabletID() << " txId " << TxId);
+        YDB_LOG_CTX_ERROR(ctx, "Unexpected TTxCancelTransactionProposal at tablet follower txId",
+            {"TabletID", Self->TabletID()},
+            {"TxId", TxId});
         return true;
     }
 
     if (Self->State == TShardState::Offline || Self->State == TShardState::PreOffline) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Ignoring TTxCancelTransactionProposal at tablet " << Self->TabletID()
-                    << " txId " << TxId << " because the tablet is going offline");
+        YDB_LOG_CTX_DEBUG(ctx, "Ignoring TTxCancelTransactionProposal at tablet txId because the tablet is going offline",
+            {"TabletID", Self->TabletID()},
+            {"TxId", TxId});
         return true;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Start TTxCancelTransactionProposal at tablet " << Self->TabletID()
-                << " txId " << TxId);
+    YDB_LOG_CTX_DEBUG(ctx, "Start TTxCancelTransactionProposal at tablet txId",
+        {"TabletID", Self->TabletID()},
+        {"TxId", TxId});
 
     NIceDb::TNiceDb db(txc.DB);
     if (!Self->Pipeline.CancelPropose(db, ctx, TxId, Replies)) {
@@ -69,8 +72,9 @@ void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx
 
 void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {
     ui64 txId = ev->Get()->Record.GetTxId();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvDataShard::TEvCancelTransactionProposal " << TabletID()
-                << " txId " <<  txId);
+    YDB_LOG_CTX_DEBUG(ctx, "Got TEvDataShard::TEvCancelTransactionProposal txId",
+        {"TabletID", TabletID()},
+        {"txId", txId});
 
     // Mark any queued proposals as cancelled
     ProposeQueue.Cancel(txId);

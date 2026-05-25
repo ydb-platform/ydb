@@ -14,6 +14,9 @@
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -143,7 +146,8 @@ private:
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
-            LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER, error);
+            YDB_LOG_CTX_ERROR(ctx, "",
+                {"error", error});
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
@@ -538,7 +542,8 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {
     TString databaseName = ev->Get()->Path;
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "SchemeBoardUpdate " << databaseName);
+    YDB_LOG_DEBUG("SchemeBoardUpdate",
+        {"databaseName", databaseName});
     auto itDatabase = Databases.try_emplace(CanonizePath(databaseName));
     TDatabaseInfo& database = itDatabase.first->second;
     database.SchemeBoardResult = ev->Release();
@@ -558,17 +563,21 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
         && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState())
     {
         const auto& securityState = describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName);
+        YDB_LOG_DEBUG("Updating SecurityState for",
+            {"databaseName", databaseName});
         if (securityState.PublicKeysSize() > 0) {
             Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(securityState));
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no PublicKeys");
+            YDB_LOG_DEBUG("Can't update SecurityState for - no PublicKeys",
+                {"databaseName", databaseName});
         }
     } else {
         if (!describeScheme.GetPathDescription().HasDomainDescription()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription");
+            YDB_LOG_DEBUG("Can't update SecurityState for - no DomainDescription",
+                {"databaseName", databaseName});
         } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no SecurityState");
+            YDB_LOG_DEBUG("Can't update SecurityState for - no SecurityState",
+                {"databaseName", databaseName});
         }
     }
 
@@ -578,8 +587,9 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
 }
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-        "SchemeBoardDelete " << ev->Get()->Path << " Strong=" << ev->Get()->Strong);
+    YDB_LOG_WARN("SchemeBoardDelete",
+        {"#_ev->Get()->Path", ev->Get()->Path},
+        {"Strong", ev->Get()->Strong});
 
     if (ev->Get()->Strong) {
         ForgetDatabase(ev->Get()->Path);
@@ -607,7 +617,8 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
 }
 
 void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribe to " << database);
+    YDB_LOG_DEBUG("Subscribe to",
+        {"database", database});
 
     TActorId subscriberId = Register(CreateSchemeBoardSubscriber(SelfId(), database));
     auto itSubscriber = Subscribers.emplace(database, subscriberId);

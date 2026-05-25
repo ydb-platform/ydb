@@ -1,4 +1,7 @@
 #include "tenant_slot_broker_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
 
 namespace NKikimr {
 namespace NTenantSlotBroker {
@@ -16,8 +19,8 @@ public:
     {
         auto &rec = Event->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "TTxUpdateConfig Execute " << rec.ShortDebugString());
+        YDB_LOG_CTX_DEBUG(ctx, "TTxUpdateConfig Execute",
+            {"ShortDebugString", rec.ShortDebugString()});
 
         NIceDb::TNiceDb db(txc.DB);
 

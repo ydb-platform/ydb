@@ -14,10 +14,9 @@
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_PRIVATE_PROXY
 
 namespace NFq {
 
@@ -182,7 +181,7 @@ private:
         )
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        LOG_E("TYqlAnalyticsPrivateProxy::OnUndelivered");
+        YDB_LOG_ERROR("TYqlAnalyticsPrivateProxy::OnUndelivered");
         Counters->GetCounter("OnUndelivered", true)->Inc();
     }
 

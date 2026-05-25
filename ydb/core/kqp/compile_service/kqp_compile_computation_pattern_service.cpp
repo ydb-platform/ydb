@@ -7,6 +7,9 @@
 #include <ydb/library/aclib/aclib.h>
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_COMPUTATION_PATTERN_SERVICE
 
 namespace NKikimr {
 namespace NKqp {
@@ -40,7 +43,7 @@ private:
     }
 
     void HandleWakeup(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_COMPUTATION_PATTERN_SERVICE, "Received wakeup");
+        YDB_LOG_CTX_DEBUG(ctx, "Received wakeup");
         auto patternCache = GetKqpResourceManager()->GetPatternCache();
         if (!patternCache) {
             ScheduleWakeup(ctx);

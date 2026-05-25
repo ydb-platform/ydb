@@ -13,13 +13,12 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 #include <util/system/hostname.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -509,7 +508,8 @@ void TClusterInfo::AddPDisk(const NKikimrBlobStorage::TBaseConfig::TPDisk &info)
 void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard::TPDiskStateInfo &info)
 {
     if (!HasPDisk(id)) {
-        BLOG_ERROR("Cannot update state for unknown PDisk " << id.ToString());
+        YDB_LOG_ERROR("Cannot update state for unknown PDisk",
+            {"id", id.ToString()});
         return;
     }
 
@@ -521,7 +521,8 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
 {
     ui32 nodeId = info.GetVSlotId().GetNodeId();
     if (!HasNode(nodeId)) {
-        BLOG_ERROR("Got VDisk info from BSC base config for unknown node " << nodeId);
+        YDB_LOG_ERROR("Got VDisk info from BSC base config for unknown node",
+            {"nodeId", nodeId});
         return;
     }
 
@@ -541,7 +542,8 @@ void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
 
     Y_DEBUG_ABORT_UNLESS(HasPDisk(vdisk->PDiskId));
     if (!HasPDisk(vdisk->PDiskId)) {
-        BLOG_ERROR("Got VDisk info from BSC base config for unknown PDisk " << vdisk->PDiskId.ToString());
+        YDB_LOG_ERROR("Got VDisk info from BSC base config for unknown PDisk",
+            {"PDiskId", vdisk->PDiskId.ToString()});
         PDisks.emplace(vdisk->PDiskId, new TPDiskInfo(vdisk->PDiskId));
     }
 
@@ -564,7 +566,8 @@ void TClusterInfo::UpdateVDiskState(const TVDiskID &id, const NKikimrWhiteboard:
             return;
         }
 
-        BLOG_ERROR("Cannot update state for unknown VDisk " << id.ToString());
+        YDB_LOG_ERROR("Cannot update state for unknown VDisk",
+            {"id", id.ToString()});
         return;
     }
 
@@ -585,15 +588,19 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
         TPDiskID pdiskId = {vdisk.GetNodeId(), vdisk.GetPDiskId()};
         Y_DEBUG_ABORT_UNLESS(HasPDisk(pdiskId));
         if (!HasPDisk(pdiskId)) {
-            BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown pdisk " << pdiskId.ToString());
+            YDB_LOG_ERROR("Group refers unknown pdisk",
+                {"GroupId", bsgroup.GroupId},
+                {"pdiskId", pdiskId.ToString()});
             return;
         }
 
         auto &pdisk = PDiskRef(pdiskId);
         Y_DEBUG_ABORT_UNLESS(pdisk.VSlots.contains(vdisk.GetVSlotId()));
         if (!pdisk.VSlots.contains(vdisk.GetVSlotId())) {
-            BLOG_ERROR("Group " << bsgroup.GroupId << " refers unknown slot " <<
-                        vdisk.GetVSlotId() << " in disk " << pdiskId.ToString());
+            YDB_LOG_ERROR("Group refers unknown slot in disk",
+                {"GroupId", bsgroup.GroupId},
+                {"GetVSlotId", vdisk.GetVSlotId()},
+                {"pdiskId", pdiskId.ToString()});
             return;
         }
 
@@ -742,8 +749,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
                 res.insert(node);
             }
         } else if (ctx) {
-            LOG_ERROR_S(*ctx, NKikimrServices::CMS,
-                        "FindLockedItems: unknown host " << action.GetHost());
+            YDB_LOG_CTX_ERROR(*ctx, "FindLockedItems: unknown host",
+                {"GetHost", action.GetHost()});
         }
         break;
 
@@ -960,8 +967,10 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                 const ui32 nodeId = replica.NodeId();
                 if (!HasNode(nodeId)) {
                     // we do not want to abort here constantly, so we just add down stub replica
-                    BLOG_ERROR("Node " << nodeId << " referenced by state storage ring " << ringId << " in ring group " << rGroupId
-                               << " does not exist in cluster. State storage is probably not reconfigured yet. Treating the replica as down.");
+                    YDB_LOG_ERROR("Node referenced by state storage ring in ring group does not exist in cluster. State storage is probably not reconfigured yet. Treating the replica as down.",
+                        {"nodeId", nodeId},
+                        {"ringId", ringId},
+                        {"rGroupId", rGroupId});
                     TNodeInfoPtr stub = MakeIntrusive<TNodeInfo>();
                     stub->NodeId = nodeId;
                     ringInfo->AddNode(stub);
@@ -993,9 +1002,8 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     for (auto tablet : BootstrapConfig.GetTablet()) {
         for (auto nodeId : tablet.GetNode()) {
             if (!HasNode(nodeId)) {
-                BLOG_ERROR(TStringBuilder() << "Got node " << nodeId
-                                            << " with system tablet, which exists in configuration, "
-                                               "but does not exist in cluster.");
+                YDB_LOG_ERROR("Got node",
+                    {"nodeId", nodeId});
                 continue;
             }
             const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
@@ -1020,8 +1028,8 @@ void TClusterInfo::GenerateClusterNodesCheckers() {
 
 void TClusterInfo::DebugDump(const TActorContext &ctx) const
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                "Timestamp: " << Timestamp.ToStringLocalUpToSeconds());
+    YDB_LOG_CTX_DEBUG(ctx, "",
+        {"Timestamp", Timestamp.ToStringLocalUpToSeconds()});
     for (auto &entry: Nodes) {
         TStringStream ss;
         auto &node = *entry.second;

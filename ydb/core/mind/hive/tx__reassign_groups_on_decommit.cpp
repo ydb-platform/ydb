@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr::NHive {
 
@@ -32,8 +35,11 @@ public:
             for (ui32 channel = 0; channel < tablet.GetChannelCount(); ++channel) {
                 auto *entry = channel < channels.size() ? channels[channel].LatestEntry() : nullptr;
                 if (!entry) {
-                    BLOG_W("TTxReassignGroupsOnDecommit entry not found TabletId# " << tabletId_
-                        << " channel# " << channel << " GroupId# " << GroupId);
+                    YDB_LOG_WARN("TTxReassignGroupsOnDecommit entry not found",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"TabletId", tabletId_},
+                        {"channel", channel},
+                        {"GroupId", GroupId});
                     continue;
                 } else if (entry->GroupID != GroupId) {
                     continue;
@@ -46,7 +52,9 @@ public:
                 ++numChannels;
 
                 if (changed || !tablet.IsReadyToReassignTablet()) {
-                    BLOG_D("TTxReassignGroupsOnDecommit tablet is not ready for reassignment TabletId# " << tabletId_);
+                    YDB_LOG_DEBUG("TTxReassignGroupsOnDecommit tablet is not ready for reassignment",
+                        {"GetLogPrefix", GetLogPrefix()},
+                        {"TabletId", tabletId_});
                     continue;
                 }
 
@@ -60,7 +68,10 @@ public:
             }
 
             if (changed) {
-                BLOG_D("TTxReassignGroupsOnDecommit tablet reassigned TabletId# " << tabletId_ << " numChannels# " << numChannels);
+                YDB_LOG_DEBUG("TTxReassignGroupsOnDecommit tablet reassigned",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"TabletId", tabletId_},
+                    {"numChannels", numChannels});
                 tablet.InitiateAssignTabletGroups();
             }
 		}

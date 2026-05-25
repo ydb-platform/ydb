@@ -1,4 +1,7 @@
 #include "datashard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -19,10 +22,10 @@ public:
         auto& record = Ev->Get()->Record;
 
         if (!Self->IsStateActive()) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Vacuum tx at non-ready tablet " << Self->TabletID()
-                << " state " << Self->State
-                << ", requested from " << Ev->Sender);
+            YDB_LOG_CTX_WARN(ctx, "Vacuum tx at non-ready tablet state, requested from",
+                {"TabletID", Self->TabletID()},
+                {"State", Self->State},
+                {"Sender", Ev->Sender});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 record.GetVacuumGeneration(),
                 Self->TabletID(),
@@ -31,10 +34,9 @@ public:
         }
 
         if (Self->Executor()->HasLoanedParts()) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Vacuum of tablet# " << Self->TabletID()
-                << ": has borrowed parts"
-                << ", requested from " << Ev->Sender);
+            YDB_LOG_CTX_WARN(ctx, "Vacuum of : has borrowed parts, requested from",
+                {"tablet", Self->TabletID()},
+                {"Sender", Ev->Sender});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 record.GetVacuumGeneration(),
                 Self->TabletID(),
@@ -49,12 +51,11 @@ public:
         }
 
         if (lastGen >= record.GetVacuumGeneration()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Vacuum of tablet# " << Self->TabletID()
-                << " for requested generation " << record.GetVacuumGeneration()
-                << ", requested from# " << Ev->Sender
-                << " already completed"
-                << ", last persisted Vacuum generation: " << lastGen);
+            YDB_LOG_CTX_DEBUG(ctx, "Vacuum of for requested generation, requested already completed, last persisted Vacuum",
+                {"tablet", Self->TabletID()},
+                {"GetVacuumGeneration", record.GetVacuumGeneration()},
+                {"from", Ev->Sender},
+                {"generation", lastGen});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 lastGen,
                 Self->TabletID(),
@@ -63,9 +64,8 @@ public:
         }
 
         if (Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Vacuum of tablet# " << Self->TabletID()
-                << ": expired snapshots removed");
+            YDB_LOG_CTX_DEBUG(ctx, "Vacuum of : expired snapshots removed",
+                {"tablet", Self->TabletID()});
         }
         Self->OutReadSets.Cleanup(db, ctx);
 
@@ -110,9 +110,9 @@ public:
             ctx.Send(waiterIt->second, std::move(response));
             waiterIt = Self->VacuumWaiters.erase(waiterIt);
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Updated last Vacuum of tablet# "<< Self->TabletID()
-            << ", last persisted Vacuum generation: " << VacuumGeneration);
+        YDB_LOG_CTX_DEBUG(ctx, "Updated last Vacuum of, last persisted Vacuum",
+            {"tablet", Self->TabletID()},
+            {"generation", VacuumGeneration});
     }
 };
 

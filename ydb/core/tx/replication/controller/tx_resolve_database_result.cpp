@@ -1,4 +1,7 @@
 #include "controller_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -18,29 +21,34 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"LogPrefix", LogPrefix},
+            {"Execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto& tenant = Ev->Get()->Tenant;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Cannot resolve database of unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_WARN(ctx, "Cannot resolve database of unknown replication",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         Replication->SetDatabase(tenant);
 
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Database resolved"
-                << ": rid# " << rid
-                << ", database# " << tenant);
+            YDB_LOG_CTX_NOTICE(ctx, "Database resolved",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"database", tenant});
 
             Self->UnresolvedDatabaseReplications.erase(Replication->GetId());
         } else {
-            CLOG_E(ctx, "Resolve database error"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_ERROR(ctx, "Resolve database error",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             Y_ABORT_UNLESS(!tenant);
 
             auto& resolveAttempts = Self->UnresolvedDatabaseReplications[rid];
@@ -63,7 +71,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
 
         if (Self->UnresolvedDatabaseReplications.empty()) {
             Self->SwitchToWork(ctx);

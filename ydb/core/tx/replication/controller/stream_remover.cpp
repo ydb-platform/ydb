@@ -7,6 +7,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -25,7 +28,9 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     }
 
     void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         DropStream();
     }
 
@@ -53,21 +58,26 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     }
 
     void Handle(TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"LogPrefix", LogPrefix},
+            {"#_ev->Get()->ToString()", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
 
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_D("Retry");
+                YDB_LOG_DEBUG("Retry",
+                    {"LogPrefix", LogPrefix});
                 return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
             }
 
-            LOG_E("Error"
-                << ": status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR("Error",
+                {"LogPrefix", LogPrefix},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()});
         } else {
-            LOG_I("Success"
-                << ": issues# " << result.GetIssues().ToOneLineString());
+            YDB_LOG_INFO("Success",
+                {"LogPrefix", LogPrefix},
+                {"issues", result.GetIssues().ToOneLineString()});
         }
 
         Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(result)));

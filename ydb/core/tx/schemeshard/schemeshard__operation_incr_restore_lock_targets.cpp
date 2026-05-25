@@ -1,8 +1,9 @@
 #include "schemeshard__operation_change_path_state.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -32,13 +33,14 @@ bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationCont
         ? NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore
         : NKikimrSchemeOp::EPathStateNoChanges;
 
-    LOG_I("BuildLockSubOps for incremental restore"
-        << " opId: " << opId
-        << " lock: " << lock
-        << " workingDir: " << workingDir
-        << " dstPaths: " << targets.DstPathsSize()
-        << " srcPaths: " << targets.SrcPathsSize()
-        << " restoreOpId: " << targets.GetRestoreOpId());
+    YDB_LOG_CTX_INFO(context.Ctx, "BuildLockSubOps for incremental restore",
+        {"TabletID", context.SS->TabletID()},
+        {"opId", opId},
+        {"lock", lock},
+        {"workingDir", workingDir},
+        {"dstPaths", targets.DstPathsSize()},
+        {"srcPaths", targets.SrcPathsSize()},
+        {"restoreOpId", targets.GetRestoreOpId()});
 
     // Absolute paths ("/...") are passed with workingDir="" to avoid double-joining.
     auto fanOut = [&](const ::google::protobuf::RepeatedPtrField<TString>& paths,

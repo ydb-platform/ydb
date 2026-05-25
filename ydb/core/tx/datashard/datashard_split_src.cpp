@@ -6,6 +6,12 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -29,8 +35,10 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " received split OpId " << opId
-                    << " at state " << DatashardStateName(Self->State));
+        YDB_LOG_CTX_DEBUG(ctx, "received split OpId at state",
+            {"TabletID", Self->TabletID()},
+            {"opId", opId},
+            {"#_DatashardStateName(Self->State)", DatashardStateName(Self->State)});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -97,7 +105,9 @@ public:
         if (SplitAlreadyFinished) {
             // Send the Ack
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << Self->SrcSplitOpId);
+                YDB_LOG_CTX_DEBUG(ctx, "ack split to schemeshard",
+                    {"TabletID", Self->TabletID()},
+                    {"SrcSplitOpId", Self->SrcSplitOpId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
             }
         } else {
@@ -168,7 +178,9 @@ public:
         }
 
         ui64 opId = Self->SrcSplitOpId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " starting snapshot for split OpId " << opId);
+        YDB_LOG_CTX_DEBUG(ctx, "starting snapshot for split OpId",
+            {"TabletID", Self->TabletID()},
+            {"opId", opId});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -189,8 +201,10 @@ public:
             if (isStrictCheck) { \
                 Y_ENSURE(str.empty(), #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : \n" << str.Str()); \
             } else if (!str.empty()) { \
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, \
-                     #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : " << str.Str()); \
+                YDB_LOG_CTX_ERROR(ctx, "", \
+                    {"Table", #table " table is not empty when starting Split at tablet "}, \
+                    {"TabletID", Self->TabletID()}, \
+                    {"Str", str.Str()}); \
             } \
         }
 
@@ -263,7 +277,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Self->SrcSplitOpId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " snapshot complete for split OpId " << opId);
+        YDB_LOG_CTX_DEBUG(ctx, "snapshot complete for split OpId",
+            {"TabletID", Self->TabletID()},
+            {"opId", opId});
 
         Y_ENSURE(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state " << DatashardStateName(Self->State));
 
@@ -332,14 +348,19 @@ public:
                 }
 
                 if (snapBody.empty()) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot needs to load pages for table "
-                                << localTableId << " for split OpId " << opId);
+                    YDB_LOG_CTX_DEBUG(ctx, "BorrowSnapshot needs to load pages for table for split OpId",
+                        {"TabletID", Self->TabletID()},
+                        {"localTableId", localTableId},
+                        {"opId", opId});
                     needToReadPages = true;
                 } else {
                     totalSnapshotSize += snapBody.size();
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot: table "
-                                << localTableId << " snapshot size is " << snapBody.size() << " total snapshot size is "
-                                << totalSnapshotSize << " for split OpId " << opId);
+                    YDB_LOG_CTX_DEBUG(ctx, "BorrowSnapshot: table snapshot size is total snapshot size is for split OpId",
+                        {"TabletID", Self->TabletID()},
+                        {"localTableId", localTableId},
+                        {"size", snapBody.size()},
+                        {"totalSnapshotSize", totalSnapshotSize},
+                        {"opId", opId});
                 }
 
                 if (!needToReadPages) {
@@ -407,7 +428,9 @@ public:
         }
 
         if (needToReadPages) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot is restarting for split OpId " << opId);
+            YDB_LOG_CTX_DEBUG(ctx, "BorrowSnapshot is restarting for split OpId",
+                {"TabletID", Self->TabletID()},
+                {"opId", opId});
             return false;
         } else {
             txc.Env.DropSnapshot(SnapContext);
@@ -431,7 +454,9 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
+        YDB_LOG_CTX_DEBUG(ctx, "Sending snapshots from src for split OpId",
+            {"TabletID", Self->TabletID()},
+            {"SrcSplitOpId", Self->SrcSplitOpId});
         Self->SplitSrcSnapshotSender.DoSend(ctx);
         if (ChangeExchangeSplit) {
             Self->KillChangeSender(ctx);
@@ -467,8 +492,10 @@ public:
 
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
         ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    Self->TabletID() << " Received snapshot Ack from dst " << dstTabletId << " for split OpId " << opId);
+        YDB_LOG_CTX_DEBUG(ctx, "Received snapshot Ack from dst for split OpId",
+            {"TabletID", Self->TabletID()},
+            {"dstTabletId", dstTabletId},
+            {"opId", opId});
 
         Self->SplitSrcSnapshotSender.AckSnapshot(dstTabletId, ctx);
 
@@ -492,7 +519,9 @@ public:
         if (AllDstAcksReceived) {
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 ui64 opId = Self->SrcSplitOpId;
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << opId);
+                YDB_LOG_CTX_DEBUG(ctx, "ack split to schemeshard",
+                    {"TabletID", Self->TabletID()},
+                    {"opId", opId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(opId, Self->TabletID()));
             }
         }
@@ -539,7 +568,9 @@ public:
     void Complete(const TActorContext &ctx) override {
         for (const auto& [ackTo, opIds] : Waiters) {
             for (const ui64 opId : opIds) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
+                YDB_LOG_CTX_DEBUG(ctx, "ack split partitioning changed to schemeshard",
+                    {"TabletID", Self->TabletID()},
+                    {"opId", opId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
             }
         }
@@ -569,17 +600,18 @@ void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, con
 void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
     const auto opId = ev->Get()->Record.GetOperationCookie();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvSplitPartitioningChanged"
-        << ": opId: " << opId
-        << ", at datashard: " << TabletID()
-        << ", state: " << DatashardStateName(State).data());
+    YDB_LOG_CTX_DEBUG(ctx, "Got TEvSplitPartitioningChanged",
+        {"opId", opId},
+        {"at_datashard", TabletID()},
+        {"state", DatashardStateName(State).data()});
 
     SrcAckPartitioningChangedTo[ev->Sender].insert(opId);
 
     if (ChangesQueue || !ChangeSenderActivator.AllAcked()) {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " delay partitioning changed ack"
-            << ", ChangesQueue size: " << ChangesQueue.size()
-            << ", siblings to be activated: " << ChangeSenderActivator.Dump());
+        YDB_LOG_CTX_NOTICE(ctx, "delay partitioning changed ack, ChangesQueue, siblings to be",
+            {"TabletID", TabletID()},
+            {"size", ChangesQueue.size()},
+            {"activated", ChangeSenderActivator.Dump()});
     } else {
         Execute(CreateTxSplitPartitioningChanged(std::move(SrcAckPartitioningChangedTo)), ctx);
         SrcAckPartitioningChangedTo.clear(); // to be sure

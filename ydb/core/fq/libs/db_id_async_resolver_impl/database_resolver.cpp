@@ -16,11 +16,9 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/split.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_DATABASE_RESOLVER
 
 namespace NFq {
 
@@ -92,7 +90,9 @@ public:
 
 private:
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        LOG_T("ResponseProcessor::HandleWakeup: tag=" << ev->Get()->Tag);
+        YDB_LOG_TRACE("ResponseProcessor::HandleWakeup:",
+            {"TraceId", TraceId},
+            {"tag", ev->Get()->Tag});
         auto tag = ev->Get()->Tag;
         switch (tag) {
         case WU_DIE_ON_TTL:
@@ -113,7 +113,9 @@ private:
             }
         }
         errorMsg << " in " << ResolvingTtl << " seconds.";
-        LOG_E("ResponseProcessor::DieOnTtl: errorMsg=" << errorMsg);
+        YDB_LOG_ERROR("ResponseProcessor::DieOnTtl:",
+            {"TraceId", TraceId},
+            {"errorMsg", errorMsg});
         Issues.AddIssue(errorMsg);
         SendResolvedEndpointsAndDie();
     }
@@ -123,7 +125,8 @@ private:
             new TEvents::TEvEndpointResponse(
                 NYql::TDatabaseResolverResponse(std::move(DatabaseId2Description), Issues.Empty(), Issues)));
         PassAway();
-        LOG_D("ResponseProcessor::SendResolvedEndpointsAndDie: passed away");
+        YDB_LOG_DEBUG("ResponseProcessor::SendResolvedEndpointsAndDie: passed away",
+            {"TraceId", TraceId});
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev)
@@ -132,7 +135,9 @@ private:
         const auto requestIter = Requests.find(ev->Get()->Request);
         HandledIds++;
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): got API response: code=" << ev->Get()->Response->Status);
+        YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): got API response:",
+            {"TraceId", TraceId},
+            {"code", ev->Get()->Response->Status});
 
         try {
             HandleResponse(ev, requestIter, result);
@@ -140,12 +145,16 @@ private:
             const TString msg = TStringBuilder() << "error while response processing, params "
                 << ((requestIter != Requests.end()) ? requestIter->second.ToDebugString() : TString{"unknown"})
                 << ", details: " << CurrentExceptionMessage();
-            LOG_E("ResponseProccessor::Handle(TEvHttpIncomingResponse): " << msg);
+            YDB_LOG_ERROR("",
+                {"TraceId", TraceId},
+                {"ResponseProccessor::Handle(TEvHttpIncomingResponse)", msg});
             Issues.AddIssue(msg);
         }
 
-        LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): progress: " 
-              << DatabaseId2Description.size() << " of " << Requests.size() << " requests are done");
+        YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): of requests are done",
+            {"TraceId", TraceId},
+            {"progress", DatabaseId2Description.size()},
+            {"size", Requests.size()});
 
         if (HandledIds == Requests.size()) {
             SendResolvedEndpointsAndDie();
@@ -175,19 +184,23 @@ private:
 
         if (errorMessage) {
             Issues.AddIssue(errorMessage);
-            LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): error=" << errorMessage);
+            YDB_LOG_ERROR("ResponseProcessor::Handle(HttpIncomingResponse):",
+                {"TraceId", TraceId},
+                {"error", errorMessage});
         } else {
             const auto& params = requestIter->second;
             auto key = std::make_tuple(params.Id, params.DatabaseType, params.DatabaseAuth);
             if (errorMessage) {
-                LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                    << "; params: " << params.ToDebugString()
-                    << ", error: " << errorMessage);
+                YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache",
+                    {"TraceId", TraceId},
+                    {"params", params.ToDebugString()},
+                    {"error", errorMessage});
                 Cache.Put(key, errorMessage);
             } else {
-                LOG_T("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache"
-                    << "; params: " << params.ToDebugString()
-                    << ", result: " << result->ToDebugString());
+                YDB_LOG_TRACE("ResponseProcessor::Handle(HttpIncomingResponse): put value in cache",
+                    {"TraceId", TraceId},
+                    {"params", params.ToDebugString()},
+                    {"result", result->ToDebugString()});
                 Cache.Put(key, result);
             }
         }
@@ -211,18 +224,24 @@ private:
                     MdbEndpointGenerator,
                     params.DatabaseAuth.UseTls,
                     params.DatabaseAuth.Protocol);
-                LOG_D("ResponseProcessor::Handle(HttpIncomingResponse): got description" << ": params: " << params.ToDebugString()
-                                                                                            << ", description: " << description.ToDebugString());
+                YDB_LOG_DEBUG("ResponseProcessor::Handle(HttpIncomingResponse): got description",
+                    {"TraceId", TraceId},
+                    {"params", params.ToDebugString()},
+                    {"description", description.ToDebugString()});
                 DatabaseId2Description[std::make_pair(params.Id, params.DatabaseType)] = description;
                 result.ConstructInPlace(description);
                 return "";
             } catch (const NKikimr::TCodeLineException& ex) {
-                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << ex.what());
+                YDB_LOG_ERROR("",
+                    {"TraceId", TraceId},
+                    {"ResponseProcessor::Handle(HttpIncomingResponse)", ex.what()});
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << ex.GetRawMessage();
             } catch (...) {
-                LOG_E("ResponseProcessor::Handle(HttpIncomingResponse): " << CurrentExceptionMessage());
+                YDB_LOG_ERROR("",
+                    {"TraceId", TraceId},
+                    {"ResponseProcessor::Handle(HttpIncomingResponse)", CurrentExceptionMessage()});
                 return TStringBuilder()
                     << "response parser error: " << params.ToDebugString() << Endl
                     << CurrentExceptionMessage();
@@ -530,7 +549,10 @@ private:
         bool success = true,
         const TString& errorMessage = "")
     {
-        LOG_D("ResponseProccessor::SendResponse: Success: " << success << ", Errors: " << (errorMessage ? errorMessage : "no"));
+        YDB_LOG_DEBUG("ResponseProccessor::SendResponse:",
+            {"TraceId", TraceId},
+            {"Success", success},
+            {"Errors", (errorMessage ? errorMessage : "no")});
         NYql::TIssues issues;
         if (errorMessage)
             issues.AddIssue(errorMessage);
@@ -549,7 +571,9 @@ private:
             const auto& kind = item.first.second;
             initMsg << id << " (" << kind << ")" << ", ";
         }
-        LOG_D("ResponseProccessor::Handle(EndpointRequest): " << initMsg);
+        YDB_LOG_DEBUG("",
+            {"TraceId", TraceId},
+            {"ResponseProccessor::Handle(EndpointRequest)", initMsg});
 
         TRequestMap requests;
         TDatabaseResolverResponse::TDatabaseDescriptionMap ready;
@@ -560,30 +584,34 @@ private:
             if (Cache.Get(key, &cacheVal)) {
                 switch(cacheVal->index()) {
                     case 0U: {
-                        LOG_T("ResponseProccessor::Handle(EndpointRequest): obtained description from cache" 
-                              << ": databaseId: " << std::get<0>(key)
-                              << ", databaseType: " << std::get<1>(key)
-                              << ", value: " << std::get<0>(*cacheVal).ToDebugString());
+                        YDB_LOG_TRACE("ResponseProccessor::Handle(EndpointRequest): obtained description from cache",
+                            {"TraceId", TraceId},
+                            {"databaseId", std::get<0>(key)},
+                            {"databaseType", std::get<1>(key)},
+                            {"value", std::get<0>(*cacheVal).ToDebugString()});
                         ready.insert(std::make_pair(p, std::get<0U>(*cacheVal)));
                         break;
                     }
                     case 1U: {
-                        LOG_T("ResponseProccessor::Handle(EndpointRequest): obtained error from cache" 
-                              << ": databaseId: " << std::get<0>(key)
-                              << ", databaseType: " << std::get<1>(key)
-                              << ", value: " << std::get<1>(*cacheVal));
+                        YDB_LOG_TRACE("ResponseProccessor::Handle(EndpointRequest): obtained error from cache",
+                            {"TraceId", TraceId},
+                            {"databaseId", std::get<0>(key)},
+                            {"databaseType", std::get<1>(key)},
+                            {"value", std::get<1>(*cacheVal)});
                         SendResponse(ev->Sender, {}, false, std::get<1U>(*cacheVal));
                         return;
                     }
                     default: {
-                        LOG_E("ResponseProccessor::Handle(EndpointRequest): unsupported cache value type");
+                        YDB_LOG_ERROR("ResponseProccessor::Handle(EndpointRequest): unsupported cache value type",
+                            {"TraceId", TraceId});
                     }
                 }
                 continue;
             } else {
-                LOG_T("ResponseProccessor::Handle(EndpointRequest): key is missing in cache" 
-                       << ": databaseId: " << std::get<0>(key)
-                       << ", databaseType: " << std::get<1>(key));
+                YDB_LOG_TRACE("ResponseProccessor::Handle(EndpointRequest): key is missing in cache",
+                    {"TraceId", TraceId},
+                    {"databaseId", std::get<0>(key)},
+                    {"databaseType", std::get<1>(key)});
             }
 
             try {
@@ -617,13 +645,17 @@ private:
                     httpRequest->Set("Authorization", token);
                 }
 
-                LOG_D("ResponseProccessor::Handle(EndpointRequest): start GET request: " << "url: "  << httpRequest->URL);
+                YDB_LOG_DEBUG("ResponseProccessor::Handle(EndpointRequest): start GET request:",
+                    {"TraceId", TraceId},
+                    {"url", httpRequest->URL});
 
                 requests[httpRequest] = TResolveParams{databaseId, databaseType, databaseAuth};
             } catch (const std::exception& e) {
                 const TString msg = TStringBuilder() << "error while preparing to resolve database id: " << databaseId 
                                                      << ", details: " << e.what();
-                LOG_E("ResponseProccessor::Handle(EndpointRequest): put error in cache: " << msg);
+                YDB_LOG_ERROR("ResponseProccessor::Handle(EndpointRequest): put error",
+                    {"TraceId", TraceId},
+                    {"in_cache", msg});
                 Cache.Put(key, msg);
                 SendResponse(ev->Sender, {}, /*success=*/false, msg);
                 return;

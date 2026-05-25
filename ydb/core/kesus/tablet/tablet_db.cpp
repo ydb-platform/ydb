@@ -1,4 +1,7 @@
 #include "tablet_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -28,8 +31,9 @@ void TKesusTablet::DoDeleteSession(
     NIceDb::TNiceDb& db, TSessionInfo* session, TVector<TDelayedEvent>& events)
 {
     ui64 sessionId = session->Id;
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Deleting session " << sessionId);
+    YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "] Deleting session",
+        {"TabletID", TabletID()},
+        {"sessionId", sessionId});
     if (session->DetachProxy()) {
         TabletCounters->Simple()[COUNTER_SESSION_ACTIVE_COUNT].Add(-1);
     }
@@ -54,8 +58,10 @@ void TKesusTablet::DoDeleteSemaphore(
     NIceDb::TNiceDb& db, TSemaphoreInfo* semaphore, TVector<TDelayedEvent>& events)
 {
     ui64 semaphoreId = semaphore->Id;
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Deleting semaphore " << semaphoreId << " " << semaphore->Name.Quote());
+    YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "] Deleting semaphore",
+        {"TabletID", TabletID()},
+        {"semaphoreId", semaphoreId},
+        {"Quote", semaphore->Name.Quote()});
     for (auto* owner : semaphore->Owners) {
         auto* session = Sessions.FindPtr(owner->SessionId);
         Y_ABORT_UNLESS(session);
@@ -93,9 +99,11 @@ void TKesusTablet::DoDeleteSessionSemaphore(
 {
     ui64 semaphoreId = semaphore->Id;
     ui64 sessionId = owner->SessionId;
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Deleting session " << sessionId << " / semaphore " << semaphoreId << " " << semaphore->Name.Quote()
-            << " owner link");
+    YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "] Deleting session / semaphore owner link",
+        {"TabletID", TabletID()},
+        {"sessionId", sessionId},
+        {"semaphoreId", semaphoreId},
+        {"Quote", semaphore->Name.Quote()});
     Y_ABORT_UNLESS(semaphore->Owners.contains(owner));
     semaphore->Count -= owner->Count;
     semaphore->Owners.erase(owner);
@@ -119,9 +127,11 @@ void TKesusTablet::DoDeleteSessionSemaphore(
     ui64 semaphoreId = semaphore->Id;
     ui64 orderId = waiter->OrderId;
     ui64 sessionId = waiter->SessionId;
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Deleting session " << sessionId << " / semaphore " << semaphoreId << " " << semaphore->Name.Quote()
-            << " waiter link");
+    YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "] Deleting session / semaphore waiter link",
+        {"TabletID", TabletID()},
+        {"sessionId", sessionId},
+        {"semaphoreId", semaphoreId},
+        {"Quote", semaphore->Name.Quote()});
     Y_ABORT_UNLESS(semaphore->Waiters.Value(orderId, nullptr) == waiter);
     bool needProcessSemaphoreQueue = semaphore->GetFirstOrderId() == orderId;
     semaphore->Waiters.erase(orderId);
@@ -147,9 +157,12 @@ void TKesusTablet::DoProcessSemaphoreQueue(
 
         ui64 orderId = waiter->OrderId;
         ui64 sessionId = waiter->SessionId;
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-            "[" << TabletID() << "] Processing semaphore " << semaphoreId << " " << semaphore->Name.Quote()
-                << " queue: next order #" << orderId << " session " << sessionId);
+        YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "] Processing semaphore queue: next order session",
+            {"TabletID", TabletID()},
+            {"semaphoreId", semaphoreId},
+            {"Quote", semaphore->Name.Quote()},
+            {"orderId", orderId},
+            {"sessionId", sessionId});
 
         auto* session = Sessions.FindPtr(sessionId);
         Y_ABORT_UNLESS(session,

@@ -11,13 +11,9 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 #include <atomic>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define TXLOG_LOG(priority, stream) \
-    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
-#define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
-#define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
-#define TXLOG_WARN(stream) TXLOG_LOG(NActors::NLog::PRI_WARN, stream)
-#define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
 
 LWTRACE_USING(LONG_TX_SERVICE_PROVIDER)
 
@@ -35,7 +31,9 @@ void TLongTxServiceActor::Bootstrap() {
 
     Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
 
-    TXLOG_NOTICE("Started, SelfId: " << SelfId());
+    YDB_LOG(NActors::NLog::PRI_NOTICE, "Started,",
+        {"LogPrefix", LogPrefix},
+        {"SelfId", SelfId()});
     Become(&TThis::StateWork);
 }
 
@@ -104,7 +102,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
     const auto* msg = ev->Get();
     const TString& databaseName = msg->Record.GetDatabaseName();
 
-    TXLOG_DEBUG("Received TEvBeginTx from " << ev->Sender);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvBeginTx from",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender});
 
     switch (msg->Record.GetMode()) {
         case NKikimrLongTxService::TEvBeginTx::MODE_READ_ONLY:
@@ -133,7 +133,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
             tx.TxId = txId;
             tx.DatabaseName = databaseName;
             tx.State = ETxState::Active;
-            TXLOG_DEBUG("Created new LongTxId# " << txId);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Created new",
+                {"LogPrefix", LogPrefix},
+                {"LongTxId", txId});
             Send(ev->Sender, new TEvLongTxService::TEvBeginTxResult(txId), 0, ev->Cookie);
             return;
         }
@@ -149,7 +151,10 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
     const auto* msg = ev->Get();
 
-    TXLOG_DEBUG("Received TEvCommitTx from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvCommitTx from",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"LongTxId", msg->GetLongTxId()});
 
     TLongTxId txId = msg->GetLongTxId();
     if (!txId.IsWritable()) {
@@ -172,7 +177,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
     if (tx.ColumnShardWrites.empty()) {
         // There's nothing to commit, so just reply with success
         Send(ev->Sender, new TEvLongTxService::TEvCommitTxResult(Ydb::StatusIds::SUCCESS), 0, ev->Cookie);
-        TXLOG_DEBUG("Committed LongTxId# " << txId << " without side-effects");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Committed without side-effects",
+            {"LogPrefix", LogPrefix},
+            {"LongTxId", txId});
         Transactions.erase(it);
         return;
     }
@@ -191,13 +198,18 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTxResult::TPtr& ev) 
     ui32 nodeId = ev->Sender.NodeId();
     auto* node = ProxyNodes.FindPtr(nodeId);
     if (!node) {
-        TXLOG_DEBUG("Ignored unexpected TEvCommitTxResult from node " << nodeId);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Ignored unexpected TEvCommitTxResult from node",
+            {"LogPrefix", LogPrefix},
+            {"nodeId", nodeId});
         return;
     }
 
     auto it = node->ActiveRequests.find(ev->Cookie);
     if (it == node->ActiveRequests.end() || it->second.Type != ERequestType::Commit) {
-        TXLOG_DEBUG("Ignored unexpected TEvCommitTxResult from node " << nodeId << " with cookie " << ev->Cookie);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Ignored unexpected TEvCommitTxResult from node with cookie",
+            {"LogPrefix", LogPrefix},
+            {"nodeId", nodeId},
+            {"Cookie", ev->Cookie});
         return;
     }
 
@@ -222,7 +234,10 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvCommitFinished::TPtr& ev) {
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTx::TPtr& ev) {
     const auto* msg = ev->Get();
 
-    TXLOG_DEBUG("Received TEvRollbackTx from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvRollbackTx from",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"LongTxId", msg->GetLongTxId()});
 
     TLongTxId txId = msg->GetLongTxId();
     if (!txId.IsWritable()) {
@@ -250,7 +265,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTx::TPtr& ev) {
     }
 
     Send(ev->Sender, new TEvLongTxService::TEvRollbackTxResult(Ydb::StatusIds::SUCCESS), 0, ev->Cookie);
-    TXLOG_DEBUG("Erased LongTxId# " << txId);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Erased",
+        {"LogPrefix", LogPrefix},
+        {"LongTxId", txId});
     Transactions.erase(it);
 }
 
@@ -258,13 +275,18 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTxResult::TPtr& ev
     ui32 nodeId = ev->Sender.NodeId();
     auto* node = ProxyNodes.FindPtr(nodeId);
     if (!node) {
-        TXLOG_DEBUG("Ignored unexpected TEvRollbackTxResult from node " << nodeId);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Ignored unexpected TEvRollbackTxResult from node",
+            {"LogPrefix", LogPrefix},
+            {"nodeId", nodeId});
         return;
     }
 
     auto it = node->ActiveRequests.find(ev->Cookie);
     if (it == node->ActiveRequests.end() || it->second.Type != ERequestType::Rollback) {
-        TXLOG_DEBUG("Ignored unexpected TEvRollbackTxResult from node " << nodeId << " with cookie " << ev->Cookie);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Ignored unexpected TEvRollbackTxResult from node with cookie",
+            {"LogPrefix", LogPrefix},
+            {"nodeId", nodeId},
+            {"Cookie", ev->Cookie});
         return;
     }
 
@@ -275,7 +297,10 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTxResult::TPtr& ev
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWrites::TPtr& ev) {
     const auto* msg = ev->Get();
 
-    TXLOG_DEBUG("Received TEvAttachColumnShardWrites from " << ev->Sender << " LongTxId# " << msg->GetLongTxId());
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvAttachColumnShardWrites from",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"LongTxId", msg->GetLongTxId()});
 
     TLongTxId txId = msg->GetLongTxId();
     if (!txId.IsWritable()) {
@@ -317,13 +342,18 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWritesRes
     ui32 nodeId = ev->Sender.NodeId();
     auto* node = ProxyNodes.FindPtr(nodeId);
     if (!node) {
-        TXLOG_DEBUG("Ignored unexpected TEvAttachColumnShardWritesResult from node " << nodeId);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Ignored unexpected TEvAttachColumnShardWritesResult from node",
+            {"LogPrefix", LogPrefix},
+            {"nodeId", nodeId});
         return;
     }
 
     auto it = node->ActiveRequests.find(ev->Cookie);
     if (it == node->ActiveRequests.end() || it->second.Type != ERequestType::AttachColumnShardWrites) {
-        TXLOG_DEBUG("Ignored unexpected TEvAttachColumnShardWritesResult from node " << nodeId << " with cookie " << ev->Cookie);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Ignored unexpected TEvAttachColumnShardWritesResult from node with cookie",
+            {"LogPrefix", LogPrefix},
+            {"nodeId", nodeId},
+            {"Cookie", ev->Cookie});
         return;
     }
 
@@ -356,7 +386,10 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
 
     auto* msg = ev->Get();
     const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->DatabaseName);
-    TXLOG_DEBUG("Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvAcquireReadSnapshot from for database",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"databaseName", databaseName});
 
     LWTRACK(AcquireReadSnapshotRequest, msg->Orbit, databaseName);
 
@@ -392,14 +425,18 @@ void TLongTxServiceActor::ScheduleAcquireSnapshot(const TString& databaseName, T
         return;
     }
 
-    TXLOG_DEBUG("Scheduling TEvAcquireSnapshotFlush for database " << databaseName);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Scheduling TEvAcquireSnapshotFlush for database",
+        {"LogPrefix", LogPrefix},
+        {"databaseName", databaseName});
     Schedule(AcquireSnapshotBatchDelay, new TEvPrivate::TEvAcquireSnapshotFlush(databaseName));
     state.FlushPending = true;
 }
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) {
     const auto* msg = ev->Get();
-    TXLOG_DEBUG("Received TEvAcquireSnapshotFlush for database " << msg->DatabaseName);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvAcquireSnapshotFlush for database",
+        {"LogPrefix", LogPrefix},
+        {"DatabaseName", msg->DatabaseName});
 
     auto& state = DatabaseSnapshots[msg->DatabaseName];
     Y_ABORT_UNLESS(state.FlushPending);
@@ -411,7 +448,9 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev) 
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& ev) {
     const auto* msg = ev->Get();
-    TXLOG_DEBUG("Received TEvAcquireSnapshotFinished, cookie = " << ev->Cookie);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvAcquireSnapshotFinished, cookie",
+        {"LogPrefix", LogPrefix},
+        {"Cookie", ev->Cookie});
 
     auto* req = AcquireSnapshotInFlight.FindPtr(ev->Cookie);
     Y_ABORT_UNLESS(req, "Unexpected reply for request that is not inflight");
@@ -447,9 +486,13 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
                 tx.TxId = txId;
                 tx.DatabaseName = databaseName;
                 tx.State = ETxState::Active;
-                TXLOG_DEBUG("Created new read-write LongTxId# " << txId);
+                YDB_LOG(NActors::NLog::PRI_DEBUG, "Created new read-write",
+                    {"LogPrefix", LogPrefix},
+                    {"LongTxId", txId});
             } else {
-                TXLOG_DEBUG("Created new read-only LongTxId# " << txId);
+                YDB_LOG(NActors::NLog::PRI_DEBUG, "Created new read-only",
+                    {"LogPrefix", LogPrefix},
+                    {"LongTxId", txId});
             }
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(txId), 0, beginReq.Cookie);
         }
@@ -493,7 +536,10 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev) {
     auto* msg = ev->Get();
     ui64 lockId = msg->LockId;
     TInstant lockTimestamp = msg->LockTimestamp;
-    TXLOG_DEBUG("Received TEvRegisterLock for LockId# " << lockId << " LockTimestamp# " << lockTimestamp);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvRegisterLock for",
+        {"LogPrefix", LogPrefix},
+        {"LockId", lockId},
+        {"LockTimestamp", lockTimestamp});
 
     Y_ABORT_UNLESS(lockId, "Unexpected registration of a zero LockId");
 
@@ -507,7 +553,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev) {
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) {
     auto* msg = ev->Get();
     ui64 lockId = msg->LockId;
-    TXLOG_DEBUG("Received TEvUnregisterLock for LockId# " << lockId);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvUnregisterLock for",
+        {"LogPrefix", LogPrefix},
+        {"LockId", lockId});
 
     auto it = Locks.find(lockId);
     if (it == Locks.end()) {
@@ -582,7 +630,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
     auto& record = ev->Get()->Record;
     ui64 lockId = record.GetLockId();
     ui32 lockNode = record.GetLockNode();
-    TXLOG_DEBUG("Received TEvSubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvSubscribeLock from for",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"LockId", lockId},
+        {"LockNode", lockNode});
 
     if (!lockId) {
         SendViaSession(
@@ -680,9 +732,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     ui32 lockNode = record.GetLockNode();
     auto lockStatus = record.GetStatus();
     auto lockTimestamp = msg->GetLockTimestamp();
-    TXLOG_DEBUG("Received TEvLockStatus from " << ev->Sender
-            << " for LockId# " << lockId << " LockNode# " << lockNode
-            << " LockStatus# " << lockStatus << " LockTimestamp# " << lockTimestamp);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvLockStatus from for",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"LockId", lockId},
+        {"LockNode", lockNode},
+        {"LockStatus", lockStatus},
+        {"LockTimestamp", lockTimestamp});
 
     auto* node = ProxyNodes.FindPtr(lockNode);
     if (!node || node->State != EProxyState::Connected) {
@@ -770,7 +826,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
     auto& record = ev->Get()->Record;
     ui64 lockId = record.GetLockId();
     ui32 lockNode = record.GetLockNode();
-    TXLOG_DEBUG("Received TEvUnsubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvUnsubscribeLock from for",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"LockId", lockId},
+        {"LockNode", lockNode});
 
     if (!lockId) {
         return;
@@ -929,7 +989,10 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
 
 void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
-    TXLOG_DEBUG("Received TEvNodeConnected for NodeId# " << nodeId << " from session " << ev->Sender);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvNodeConnected for from session",
+        {"LogPrefix", LogPrefix},
+        {"NodeId", nodeId},
+        {"Sender", ev->Sender});
 
     auto itNode = ProxyNodes.find(nodeId);
     if (itNode == ProxyNodes.end()) {
@@ -974,7 +1037,10 @@ void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
 
 void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     const ui32 nodeId = ev->Get()->NodeId;
-    TXLOG_DEBUG("Received TEvNodeDisconnected for NodeId# " << nodeId << " from session " << ev->Sender);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvNodeDisconnected for from session",
+        {"LogPrefix", LogPrefix},
+        {"NodeId", nodeId},
+        {"Sender", ev->Sender});
     OnNodeDisconnected(nodeId, ev->Sender);
 }
 
@@ -1072,10 +1138,13 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvReconnect::TPtr& ev) {
 
 void TLongTxServiceActor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     auto* msg = ev->Get();
-    TXLOG_DEBUG("Received TEvUndelivered from " << ev->Sender << " cookie " << ev->Cookie
-        << " type " << msg->SourceType
-        << " reason " << msg->Reason
-        << " session " << ev->InterconnectSession);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvUndelivered from cookie type reason session",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"Cookie", ev->Cookie},
+        {"SourceType", msg->SourceType},
+        {"Reason", msg->Reason},
+        {"InterconnectSession", ev->InterconnectSession});
 
     if (msg->SourceType == TEvInterconnect::EvConnectNode) {
         return OnNodeDisconnected(ev->Cookie, ev->Sender);
@@ -1168,20 +1237,26 @@ TLongTxServiceActor::TLockStateHandle TLongTxServiceActor::GetAwaiterHandle(cons
     if (awaiterInfo.LockNodeId == SelfId().NodeId()) {
         auto lockIt = Locks.find(awaiterInfo.LockId);
         if (lockIt == Locks.end()) {
-            TXLOG_WARN("Local awaiter id: " << awaiterInfo.LockId << " not found");
+            YDB_LOG(NActors::NLog::PRI_WARN, "Local awaiter not found",
+                {"LogPrefix", LogPrefix},
+                {"id", awaiterInfo.LockId});
             return TLockStateHandle{};
         }
         return TLockStateHandle(lockIt->second);
     } else {
         auto& node = ConnectProxyNode(awaiterInfo.LockNodeId);
         if (node.State == EProxyState::Disconnected) {
-            TXLOG_WARN("Proxy node for remote awaiter id: " << awaiterInfo << " not found");
+            YDB_LOG(NActors::NLog::PRI_WARN, "Proxy node for remote awaiter not found",
+                {"LogPrefix", LogPrefix},
+                {"id", awaiterInfo});
             return TLockStateHandle{};
         }
 
         auto lockIt = node.Locks.find(awaiterInfo.LockId);
         if (lockIt == node.Locks.end()) {
-            TXLOG_WARN("Proxy lock for remote awaiter id: " << awaiterInfo << " not found");
+            YDB_LOG(NActors::NLog::PRI_WARN, "Proxy lock for remote awaiter not found",
+                {"LogPrefix", LogPrefix},
+                {"id", awaiterInfo});
             return TLockStateHandle{};
         }
         return TLockStateHandle(lockIt->second);
@@ -1200,9 +1275,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         auto existingIt = WaitEdges.find(addedEdge.Id);
         if (existingIt != WaitEdges.end()) {
             if (existingIt->second.Blocker.LockInfo(SelfId()) != addedEdge.Blocker) {
-                TXLOG_ERROR("Unexpected blocker: " << existingIt->second.Blocker.LockInfo(SelfId())
-                    << " for duplicate added edge id: " << addedEdge.Id
-                    << ", expected: " << addedEdge.Blocker.LockId);
+                YDB_LOG(NActors::NLog::PRI_ERROR, "Unexpected for duplicate added edge",
+                    {"LogPrefix", LogPrefix},
+                    {"blocker", existingIt->second.Blocker.LockInfo(SelfId())},
+                    {"id", addedEdge.Id},
+                    {"expected", addedEdge.Blocker.LockId});
             }
             continue;
         }
@@ -1276,9 +1353,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             }
         }
 
-        TXLOG_DEBUG("Added wait edge id: " << addedEdge.Id
-            << ", awaiter: " << awaiterInfo
-            << ", blocker: " << addedEdge.Blocker);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Added wait edge",
+            {"LogPrefix", LogPrefix},
+            {"id", addedEdge.Id},
+            {"awaiter", awaiterInfo},
+            {"blocker", addedEdge.Blocker});
     }
 
     TVector<TWaitEdgeId> actuallyRemoved;
@@ -1291,9 +1370,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         Y_ABORT_UNLESS(it->second.Blocker);
 
         if (it->second.Awaiter.Impl != awaiter.Impl) {
-            TXLOG_ERROR("Unexpected awaiter: " << awaiterInfo
-                << " for removed edge id: " << id
-                << ", expected: " << awaiter.LockInfo(SelfId()));
+            YDB_LOG(NActors::NLog::PRI_ERROR, "Unexpected for removed edge",
+                {"LogPrefix", LogPrefix},
+                {"awaiter", awaiterInfo},
+                {"id", id},
+                {"expected", awaiter.LockInfo(SelfId())});
             continue;
         }
 
@@ -1302,9 +1383,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
         WaitEdges.erase(it);
         actuallyRemoved.push_back(id);
 
-        TXLOG_DEBUG("Removed wait edge id: " << id
-            << ", awaiter: " << awaiterInfo
-            << ", blocker: " << blockerInfo);
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Removed wait edge",
+            {"LogPrefix", LogPrefix},
+            {"id", id},
+            {"awaiter", awaiterInfo},
+            {"blocker", blockerInfo});
     }
 
     // 2. Send notifications
@@ -1453,9 +1536,11 @@ void TLongTxServiceActor::UnlinkWaitNode(TWaitNode& waitNode) {
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) {
     auto edgeId = TWaitEdgeId(ev->Sender, ev->Get()->RequestId);
-    TXLOG_DEBUG("Received TEvWaitingLockAdd for awaiter: " << ev->Get()->Lock
-        << ", blocker: " << ev->Get()->OtherLock
-        << ", edge id: " << edgeId);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvWaitingLockAdd for, edge",
+        {"LogPrefix", LogPrefix},
+        {"awaiter", ev->Get()->Lock},
+        {"blocker", ev->Get()->OtherLock},
+        {"id", edgeId});
 
     auto awaiter = GetAwaiterHandle(ev->Get()->Lock);
     if (!awaiter) {
@@ -1473,7 +1558,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) 
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev) {
     auto edgeId = TWaitEdgeId(ev->Sender, ev->Get()->RequestId);
-    TXLOG_DEBUG("Received TEvWaitingLockRemove for edge id: " << edgeId);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvWaitingLockRemove for edge",
+        {"LogPrefix", LogPrefix},
+        {"id", edgeId});
 
     auto edgeIt = WaitEdges.find(edgeId);
     if (edgeIt == WaitEdges.end()) {
@@ -1487,10 +1574,12 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr&
     const auto& record = ev->Get()->Record;
     TLockInfo awaiterInfo(record.GetLockId(), record.GetLockNode());
 
-    TXLOG_DEBUG("Received TEvUpdateLockWaitEdges from " << ev->Sender
-        << " for awaiter: " << awaiterInfo
-        << ", added count: " << record.GetAdded().size()
-        << ", removed count: " << record.GetRemoved().size());
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Received TEvUpdateLockWaitEdges from for, added, removed",
+        {"LogPrefix", LogPrefix},
+        {"Sender", ev->Sender},
+        {"awaiter", awaiterInfo},
+        {"count", record.GetAdded().size()},
+        {"#_count", record.GetRemoved().size()});
 
     if (Settings.Counters) {
         Settings.Counters->WaitGraphEdgesReceived->Add(
@@ -1699,9 +1788,11 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
                 continue;
             }
 
-            TXLOG_DEBUG("Breaking the wait edge id: " << edge.Id
-                << ", awaiter: " << edge.Awaiter.LockInfo(SelfId())
-                << ", blocker: " << edge.Blocker.LockInfo(SelfId()));
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Breaking the wait edge",
+                {"LogPrefix", LogPrefix},
+                {"id", edge.Id},
+                {"awaiter", edge.Awaiter.LockInfo(SelfId())},
+                {"blocker", edge.Blocker.LockInfo(SelfId())});
             edge.Broken = true;
             Send(edge.Id.OwnerId, new TEvLongTxService::TEvWaitingLockDeadlock(edge.Id.RequestId));
             if (Settings.Counters) {
@@ -1722,8 +1813,9 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {
     UpdateImmutableSnapshotsRegistry();
-    TXLOG_DEBUG("Scheduled next TEvSnapshotMaintenance event in "
-        << AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds() << " seconds");
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Scheduled next TEvSnapshotMaintenance event in seconds",
+        {"LogPrefix", LogPrefix},
+        {"GetSnapshotsRegistryUpdateIntervalSeconds", AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds()});
     Schedule(
         TDuration::Seconds(AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds()),
         new TEvPrivate::TEvSnapshotMaintenance());
@@ -1731,7 +1823,8 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {
 
 void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {    
     if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
-        TXLOG_DEBUG("Snapshots locking is disabled, clearing local and remote snapshots storage");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Snapshots locking is disabled, clearing local and remote snapshots storage",
+            {"LogPrefix", LogPrefix});
         LocalSnapshotsStorage->Clear();
         RemoteSnapshotsStorage->Clear();
         AppData()->SnapshotRegistryHolder->Set(nullptr);
@@ -1759,7 +1852,8 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
 
     LocalSnapshotsStorage->CleanExpired();
     if (!RemoteSnapshotsStorage->IsReady()) {
-        TXLOG_DEBUG("Remote snapshots storage is not ready, skipping update");
+        YDB_LOG(NActors::NLog::PRI_DEBUG, "Remote snapshots storage is not ready, skipping update",
+            {"LogPrefix", LogPrefix});
         return;
     }
 
@@ -1785,9 +1879,10 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     }
 
     AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
-    TXLOG_DEBUG("Updated immutable snapshots registry. "
-        << "Local snapshots count: " << localSnapshotsCount
-        << ", Remote snapshots count: " << remoteSnapshotsCount);
+    YDB_LOG(NActors::NLog::PRI_DEBUG, "Updated immutable snapshots registry. Local snapshots, Remote snapshots",
+        {"LogPrefix", LogPrefix},
+        {"count", localSnapshotsCount},
+        {"#_count", remoteSnapshotsCount});
 }
 
 } // namespace NLongTxService

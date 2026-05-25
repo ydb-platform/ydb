@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_tx_allocator.pb.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -85,11 +86,10 @@ public:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        ALOG_ERROR(NKikimrServices::TX_ALLOCATOR,
-                    "tablet# " << TabletID() <<
-                    " IGNORING message type# " <<  ev->GetTypeRewrite() <<
-                    " from Sender# " << ev->Sender.ToString() <<
-                    " at StateInit");
+        YDB_LOG_COMP_ERROR(NKikimrServices::TX_ALLOCATOR, "IGNORING message at StateInit",
+            {"tablet", TabletID()},
+            {"type", ev->GetTypeRewrite()},
+            {"from_Sender", ev->Sender.ToString()});
     }
 
     STFUNC(StateWork) {
@@ -99,11 +99,10 @@ public:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                ALOG_ERROR(NKikimrServices::TX_ALLOCATOR,
-                            "tablet# " << TabletID() <<
-                            " IGNORING message type# " <<  ev->GetTypeRewrite() <<
-                            " from Sender# " << ev->Sender.ToString() <<
-                            " at StateWork");
+                YDB_LOG_COMP_ERROR(NKikimrServices::TX_ALLOCATOR, "IGNORING message at StateWork",
+                    {"tablet", TabletID()},
+                    {"type", ev->GetTypeRewrite()},
+                    {"from_Sender", ev->Sender.ToString()});
             }
         }
     }

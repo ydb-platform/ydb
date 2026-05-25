@@ -21,6 +21,9 @@
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -168,8 +171,8 @@ private:
 
         NMon::TEvHttpInfo *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "HTTP request"
-            << ": dump# " << DumpRequest(msg->Request));
+        YDB_LOG_CTX_DEBUG(ctx, "HTTP request",
+            {"dump", DumpRequest(msg->Request)});
 
         // Check for API call.
         if (msg->Request.GetPathInfo().StartsWith("/api/")) {

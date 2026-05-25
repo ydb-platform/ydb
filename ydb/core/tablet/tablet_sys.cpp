@@ -13,17 +13,12 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 #include <util/stream/str.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_LEVEL
-#error log macro definition clash
-#endif
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
-#define BLOG_LEVEL(level, stream, marker) LOG_LOG_S(*TlsActivationContext, level, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
-#define BLOG_D(stream, marker) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
-#define BLOG_I(stream, marker) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
-#define BLOG_ERROR(stream, marker) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
-#define BLOG_TRACE(stream, marker) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_MAIN, "Tablet: " << TabletID() << " " << stream << " Marker# " << marker)
-
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_MAIN
 
 namespace NKikimr {
 
@@ -232,7 +227,9 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
     Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency,
         Info.Get(), Relevance, /*isZeroEntry=*/ true));
 
-    BLOG_D(" TTablet::WriteZeroEntry. logid# " << logid.ToString(), "TSYS01");
+    YDB_LOG_DEBUG("TTablet::WriteZeroEntry. Marker# TSYS01",
+        {"Tablet", TabletID()},
+        {"logid", logid.ToString()});
 
     Become(&TThis::StateWriteZeroEntry);
     ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
@@ -348,7 +345,8 @@ void TTablet::HandleFollowerRetry(TEvTabletBase::TEvFollowerRetry::TPtr &ev) {
 void TTablet::HandleByFollower(TEvTabletBase::TEvTryBuildFollowerGraph::TPtr &ev) {
     Y_UNUSED(ev);
 
-    BLOG_TRACE("Follower starting to rebuild history", "TSYS02");
+    YDB_LOG_TRACE("Follower starting to rebuild history Marker# TSYS02",
+        {"Tablet", TabletID()});
     Y_DEBUG_ABORT_UNLESS(!RebuildGraphRequest);
     RebuildGraphRequest = Register(CreateTabletReqRebuildHistoryGraph(SelfId(), Info.Get(), 0, nullptr, ++FollowerInfo.RebuildGraphCookie));
 
@@ -357,13 +355,16 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvTryBuildFollowerGraph::TPtr &ev
 
 void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
     if (ev->Sender != RebuildGraphRequest || ev->Cookie != FollowerInfo.RebuildGraphCookie || UserTablet) {
-        BLOG_D("Outdated TEvRebuildGraphResult ignored", "TSYS03");
+        YDB_LOG_DEBUG("Outdated TEvRebuildGraphResult ignored Marker# TSYS03",
+            {"Tablet", TabletID()});
         return;
     }
 
     RebuildGraphRequest = TActorId(); // check consistency??
     TEvTabletBase::TEvRebuildGraphResult *msg = ev->Get();
-    BLOG_TRACE("Follower received rebuild history result Status# " << msg->Status, "TSYS04");
+    YDB_LOG_TRACE("Follower received rebuild history result Marker# TSYS04",
+        {"Tablet", TabletID()},
+        {"Status", msg->Status});
 
     switch (msg->Status) {
     case NKikimrProto::OK:
@@ -377,7 +378,8 @@ void TTablet::HandleByFollower(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev) {
                     std::move(msg->GroupReadOps)));
 
             Send(Launcher, new TEvTablet::TEvRestored(TabletID(), StateStorageInfo.KnownGeneration, UserTablet, true));
-            BLOG_TRACE("SBoot with rebuilt graph", "TSYS05");
+            YDB_LOG_TRACE("SBoot with rebuilt graph Marker# TSYS05",
+                {"Tablet", TabletID()});
         }
         break;
     case NKikimrProto::NODATA: // any not-positive cases ignored and handled by long retry
@@ -436,7 +438,9 @@ void TTablet::HandleByFollower(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     if (ev->Get()->NodeId == FollowerInfo.KnownLeaderID.NodeId() && ev->Cookie == FollowerInfo.LastCookie) {
         FollowerInfo.LastCookie = -1;
 
-        BLOG_TRACE("Follower got TEvNodeDisconnected NodeId# " << ev->Get()->NodeId, "TSYS06");
+        YDB_LOG_TRACE("Follower got TEvNodeDisconnected Marker# TSYS06",
+            {"Tablet", TabletID()},
+            {"NodeId", ev->Get()->NodeId});
         NextFollowerAttempt();
         RetryFollowerBootstrapOrWait();
     }
@@ -449,7 +453,9 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerDisconnect::TPtr &ev) {
     if (ev->Sender != FollowerInfo.KnownLeaderID)
         return;
 
-    BLOG_TRACE("Follower got TEvFollowerDisconnect Sender# " << ev->Sender, "TSYS07");
+    YDB_LOG_TRACE("Follower got TEvFollowerDisconnect Marker# TSYS07",
+        {"Tablet", TabletID()},
+        {"Sender", ev->Sender});
     NextFollowerAttempt();
     RetryFollowerBootstrapOrWait();
 }
@@ -485,8 +491,12 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerAuxUpdate::TPtr &ev) {
 void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
     const auto &record = ev->Get()->Record;
 
-    BLOG_TRACE("FollowerUpdate attempt: " << record.GetFollowerAttempt() << ":" << record.GetStreamCounter()
-        << ", " << record.GetGeneration() << ":" << record.GetStep(), "TSYS08");
+    YDB_LOG_TRACE("FollowerUpdate Marker# TSYS08",
+        {"Tablet", TabletID()},
+        {"attempt", record.GetFollowerAttempt()},
+        {"GetStreamCounter", record.GetStreamCounter()},
+        {"GetGeneration", record.GetGeneration()},
+        {"GetStep", record.GetStep()});
 
     if (!CheckFollowerUpdate(ev->Sender, record.GetFollowerAttempt(), record.GetStreamCounter()))
         return;
@@ -523,15 +533,21 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
                                          Launcher, *ev->Get(), Info,
                                          ResourceProfiles, TxCacheQuota));
 
-        BLOG_TRACE("SBoot attempt: " << FollowerInfo.FollowerAttempt
-            << ", " << record.GetGeneration() << ":" << record.GetStep(), "TSYS09");
+        YDB_LOG_TRACE("SBoot Marker# TSYS09",
+            {"Tablet", TabletID()},
+            {"attempt", FollowerInfo.FollowerAttempt},
+            {"GetGeneration", record.GetGeneration()},
+            {"GetStep", record.GetStep()});
 
     } else {
         Y_ABORT_UNLESS(UserTablet);
         Send(UserTablet, new TEvTablet::TEvFUpdate(*ev->Get()));
 
-        BLOG_TRACE("SUpdate attempt: " << FollowerInfo.FollowerAttempt
-            << ", " << record.GetGeneration() << ":" << record.GetStep(), "TSYS10");
+        YDB_LOG_TRACE("SUpdate Marker# TSYS10",
+            {"Tablet", TabletID()},
+            {"attempt", FollowerInfo.FollowerAttempt},
+            {"GetGeneration", record.GetGeneration()},
+            {"GetStep", record.GetStep()});
     }
 
     ++FollowerInfo.StreamCounter;
@@ -539,7 +555,10 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
 
 void TTablet::HandleByFollower(TEvTablet::TEvPromoteToLeader::TPtr &ev) {
     TEvTablet::TEvPromoteToLeader *msg = ev->Get();
-    BLOG_TRACE("Follower got TEvPromoteToLeader Sender# " << ev->Sender << " Generation# " << msg->SuggestedGeneration, "TSYS11");
+    YDB_LOG_TRACE("Follower got TEvPromoteToLeader Marker# TSYS11",
+        {"Tablet", TabletID()},
+        {"Sender", ev->Sender},
+        {"Generation", msg->SuggestedGeneration});
 
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnFollowerPromoteToLeader>(
@@ -605,7 +624,10 @@ TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnection
     auto moveToIgnore = [&]() {
         shouldEraseEntry = !followerInfo.PresentInList;
         followerInfo.SyncState = EFollowerSyncState::Ignore;
-        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to Ignore state, shouldEraseEntry# " << shouldEraseEntry, "TSYS13");
+        YDB_LOG_DEBUG("HandleFollowerConnectionProblem moved to Ignore state, Marker# TSYS13",
+            {"Tablet", TabletID()},
+            {"first", followerIt->first},
+            {"shouldEraseEntry", shouldEraseEntry});
     };
 
     switch (followerInfo.SyncState) {
@@ -616,18 +638,24 @@ TMap<TActorId, TTablet::TLeaderInfo>::iterator TTablet::HandleFollowerConnection
         } else {
             followerInfo.SyncState = EFollowerSyncState::NeedSync;
             followerInfo.SyncAttempt = 0;
-            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " moved to NeedSync state", "TSYS12");
+            YDB_LOG_DEBUG("HandleFollowerConnectionProblem moved to NeedSync state Marker# TSYS12",
+                {"Tablet", TabletID()},
+                {"first", followerIt->first});
         }
         break;
     case EFollowerSyncState::NeedSync:
         if (!followerInfo.SyncCookieHolder && followerInfo.SyncAttempt > 3) {
             moveToIgnore();
         } else {
-            BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in NeedSync state", "TSYS14");
+            YDB_LOG_DEBUG("HandleFollowerConnectionProblem kept in NeedSync state Marker# TSYS14",
+                {"Tablet", TabletID()},
+                {"first", followerIt->first});
         }
         break;
     case EFollowerSyncState::Ignore:
-        BLOG_D("HandleFollowerConnectionProblem " << followerIt->first << " kept in Ignore state", "TSYS15");
+        YDB_LOG_DEBUG("HandleFollowerConnectionProblem kept in Ignore state Marker# TSYS15",
+            {"Tablet", TabletID()},
+            {"first", followerIt->first});
         break;
     }
 
@@ -875,7 +903,9 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
                 return LockedInitializationPath();
             }
 
-            BLOG_D("HandleStateStorageInfoResolve, KnownGeneration: " << msg->CurrentGeneration << " Promote", "TSYS16");
+            YDB_LOG_DEBUG("HandleStateStorageInfoResolve, Promote Marker# TSYS16",
+                {"Tablet", TabletID()},
+                {"KnownGeneration", msg->CurrentGeneration});
 
             return PromoteToCandidate(0);
         }
@@ -968,23 +998,30 @@ void TTablet::HandleFindLatestLogEntry(TEvTabletBase::TEvFindLatestLogEntryResul
         {
             DiscoveredLastBlocked = msg->BlockedGeneration;
             if (msg->Latest.Generation() > msg->BlockedGeneration + 1) {
-                BLOG_ERROR("HandleFindLatestLogEntry inconsistency. LatestGeneration: "
-                    <<  msg->Latest.Generation() << ", blocked: " << msg->BlockedGeneration, "TSYS17");
+                YDB_LOG_ERROR("HandleFindLatestLogEntry inconsistency. Marker# TSYS17",
+                    {"Tablet", TabletID()},
+                    {"LatestGeneration", msg->Latest.Generation()},
+                    {"blocked", msg->BlockedGeneration});
             }
 
             const ui32 latestKnownGeneration = Max(msg->Latest.Generation(), msg->BlockedGeneration);
-            BLOG_D("HandleFindLatestLogEntry, latestKnownGeneration: " << latestKnownGeneration << " Promote", "TSYS18");
+            YDB_LOG_DEBUG("HandleFindLatestLogEntry, Promote Marker# TSYS18",
+                {"Tablet", TabletID()},
+                {"latestKnownGeneration", latestKnownGeneration});
 
             return PromoteToCandidate(latestKnownGeneration);
         }
     case NKikimrProto::NODATA:
-        BLOG_D("HandleFindLatestLogEntry, NODATA Promote", "TSYS19");
+        YDB_LOG_DEBUG("HandleFindLatestLogEntry, NODATA Promote Marker# TSYS19",
+            {"Tablet", TabletID()});
 
         DiscoveredLastBlocked = 0;
         return PromoteToCandidate(0);
     default:
         {
-            BLOG_ERROR("HandleFindLatestLogEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS20");
+            YDB_LOG_ERROR("HandleFindLatestLogEntry, Marker# TSYS20",
+                {"Tablet", TabletID()},
+                {"msg->Status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
         }
     }
@@ -1001,11 +1038,10 @@ void TTablet::HandleBlockBlobStorageResult(TEvTabletBase::TEvBlockBlobStorageRes
         }
     default:
         {
-            BLOG_ERROR("HandleBlockBlobStorageResult, msg->Status: "
-                    << NKikimrProto::EReplyStatus_Name(msg->Status)
-                    << (DiscoveredLastBlocked == Max<ui32>()
-                        ? ", not discovered"
-                        : Sprintf(", discovered gen was: %u", DiscoveredLastBlocked).c_str()), "TSYS21");
+            YDB_LOG_ERROR("HandleBlockBlobStorageResult, Marker# TSYS21",
+                {"Tablet", TabletID()},
+                {"msg->Status", NKikimrProto::EReplyStatus_Name(msg->Status)},
+                {"#_num_0", (DiscoveredLastBlocked == Max<ui32>()                         ? ", not discovered"                         : Sprintf(", discovered gen was: %u", DiscoveredLastBlocked).c_str())});
 
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
         }
@@ -1046,7 +1082,9 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
         return;
     default:
         {
-            BLOG_ERROR("HandleRebuildGraphResult, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS22");
+            YDB_LOG_ERROR("HandleRebuildGraphResult, Marker# TSYS22",
+                {"Tablet", TabletID()},
+                {"msg->Status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
         }
     }
@@ -1059,7 +1097,9 @@ void TTablet::HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
         return StartActivePhase();
     default:
         {
-            BLOG_ERROR("HandleWriteZeroEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS23");
+            YDB_LOG_ERROR("HandleWriteZeroEntry, Marker# TSYS23",
+                {"Tablet", TabletID()},
+                {"msg->Status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             ReassignYellowChannels(std::move(msg->YellowMoveChannels));
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason); // TODO: detect 'need channel reconfiguration' case
         }
@@ -1078,9 +1118,11 @@ void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
     ReportTabletStateChange(TTabletStateInfo::Active);
     Send(Launcher, new TEvTablet::TEvReady(TabletID(), StateStorageInfo.KnownGeneration, UserTablet));
     ActivateTime = AppData()->TimeProvider->Now();
-    BLOG_I("Active! Generation: " << StateStorageInfo.KnownGeneration
-            <<  ", Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
-            <<  " started in " << (ActivateTime-BoostrapTime).MilliSeconds() << "msec", "TSYS24");
+    YDB_LOG_INFO("Active! started in msec Marker# TSYS24",
+        {"Tablet", TabletID()},
+        {"Generation", StateStorageInfo.KnownGeneration},
+        {"Type", TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)},
+        {"MilliSeconds", (ActivateTime-BoostrapTime).MilliSeconds()});
 
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, true, StateStorageInfo.KnownGeneration, TabletVersionInfo);
     SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
@@ -1089,7 +1131,8 @@ void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
 void TTablet::HandleByFollower(TEvTablet::TEvTabletActive::TPtr &ev) {
     auto *msg = ev->Get();
     TabletVersionInfo = std::move(msg->VersionInfo);
-    BLOG_D("Follower TabletStateActive", "TSYS25");
+    YDB_LOG_DEBUG("Follower TabletStateActive Marker# TSYS25",
+        {"Tablet", TabletID()});
 
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration, TabletVersionInfo);
 
@@ -1195,7 +1238,9 @@ void TTablet::Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev) {
 
     auto it = ConfirmLeaderRequests.find(ev->Cookie);
     if (it == ConfirmLeaderRequests.end()) {
-        BLOG_ERROR("Unexpected TEvGetBlockResult with cookie " << ev->Cookie << " without a pending request", "TSYS33");
+        YDB_LOG_ERROR("Unexpected TEvGetBlockResult with cookie without a pending request Marker# TSYS33",
+            {"Tablet", TabletID()},
+            {"Cookie", ev->Cookie});
         return;
     }
 
@@ -1462,15 +1507,24 @@ void TTablet::GcLogChannel(ui32 step) {
 
     if (GcInFly != 0 || Graph.SyncCommit.SyncStep != 0 && Graph.SyncCommit.SyncStep <= step) {
         if (GcInFlyStep < step) {
-            BLOG_D("GcCollect 0 channel postponed, tablet:gen:step => " << gen << ":" << step, "TSYS26");
+            YDB_LOG_DEBUG("GcCollect 0 channel postponed, tablet:gen:step => Marker# TSYS26",
+                {"Tablet", TabletID()},
+                {"gen", gen},
+                {"step", step});
             GcNextStep = step;
             return;
         }
-        BLOG_D("GcCollect 0 channel skipped, tablet:gen:step => " << gen << ":" << step, "TSYS27");
+        YDB_LOG_DEBUG("GcCollect 0 channel skipped, tablet:gen:step => Marker# TSYS27",
+            {"Tablet", TabletID()},
+            {"gen", gen},
+            {"step", step});
         return;
     }
 
-    BLOG_D("GcCollect 0 channel, tablet:gen:step => " << gen << ":" << step, "TSYS28");
+    YDB_LOG_DEBUG("GcCollect 0 channel, tablet:gen:step => Marker# TSYS28",
+        {"Tablet", TabletID()},
+        {"gen", gen},
+        {"step", step});
 
     const TTabletChannelInfo *channelInfo = Info->ChannelInfo(0);
     if (GcCounter == 0) {
@@ -1822,7 +1876,10 @@ void TTablet::HandleFeatures(TEvTablet::TEvFeatures::TPtr &ev) {
 }
 
 void TTablet::HandleStop(TEvTablet::TEvTabletStop::TPtr &ev) {
-    BLOG_D("Received TEvTabletStop from " << ev->Sender << ", reason = " << ev->Get()->GetReason(), "TSYS29");
+    YDB_LOG_DEBUG("Received TEvTabletStop from, reason Marker# TSYS29",
+        {"Tablet", TabletID()},
+        {"Sender", ev->Sender},
+        {"#_ev->Get()->GetReason()", ev->Get()->GetReason()});
     StopTablet(ev->Get()->GetReason(), TEvTablet::TEvTabletDead::ReasonPill);
 }
 
@@ -1939,9 +1996,10 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
         return std::move(out);
     };
 
-    BLOG_I(
-        " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
-        << ", YellowMoveChannels: " << yellowMoveChannelsString(), "TSYS30");
+    YDB_LOG_INFO("Marker# TSYS30",
+        {"Tablet", TabletID()},
+        {"Type", TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)},
+        {"YellowMoveChannels", yellowMoveChannelsString()});
 
     Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(
@@ -1951,15 +2009,16 @@ void TTablet::ReassignYellowChannels(TVector<ui32> &&yellowMoveChannels) {
 }
 
 void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TString &details) {
-    BLOG_LEVEL(
-        reason == TEvTablet::TEvTabletDead::ReasonPill
+    YDB_LOG(reason == TEvTablet::TEvTabletDead::ReasonPill
             ? NActors::NLog::PRI_NOTICE
-            : NActors::NLog::PRI_ERROR,
-        " Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
-        << ", EReason: " << TEvTablet::TEvTabletDead::Str(reason)
-        << ", SuggestedGeneration: " << SuggestedGeneration
-        << ", KnownGeneration: " << StateStorageInfo.KnownGeneration
-        << (details ? ", Details: " : "") << details.data(), "TSYS31");
+            : NActors::NLog::PRI_ERROR, "Marker# TSYS31",
+        {"Tablet", TabletID()},
+        {"Type", TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)},
+        {"EReason", TEvTablet::TEvTabletDead::Str(reason)},
+        {"SuggestedGeneration", SuggestedGeneration},
+        {"KnownGeneration", StateStorageInfo.KnownGeneration},
+        {"#_num_0", (details ? ", Details: " : "")},
+        {"data", details.data()});
 
     PipeConnectAcceptor->Detach(SelfId());
     const ui32 reportedGeneration = SuggestedGeneration ? SuggestedGeneration : StateStorageInfo.KnownGeneration;
@@ -2184,7 +2243,8 @@ void TTablet::SendViaSession(const TActorId& sessionId, const TActorId& target, 
 void TTablet::LockedInitializationPath() {
     const ui32 latestChangeGeneration = SuggestedGeneration ? SuggestedGeneration - 1 : Info->ChannelInfo(0)->LatestEntry()->FromGeneration;
 
-    BLOG_D("LockedInitializationPath", "TSYS32");
+    YDB_LOG_DEBUG("LockedInitializationPath Marker# TSYS32",
+        {"Tablet", TabletID()});
 
     if (StateStorageInfo.KnownGeneration < latestChangeGeneration) {
         StateStorageInfo.KnownGeneration = latestChangeGeneration;
@@ -2214,7 +2274,8 @@ void TTablet::StartRecovery() {
 }
 
 void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev) {
-    BLOG_D("CompleteRecoveryBoot", "TSYS34");
+    YDB_LOG_DEBUG("CompleteRecoveryBoot Marker# TSYS34",
+        {"Tablet", TabletID()});
 
     auto* msg = ev->Get();
     using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
@@ -2240,13 +2301,16 @@ void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev) {
                                     TxCacheQuota));
     } else {
         TString error = TStringBuilder() << "CompleteRecoveryBoot, unsupported msg->Mode: " << static_cast<ui8>(msg->Mode);
-        BLOG_ERROR(error, "TSYS39");
+        YDB_LOG_ERROR("Marker# TSYS39",
+            {"Tablet", TabletID()},
+            {"error", error});
         return CancelTablet(TEvTablet::TEvTabletDead::ReasonError, error);
     }
 }
 
 void TTablet::HandleEmptyZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr& ev) {
-    BLOG_D("HandleEmptyZeroEntry", "TSYS35");
+    YDB_LOG_DEBUG("HandleEmptyZeroEntry Marker# TSYS35",
+        {"Tablet", TabletID()});
 
     TEvTabletBase::TEvWriteLogResult *msg = ev->Get();
     switch (msg->Status) {
@@ -2256,7 +2320,9 @@ void TTablet::HandleEmptyZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr& ev) {
             break;
     default:
         {
-            BLOG_ERROR("HandleEmptyZeroEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS36");
+            YDB_LOG_ERROR("HandleEmptyZeroEntry, Marker# TSYS36",
+                {"Tablet", TabletID()},
+                {"msg->Status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             ReassignYellowChannels(std::move(msg->YellowMoveChannels));
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason); // TODO: detect 'need channel reconfiguration' case
         }
@@ -2264,7 +2330,8 @@ void TTablet::HandleEmptyZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr& ev) {
 }
 
 void TTablet::Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev) {
-    BLOG_D("HandleDeleteTabletResult", "TSYS37");
+    YDB_LOG_DEBUG("HandleDeleteTabletResult Marker# TSYS37",
+        {"Tablet", TabletID()});
 
     TEvTabletBase::TEvDeleteTabletResult *msg = ev->Get();
     switch (msg->Status) {
@@ -2272,7 +2339,9 @@ void TTablet::Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev) {
         return StartActivePhase();
     default:
         {
-            BLOG_ERROR("HandleDeleteTabletResult, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS38");
+            YDB_LOG_ERROR("HandleDeleteTabletResult, Marker# TSYS38",
+                {"Tablet", TabletID()},
+                {"msg->Status", NKikimrProto::EReplyStatus_Name(msg->Status)});
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError);
         }
     }

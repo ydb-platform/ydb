@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "scrub_actor_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr {
 
@@ -51,9 +52,12 @@ namespace NKikimr {
                         if (part->ChunkIdx && part->Size) {
                             const TLogoBlobID partId(key.LogoBlobID(), i + 1); // part id for this blob
                             std::optional<TRcBuf> data = Read(*part, partId);
-                            STLOGX(Impl->GetActorContext(), data ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS21,
-                                VDISKP(LogPrefix, "huge blob read"), (Id, key.LogoBlobID()), (Local, local),
-                                (Location, *part), (IsReadable, data.has_value()));
+                            YDB_LOG_CTX_COMP(Impl->GetActorContext(), data ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDISKP(LogPrefix, "huge blob read"),
+                                {"Marker", "VDS21"},
+                                {"Id", key.LogoBlobID()},
+                                {"Local", local},
+                                {"Location", *part},
+                                {"IsReadable", data.has_value()});
                             Local.Set(i);
                             if (data) {
                                 ReadableLocal.Set(i);

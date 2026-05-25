@@ -23,6 +23,7 @@
 #include <util/folder/dirut.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -292,7 +293,11 @@ void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData
         TString encoded = Base64Encode(serial.substr(0, size));
 
         // Output bad serial number in base64 encoding.
-        STLOG(PRI_WARN, BS_NODE, NW03, "Bad serial number", (Path, path), (SerialBase64, encoded.Quote()), (Details, details.Str()));
+        YDB_LOG_COMP_WARN(BS_NODE, "Bad serial number",
+            {"Marker", "NW03"},
+            {"Path", path},
+            {"SerialBase64", encoded.Quote()},
+            {"Details", details.Str()});
 
         mapIt->second.BadSerialsRead->Inc();
     }
@@ -318,10 +323,14 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
                 drives.push_back(data);
             }
         } else {
-            STLOG(PRI_WARN, BS_NODE, NW01, "Error parsing mock devices protobuf from file", (Path, MockDevicesPath));
+            YDB_LOG_COMP_WARN(BS_NODE, "Error parsing mock devices protobuf from file",
+                {"Marker", "NW01"},
+                {"Path", MockDevicesPath});
         }
     } catch (...) {
-        STLOG(PRI_INFO, BS_NODE, NW90, "Unable to find mock devices file", (Path, MockDevicesPath));
+        YDB_LOG_COMP_INFO(BS_NODE, "Unable to find mock devices file",
+            {"Marker", "NW90"},
+            {"Path", MockDevicesPath});
     }
 
     std::sort(drives.begin(), drives.end(), [] (const auto& lhs, const auto& rhs) {
@@ -335,24 +344,30 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
 
 void TNodeWarden::StartInvalidGroupProxy() {
     const ui32 groupId = Max<ui32>();
-    STLOG(PRI_DEBUG, BS_NODE, NW11, "StartInvalidGroupProxy", (GroupId, groupId));
+    YDB_LOG_COMP_DEBUG(BS_NODE, "StartInvalidGroupProxy",
+        {"Marker", "NW11"},
+        {"GroupId", groupId});
     TActivationContext::ActorSystem()->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
         CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
 }
 
 void TNodeWarden::StopInvalidGroupProxy() {
     ui32 groupId = Max<ui32>();
-    STLOG(PRI_DEBUG, BS_NODE, NW15, "StopInvalidGroupProxy", (GroupId, groupId));
+    YDB_LOG_COMP_DEBUG(BS_NODE, "StopInvalidGroupProxy",
+        {"Marker", "NW15"},
+        {"GroupId", groupId});
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
 }
 
 void TNodeWarden::StartRequestReportingThrottler() {
-    STLOG(PRI_DEBUG, BS_NODE, NW62, "StartRequestReportingThrottler");
+    YDB_LOG_COMP_DEBUG(BS_NODE, "StartRequestReportingThrottler",
+        {"Marker", "NW62"});
     Register(CreateRequestReportingThrottler(ReportingControllerBucketSize, ReportingControllerLeakDurationMs, ReportingControllerLeakRate));
 }
 
 void TNodeWarden::PassAway() {
-    STLOG(PRI_DEBUG, BS_NODE, NW25, "PassAway");
+    YDB_LOG_COMP_DEBUG(BS_NODE, "PassAway",
+        {"Marker", "NW25"});
 
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest(SelfId()));
@@ -364,7 +379,8 @@ void TNodeWarden::PassAway() {
 }
 
 void TNodeWarden::Bootstrap() {
-    STLOG(PRI_DEBUG, BS_NODE, NW26, "Bootstrap");
+    YDB_LOG_COMP_DEBUG(BS_NODE, "Bootstrap",
+        {"Marker", "NW26"});
 
     LocalNodeId = SelfId().NodeId();
     WhiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(LocalNodeId);
@@ -590,7 +606,9 @@ void TNodeWarden::HandleReadCache() {
                     throw yexception() << "failed to parse node warden cache protobuf";
                 }
 
-                STLOG(PRI_INFO, BS_NODE, NW07, "Bootstrap", (Cache, proto));
+                YDB_LOG_COMP_INFO(BS_NODE, "Bootstrap",
+                    {"Marker", "NW07"},
+                    {"Cache", proto});
 
                 if (!proto.HasInstanceId() && !proto.HasAvailDomain() && !proto.HasServiceSet()) {
                     return;
@@ -604,7 +622,9 @@ void TNodeWarden::HandleReadCache() {
 
                 ApplyServiceSet(proto.GetServiceSet(), false, false, false, "cache");
             } catch (...) {
-                STLOG(PRI_INFO, BS_NODE, NW16, "Bootstrap failed to fetch cache", (Error, CurrentExceptionMessage()));
+                YDB_LOG_COMP_INFO(BS_NODE, "Bootstrap failed to fetch cache",
+                    {"Marker", "NW16"},
+                    {"Error", CurrentExceptionMessage()});
                 // ignore exception
             }
         };
@@ -637,8 +657,10 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     const TVSlotId vslotId(LocalNodeId, msg.PDiskId, msg.VSlotId);
     const auto it = SlayInFlight.find(vslotId);
     Y_DEBUG_ABORT_UNLESS(it != SlayInFlight.end());
-    STLOG(PRI_INFO, BS_NODE, NW28, "Handle(NPDisk::TEvSlayResult)", (Msg, msg.ToString()),
-        (ExpectedRound, it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt));
+    YDB_LOG_COMP_INFO(BS_NODE, "Handle(NPDisk::TEvSlayResult)",
+        {"Marker", "NW28"},
+        {"Msg", msg.ToString()},
+        {"ExpectedRound", it != SlayInFlight.end() ? std::make_optional(it->second) : std::nullopt});
     if (it == SlayInFlight.end() || it->second != msg.SlayOwnerRound) {
         return; // outdated response
     }
@@ -666,7 +688,9 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
         case NKikimrProto::CORRUPTED: // this branch doesn't really work
         case NKikimrProto::ERROR:
             SlayInFlight.erase(it);
-            STLOG(PRI_ERROR, BS_NODE, NW29, "Handle(NPDisk::TEvSlayResult) error", (Msg, msg.ToString()));
+            YDB_LOG_COMP_ERROR(BS_NODE, "Handle(NPDisk::TEvSlayResult) error",
+                {"Marker", "NW29"},
+                {"Msg", msg.ToString()});
             SendVDiskReport(vslotId, msg.VDiskId, NKikimrBlobStorage::TEvControllerNodeReport::OPERATION_ERROR);
             break;
 
@@ -688,11 +712,16 @@ void TNodeWarden::Handle(NPDisk::TEvShredPDiskResult::TPtr ev) {
 
 void TNodeWarden::Handle(NPDisk::TEvChangeExpectedSlotCountResult::TPtr ev) {
     const NPDisk::TEvChangeExpectedSlotCountResult &msg = *ev->Get();
-    STLOG(PRI_DEBUG, BS_NODE, NW108, "Handle(NPDisk::TEvChangeExpectedSlotCountResult)", (Msg, msg.ToString()));
+    YDB_LOG_COMP_DEBUG(BS_NODE, "Handle(NPDisk::TEvChangeExpectedSlotCountResult)",
+        {"Marker", "NW108"},
+        {"Msg", msg.ToString()});
 
     // For now, just log the result. In the future, we might want to track this or take action based on the result.
     if (msg.Status != NKikimrProto::OK) {
-        STLOG(PRI_ERROR, BS_NODE, NW109, "ChangeExpectedSlotCount failed", (Status, msg.Status), (ErrorReason, msg.ErrorReason));
+        YDB_LOG_COMP_ERROR(BS_NODE, "ChangeExpectedSlotCount failed",
+            {"Marker", "NW109"},
+            {"Status", msg.Status},
+            {"ErrorReason", msg.ErrorReason});
     }
 }
 
@@ -717,12 +746,13 @@ void TNodeWarden::ProcessShredStatus(ui64 cookie, ui64 generation, std::optional
         Y_ABORT_UNLESS(numErased);
     }
 
-    STLOG(PRI_DEBUG, BS_SHRED, BSSN00, "processing shred result from PDisk",
-        (Cookie, cookie),
-        (PDiskId, key),
-        (ShredGeneration, generation),
-        (ErrorReason, error),
-        (ShredGenerationIssued, pdisk ? pdisk->ShredGenerationIssued : std::nullopt));
+    YDB_LOG_COMP_DEBUG(BS_SHRED, "processing shred result from PDisk",
+        {"Marker", "BSSN00"},
+        {"Cookie", cookie},
+        {"PDiskId", key},
+        {"ShredGeneration", generation},
+        {"ErrorReason", error},
+        {"ShredGenerationIssued", pdisk ? pdisk->ShredGenerationIssued : std::nullopt});
 
     if (pdisk && generation == pdisk->ShredGenerationIssued) {
         if (error) {
@@ -747,12 +777,13 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
 
     auto escape = [&](auto& value) { return value ? std::make_optional('"' + EscapeC(*value) + '"') : std::nullopt; };
 
-    STLOG(PRI_DEBUG, BS_NODE, NW63, "persisting new configurations",
-        (MainYaml, escape(mainYaml)),
-        (MainYamlVersion, mainYamlVersion),
-        (StorageYaml, escape(storageYaml)),
-        (StorageYamlVersion, storageYamlVersion),
-        (YamlConfig, YamlConfig));
+    YDB_LOG_COMP_DEBUG(BS_NODE, "persisting new configurations",
+        {"Marker", "NW63"},
+        {"MainYaml", escape(mainYaml)},
+        {"MainYamlVersion", mainYamlVersion},
+        {"StorageYaml", escape(storageYaml)},
+        {"StorageYamlVersion", storageYamlVersion},
+        {"YamlConfig", YamlConfig});
 
     const bool updateMain = mainYaml && (!YamlConfig || !YamlConfig->HasMainConfigVersion() ||
         YamlConfig->GetMainConfigVersion() < mainYamlVersion);
@@ -792,7 +823,9 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         try {
             MakePathIfNotExist(saveCtx->ConfigDirPath.c_str());
         } catch (const yexception& e) {
-            STLOG(PRI_ERROR, BS_NODE, NW91, "Failed to create config store path", (Error, e.what()));
+            YDB_LOG_COMP_ERROR(BS_NODE, "Failed to create config store path",
+                {"Marker", "NW91"},
+                {"Error", e.what()});
             success = false;
         }
 
@@ -806,20 +839,26 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
                     tempFile << yaml;
                     tempFile.Flush();
                     if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
-                        STLOG(PRI_ERROR, BS_NODE, NW92, "Failed to set permissions for temporary file", (Error, LastSystemErrorText()));
+                        YDB_LOG_COMP_ERROR(BS_NODE, "Failed to set permissions for temporary file",
+                            {"Marker", "NW92"},
+                            {"Error", LastSystemErrorText()});
                         success = false;
                         return false;
                     }
                 }
 
                 if (!NFs::Rename(tempPath, configPath)) {
-                    STLOG(PRI_ERROR, BS_NODE, NW53, "Failed to rename temporary file", (Error, LastSystemErrorText()));
+                    YDB_LOG_COMP_ERROR(BS_NODE, "Failed to rename temporary file",
+                        {"Marker", "NW53"},
+                        {"Error", LastSystemErrorText()});
                     success = false;
                     return false;
                 }
                 return true;
             } catch (const std::exception& e) {
-                STLOG(PRI_ERROR, BS_NODE, NW93, "Failed to save config file", (Error, e.what()));
+                YDB_LOG_COMP_ERROR(BS_NODE, "Failed to save config file",
+                    {"Marker", "NW93"},
+                    {"Error", e.what()});
                 success = false;
                 return false;
             }
@@ -828,7 +867,8 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         if (success && saveCtx->UpdateMain) {
             success = saveConfig(*saveCtx->MainYaml, YamlConfigFileName);
             if (success) {
-                STLOG(PRI_INFO, BS_NODE, NW94, "Yaml config saved");
+                YDB_LOG_COMP_INFO(BS_NODE, "Yaml config saved",
+                    {"Marker", "NW94"});
             }
         }
 
@@ -837,7 +877,8 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         } else if (success && saveCtx->UpdateStorage) {
             success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);
             if (success) {
-                STLOG(PRI_INFO, BS_NODE, NW95, "Storage config saved");
+                YDB_LOG_COMP_INFO(BS_NODE, "Storage config saved",
+                    {"Marker", "NW95"});
             }
         }
 
@@ -874,7 +915,9 @@ void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev) {
     auto& record = ev->Get()->Record;
 
-    STLOG(PRI_DEBUG, BS_NODE, NW52, "TEvControllerNodeServiceSetUpdate", (Record, record));
+    YDB_LOG_COMP_DEBUG(BS_NODE, "TEvControllerNodeServiceSetUpdate",
+        {"Marker", "NW52"},
+        {"Record", record});
 
     if (record.HasAvailDomain() && record.GetAvailDomain() != AvailDomainId) {
         // AvailDomain may arrive unset
@@ -892,7 +935,9 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     if (record.HasServiceSet()) {
         const bool comprehensive = record.GetComprehensive();
         IgnoreCache |= comprehensive;
-        STLOG(PRI_DEBUG, BS_NODE, NW17, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)", (Msg, record));
+        YDB_LOG_COMP_DEBUG(BS_NODE, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)",
+            {"Marker", "NW17"},
+            {"Msg", record});
         ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true, "controller");
     }
 
@@ -923,10 +968,11 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
                         ev.release(), IEventHandle::FlagForwardOnNondelivery, cookie, &actorId));
                     pdisk.ShredGenerationIssued.emplace(generation);
 
-                    STLOG(PRI_DEBUG, BS_SHRED, BSSN01, "sending shred query to PDisk",
-                        (Cookie, cookie),
-                        (PDiskId, key),
-                        (ShredGeneration, generation));
+                    YDB_LOG_COMP_DEBUG(BS_SHRED, "sending shred query to PDisk",
+                        {"Marker", "BSSN01"},
+                        {"Cookie", cookie},
+                        {"PDiskId", key},
+                        {"ShredGeneration", generation});
                 };
 
                 if (pdisk.ShredGenerationIssued == generation) {
@@ -983,8 +1029,12 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
 }
 
 void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, TDuration backoff) {
-    STLOG(PRI_NOTICE, BS_NODE, NW87, "SendDropDonorQuery", (NodeId, nodeId), (PDiskId, pdiskId), (VSlotId, vslotId),
-        (VDiskId, vdiskId));
+    YDB_LOG_COMP_NOTICE(BS_NODE, "SendDropDonorQuery",
+        {"Marker", "NW87"},
+        {"NodeId", nodeId},
+        {"PDiskId", pdiskId},
+        {"VSlotId", vslotId},
+        {"VDiskId", vdiskId});
     if (TGroupID groupId(vdiskId.GroupID); groupId.ConfigurationType() == EGroupConfigurationType::Static) {
         auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
         auto *record = &ev->Record;
@@ -1031,7 +1081,11 @@ void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, co
 
 void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
         NKikimrBlobStorage::TEvControllerNodeReport::EVDiskPhase phase, TDuration backoff) {
-    STLOG(PRI_DEBUG, BS_NODE, NW32, "SendVDiskReport", (VSlotId, vslotId), (VDiskId, vDiskId), (Phase, phase));
+    YDB_LOG_COMP_DEBUG(BS_NODE, "SendVDiskReport",
+        {"Marker", "NW32"},
+        {"VSlotId", vslotId},
+        {"VDiskId", vDiskId},
+        {"Phase", phase});
 
     if (TGroupID groupId(vDiskId.GroupID); groupId.ConfigurationType() == EGroupConfigurationType::Static &&
             phase == NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED) {
@@ -1135,7 +1189,8 @@ void TNodeWarden::SendUnfinishedRequests() {
 }
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev) {
-    STLOG(PRI_TRACE, BS_NODE, NW38, "Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus)");
+    YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus)",
+        {"Marker", "NW38"});
 
     auto differs = [](const auto& updated, const auto& current) {
         TString xUpdated, xCurrent;
@@ -1203,7 +1258,8 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
-    STLOG(PRI_TRACE, BS_NODE, NW39, "Handle(TEvPrivate::TEvSendDiskMetrics)");
+    YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvPrivate::TEvSendDiskMetrics)",
+        {"Marker", "NW39"});
     SendDiskMetrics(true);
     ReportLatencies();
     NotifySyncersProgress();
@@ -1211,7 +1267,8 @@ void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
-    STLOG(PRI_TRACE, BS_NODE, NW88, "Handle(TEvPrivate::UpdateNodeDrives)");
+    YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvPrivate::UpdateNodeDrives)",
+        {"Marker", "NW88"});
     EnqueueSyncOp([this] (const TActorContext&) {
         auto drives = ListLocalDrives();
 
@@ -1226,7 +1283,8 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
-    STLOG(PRI_TRACE, BS_NODE, NW97, "Handle(TEvRetrySaveConfig)");
+    YDB_LOG_COMP_TRACE(BS_NODE, "Handle(TEvRetrySaveConfig)",
+        {"Marker", "NW97"});
     if (ev->Cookie == ExpectedSaveConfigCookie) {
         auto *msg = ev->Get();
         PersistConfig(std::move(msg->MainYaml), msg->MainYamlVersion, std::move(msg->StorageYaml), msg->StorageYamlVersion);
@@ -1240,7 +1298,9 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
 }
 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
-    STLOG(PRI_TRACE, BS_NODE, NW45, "SendDiskMetrics", (ReportMetrics, reportMetrics));
+    YDB_LOG_COMP_TRACE(BS_NODE, "SendDiskMetrics",
+        {"Marker", "NW45"},
+        {"ReportMetrics", reportMetrics});
 
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
     auto& record = ev->Record;
@@ -1264,7 +1324,8 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
 }
 
 void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
-    STLOG(PRI_DEBUG, BS_NODE, NW47, "Handle(TEvStatusUpdate)");
+    YDB_LOG_COMP_DEBUG(BS_NODE, "Handle(TEvStatusUpdate)",
+        {"Marker", "NW47"});
     auto *msg = ev->Get();
     const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
     if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end() && (it->second.Status != msg->Status ||
@@ -1318,10 +1379,11 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
 
                 if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
                         newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
-                    STLOG(PRI_DEBUG, BS_NODE, NW112, "SendChangeExpectedSlotCount from config notification",
-                        (PDiskId, key.PDiskId),
-                        (ExpectedSlotCount, newExpectedSlotCount),
-                        (SlotSizeInUnits, newSlotSizeInUnits));
+                    YDB_LOG_COMP_DEBUG(BS_NODE, "SendChangeExpectedSlotCount from config notification",
+                        {"Marker", "NW112"},
+                        {"PDiskId", key.PDiskId},
+                        {"ExpectedSlotCount", newExpectedSlotCount},
+                        {"SlotSizeInUnits", newSlotSizeInUnits});
 
                     const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
                     Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
@@ -1422,7 +1484,8 @@ bool NKikimr::ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfi
         auto &record = keyConfig.GetKeys(0);
         return ObtainKey(key, record);
     } else {
-        STLOG(PRI_INFO, BS_NODE, NW66, "No Keys in KeyConfig! Encrypted group DsProxies will not start");
+        YDB_LOG_COMP_INFO(BS_NODE, "No Keys in KeyConfig! Encrypted group DsProxies will not start",
+            {"Marker", "NW66"});
         return false;
     }
 }
@@ -1433,7 +1496,8 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
 
     ui32 keysSize = keyConfig.KeysSize();
     if (!keysSize) {
-        STLOG(PRI_INFO, BS_NODE, NW69, "No Keys in PDiskKeyConfig! Encrypted pdisks will not start");
+        YDB_LOG_COMP_INFO(BS_NODE, "No Keys in PDiskKeyConfig! Encrypted pdisks will not start",
+            {"Marker", "NW69"});
         mainKey->ErrorReason = "Empty PDiskKeyConfig";
         mainKey->Keys = { NPDisk::YdbDefaultPDiskSequence };
         mainKey->IsInitialized = true;

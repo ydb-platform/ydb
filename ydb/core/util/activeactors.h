@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <util/generic/hash_set.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NActors {
 
@@ -75,7 +76,8 @@ namespace NActors {
                 NKikimrServices::EServiceKikimr service) {
             counter.Value += value;
             if (counter.Value >= CounterLimit && !std::exchange(counter.Warning, true)) {
-                LOG_CRIT_S(ctx, service, "Activity " << key << " reached active actors limit");
+                YDB_LOG_CTX_COMP_CRIT(ctx, service, "Activity reached active actors limit",
+                    {"key", key});
                 Y_DEBUG_ABORT("Activity %s reached active actors limit", key.c_str());
             }
         }

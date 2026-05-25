@@ -6,6 +6,9 @@
 #include <library/cpp/svnversion/svnversion.h>
 
 #include <util/system/hostname.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -68,8 +71,8 @@ public:
             state->FirstBootTimestamp = TInstant::MicroSeconds(paramRow.GetValueOrDefault<Schema::Param::FirstBootTimestamp>(0));
             config = paramRow.GetValueOrDefault<Schema::Param::Config>(NKikimrCms::TCmsConfig());
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                        "Loaded config: " << config.ShortDebugString());
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded",
+                {"config", config.ShortDebugString()});
         } else {
             FirstBoot = true;
 
@@ -78,8 +81,7 @@ public:
             state->NextNotificationId = 1;
             state->FirstBootTimestamp = ctx.Now();
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                        "Using default config");
+            YDB_LOG_CTX_DEBUG(ctx, "Using default config");
         }
         state->ConfigProto = config;
         state->Config.Deserialize(config);

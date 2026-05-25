@@ -21,11 +21,9 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RESULT_WRITER, "TraceId: " << TraceId << " " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RESULT_WRITER
 
 namespace NFq {
 
@@ -59,7 +57,8 @@ public:
     static constexpr char ActorName[] = "YQ_RESULT_WRITER";
 
     void Bootstrap() {
-        LOG_I("Bootstrap");
+        YDB_LOG_INFO("Bootstrap",
+            {"TraceId", TraceId});
         Become(&TResultWriter::StateFunc);
     }
 
@@ -77,14 +76,16 @@ private:
 
     void PassAway() {
         auto duration = (TInstant::Now()-StartTime);
-        LOG_I("FinishWrite, Records: " << RowIndex
-                << " HasError: " << HasError
-                << " Size: " << Size
-                << " Rows: " << Rows
-                << " FreeSpace: " << FreeSpace
-                << " Duration: " << duration
-                << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024
-                << " ResultChunks.size(): " << ResultChunks.size());
+        YDB_LOG_INFO("FinishWrite,",
+            {"TraceId", TraceId},
+            {"Records", RowIndex},
+            {"HasError", HasError},
+            {"Size", Size},
+            {"Rows", Rows},
+            {"FreeSpace", FreeSpace},
+            {"Duration", duration},
+            {"AvgSpeed", Size/(duration.Seconds()+1)/1024/1024},
+            {"ResultChunks.size()", ResultChunks.size()});
         NActors::IActor::PassAway();
     }
 
@@ -95,7 +96,9 @@ private:
     }
 
     void SendIssuesAndSetErrorFlag(const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode statusCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
-        LOG_E("ControlPlane WriteResult Issues: " << issues.ToString());
+        YDB_LOG_ERROR("ControlPlane WriteResult",
+            {"TraceId", TraceId},
+            {"Issues", issues.ToString()});
         Issues.AddIssues(issues);
         HasError = true;
         auto req = MakeHolder<TEvDqFailure>(statusCode, Issues);
@@ -123,7 +126,8 @@ private:
         queryResult.SetTruncated(Truncated);
         queryResult.SetRowsCount(Rows);
 
-        LOG_D("Send response to executer");
+        YDB_LOG_DEBUG("Send response to executer",
+            {"TraceId", TraceId});
         Send(ExecuterId, new TEvQueryResponse(std::move(queryResult)));
     }
 
@@ -166,13 +170,15 @@ private:
 
                 auto duration = (TInstant::Now()-StartTime);
 
-                LOG_T("ChannelData, Records: " << RowIndex
-                    << " HasError: " << HasError
-                    << " Size: " << Size
-                    << " Rows: " << Rows
-                    << " FreeSpace: " << FreeSpace
-                    << " Duration: " << duration
-                    << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024);
+                YDB_LOG_TRACE("ChannelData,",
+                    {"TraceId", TraceId},
+                    {"Records", RowIndex},
+                    {"HasError", HasError},
+                    {"Size", Size},
+                    {"Rows", Rows},
+                    {"FreeSpace", FreeSpace},
+                    {"Duration", duration},
+                    {"AvgSpeed", Size/(duration.Seconds()+1)/1024/1024});
             }
 
             Requests.erase(it);
@@ -222,13 +228,15 @@ private:
 
             auto duration = (TInstant::Now()-StartTime);
 
-            LOG_T("ChannelData Shift, Records: " << RowIndex
-                << " HasError: " << HasError
-                << " Size: " << Size
-                << " Rows: " << Rows
-                << " FreeSpace: " << FreeSpace
-                << " Duration: " << duration
-                << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024);
+            YDB_LOG_TRACE("ChannelData Shift,",
+                {"TraceId", TraceId},
+                {"Records", RowIndex},
+                {"HasError", HasError},
+                {"Size", Size},
+                {"Rows", Rows},
+                {"FreeSpace", FreeSpace},
+                {"Duration", duration},
+                {"AvgSpeed", Size/(duration.Seconds()+1)/1024/1024});
             ResultChunks.pop_front();
         }
 
@@ -328,7 +336,9 @@ private:
         try {
             ProcessData(ev);
         } catch (...) {
-            LOG_E(CurrentExceptionMessage());
+            YDB_LOG_ERROR("",
+                {"TraceId", TraceId},
+                {"CurrentExceptionMessage", CurrentExceptionMessage()});
             auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR));
             Send(ExecuterId, req.Release());
             HasError = true;

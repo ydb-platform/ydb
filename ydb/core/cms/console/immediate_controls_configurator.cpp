@@ -6,6 +6,9 @@
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -53,13 +56,11 @@ TImmediateControlsConfigurator::TImmediateControlsConfigurator(TIntrusivePtr<TCo
 
 void TImmediateControlsConfigurator::Bootstrap(const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TImmediateControlsConfigurator Bootstrap");
+    YDB_LOG_CTX_DEBUG(ctx, "TImmediateControlsConfigurator Bootstrap");
 
     Become(&TThis::StateWork);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TImmediateControlsConfigurator: subscribe for config updates.");
+    YDB_LOG_CTX_DEBUG(ctx, "TImmediateControlsConfigurator: subscribe for config updates.");
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -71,17 +72,15 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
 {
     auto &rec = ev->Get()->Record;
 
-    LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS,
-               "TImmediateControlsConfigurator: got new config: "
-               << rec.GetConfig().ShortDebugString());
+    YDB_LOG_CTX_INFO(ctx, "TImmediateControlsConfigurator: got new",
+        {"config", rec.GetConfig().ShortDebugString()});
 
     ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb);
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TImmediateControlsConfigurator: Send TEvConfigNotificationResponse: "
-                << resp->Record.ShortDebugString());
+    YDB_LOG_CTX_TRACE(ctx, "TImmediateControlsConfigurator: Send",
+        {"TEvConfigNotificationResponse", resp->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }

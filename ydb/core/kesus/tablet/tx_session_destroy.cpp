@@ -1,4 +1,7 @@
 #include "tablet_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
 
 namespace NKikimr {
 namespace NKesus {
@@ -32,9 +35,11 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionDestroy::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", session=" << Record.GetSessionId() << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionDestroy::Execute",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie},
+            {"session", Record.GetSessionId()});
 
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
@@ -70,9 +75,10 @@ struct TKesusTablet::TTxSessionDestroy : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionDestroy::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_CTX_DEBUG(ctx, "] TTxSessionDestroy::Complete",
+            {"TabletID", Self->TabletID()},
+            {"(sender", Sender},
+            {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 
         for (auto& ev : Events) {

@@ -1,6 +1,9 @@
 #include "console_configs_manager.h"
 #include "console_impl.h"
 #include "console_tenants_manager.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NConsole {
 
@@ -44,8 +47,9 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                        "Loaded config:" << Endl << config.DebugString());
+            YDB_LOG_CTX_DEBUG(ctx, "Loaded",
+                {"config", Endl},
+                {"DebugString", config.DebugString()});
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Using default config.");
 

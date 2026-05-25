@@ -37,7 +37,7 @@ public:
         if (params.Has("content_type")) {
             ContentType = params.Get("content_type");
         }
-        BLOG_D("Started MaxCounter: " << MaxCounter << ", Period: " << Period << ", FailChance: " << FailChance << ", ContentType: " << ContentType);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Started MaxCounter: " << MaxCounter << ", Period: " << Period << ", FailChance: " << FailChance << ", ContentType: " << ContentType);
         HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "multipart/x-mixed-replace;boundary=boundary"));
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
         Become(&TThis::StateWork, TDuration::MilliSeconds(Period), new TEvents::TEvWakeup());
@@ -46,11 +46,11 @@ public:
     void HandleTimer() {
         ++Counter;
         if (FailChance > 0 && ((ui32)NPrivate::TRandom() % 100) < FailChance) {
-            BLOG_D("Simulate fail");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Simulate fail");
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("failed"));
             return ReplyAndPassAway();
         } else {
-            BLOG_D("Counter: " << Counter);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Counter: " << Counter);
             TStringBuilder content;
             content << "{\"Counter\":" << Counter << "}";
             TStringBuilder data;
@@ -72,7 +72,7 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        BLOG_D("Done");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::VIEWER, GetLogPrefix() <<"Done");
         HttpEvent.Reset(); // to avoid double reply
         TBase::ReplyAndPassAway("ok");
     }

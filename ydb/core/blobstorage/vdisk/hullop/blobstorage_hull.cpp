@@ -8,6 +8,9 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLRECS
 
 template<>
 void Out<NKikimr::THullCheckStatus>(IOutputStream &str, const NKikimr::THullCheckStatus &status) {
@@ -428,9 +431,9 @@ namespace NKikimr {
             return {NKikimrProto::ERROR, "", false}; // record has duplicates
 
         if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
-            LOG_ERROR_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                << "Db# Barriers ValidateGCCmd: empty garbage collection command"
-                << " TabletId# " << tabletID);
+            YDB_LOG_CTX_ERROR(ctx, "Db# Barriers ValidateGCCmd: empty garbage collection command",
+                {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                {"TabletId", tabletID});
             return {NKikimrProto::ERROR, "empty garbage collection command"};
         }
 

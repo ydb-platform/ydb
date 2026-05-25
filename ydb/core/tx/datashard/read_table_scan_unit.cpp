@@ -2,6 +2,9 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "read_table_scan.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -153,9 +156,11 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
     if (op->HasScanResult()) {
         auto *result = CheckedCast<TReadTableProd*>(op->ScanResult().Get());
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "ReadTable scan complete for " << *op << " at "
-                    << DataShard.TabletID() << " error: " << result->Error << ", IsFatalError: " << result->IsFatalError);
+        YDB_LOG_CTX_TRACE(ctx, "ReadTable scan complete for at",
+            {"#_*op", *op},
+            {"TabletID", DataShard.TabletID()},
+            {"error", result->Error},
+            {"IsFatalError", result->IsFatalError});
 
         tx->SetScanTask(0);
 
@@ -200,9 +205,9 @@ void TReadTableScanUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &ev,
         IgnoreFunc(TEvTxProcessing::TEvStreamClearancePending);
         IgnoreFunc(TEvTxProcessing::TEvStreamClearanceResponse);
     default:
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TReadTableScanUnit::ProcessEvent unhandled event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString());
+        YDB_LOG_CTX_ERROR(ctx, "TReadTableScanUnit::ProcessEvent unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         Y_DEBUG_ABORT("unexpected event %" PRIu64, (ui64)ev->GetTypeRewrite());
     }
 }
@@ -237,7 +242,8 @@ void TReadTableScanUnit::Abort(const TString &err,
         tx->SetScanTask(0);
     }
 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+    YDB_LOG_CTX_NOTICE(ctx, "",
+        {"err", err});
 
     op->ResetWaitingForScanFlag();
 }

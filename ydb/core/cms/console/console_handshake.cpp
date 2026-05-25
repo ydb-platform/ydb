@@ -11,6 +11,9 @@
 #include <ydb/core/util/pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NConsole {
 
@@ -119,12 +122,12 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::
         responseRecord.SetProposedConfigVersion(proposedConfigVersion);
         responseRecord.SetConsoleConfigVersion(YamlVersion);
         responseRecord.SetYAML(MainYamlConfig);
-        LOG_ALERT_S(ctx, NKikimrServices::CMS, "Unexpected proposed config.");
+        YDB_LOG_CTX_ALERT(ctx, "Unexpected proposed config.");
     } else if (proposedConfigHash != currentConfigHash) {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::HashMismatch);
         responseRecord.SetProposedConfigHash(proposedConfigHash);
         responseRecord.SetConsoleConfigHash(currentConfigHash);
-        LOG_ALERT_S(ctx, NKikimrServices::CMS, "Config hash mismatch.");
+        YDB_LOG_CTX_ALERT(ctx, "Config hash mismatch.");
     } else {
         responseRecord.SetStatus(NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded);
     }

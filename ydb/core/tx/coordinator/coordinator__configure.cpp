@@ -1,5 +1,8 @@
 #include "coordinator_impl.h"
 #include "coordinator_hooks.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COORDINATOR
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
@@ -116,10 +119,9 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
-             "tablet# " << Self->TabletID() <<
-             " version# " << Version <<
-             " TTxConfigure Complete");
+        YDB_LOG_CTX_INFO(ctx, "TTxConfigure Complete",
+            {"tablet", Self->TabletID()},
+            {"version", Version});
         if (ConfigurationApplied) {
             Self->Execute(Self->CreateTxInit(), ctx);
         } else {

@@ -2,6 +2,9 @@
 #include "hive_log.h"
 
 #include <ranges>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr::NHive {
 
@@ -49,7 +52,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxShrinkPool::Execute");
+        YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute",
+            {"GetLogPrefix", GetLogPrefix()});
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         auto* storagePool = Self->FindStoragePool(StoragePool);
@@ -76,7 +80,9 @@ public:
         std::ranges::sort(storagePool->InactiveGroups, TGroupCmp(), [storagePool](auto groupId) { return &storagePool->GetStorageGroup(groupId); });
         while (groupsToRemove < std::ssize(storagePool->InactiveGroups)) {
             auto groupId = storagePool->InactiveGroups.back();
-            BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << " as active");
+            YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute marking group as active",
+                {"GetLogPrefix", GetLogPrefix()},
+                {"groupId", groupId});
             auto& groupInfo = storagePool->GetStorageGroup(groupId);
             groupInfo.Status = EGroupState::Active;
             db.Table<Schema::Group>().Key(groupId).Delete();
@@ -95,7 +101,9 @@ public:
                 | std::views::take(groupsToRemove - std::ssize(storagePool->InactiveGroups));
             storagePool->InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
             for (auto* group : newGroupsToRemove) {
-                BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << " as inactive");
+                YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute marking group as inactive",
+                    {"GetLogPrefix", GetLogPrefix()},
+                    {"Id", group->Id});
                 group->Status = EGroupState::Inactive;
                 db.Table<Schema::Group>().Key(group->Id).Update(
                     NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),

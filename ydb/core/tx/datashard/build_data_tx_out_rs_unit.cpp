@@ -3,6 +3,9 @@
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -88,11 +91,11 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
 
         engine->AfterOutgoingReadsetsExtracted();
     } catch (const TMemoryLimitExceededException &) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Operation " << *op << " at " << DataShard.TabletID()
-                    << " exceeded memory limit " << txc.GetMemoryLimit()
-                    << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
-                    << " more for the next try");
+        YDB_LOG_CTX_TRACE(ctx, "Operation at exceeded memory limit and requests more for the next try",
+            {"#_*op", *op},
+            {"TabletID", DataShard.TabletID()},
+            {"GetMemoryLimit", txc.GetMemoryLimit()},
+            {"#_txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
         txc.NotEnoughMemory();
         DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
@@ -104,9 +107,9 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Tablet " << DataShard.TabletID() << " is not ready for " << *op
-                    << " execution");
+        YDB_LOG_CTX_DEBUG(ctx, "Tablet is not ready for execution",
+            {"TabletID", DataShard.TabletID()},
+            {"#_*op", *op});
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 

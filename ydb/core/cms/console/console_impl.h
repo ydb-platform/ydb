@@ -20,6 +20,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/set.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 namespace NKikimr::NConsole {
 
@@ -140,9 +141,9 @@ private:
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS,
-                           "TConsole::StateWork unexpected event type: " << ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
+                YDB_LOG_COMP_CRIT(NKikimrServices::CMS, "TConsole::StateWork unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()});
             }
         }
     }

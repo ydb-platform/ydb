@@ -1,4 +1,7 @@
 #include "controller_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -18,31 +21,37 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"LogPrefix", LogPrefix},
+            {"Execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown replication",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         if (Ev->Cookie != Replication->GetExpectedSecretResolverCookie()) {
-            CLOG_E(ctx, "Unexpected cookie"
-                << ": cookie# " << Ev->Cookie);
+            YDB_LOG_CTX_ERROR(ctx, "Unexpected cookie",
+                {"LogPrefix", LogPrefix},
+                {"cookie", Ev->Cookie});
             return true;
         }
 
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Secret resolved"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_NOTICE(ctx, "Secret resolved",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             Replication->UpdateSecret(Ev->Get()->Value);
         } else {
-            CLOG_E(ctx, "Resolve secret error"
-                << ": rid# " << rid
-                << ", error# " << Ev->Get()->Error);
+            YDB_LOG_CTX_ERROR(ctx, "Resolve secret error",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"error", Ev->Get()->Error});
             Replication->SetState(TReplication::EState::Error, Ev->Get()->Error);
 
             NIceDb::TNiceDb db(txc.DB);
@@ -56,7 +65,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

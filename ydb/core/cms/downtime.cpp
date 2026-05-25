@@ -4,6 +4,9 @@
 
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -223,17 +226,17 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
         if (pr.second.Empty()) {
             db.Table<Schema::NodeDowntimes>().Key(pr.first).Delete();
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                        "Removed downtime for node " << pr.first << " from local DB");
+            YDB_LOG_CTX_TRACE(ctx, "Removed downtime for node from local DB",
+                {"first", pr.first});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
             db.Table<Schema::NodeDowntimes>().Key(pr.first)
                 .Update<Schema::NodeDowntimes::Downtime>(rec);
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                        "Updated downtime for node " << pr.first
-                        << " in local DB downtime=" << pr.second);
+            YDB_LOG_CTX_TRACE(ctx, "Updated downtime for node in local DB",
+                {"first", pr.first},
+                {"downtime", pr.second});
         }
     }
 
@@ -242,17 +245,17 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
             db.Table<Schema::PDiskDowntimes>().Key(pr.first.NodeId, pr.first.DiskId)
                 .Delete();
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,                        "Removed downtime for pdisk " << pr.first.ToString()
-                        << " from local DB");
+            YDB_LOG_CTX_TRACE(ctx, "Removed downtime for pdisk from local DB",
+                {"pr.first", pr.first.ToString()});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
             db.Table<Schema::PDiskDowntimes>().Key(pr.first.NodeId, pr.first.DiskId)
                 .Update<Schema::PDiskDowntimes::Downtime>(rec);
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                        "Updated downtime for pdisk " << pr.first.ToString()
-                        << " in local DB downtime=" << pr.second);
+            YDB_LOG_CTX_TRACE(ctx, "Updated downtime for pdisk in local DB",
+                {"pr.first", pr.first.ToString()},
+                {"downtime", pr.second});
         }
     }
 }

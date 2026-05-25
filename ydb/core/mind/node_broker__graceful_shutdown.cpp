@@ -1,6 +1,9 @@
 #include "node_broker_impl.h"
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
 
 namespace NKikimr::NNodeBroker {
 
@@ -22,8 +25,8 @@ public:
         const auto& rec = Event->Get()->Record;
         const auto nodeId = rec.GetNodeId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxGracefulShutdown Execute. Graceful Shutdown request from " << nodeId << " ");
+        YDB_LOG_CTX_DEBUG(ctx, "TTxGracefulShutdown Execute. Graceful Shutdown request from",
+            {"nodeId", nodeId});
 
         Response = MakeHolder<TEvNodeBroker::TEvGracefulShutdownResponse>();
         const auto it = Self->Dirty.Nodes.find(nodeId);

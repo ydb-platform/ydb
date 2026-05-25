@@ -9,6 +9,9 @@
 #include <ydb/library/yaml_config/util.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -96,8 +99,10 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!found) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC62, "FetchStorageConfig: requestor put to pending queue", (SelfId, SelfId()),
-                    (Request, request));
+                YDB_LOG_DEBUG("FetchStorageConfig: requestor put to pending queue",
+                    {"Marker", "NWDC62"},
+                    {"SelfId", SelfId()},
+                    {"Request", request});
                 DetachQuery();
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
                 TActivationContext::Schedule(TDuration::Seconds(3), new IEventHandle(TEvents::TSystem::Wakeup, 0,
@@ -229,8 +234,9 @@ namespace NKikimr::NStorage {
         bool transient = ev->Cookie;
         for (const auto& node : config.GetAllNodes()) {
             if (requestorHosts.contains(node.GetHost()) && node.GetPort() == cmd.GetRequestorPort()) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC82, "FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
-                    (SelfId, SelfId()));
+                YDB_LOG_DEBUG("FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
+                    {"Marker", "NWDC82"},
+                    {"SelfId", SelfId()});
 
                 std::optional<TString> mainConfigYaml;
                 std::optional<TString> storageConfigYaml;
@@ -249,12 +255,15 @@ namespace NKikimr::NStorage {
                 return PassAway();
             }
         }
-        STLOG(PRI_DEBUG, BS_NODE, NWDC86, "FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
-            (SelfId, SelfId()));
+        YDB_LOG_DEBUG("FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
+            {"Marker", "NWDC86"},
+            {"SelfId", SelfId()});
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC87, "FetchStorageConfig: timed out", (SelfId, SelfId()));
+        YDB_LOG_DEBUG("FetchStorageConfig: timed out",
+            {"Marker", "NWDC87"},
+            {"SelfId", SelfId()});
         ReplyToFetchStorageConfig(std::nullopt, std::nullopt, false);
         PassAway();
     }
@@ -528,8 +537,12 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_NODE, NWDC65, "received TEvClientConnected", (SelfId, SelfId()), (Status, msg.Status),
-            (ClientId, msg.ClientId), (ServerId, msg.ServerId));
+        YDB_LOG_DEBUG("received TEvClientConnected",
+            {"Marker", "NWDC65"},
+            {"SelfId", SelfId()},
+            {"Status", msg.Status},
+            {"ClientId", msg.ClientId},
+            {"ServerId", msg.ServerId});
 
         if (msg.Status != NKikimrProto::OK) {
             ControllerPipeId = {};
@@ -539,8 +552,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_NODE, NWDC79, "received TEvClientDestroyed", (SelfId, SelfId()),
-            (ClientId, msg.ClientId), (ServerId, msg.ServerId));
+        YDB_LOG_DEBUG("received TEvClientDestroyed",
+            {"Marker", "NWDC79"},
+            {"SelfId", SelfId()},
+            {"ClientId", msg.ClientId},
+            {"ServerId", msg.ServerId});
 
         ControllerPipeId = {};
         throw TExError() << "Pipe to BSC disconnected";
@@ -548,8 +564,10 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
-        STLOG(PRI_DEBUG, BS_NODE, NWDC80, "received TEvControllerConfigResponse", (SelfId, SelfId()),
-            (Response, response));
+        YDB_LOG_DEBUG("received TEvControllerConfigResponse",
+            {"Marker", "NWDC80"},
+            {"SelfId", SelfId()},
+            {"Response", response});
         if (response.StatusSize() != 1 || response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_DISTCONF_CONTROL) {
             throw TExError() << "BS_CONTROLLER is way too old to process this query";
         }
@@ -627,8 +645,10 @@ namespace NKikimr::NStorage {
             return record;
         };
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC81, "received TEvControllerDistconfResponse", (SelfId, SelfId()),
-            (Record, getRecord()));
+        YDB_LOG_DEBUG("received TEvControllerDistconfResponse",
+            {"Marker", "NWDC81"},
+            {"SelfId", SelfId()},
+            {"Record", getRecord()});
 
         if (const auto& status = record.GetStatus(); status != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
             throw TExError() << "Failed to interact with BSC to update configuration"
@@ -667,8 +687,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BS_NODE, NWDC77, "received TEvControllerValidateConfigResponse", (SelfId, SelfId()),
-            (InternalError, ev->Get()->InternalError), (Status, record.GetStatus()));
+        YDB_LOG_DEBUG("received TEvControllerValidateConfigResponse",
+            {"Marker", "NWDC77"},
+            {"SelfId", SelfId()},
+            {"InternalError", ev->Get()->InternalError},
+            {"Status", record.GetStatus()});
 
         if (ev->Get()->InternalError) {
             throw TExError() << "Failed to validate config through console: " << *ev->Get()->InternalError;

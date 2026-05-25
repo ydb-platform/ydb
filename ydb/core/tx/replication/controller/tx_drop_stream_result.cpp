@@ -1,4 +1,7 @@
 #include "controller_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -18,45 +21,52 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CTX_DEBUG(ctx, "",
+            {"LogPrefix", LogPrefix},
+            {"Execute", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown replication",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid});
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_CTX_WARN(ctx, "Unknown target",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
         if (target->GetStreamState() != TReplication::EStreamState::Removing) {
-            CLOG_W(ctx, "Stream state mismatch"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", state# " << target->GetStreamState());
+            YDB_LOG_CTX_WARN(ctx, "Stream state mismatch",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid},
+                {"state", target->GetStreamState()});
             return true;
         }
 
         if (Ev->Get()->IsSuccess()) {
-            CLOG_N(ctx, "Stream dropped"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_CTX_NOTICE(ctx, "Stream dropped",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid});
         } else {
             const auto& status = Ev->Get()->Status;
-            CLOG_E(ctx, "Drop stream error"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", status# " << status.GetStatus()
-                << ", issue# " << status.GetIssues().ToOneLineString());
+            YDB_LOG_CTX_ERROR(ctx, "Drop stream error",
+                {"LogPrefix", LogPrefix},
+                {"rid", rid},
+                {"tid", tid},
+                {"status", status.GetStatus()},
+                {"issue", status.GetIssues().ToOneLineString()});
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -76,7 +86,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CTX_DEBUG(ctx, "Complete",
+            {"LogPrefix", LogPrefix});
 
         if (Replication) {
             Replication->Progress(ctx);

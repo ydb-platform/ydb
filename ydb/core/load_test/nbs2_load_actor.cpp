@@ -32,6 +32,9 @@
 #include <util/generic/queue.h>
 #include <util/random/fast.h>
 #include <util/random/shuffle.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS2_LOAD_TEST
 
 namespace {
 
@@ -124,27 +127,28 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " TNBS2LoadActor Bootstrap called");
+        YDB_LOG_CTX_WARN(ctx, "TNBS2LoadActor Bootstrap called",
+            {"Tag", Tag});
 
         Become(&TNBS2LoadActor::StateStart);
         auto TestInitializeingStart = Now();
         RunTest(ctx);
         TestInitializingDuration = Now() - TestInitializeingStart;
-        LOG_WARN_S(
-            ctx,
-            NKikimrServices::NBS2_LOAD_TEST,
-            "Tag# " << Tag << " Test has been initialized in "
-                << TestInitializingDuration << " sec");
+        YDB_LOG_CTX_WARN(ctx, "Test has been initialized in sec",
+            {"Tag", Tag},
+            {"TestInitializingDuration", TestInitializingDuration});
 
         ctx.Schedule(TDuration::Seconds(DurationSeconds + 1), new TEvents::TEvPoisonPill);
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
+        YDB_LOG_CTX_WARN(ctx, "Schedule PoisonPill",
+            {"Tag", Tag});
 
     }
 
     void PrepareTestResult(const TActorContext& ctx)
     {
         using namespace NYdb::NBS::NBlockStore;
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, " test has been completed " << Name);
+        YDB_LOG_CTX_WARN(ctx, "test has been completed",
+            {"Name", Name});
 
         auto stopped = TInstant::Now();
         NJson::TJsonValue result;
@@ -164,12 +168,13 @@ public:
         proto.SetIops(suiteResults.RequestsCompleted / duration_s);
         proto.SetThroughputMbs(dataSizeMb / duration_s);
         
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, 
-            "Tag# " << Tag << " Test final results: Status=" << static_cast<int>(suiteResults.Status) 
-            << " (0=OK, 1=FAILURE), RequestsCompleted=" << suiteResults.RequestsCompleted 
-            << ", RequestsFailed=" << suiteResults.RequestsFailed 
-            << ", BlocksRead=" << suiteResults.BlocksRead 
-            << ", BlocksWritten=" << suiteResults.BlocksWritten);
+        YDB_LOG_CTX_WARN(ctx, "Test final results: (0=OK, 1=FAILURE),",
+            {"Tag", Tag},
+            {"Status", static_cast<int>(suiteResults.Status)},
+            {"RequestsCompleted", suiteResults.RequestsCompleted},
+            {"RequestsFailed", suiteResults.RequestsFailed},
+            {"BlocksRead", suiteResults.BlocksRead},
+            {"BlocksWritten", suiteResults.BlocksWritten});
 
         if (suiteResults.BlocksRead) {
             proto.SetBlocksRead(suiteResults.BlocksRead);
@@ -290,7 +295,8 @@ public:
 
     void RunTest(const TActorContext& ctx) {
         using namespace NYdb::NBS::NBlockStore;
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " RunTest called");
+        YDB_LOG_CTX_WARN(ctx, "RunTest called",
+            {"Tag", Tag});
 
         try {
             NYdb::NBS::TLogSettings logSettings;
@@ -307,8 +313,9 @@ public:
                 reinterpret_cast<const void*>(&ctx));
             TestRunner->Start();
         } catch (std::exception& e) {
-            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST,
-                "Tag# " << Tag << " RUN_TEST EXCEPTION: " << e.what());
+            YDB_LOG_CTX_ERROR(ctx, "RUN_TEST",
+                {"Tag", Tag},
+                {"EXCEPTION", e.what()});
             TestRunner->Stop();
         }
     }
@@ -323,7 +330,9 @@ public:
         using namespace NYdb::NBS;
         auto it = CookieToRequestCB.find(cookie);
         if (it == CookieToRequestCB.end()) {
-            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not find delivered cookie request " << cookie);
+            YDB_LOG_CTX_ERROR(ctx, "Could not find delivered cookie request",
+                {"Tag", Tag},
+                {"cookie", cookie});
             return;
         }
 
@@ -349,9 +358,11 @@ public:
             : MakeError(S_OK);
 
         if (HasError(record)) {
-            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST,
-                "Tag# " << Tag << " Request failed with error: code=" << error.GetCode()
-                << " message=" << error.GetMessage() << " cookie=" << cookie);
+            YDB_LOG_CTX_ERROR(ctx, "Request failed with error:",
+                {"Tag", Tag},
+                {"code", error.GetCode()},
+                {"message", error.GetMessage()},
+                {"cookie", cookie});
         }
 
         it->second(error, &ctx);
@@ -362,7 +373,9 @@ public:
         const NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse::TPtr& ev,
         const TActorContext& ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "HandleReadBlocksResponse " << ev->Cookie);
+        YDB_LOG_CTX_DEBUG(ctx, "HandleReadBlocksResponse",
+            {"Tag", Tag},
+            {"Cookie", ev->Cookie});
         HandleReadWriteResponse(ctx, ev->Get()->Record, ev->Cookie);
 
     }
@@ -371,7 +384,9 @@ public:
         const NYdb::NBS::NBlockStore::TEvService::TEvWriteBlocksResponse::TPtr& ev,
         const TActorContext& ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "HandleWriteBlocksResponse " << ev->Cookie);
+        YDB_LOG_CTX_DEBUG(ctx, "HandleWriteBlocksResponse",
+            {"Tag", Tag},
+            {"Cookie", ev->Cookie});
         HandleReadWriteResponse(ctx, ev->Get()->Record, ev->Cookie);
     }
 
@@ -381,11 +396,15 @@ public:
         const TActorContext& ctx)
     {
         using namespace NYdb::NBS;
-        LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not deliver request " << ev->Cookie);
+        YDB_LOG_CTX_ERROR(ctx, "Could not deliver request",
+            {"Tag", Tag},
+            {"Cookie", ev->Cookie});
 
         auto it = CookieToRequestCB.find(ev->Cookie);
         if (it == CookieToRequestCB.end()) {
-            LOG_ERROR_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << "Could not find undelivered cookie request " << ev->Cookie);
+            YDB_LOG_CTX_ERROR(ctx, "Could not find undelivered cookie request",
+                {"Tag", Tag},
+                {"Cookie", ev->Cookie});
             return;
         }
 
@@ -415,7 +434,8 @@ private:
 
     // death
     void HandlePoisonPill(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill called");
+        YDB_LOG_CTX_WARN(ctx, "HandlePoisonPill called",
+            {"Tag", Tag});
 
         // TODO add waiting of active requests
         TestRunner->Stop();
@@ -428,12 +448,14 @@ private:
             SendTestResult(ctx);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " loadActor has been finifshed");
+        YDB_LOG_CTX_DEBUG(ctx, "loadActor has been finifshed",
+            {"Tag", Tag});
         Die(ctx);
     }
 
     void SendTestResult(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::NBS2_LOAD_TEST, "Tag# " << Tag << " sending result");
+        YDB_LOG_CTX_WARN(ctx, "sending result",
+            {"Tag", Tag});
         ResultSent = true;
         TIntrusivePtr<TEvLoad::TLoadReport> report = nullptr;
         report.Reset(new TEvLoad::TLoadReport());

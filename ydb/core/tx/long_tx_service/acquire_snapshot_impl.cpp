@@ -7,12 +7,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/random/random.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define TXLOG_LOG(priority, stream) \
-    LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
-#define TXLOG_DEBUG(stream) TXLOG_LOG(NActors::NLog::PRI_DEBUG, stream)
-#define TXLOG_NOTICE(stream) TXLOG_LOG(NActors::NLog::PRI_NOTICE, stream)
-#define TXLOG_ERROR(stream) TXLOG_LOG(NActors::NLog::PRI_ERROR, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
 
 namespace NKikimr {
 namespace NLongTxService {
@@ -45,7 +42,9 @@ namespace NLongTxService {
 
     private:
         void SendNavigateRequest() {
-            TXLOG_DEBUG("Sending navigate request for " << DatabaseName);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Sending navigate request for",
+                {"LogPrefix", LogPrefix},
+                {"DatabaseName", DatabaseName});
             auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
             request->DatabaseName = DatabaseName;
             auto& entry = request->ResultSet.emplace_back();
@@ -64,7 +63,9 @@ namespace NLongTxService {
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-            TXLOG_DEBUG("Received undelivered from " << ev->Sender);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Received undelivered from",
+                {"LogPrefix", LogPrefix},
+                {"Sender", ev->Sender});
             ReplyError(Ydb::StatusIds::UNAVAILABLE, "An essential service is unavailable");
         }
 
@@ -72,7 +73,9 @@ namespace NLongTxService {
             NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
             const auto& entry = resp->ResultSet.at(0);
-            TXLOG_DEBUG("Received navigate response status " << entry.Status);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Received navigate response status",
+                {"LogPrefix", LogPrefix},
+                {"Status", entry.Status});
 
             switch (entry.Status) {
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
@@ -126,7 +129,9 @@ namespace NLongTxService {
 
         void SendAcquireStep(ui64 coordinator) {
             if (WaitingCoordinators.insert(coordinator).second) {
-                TXLOG_DEBUG("Sending acquire step to coordinator " << coordinator);
+                YDB_LOG(NActors::NLog::PRI_DEBUG, "Sending acquire step to coordinator",
+                    {"LogPrefix", LogPrefix},
+                    {"coordinator", coordinator});
                 SendToTablet(coordinator, MakeHolder<TEvTxProxy::TEvAcquireReadStep>(coordinator));
             }
         }
@@ -143,9 +148,10 @@ namespace NLongTxService {
             const auto* msg = ev->Get();
             const ui64 tabletId = msg->TabletId;
 
-            TXLOG_DEBUG("Delivery problem"
-                << " TabletId# " << tabletId
-                << " NotDelivered# " << msg->NotDelivered);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Delivery problem",
+                {"LogPrefix", LogPrefix},
+                {"TabletId", tabletId},
+                {"NotDelivered", msg->NotDelivered});
 
             WaitingCoordinators.erase(tabletId);
             if (WaitingCoordinators.empty() && !BackupCoordinators.empty()) {
@@ -162,7 +168,9 @@ namespace NLongTxService {
         void Handle(TEvTxProxy::TEvAcquireReadStepResult::TPtr& ev) {
             const auto* msg = ev->Get();
             const ui64 step = msg->Record.GetStep();
-            TXLOG_DEBUG("Received read step " << step);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Received read step",
+                {"LogPrefix", LogPrefix},
+                {"step", step});
             ReplySuccess(TRowVersion(step, Max<ui64>()));
         }
 
@@ -173,7 +181,10 @@ namespace NLongTxService {
         }
 
         void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message) {
-            TXLOG_DEBUG("Replying with error " << status << ": " << message);
+            YDB_LOG(NActors::NLog::PRI_DEBUG, "Replying with error",
+                {"LogPrefix", LogPrefix},
+                {"status", status},
+                {"message", message});
             NYql::TIssues issues;
             issues.AddIssue(message);
             Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(status, std::move(issues)), 0, Cookie);

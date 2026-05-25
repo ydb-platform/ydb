@@ -5,6 +5,9 @@
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <algorithm>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_PROXY
 
 namespace NKikimr {
 namespace NKesus {
@@ -40,8 +43,7 @@ private:
     {
         Y_UNUSED(ctx);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
+        YDB_LOG_CTX_DEBUG(ctx, "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
 
         const auto* msg = ev->Get();
 
@@ -50,10 +52,9 @@ private:
 
     void HandleUnexpectedEvent(STFUNC_SIG)
     {
-        ALOG_DEBUG(NKikimrServices::KESUS_PROXY,
-                    "TFakeMetering:"
-                        << " unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << ev->ToString());
+        YDB_LOG_DEBUG("TFakeMetering: unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
     }
 };
 

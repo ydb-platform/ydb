@@ -9,6 +9,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define CHECK_PROTOBUF_FIELD_PRESENCE(pb, field, errslist) \
     if (!pb.Has##field()) { \
@@ -62,8 +63,11 @@ protected:
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
             const TString& text = TString()) {
-        LOG_ERROR_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest TabletId# " << TabletId
-            << " status# " << status << " text# \"" << text << "\"" << Endl);
+        YDB_LOG_CTX_COMP_ERROR(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest text#",
+            {"TabletId", TabletId},
+            {"status", status},
+            {"text", text},
+            {"Endl", Endl});
         return new TBusResponseStatus(status, text);
     }
 

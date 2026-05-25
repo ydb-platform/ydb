@@ -4,6 +4,9 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "probes.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 LWTRACE_USING(DATASHARD_PROVIDER)
 
@@ -160,11 +163,12 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
     res->Record.SetProposeLatency(duration.MilliSeconds());
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Propose transaction complete txid " << op->GetTxId() << " at tablet "
-                << DataShard.TabletID() << " send to client, exec latency: "
-                << res->Record.GetExecLatency() << " ms, propose latency: "
-                << duration.MilliSeconds() << " ms, status: " << res->GetStatus());
+    YDB_LOG_CTX_TRACE(ctx, "Propose transaction complete txid at tablet send to client, exec ms, propose ms,",
+        {"GetTxId", op->GetTxId()},
+        {"TabletID", DataShard.TabletID()},
+        {"latency", res->Record.GetExecLatency()},
+        {"#_latency", duration.MilliSeconds()},
+        {"status", res->GetStatus()});
 
     TString errors = res->GetError();
     if (errors.size()) {

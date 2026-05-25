@@ -2,6 +2,9 @@
 
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_MEDIATOR
 
 namespace NKikimr {
 namespace NTxMediator {
@@ -76,11 +79,14 @@ void TTxMediator::ProcessEnqueuedWatch(const TActorContext &ctx) {
 void TTxMediator::ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx) {
     Y_ABORT_UNLESS(record.GetMediatorID() == TabletID());
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID()
-        << " SEND EvCoordinatorSyncResult to# " << sender.ToString() << " Cookie# " << record.GetCookie()
-        << " CompleteStep# " << VolatileState.CompleteStep
-        << " LatestKnownStep# " << VolatileState.LatestKnownStep << " SubjectiveTime# " << SubjectiveTime()
-        << " Coordinator# " << record.GetCoordinatorID());
+    YDB_LOG_CTX_DEBUG(ctx, "SEND EvCoordinatorSyncResult",
+        {"tablet", TabletID()},
+        {"to", sender.ToString()},
+        {"Cookie", record.GetCookie()},
+        {"CompleteStep", VolatileState.CompleteStep},
+        {"LatestKnownStep", VolatileState.LatestKnownStep},
+        {"SubjectiveTime", SubjectiveTime()},
+        {"Coordinator", record.GetCoordinatorID()});
 
     ctx.Send(sender,
         new TEvTxCoordinator::TEvCoordinatorSyncResult(
@@ -94,23 +100,27 @@ void TTxMediator::ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordina
 }
 
 void TTxMediator::HandleEnqueue(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " HANDLE Enqueue EvCoordinatorSync ");
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE Enqueue EvCoordinatorSync",
+        {"tablet", TabletID()});
 
     CoordinatorsSyncEnqueued[ev->Sender] = ev->Get()->Record;
 }
 
 void TTxMediator::HandleEnqueueWatch(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " ENQUEUE Watch from# " << ev->Sender << " server# " << ev->Recipient);
+    YDB_LOG_CTX_DEBUG(ctx, "ENQUEUE Watch",
+        {"tablet", TabletID()},
+        {"from", ev->Sender},
+        {"server", ev->Recipient});
     EnqueuedWatch.push_back(std::move(ev));
 }
 
 void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
     if (0 == record.CoordinatorsSize() || 0 == record.GetTimeCastBucketsPerMediator()) {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_MEDIATOR
-                     , "tablet# " << TabletID() << " actor# " << SelfId()
-                    << " Apply TEvMediatorConfiguration Version# " << record.GetVersion()
-                    << " recive empty coordinators set");
+        YDB_LOG_CTX_ERROR(ctx, "Apply TEvMediatorConfiguration recive empty coordinators set",
+            {"tablet", TabletID()},
+            {"actor", SelfId()},
+            {"Version", record.GetVersion()});
         Y_ABORT("empty coordinators set");
         return;
     }
@@ -128,25 +138,33 @@ void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActor
 
 void TTxMediator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_MEDIATOR
-                 , "tablet# " << TabletID() << " actor# " << SelfId()
-                << " HANDLE TEvMediatorConfiguration Version# " << record.GetVersion());
+    YDB_LOG_CTX_NOTICE(ctx, "HANDLE TEvMediatorConfiguration",
+        {"tablet", TabletID()},
+        {"actor", SelfId()},
+        {"Version", record.GetVersion()});
 
     DoConfigure(*ev->Get(), ctx, ev->Sender);
 }
 
 void TTxMediator::Handle(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " HANDLE EvCoordinatorSync ");
+    YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvCoordinatorSync",
+        {"tablet", TabletID()});
     const NKikimrTx::TEvCoordinatorSync &record = ev->Get()->Record;
     ReplySync(ev->Sender, record, ctx);
 }
 
 void TTxMediator::ReplyStep(const TActorId &sender, NKikimrTx::TEvCoordinatorStepResult::EStatus status, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx) {
-//    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " SEND EvCoordinatorStepResult"
-//        << " to# " << sender.ToString() << " sender status# " << status << " step# " << request.GetStep()
-//        << " CompleteStep# " << VolatileState.CompleteStep
-//        << " LatestKnownStep# " << VolatileState.LatestKnownStep << " SubjectiveTime# " << SubjectiveTime()
-//        << " Coordinator# " << request.GetCoordinatorID());
+
+//    YDB_LOG_CTX_DEBUG(ctx, "SEND EvCoordinatorStepResult",
+//          {"tablet", TabletID()},
+//          {"to", sender.ToString()},
+//          {"status", status},
+//          {"step", request.GetStep()},
+//          {"CompleteStep", VolatileState.CompleteStep},
+//          {"LatestKnownStep", VolatileState.LatestKnownStep},
+//          {"SubjectiveTime", SubjectiveTime()},
+//          {"Coordinator", request.GetCoordinatorID()});
+
     ctx.Send(sender,
         new TEvTxCoordinator::TEvCoordinatorStepResult(
             status,
@@ -201,8 +219,10 @@ void TTxMediator::Progress(ui64 to, const TActorContext &ctx) {
 
     if (txCount) {
         // push steps to execution
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " SEND EvCommitStep to# " <<
-            ExecQueue.ToString() << " ExecQueue " << mds->ToString() << " marker# M0");
+        YDB_LOG_CTX_DEBUG(ctx, "SEND EvCommitStep ExecQueue marker# M0",
+            {"tablet", TabletID()},
+            {"to", ExecQueue.ToString()},
+            {"mds", mds->ToString()});
     }
     ctx.Send(ExecQueue, new TEvTxMediator::TEvCommitStep(mds));
 
@@ -219,8 +239,10 @@ void TTxMediator::CheckProgress(const TActorContext &ctx) {
 
 void TTxMediator::RequestLostAcks(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx) {
     TAutoPtr<TCoordinatorStep> step(new TCoordinatorStep(request));
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " SEND EvRequestLostAcks to# "
-        << ExecQueue.ToString() << " ExecQueue step " << step->ToString());
+    YDB_LOG_CTX_DEBUG(ctx, "SEND EvRequestLostAcks ExecQueue step",
+        {"tablet", TabletID()},
+        {"to", ExecQueue.ToString()},
+        {"step", step->ToString()});
     ctx.Send(ExecQueue, new TEvTxMediator::TEvRequestLostAcks(step, sender));
 }
 
@@ -276,8 +298,10 @@ void TTxMediator::Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const T
     const ui64 transactionsCount = record.TransactionsSize();
 
     if (transactionsCount) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID()
-            << " HANDLE EvCoordinatorStep coordinator# " << coordinator << " step# " << step);
+        YDB_LOG_CTX_DEBUG(ctx, "HANDLE EvCoordinatorStep",
+            {"tablet", TabletID()},
+            {"coordinator", coordinator},
+            {"step", step});
 
         LOG_INFO(ctx, NKikimrServices::TX_MEDIATOR,
             "Coordinator step: Mediator [%" PRIu64 "],"
@@ -299,13 +323,17 @@ void TTxMediator::Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const T
 void TTxMediator::HandleForwardWatch(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
     if (!ConnectedServers.contains(ev->Recipient)) {
         // Server disconnected before this message could be processed
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID()
-            << " IGNORE Watch from# " << ev->Sender << " server# " << ev->Recipient);
+        YDB_LOG_CTX_DEBUG(ctx, "IGNORE Watch",
+            {"tablet", TabletID()},
+            {"from", ev->Sender},
+            {"server", ev->Recipient});
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID()
-        << " FORWARD Watch from# " << ev->Sender << " to# " << ExecQueue.ToString() << " ExecQueue");
+    YDB_LOG_CTX_DEBUG(ctx, "FORWARD Watch ExecQueue",
+        {"tablet", TabletID()},
+        {"from", ev->Sender},
+        {"to", ExecQueue.ToString()});
     // Preserve Recipient (server) and InterconnectSession
     ev->Rewrite(ev->GetTypeRewrite(), ExecQueue);
     ctx.Send(ev.Release());
@@ -313,13 +341,17 @@ void TTxMediator::HandleForwardWatch(TAutoPtr<IEventHandle> &ev, const TActorCon
 
 void TTxMediator::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
     auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " server# " << msg->ServerId << " connected");
+    YDB_LOG_CTX_DEBUG(ctx, "connected",
+        {"tablet", TabletID()},
+        {"server", msg->ServerId});
     ConnectedServers.insert(msg->ServerId);
 }
 
 void TTxMediator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
     auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " server# " << msg->ServerId << " disconnnected");
+    YDB_LOG_CTX_DEBUG(ctx, "disconnnected",
+        {"tablet", TabletID()},
+        {"server", msg->ServerId});
     ConnectedServers.erase(msg->ServerId);
     if (!!ExecQueue) {
         Send(ExecQueue, new TEvTxMediator::TEvServerDisconnected(msg->ServerId));

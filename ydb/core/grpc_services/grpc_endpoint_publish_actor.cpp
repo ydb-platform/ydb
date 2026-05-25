@@ -9,6 +9,9 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
 
 namespace NKikimr::NGRpcService {
 
@@ -66,7 +69,8 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
 
     void PassAway() override {
         if (PublishActor) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Stop publish endpoints for database: " << AppData()->TenantName);
+            YDB_LOG_NOTICE("Stop publish endpoints for",
+                {"database", AppData()->TenantName});
             Send(PublishActor, new TEvents::TEvPoisonPill());
         }
 

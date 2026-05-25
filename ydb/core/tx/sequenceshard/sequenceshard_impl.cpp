@@ -3,6 +3,9 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 #include <util/stream/output.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
 
 namespace NKikimr {
 namespace NSequenceShard {
@@ -35,7 +38,8 @@ namespace NSequenceShard {
     }
 
     void TSequenceShard::OnActivateExecutor(const TActorContext& ctx) {
-        SLOG_T("OnActivateExecutor");
+        YDB_LOG_TRACE("OnActivateExecutor",
+            {"LogPrefix", LogPrefix});
 
         Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
         RunTxInitSchema(ctx);

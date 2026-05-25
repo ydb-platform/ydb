@@ -6,6 +6,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
 #define LOG_WITH_QUERY_ID(LEVEL, QUERY_ID, STRM) LOG_LOG_S(ctx, NActors::NLog::PRI_ ## LEVEL, NKikimrServices::FQ_INTERNAL_SERVICE, (TLogCtx{.Owner_ = *this, .QueryId_ = QUERY_ID}) << STRM)
 
@@ -57,9 +58,11 @@ public:
 
         TString serialized;
         if (!response.SerializeToString(&serialized)) {
-            LOG_ERROR_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "YdbOverFq::" << TDerived::RpcName << " actorId: " << TActorBootstrapped<TDerived>::SelfId().ToString() <<
-                " couldn't serialize response, status: " << Ydb::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString()
-            );
+            YDB_LOG_CTX_COMP_ERROR(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "couldn't serialize response,",
+                {"YdbOverFq", TDerived::RpcName},
+                {"actorId", TActorBootstrapped<TDerived>::SelfId().ToString()},
+                {"status", Ydb::StatusIds::StatusCode_Name(status)},
+                {"issues", issues.ToOneLineString()});
             FinishStream(Ydb::StatusIds::INTERNAL_ERROR, ctx);
             return;
         }

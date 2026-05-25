@@ -16,14 +16,14 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_AGGREGATE_DATA; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxAggregateData::Execute (" << Settings.ToString() << ")");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxAggregateData::Execute (" << Settings.ToString() << ")");
         TInstant now = TActivationContext::Now();
         return Self->LocalBackend.AggregateData(txc, now, Settings);
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("TTxAggregateData::Complete");
+        ALOG_DEBUG(NKikimrServices::GRAPH, GetLogPrefix() <<"TTxAggregateData::Complete");
     }
 };
 

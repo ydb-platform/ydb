@@ -8,6 +8,9 @@
 #include <library/cpp/resource/resource.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr {
 namespace NDataShard {
@@ -210,9 +213,9 @@ public:
     {}
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "HTTP request at " << Self->TabletID() << " url="
-                    << Ev->Get()->PathInfo());
+        YDB_LOG_CTX_DEBUG(ctx, "HTTP request at",
+            {"TabletID", Self->TabletID()},
+            {"url", Ev->Get()->PathInfo()});
 
         auto cgi = Ev->Get()->Cgi();
 

@@ -1,6 +1,9 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -68,8 +71,8 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
     if (!schemeTx.HasDropTable())
         return EExecutionStatus::Executed;
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to DROP TABLE at " << DataShard.TabletID());
+    YDB_LOG_CTX_INFO(ctx, "Trying to DROP TABLE at",
+        {"TabletID", DataShard.TabletID()});
 
     ui64 tableId = schemeTx.GetDropTable().GetId_Deprecated();
     if (schemeTx.GetDropTable().HasPathId()) {

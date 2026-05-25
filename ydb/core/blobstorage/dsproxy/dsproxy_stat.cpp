@@ -1,4 +1,7 @@
 #include "dsproxy_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
 
 namespace NKikimr {
 
@@ -20,7 +23,9 @@ namespace NKikimr {
             str << "}";
             return str.Str();
         };
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId << " Responsiveness# " << formatResponsiveness());
+        YDB_LOG_TRACE("",
+            {"Group", GroupId},
+            {"Responsiveness", formatResponsiveness()});
 
         if (!ResponsivenessTracker.IsEmpty()) {
             ScheduleUpdateResponsiveness();

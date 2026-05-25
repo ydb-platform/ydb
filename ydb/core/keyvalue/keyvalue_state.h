@@ -23,6 +23,8 @@
 #include <bitset>
 #include <memory>
 
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
 namespace NActors {
     struct TActorContext;
 }
@@ -593,7 +595,8 @@ public:
         NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info = nullptr)
     {
-        ALOG_INFO(NKikimrServices::KEYVALUE, errorDescription);
+        YDB_LOG_COMP_INFO(NKikimrServices::KEYVALUE, "",
+            {"errorDescription", errorDescription});
         Y_ABORT_UNLESS(!intermediate->IsReplied);
         std::unique_ptr<TResponse> response = std::make_unique<TResponse>();
         response->Record.set_status(status);

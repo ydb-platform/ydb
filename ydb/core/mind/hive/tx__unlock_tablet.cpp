@@ -1,5 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
@@ -40,7 +43,9 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_NOTICE("THive::TTxUnlockTabletExecution::Execute TabletId: " << TabletId);
+        YDB_LOG_NOTICE("THive::TTxUnlockTabletExecution::Execute",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", TabletId});
         SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet == nullptr) {
@@ -88,7 +93,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_NOTICE("THive::TTxUnlockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        YDB_LOG_NOTICE("THive::TTxUnlockTabletExecution::Complete",
+            {"GetLogPrefix", GetLogPrefix()},
+            {"TabletId", TabletId},
+            {"SideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 
@@ -112,7 +120,10 @@ ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo, NKik
 
 void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason) {
     // Unlock tablets that have been locked by this node
-    BLOG_NOTICE("ScheduleUnlockTabletExecution(" << node.Id << ", " << NKikimrHive::ELockLostReason_Name(reason) << ")");
+    YDB_LOG_NOTICE("ScheduleUnlockTabletExecution(",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"Id", node.Id},
+        {"#_NKikimrHive::ELockLostReason_Name(reason)", NKikimrHive::ELockLostReason_Name(reason)});
     for (TLeaderTabletInfo* tablet : node.LockedTablets) {
         Y_ABORT_UNLESS(FindTabletEvenInDeleting(tablet->Id) == tablet);
         Y_ABORT_UNLESS(tablet->LockedToActor.NodeId() == node.Id);
@@ -132,7 +143,10 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLos
 void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     ui64 seqNo = ev->Get()->SeqNo;
-    BLOG_NOTICE("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId << " Reason=" << NKikimrHive::ELockLostReason_Name(ev->Get()->Reason));
+    YDB_LOG_NOTICE("THive::Handle::TEvUnlockTabletReconnectTimeout",
+        {"GetLogPrefix", GetLogPrefix()},
+        {"TabletId", tabletId},
+        {"Reason", NKikimrHive::ELockLostReason_Name(ev->Get()->Reason)});
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr && tablet->IsLockedToActor() && tablet->PendingUnlockSeqNo == seqNo) {
         // We use sequence numbers to make sure unlock happens only if some

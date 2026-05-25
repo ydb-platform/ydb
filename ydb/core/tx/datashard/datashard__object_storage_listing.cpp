@@ -1,5 +1,8 @@
 #include "datashard_impl.h"
 #include <util/string/vector.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -192,11 +195,14 @@ public:
             endKeyInclusive = false;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: start at key ("
-            << JoinVectorIntoString(key, " ") << "), end at key (" << JoinVectorIntoString(endKey, " ") << ")"
-            << " restarted: " << RestartCount-1 << " last path: \"" << LastPath << "\""
-            << " contents: " << Result->Record.ContentsRowsSize()
-            << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
+        YDB_LOG_CTX_DEBUG(ctx, "S3 Listing: start at key ( ), end at key ( last path: common",
+            {"TabletID", Self->TabletID()},
+            {"#_num_0", JoinVectorIntoString(key, " ")},
+            {"#_num_1", JoinVectorIntoString(endKey, " ")},
+            {"restarted", RestartCount-1},
+            {"LastPath", LastPath},
+            {"contents", Result->Record.ContentsRowsSize()},
+            {"prefixes", Result->Record.CommonPrefixesRowsSize()});
 
         Result->Record.SetMoreRows(!IsKeyInRange(endKey, tableInfo));
 
@@ -291,8 +297,10 @@ public:
             }
 
             TDbTupleRef value = iter->GetValues();
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: "
-                "\"" << path << "\"" << (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString()));
+            YDB_LOG_CTX_TRACE(ctx, "",
+                {"TabletID", Self->TabletID()},
+                {"path", path},
+                {"#_num_0", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
 
             if (isLeafPath) {
                 ++stats.LeafRows;
@@ -455,11 +463,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: finished "
-                    << " status: " << Result->Record.GetStatus()
-                    << " description: \"" << Result->Record.GetErrorDescription() << "\""
-                    << " contents: " << Result->Record.ContentsRowsSize()
-                    << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
+        YDB_LOG_CTX_DEBUG(ctx, "S3 Listing: finished description: common",
+            {"TabletID", Self->TabletID()},
+            {"status", Result->Record.GetStatus()},
+            {"GetErrorDescription", Result->Record.GetErrorDescription()},
+            {"contents", Result->Record.ContentsRowsSize()},
+            {"prefixes", Result->Record.CommonPrefixesRowsSize()});
         ctx.Send(Ev->Sender, Result.Release());
 
         if (ListingSpan) {

@@ -1,6 +1,7 @@
 #include "schemeshard_impl.h"
+#include <ydb/library/actors/struct_log/create_message_impl.h>
 
-#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -25,7 +26,9 @@ public:
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
-        LOG_N("TForcedCompaction::TTxList DoExecute " << request.ShortDebugString());
+        YDB_LOG_CTX_NOTICE(ctx, "][ForcedCompaction] TForcedCompaction::TTxList DoExecute",
+            {"SelfTabletId", Self->SelfTabletId()},
+            {"ShortDebugString", request.ShortDebugString()});
 
         auto response = MakeHolder<TEvForcedCompaction::TEvListResponse>();
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -81,7 +84,9 @@ public:
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxList DoComplete " << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_CTX_NOTICE(ctx, "][ForcedCompaction] TForcedCompaction::TTxList DoComplete",
+            {"SelfTabletId", Self->SelfTabletId()},
+            {"ShortDebugString", Request->Get()->Record.ShortDebugString()});
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

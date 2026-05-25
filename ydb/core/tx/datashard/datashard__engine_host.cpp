@@ -16,6 +16,9 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/cast.h>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MINIKQL_ENGINE
 
 namespace NKikimr {
 namespace NDataShard {
@@ -524,8 +527,10 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
     auto txId = stepTxId.TxId;
     const TActorSystem* actorSystem = ctx.ActorSystem();
     EngineSettings->LogErrorWriter = [actorSystem, tabletId, txId](const TString& message) {
-        LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE,
-            "Shard %" << tabletId << ", txid %" <<txId << ", engine error: " << message);
+        YDB_LOG_CTX_ERROR(*actorSystem, "Shard %, txid %, engine",
+            {"tabletId", tabletId},
+            {"txId", txId},
+            {"error", message});
     };
 
     if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, txId)) {

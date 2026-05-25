@@ -34,6 +34,9 @@
 #include <algorithm>
 #include <limits>
 #include <queue>
+#include <ydb/library/actors/struct_log/create_message_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
 
 namespace NActors {
 
@@ -512,11 +515,11 @@ public:
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
             TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            ALOG_NOTICE(NActorsServices::HTTP,
-                (request->Address ? request->Address->ToString() : "")
-                << " " << user
-                << " " << request->Method
-                << " " << request->URL);
+            YDB_LOG_NOTICE("",
+                {"#_num_0", (request->Address ? request->Address->ToString() : "")},
+                {"user", user},
+                {"Method", request->Method},
+                {"URL", request->URL});
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -1151,10 +1154,11 @@ public:
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
             TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
-                << " " << user
-                << " " << request->Method
-                << " " << request->URL);
+            YDB_LOG_NOTICE("",
+                {"#_num_0", (request->Address ? request->Address->ToString() : "")},
+                {"user", user},
+                {"Method", request->Method},
+                {"URL", request->URL});
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }

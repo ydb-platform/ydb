@@ -381,7 +381,7 @@ message TEvLoadTestRequest {
     //
     // TAllocConfig and TWorkloadConfig are split because allocation persists
     // across runs — Create once, Run many times with different
-    // TWorkloadConfig (typically varying InFlightWrites).
+    // TWorkloadConfig (typically varying MaxInFlight).
     message TNbsDbgLikeLoad {
         // Allocation-time configuration. Persisted once at Create time and
         // reused across Runs. Editing it after Create requires Delete first.
@@ -449,19 +449,16 @@ message TEvLoadTestRequest {
             // 50 ms matches the partition's DefaultPBufferReplyTimeout.
             optional uint32 PBufferReplyTimeoutMicroseconds = 5 [default = 50000];
 
-            // Percent PB occupancy that gates erase startup (per DBG)
-            optional uint32 FillRatio = 6 [default = 50];
-
             // How many of the persisted DBGs participate in the next Run.
             // 0 = use all N. The worker validates every TNbsWrite/Read address
             // against the slice [0, NumDirectBlockGroupsToUse) of Dbgs.
-            optional uint32 NumDirectBlockGroupsToUse = 7 [default = 0];
+            optional uint32 NumDirectBlockGroupsToUse = 6 [default = 0];
 
             // Per-Run fixed I/O size (= ReadWriteSizeKiB * 1024 from TWorkloadConfig).
             // The worker rejects TNbsWrite/Read with SizeBytes != IoSizeBytes.
             // 0 = uninitialised (worker stays idle until the first
             // TConfigureTablet with a nonzero value arrives).
-            optional uint32 IoSizeBytes = 8 [default = 0];
+            optional uint32 IoSizeBytes = 7 [default = 0];
         }
 
         // Load-actor -> worker: "write SizeBytes at this flat address".
@@ -524,8 +521,9 @@ message TEvLoadTestRequest {
             // DBGs in tablet/actor order (1 <= M <= N).
             optional uint32 NumDirectBlockGroupsToUse = 4 [default = 0];
 
-            // Global cap on in-flight TEvWritePersistentBuffers across DBGs.
-            optional uint32 InFlightWrites = 5 [default = 32];
+            // Combined cap on concurrent in-flight ops (writes + reads).
+            // ReadRatio controls what fraction of in-flight slots are used for reads.
+            optional uint32 MaxInFlight = 5 [default = 32];
 
             optional uint32 ReadRatio = 6 [default = 0];
 

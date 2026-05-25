@@ -194,7 +194,7 @@ TString X509CertificateReader::GetPublicKey(const X509Ptr& x509) {
         return "";
     }
 
-    const char* pubkeyBuf = nullptr;
+    char* pubkeyBuf = nullptr;
     const auto pubkeyLen = BIO_get_mem_data(pubkeyBio.get(), &pubkeyBuf);
     if (pubkeyLen <= 0) {
         return "";

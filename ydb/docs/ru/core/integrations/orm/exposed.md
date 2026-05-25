@@ -300,6 +300,7 @@ import tech.ydb.exposed.dialect.ydbUint32
 import tech.ydb.exposed.dialect.ydbUint64
 import tech.ydb.exposed.dialect.ydbUlong
 import tech.ydb.exposed.dialect.ydbUuid
+import tech.ydb.exposed.dialect.ydbUshort
 
 val amount = ydbDecimal("amount", precision = 22, scale = 9)
 val payload = ydbJson("payload")

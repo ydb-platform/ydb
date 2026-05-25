@@ -15,6 +15,7 @@ struct TCertificateAuthValues {
 std::vector<TCertificateAuthorizationParams> GetCertificateAuthorizationParams(const NKikimrConfig::TClientCertificateAuthorization& clientCertificateAuth);
 NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(const TString& name, const TVector<TString>& values, const TVector<TString>& suffixes = {});
 
-std::string GetCertificateFingerprint(const std::string& certificate);
+std::string GetCertificateFingerprint(const std::string& certificate, bool isPEMFormat = true);
+std::string GetCertificatePublicKey(const std::string& certificate, bool isPEMFormat = true);
 
 } //namespace NKikimr

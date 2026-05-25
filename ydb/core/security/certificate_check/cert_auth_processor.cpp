@@ -29,6 +29,17 @@ X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsPEM(const TStrin
     return x509;
 }
 
+X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsDER(const TStringBuf& cert) {
+    const ui8* ptr = reinterpret_cast<const ui8*>(cert.data());
+
+    auto x509 = X509Ptr{d2i_X509(NULL, &ptr, cert.size())};
+    if (x509 == nullptr) {
+        return {};
+    }
+
+    return x509;
+}
+
 std::pair<TString, TString> X509CertificateReader::GetTermFromX509Name(X509_NAME* name, int nid) {
     if (name == nullptr) {
         return {};
@@ -158,6 +169,32 @@ TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
         return "";
     }
     return HexEncode(fingerprint, FINGERPRINT_LENGTH);
+}
+
+TString X509CertificateReader::GetPublicKey(const X509Ptr& x509) {
+    auto* rawPubkey = X509_get_pubkey(x509.get());
+    if (rawPubkey == nullptr) {
+        return "";
+    }
+    const EVPPkeyPtr pubkey(rawPubkey);
+
+    auto* bio = BIO_new(BIO_s_mem());
+    if (bio == nullptr) {
+        return "";
+    }
+    const BIOPtr pubkeyBio(bio);
+
+    if (PEM_write_bio_PUBKEY(pubkeyBio.get(), pubkey.get()) != 1) {
+        return "";
+    }
+
+    const char* pubkeyBuf = nullptr;
+    const auto pubkeyLen = BIO_get_mem_data(pubkeyBio.get(), &pubkeyBuf);
+    if (pubkeyLen <= 0) {
+        return "";
+    }
+
+    return TString(pubkeyBuf, pubkeyLen);
 }
 
 TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, const std::optional<TRDN>& subjectDns, bool requireSameIssuer, const std::vector<TString>& groups)

@@ -49,14 +49,26 @@ NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(con
     return term;
 }
 
-std::string GetCertificateFingerprint(const std::string& certificate) {
+std::string GetCertificateFingerprint(const std::string& certificate, bool isPEMFormat) {
     const static std::string defaultFingerprint = "certificate";
-    X509CertificateReader::X509Ptr x509Cert = X509CertificateReader::ReadCertAsPEM(certificate);
+    X509CertificateReader::X509Ptr x509Cert = isPEMFormat
+        ? X509CertificateReader::ReadCertAsPEM(certificate)
+        : X509CertificateReader::ReadCertAsDER(certificate);
     if (!x509Cert) {
         return defaultFingerprint;
     }
     std::string fingerprint = X509CertificateReader::GetFingerprint(x509Cert);
     return (fingerprint.empty() ? defaultFingerprint : fingerprint);
+}
+
+std::string GetCertificatePublicKey(const std::string& certificate, bool isPEMFormat) {
+    X509CertificateReader::X509Ptr x509Cert = isPEMFormat
+        ? X509CertificateReader::ReadCertAsPEM(certificate)
+        : X509CertificateReader::ReadCertAsDER(certificate);
+    if (!x509Cert) {
+        return "";
+    }
+    return X509CertificateReader::GetPublicKey(x509Cert);
 }
 
 }  //namespace NKikimr

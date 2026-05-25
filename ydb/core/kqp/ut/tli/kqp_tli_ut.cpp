@@ -671,7 +671,7 @@ namespace {
             Kikimr.RunCall([&] () { return CreateAndSeedTablesWithSecondKeyInSession(Session, count); });
         }
 
-        void ExecuteQuery(const TString& query, bool waitForMediatorStep = true) {
+        void ExecuteQuery(const TString& query, bool waitForMediatorStep = false) {
             if (waitForMediatorStep) {
                 NActors::TWaitForFirstEvent<TEvMediatorTimecast::TEvUpdate> waiter(*Kikimr.GetTestServer().GetRuntime());
                 waiter.Wait(TDuration::Seconds(5));
@@ -1397,7 +1397,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Breaker: write to key 3
         // At this point, victim's lock doesn't exist yet (deferred lock creation)
         // The breaker's write is tracked for later TLI linkage via RecentWritesForTli cache
-        ctx->ExecuteQuery(breakerUpsert);
+        ctx->ExecuteQuery(breakerUpsert, true);
 
         // Victim: try to commit - should be aborted due to MVCC conflict detection
         auto [status, issues] = ctx->CommitTxWithIssues(victimTx);

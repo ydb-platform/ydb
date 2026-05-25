@@ -38,7 +38,7 @@ X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsDER(const TStrin
 
     const ui8* certStart = reinterpret_cast<const ui8*>(cert.data());
     const ui8* certEnd = certStart + cert.size();
-    const long certSize = cert.size();
+    const long certSize = static_cast<long>(cert.size());
 
     const ui8* ptr = certStart;
 
@@ -203,12 +203,12 @@ TString X509CertificateReader::GetPublicKey(const X509Ptr& x509) {
     }
 
     char* pubkeyBuf = nullptr;
-    const auto pubkeyLen = BIO_get_mem_data(pubkeyBio.get(), &pubkeyBuf);
+    const long pubkeyLen = BIO_get_mem_data(pubkeyBio.get(), &pubkeyBuf);
     if (pubkeyLen <= 0) {
         return "";
     }
 
-    return TString(pubkeyBuf, pubkeyLen);
+    return TString(pubkeyBuf, static_cast<size_t>(pubkeyLen));
 }
 
 TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, const std::optional<TRDN>& subjectDns, bool requireSameIssuer, const std::vector<TString>& groups)

@@ -1262,10 +1262,10 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         if (p.Msg.MaxSeqNo.has_value() && sourceId.SeqNo() && p.Msg.SeqNo < *sourceId.SeqNo()
             && *sourceId.SeqNo() < *p.Msg.MaxSeqNo) {
             CancelOneWriteOnWrite(ctx,
-                                    TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId)
-                                    << " seqNo: " << p.Msg.SeqNo
-                                    << " maxSeqNo: " << *p.Msg.MaxSeqNo
-                                    << " must be less than already written seqNo: " << *sourceId.SeqNo(),
+                                    TStringBuilder() << "Batch write for sourceId: " << EscapeC(p.Msg.SourceId)
+                                    << " is already partially written: written seqNo=" << *sourceId.SeqNo()
+                                    << ", batch startSeqNo=" << p.Msg.SeqNo
+                                    << ", batch endSeqNo=" << *p.Msg.MaxSeqNo,
                                     p,
                                     NPersQueue::NErrorCode::BAD_REQUEST);
             return false;
@@ -1517,7 +1517,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         );
 
         sourceId.Update(
-            p.Msg.MaxSeqNo.has_value() ? *p.Msg.MaxSeqNo : p.Msg.SeqNo,
+            p.Msg.MaxSeqNo.value_or(p.Msg.SeqNo),
             curOffset,
             CurrentTimestamp,
             p.Msg.ProducerEpoch);

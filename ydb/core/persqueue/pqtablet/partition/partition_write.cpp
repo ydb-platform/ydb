@@ -1216,7 +1216,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
-    if (p.Msg.MessagesCount > 1 && !AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) {
+    if (p.Msg.BatchMessageCount >= 1 && !AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) {
         CancelOneWriteOnWrite(ctx,
                                 TStringBuilder() << "messages batching is not enabled, partitionId: " << Partition,
                                 p,
@@ -1443,7 +1443,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteTimestampEstimate = p.Msg.WriteTimestamp > 0 ? TInstant::MilliSeconds(p.Msg.WriteTimestamp) : WriteTimestamp;
     TClientBlob blob(TString{p.Msg.SourceId}, p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
-                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey), p.Msg.MessagesCount); //remove curOffset when LB will report CTime
+                     p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey), p.Msg.BatchMessageCount); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1522,7 +1522,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             CurrentTimestamp,
             p.Msg.ProducerEpoch);
 
-        curOffset += p.Msg.MessagesCount;
+        curOffset += p.Msg.BatchMessageCount >= 1 ? p.Msg.BatchMessageCount : 1;
         BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;

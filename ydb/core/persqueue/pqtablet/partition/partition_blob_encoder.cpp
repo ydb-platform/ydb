@@ -157,7 +157,7 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
                 break;
             }
             if (blobs[i].IsLastPart()) {
-                offset += blobs[i].MessagesCount;
+                offset += blobs[i].GetLogicalOffsetSpan();
                 pno = 0;
             } else {
                 ++pno;

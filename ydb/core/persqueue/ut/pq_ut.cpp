@@ -129,13 +129,13 @@ Y_UNIT_TEST(BatchedMessagesWriteRead) {
     constexpr size_t dataSize = 16;
 
     const TVector<TBatchedMessageSpec> writes = {
-        {.SeqNo = 1, .MessagesCount = 5, .Offset = 0, .Fill = 'a'},
-        {.SeqNo = 2, .MessagesCount = 3, .Offset = 5, .Fill = 'b'},
-        {.SeqNo = 3, .MessagesCount = 1, .Offset = 8, .Fill = 'c'},
+        {.SeqNo = 1, .BatchMessageCount = 5, .Offset = 0, .Fill = 'a'},
+        {.SeqNo = 2, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 3, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
     };
 
     for (const auto& w : writes) {
-        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.MessagesCount, tc);
+        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.BatchMessageCount, tc);
     }
 
     PQGetPartInfo(0, 9, tc);
@@ -186,13 +186,13 @@ Y_UNIT_TEST(BatchedMessagesCompaction) {
     constexpr size_t dataSize = 7000_KB;
 
     const TVector<TBatchedMessageSpec> writes = {
-        {.SeqNo = 1, .MessagesCount = 5, .Offset = 0, .Fill = 'a'},
-        {.SeqNo = 2, .MessagesCount = 3, .Offset = 5, .Fill = 'b'},
-        {.SeqNo = 3, .MessagesCount = 1, .Offset = 8, .Fill = 'c'},
+        {.SeqNo = 1, .BatchMessageCount = 5, .Offset = 0, .Fill = 'a'},
+        {.SeqNo = 2, .BatchMessageCount = 3, .Offset = 5, .Fill = 'b'},
+        {.SeqNo = 3, .BatchMessageCount = 0, .Offset = 8, .Fill = 'c'},
     };
 
     for (const auto& w : writes) {
-        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.MessagesCount, tc, static_cast<i64>(w.Offset));
+        CmdWriteBatched(0, sourceId, w.SeqNo, TString(dataSize, w.Fill), w.BatchMessageCount, tc, static_cast<i64>(w.Offset));
     }
 
     PQGetPartInfo(0, 9, tc);

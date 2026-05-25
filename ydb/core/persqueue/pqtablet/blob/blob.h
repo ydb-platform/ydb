@@ -41,12 +41,15 @@ struct TClientBlob {
     ui32 UncompressedSize;
     TString PartitionKey;
     TString ExplicitHashKey;
-    ui32 MessagesCount = 1;
+    // 0 means the message is not a batch.
+    ui32 BatchMessageCount = 0;
 
     TClientBlob();
     TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp,
-        const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey, ui32 messagesCount = 1);
+        const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey, ui32 batchMessageCount = 0);
+
+    ui32 GetLogicalOffsetSpan() const;
 
     ui32 GetSerializedSize() const;
     ui16 GetPartNo() const;

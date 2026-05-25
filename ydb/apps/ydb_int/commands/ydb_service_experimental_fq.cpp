@@ -258,7 +258,7 @@ int TCommandFederatedQueryCreateQuery::Run(TConfig& config) {
     }
 
     if (ContentFile) {
-        auto content = ReadFromFile(ContentFile, "json");
+        auto content = ReadFromFile(ContentFile, "content");
         request.mutable_content()->set_text(content);
     } else if (Content) {
         request.mutable_content()->set_text(Content);

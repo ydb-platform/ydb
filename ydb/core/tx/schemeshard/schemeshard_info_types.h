@@ -3015,6 +3015,13 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TVectorIndexIvfPqDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
                 auto success = SpecializedIndexDescription
@@ -3084,6 +3091,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq:
+                alterData->SpecializedIndexDescription = config.GetVectorIndexIvfPqDescription();
+                break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
@@ -3107,7 +3117,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
-        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
+        NKikimrSchemeOp::TFulltextIndexDescription,
+        NKikimrSchemeOp::TVectorIndexIvfPqDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamSettings {

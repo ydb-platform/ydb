@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
+#include <ydb/core/base/ivf_pq.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -152,6 +153,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 if (NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings().settings())) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed,
                         "Cannot build vector index: table is empty and vector_type/vector_dimension were not specified")};
+                }
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq: {
+                TString msg;
+                if (!NKikimr::NIvfPq::ValidateSettings(indexDescription.GetVectorIndexIvfPqDescription().GetSettings(), msg)) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
                 }
                 break;
             }
@@ -365,6 +373,29 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
                     outTx.SetInternal(tx.GetInternal());
                     result.push_back(CreateNewSequence(NextPartId(nextId, result), outTx));
+                }
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq: {
+                const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
+                NKikimrSchemeOp::TTableDescription userCodebookDesc, userLevelDesc, userPostingDesc, userPrefixDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize() == 3 + prefixVectorIndex) {
+                    // This description provided by user to override partition policy
+                    userCodebookDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::CodebookTablePosition);
+                    userLevelDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::LevelTablePosition);
+                    userPostingDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::PostingTablePosition);
+                    if (prefixVectorIndex) {
+                        userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::PrefixTablePosition);
+                    }
+                }
+
+                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                result.push_back(createIndexImplTable(CalcVectorIvfPqCodebookImplTableDesc(baseTableDescription.GetPartitionConfig(), userCodebookDesc)));
+                result.push_back(createIndexImplTable(CalcVectorIvfPqLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
+                result.push_back(createIndexImplTable(CalcVectorIvfPqPostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
+                if (prefixVectorIndex) {
+                    // TODO(raydzast)
+                    Y_ENSURE(false, "Not implemented");
                 }
                 break;
             }

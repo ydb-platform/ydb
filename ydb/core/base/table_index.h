@@ -105,6 +105,44 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 
 }
 
+namespace NIvfPq {
+
+using TClusterId = NKMeans::TClusterId;
+inline constexpr auto ClusterIdType = NKMeans::ClusterIdType;
+inline constexpr const char* ClusterIdTypeName = NKMeans::ClusterIdTypeName;
+
+using TSubspaceIdx = ui16;
+inline constexpr auto SubspaceIdxType = Ydb::Type::UINT16;
+inline constexpr const char* SubspaceIdxTypeName = "Uint16";
+
+using TCell = ui16;
+inline constexpr auto CellType = Ydb::Type::UINT16;
+inline constexpr const char* CellTypeName = "Uint16";
+
+using TCode = TString;
+inline constexpr auto CodeType = Ydb::Type::STRING;
+inline constexpr const char* CodeTypeName = "String";
+
+inline constexpr const char* CodebookTable = "indexImplCodebookTable";
+inline constexpr const char* LevelTable = NKMeans::LevelTable;
+inline constexpr const char* PostingTable = "indexImplPostingTable";
+inline constexpr const char* PrefixTable = NKMeans::PrefixTable;
+
+// Impl table positions in partitioning setting list
+inline constexpr const int CodebookTablePosition = 0;
+inline constexpr const int LevelTablePosition = 1;
+inline constexpr const int PostingTablePosition = 2;
+inline constexpr const int PrefixTablePosition = 3;
+
+inline constexpr const char* ParentColumn = NKMeans::ParentColumn;
+inline constexpr const char* IdColumn = NKMeans::IdColumn;
+inline constexpr const char* SubspaceColumn = "__ydb_subspace";
+inline constexpr const char* CellColumn = "__ydb_cell";
+inline constexpr const char* CodeColumn = "__ydb_code";
+inline constexpr const char* CentroidColumn = NKMeans::CentroidColumn;
+
+}
+
 namespace NFulltext {
     // Type for token frequency within a document - uint32 is OK
     using TTokenCount = ui32;

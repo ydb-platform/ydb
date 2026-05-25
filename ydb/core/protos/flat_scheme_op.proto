@@ -1323,6 +1323,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextPlain = 5;
     EIndexTypeGlobalFulltextRelevance = 6;
     EIndexTypeGlobalJson = 7;
+    EIndexTypeGlobalVectorIvfPq = 8;
 }
 
 enum EIndexState {
@@ -1334,6 +1335,10 @@ enum EIndexState {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
+message TVectorIndexIvfPqDescription {
+    optional Ydb.Table.IvfPqSettings Settings = 1;
 }
 
 message TFulltextIndexDescription {
@@ -1362,6 +1367,7 @@ message TIndexDescription {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
         TFulltextIndexDescription FulltextIndexDescription = 12;
+        TVectorIndexIvfPqDescription VectorIndexIvfPqDescription = 13;
     }
 }
 
@@ -1375,6 +1381,7 @@ message TIndexCreationConfig {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
         TFulltextIndexDescription FulltextIndexDescription = 8;
+        TVectorIndexIvfPqDescription VectorIndexIvfPqDescription = 9;
     }
 }
 
@@ -2165,6 +2172,7 @@ enum EPathSubType {
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
     EPathSubTypeFulltextIndexImplTable = 5;
     EPathSubTypeJsonIndexImplTable = 6;
+    EPathSubTypeVectorIvfPqIndexImplTable = 7;
 }
 
 enum EPathState {

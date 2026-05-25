@@ -5213,6 +5213,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
+    EnableIvfPqIndex = appData->FeatureFlags.GetEnableIvfPqIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = appData->FeatureFlags.GetEnableDataErasure();

@@ -163,7 +163,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
-        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
+        NKikimrSchemeOp::TFulltextIndexDescription,
+        NKikimrSchemeOp::TVectorIndexIvfPqDescription> SpecializedIndexDescription;
 
     struct TKMeans {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
@@ -612,6 +613,11 @@ public:
                         : NTableIndex::NKMeans::DefaultOverlapRatio;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
+                    break;
+                }
+                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexIvfPqDescription: {
+                    // TODO(raydzast)
+                    Y_ENSURE(false, "Not implemented");
                     break;
                 }
                 case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {

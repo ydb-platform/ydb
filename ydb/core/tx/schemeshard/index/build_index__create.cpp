@@ -321,6 +321,16 @@ private:
             }
             break;
         }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorIvfPqIndex: {
+            if (!Self->EnableIvfPqIndex) {
+                explain = "IVF-PQ index support is disabled";
+                return false;
+            }
+
+            // TODO(raydzast)
+            Y_ENSURE(false, "Not implemented");
+            break;
+        }
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex: {
             if (!Self->EnableFulltextIndex) {
                 explain = "Fulltext index support is disabled";

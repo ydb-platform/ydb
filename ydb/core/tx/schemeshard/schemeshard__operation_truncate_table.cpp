@@ -432,6 +432,11 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq: {
+                                // TODO(raydzast)
+                                Y_ENSURE(false, "Not implemented");
+                                break;
+                            }
                             case NKikimrSchemeOp::EIndexTypeGlobalJson:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:

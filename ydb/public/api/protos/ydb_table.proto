@@ -104,6 +104,18 @@ message KMeansTreeSettings {
     optional double overlap_ratio = 5;
 }
 
+message IvfPqSettings {
+    VectorIndexSettings settings = 1;
+
+    optional uint32 subspaces = 2;
+
+    optional uint32 subspace_bits = 3;
+
+    oneof ivf_type {
+        KMeansTreeSettings kmeans_tree_settings = 4;
+    }
+}
+
 message GlobalIndex {
     GlobalIndexSettings settings = 1;
 }
@@ -121,6 +133,14 @@ message GlobalVectorKMeansTreeIndex {
     GlobalIndexSettings posting_table_settings = 2;
     GlobalIndexSettings prefix_table_settings = 4;
     KMeansTreeSettings vector_settings = 3;
+}
+
+message GlobalVectorIvfPqIndex {
+    GlobalIndexSettings level_table_settings = 1;
+    GlobalIndexSettings codebook_table_settings = 2;
+    GlobalIndexSettings posting_table_settings = 3;
+    GlobalIndexSettings prefix_table_settings = 4;
+    IvfPqSettings vector_settings = 5;
 }
 
 message FulltextIndexSettings {
@@ -359,6 +379,7 @@ message TableIndex {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
        GlobalJsonIndex global_json_index = 12;
        LocalMinMaxIndex local_min_max_index = 14;
+       GlobalVectorIvfPqIndex global_vector_ivf_pq_index = 15;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -391,6 +412,7 @@ message TableIndexDescription {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
        GlobalJsonIndex global_json_index = 14;
        LocalMinMaxIndex local_min_max_index = 15;
+       GlobalVectorIvfPqIndex global_vector_ivf_pq_index = 16;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

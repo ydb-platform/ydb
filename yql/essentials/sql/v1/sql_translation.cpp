@@ -712,8 +712,8 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name);
-        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT_PLAIN" ||
-            subType == "FULLTEXT_RELEVANCE" || subType == "JSON") {
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "VECTOR_IVF_PQ" || 
+            subType == "FULLTEXT_PLAIN" || subType == "FULLTEXT_RELEVANCE" || subType == "JSON") {
             if (isLocalIndex || indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
@@ -721,6 +721,8 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
             if (subType == "VECTOR_KMEANS_TREE") {
                 indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            } else if (subType == "VECTOR_IVF_PQ") {
+                indexes.back().Type = TIndexDescription::EType::GlobalVectorIvfPq;
             } else if (subType == "FULLTEXT_PLAIN") {
                 indexes.back().Type = TIndexDescription::EType::GlobalFulltextPlain;
             } else if (subType == "FULLTEXT_RELEVANCE") {

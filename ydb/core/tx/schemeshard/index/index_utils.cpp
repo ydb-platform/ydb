@@ -24,6 +24,12 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
             res.SequenceCount = (prefixVectorIndex ? 1 : 0);
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq: {
+            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+            res.IndexTableCount = (prefixVectorIndex ? 4 : 3);
+            res.SequenceCount = (prefixVectorIndex ? 1 : 0);
+            break;
+        }
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
             res.IndexTableCount = 1;
@@ -419,6 +425,51 @@ auto CalcVectorKmeansTreeBuildOverlapTableDescImpl(
     return implTableDesc;
 }
 
+auto CalcVectorIvfPqPostingImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns = indexDataColumns;
+    for (const auto& keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NIvfPq::PostingTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto parentColumn = implTableDesc.AddColumns();
+        parentColumn->SetName(NIvfPq::ParentColumn);
+        parentColumn->SetType(NIvfPq::ClusterIdTypeName);
+        parentColumn->SetTypeId(NIvfPq::ClusterIdType);
+        parentColumn->SetNotNull(true);
+    }
+    {
+        auto codeColumn = implTableDesc.AddColumns();
+        codeColumn->SetName(NIvfPq::CodeColumn);
+        codeColumn->SetType(NIvfPq::CodeTypeName);
+        codeColumn->SetTypeId(NIvfPq::CodeType);
+        codeColumn->SetNotNull(false);
+    }
+    // TODO(raydzast): add support for foreign
+    // if (withForeign) {
+    //     auto col = implTableDesc.AddColumns();
+    //     col->SetName(NKMeans::IsForeignColumn);
+    //     col->SetType(NTableIndex::NKMeans::IsForeignTypeName);
+    //     col->SetTypeId(NTableIndex::NKMeans::IsForeignType);
+    //     col->SetNotNull(true);
+    // }
+    implTableDesc.AddKeyColumnNames(NIvfPq::ParentColumn);
+    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
 auto CalcFulltextImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
@@ -695,6 +746,89 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeBuildOverlapTableDesc(
     std::string_view suffix)
 {
     return CalcVectorKmeansTreeBuildOverlapTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorIvfPqCodebookImplTableDesc(
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+
+    implTableDesc.SetName(NIvfPq::CodebookTable);
+
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+
+    {
+        auto parentColumn = implTableDesc.AddColumns();
+        parentColumn->SetName(NIvfPq::ParentColumn);
+        parentColumn->SetType(NIvfPq::ClusterIdTypeName);
+        parentColumn->SetTypeId(NIvfPq::ClusterIdType);
+        parentColumn->SetNotNull(true);
+    }
+    {
+        auto subspaceColumn = implTableDesc.AddColumns();
+        subspaceColumn->SetName(NIvfPq::SubspaceColumn);
+        subspaceColumn->SetType(NIvfPq::SubspaceIdxTypeName);
+        subspaceColumn->SetTypeId(NIvfPq::SubspaceIdxType);
+        subspaceColumn->SetNotNull(true);
+    }
+    {
+        auto cellColumn = implTableDesc.AddColumns();
+        cellColumn->SetName(NIvfPq::CellColumn);
+        cellColumn->SetType(NIvfPq::CellTypeName);
+        cellColumn->SetTypeId(NIvfPq::CellType);
+        cellColumn->SetNotNull(true);
+    }
+    {
+        auto centroidColumn = implTableDesc.AddColumns();
+        centroidColumn->SetName(NIvfPq::CentroidColumn);
+        centroidColumn->SetType("String");
+        centroidColumn->SetTypeId(NScheme::NTypeIds::String);
+        centroidColumn->SetNotNull(true);
+    }
+
+    implTableDesc.AddKeyColumnNames(NIvfPq::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NIvfPq::SubspaceColumn);
+    implTableDesc.AddKeyColumnNames(NIvfPq::CellColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorIvfPqLevelImplTableDesc(
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorKmeansTreeLevelImplTableDesc(baseTablePartitionConfig, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorIvfPqPostingImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorIvfPqPostingImplTableDescImpl(baseTable, baseTablePartitionConfig, indexDataColumns, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorIvfPqPostingImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorIvfPqPostingImplTableDescImpl(baseTable, baseTablePartitionConfig, indexDataColumns, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorIvfPqPrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorKmeansTreePrefixImplTableDesc(indexKeyColumns, baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(

@@ -37,6 +37,7 @@ SRCS(
     group_stat.h
     hive.h
     interconnect_channels.h
+    ivf_pq.cpp
     kmeans_clusters.cpp
     local_user_token.cpp
     local_user_token.h

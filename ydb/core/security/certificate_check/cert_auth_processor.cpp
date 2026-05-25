@@ -30,12 +30,18 @@ X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsPEM(const TStrin
 }
 
 X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsDER(const TStringBuf& cert) {
-    const ui8* start = reinterpret_cast<const ui8*>(cert.data());
-    const ui8* ptr = start;
-    const ui8* end = start + cert.size();
+    if (cert.size() > std::numeric_limits<long>::max()) {
+        return {};
+    }
 
-    auto x509 = X509Ptr{d2i_X509(NULL, &ptr, cert.size())};
-    if (x509 == nullptr || ptr != end) {
+    const ui8* certStart = reinterpret_cast<const ui8*>(cert.data());
+    const ui8* certEnd = certStart + cert.size();
+    const long certSize = cert.size();
+
+    const ui8* ptr = certStart;
+
+    auto x509 = X509Ptr{d2i_X509(NULL, &ptr, certSize)};
+    if (x509 == nullptr || ptr != certEnd) {
         return {};
     }
 
@@ -182,7 +188,7 @@ TString X509CertificateReader::GetPublicKey(const X509Ptr& x509) {
     if (rawPubkey == nullptr) {
         return "";
     }
-    const EVPPkeyPtr pubkey(rawPubkey);
+    const EVPPKeyPtr pubkey(rawPubkey);
 
     auto* bio = BIO_new(BIO_s_mem());
     if (bio == nullptr) {

@@ -9,7 +9,6 @@ X509CertificateReader::X509Ptr ReadCertificate(const std::string& certificate, E
         case ECertificateFormat::PEM: return X509CertificateReader::ReadCertAsPEM(certificate);
         case ECertificateFormat::DER: return X509CertificateReader::ReadCertAsDER(certificate);
     }
-    return nullptr;
 }
 
 } // namespace

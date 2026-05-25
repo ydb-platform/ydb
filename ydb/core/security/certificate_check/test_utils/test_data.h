@@ -1,11 +1,11 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 
 namespace NKikimr::NCertTestUtils {
 
 // ssl.com EV SSL certificate (www.ssl.com) in PEM format
-const std::string TEST_CERT_PEM =
+inline constexpr std::string_view TEST_CERT_PEM =
     "-----BEGIN CERTIFICATE-----\n"
     "MIIH/TCCBeWgAwIBAgIQaBYE3/M08XHYCnNVmcFBcjANBgkqhkiG9w0BAQsFADBy\n"
     "MQswCQYDVQQGEwJVUzEOMAwGA1UECAwFVGV4YXMxEDAOBgNVBAcMB0hvdXN0b24x\n"
@@ -53,7 +53,7 @@ const std::string TEST_CERT_PEM =
     "-----END CERTIFICATE-----\n";
 
 // The same certificate in DER format, hex-encoded
-const std::string TEST_CERT_DER_HEX =
+inline constexpr std::string_view TEST_CERT_DER_HEX =
     "308207fd308205e5a003020102021068"
     "1604dff334f171d80a735599c1417230"
     "0d06092a864886f70d01010b05003072"
@@ -186,10 +186,11 @@ const std::string TEST_CERT_DER_HEX =
 
 // Expected SHA-256 fingerprint (uppercase hex, no separators) — matches openssl output
 // openssl: 62:67:BA:62:93:3B:F9:48:2B:F3:87:09:0A:80:69:0B:89:57:25:E7:A5:4B:8B:AF:A1:46:DD:88:40:F0:80:BF
-const std::string EXPECTED_FINGERPRINT = "6267BA62933BF9482BF387090A80690B895725E7A54B8BAFA146DD8840F080BF";
+inline constexpr std::string_view EXPECTED_FINGERPRINT =
+    "6267BA62933BF9482BF387090A80690B895725E7A54B8BAFA146DD8840F080BF";
 
 // Expected public key in PEM format
-const std::string EXPECTED_PUBLIC_KEY =
+inline constexpr std::string_view EXPECTED_PUBLIC_KEY =
     "-----BEGIN PUBLIC KEY-----\n"
     "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx4XkZG29RQnO8USrLcCt\n"
     "CSBmimPLeyW0tm0Nm+mCCQ4Jx7iGB6gawlFe/aHpYpJKJEZBb3L6WiopxRw0B1KV\n"

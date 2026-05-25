@@ -11,7 +11,8 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
 
     Y_UNIT_TEST(GetCertificateFingerprint_PEM_ValidCert) {
-        std::string fingerprint = GetCertificateFingerprint(NCertTestUtils::TEST_CERT_PEM);
+        std::string fingerprint = GetCertificateFingerprint(
+            std::string(NCertTestUtils::TEST_CERT_PEM.begin(), NCertTestUtils::TEST_CERT_PEM.end()));
         UNIT_ASSERT_VALUES_EQUAL(fingerprint, NCertTestUtils::EXPECTED_FINGERPRINT);
     }
 
@@ -42,7 +43,8 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
     }
 
     Y_UNIT_TEST(GetCertificateFingerprint_PEMAndDERProduceSameResult) {
-        std::string pemFingerprint = GetCertificateFingerprint(NCertTestUtils::TEST_CERT_PEM);
+        std::string pemFingerprint = GetCertificateFingerprint(
+            std::string(NCertTestUtils::TEST_CERT_PEM.begin(), NCertTestUtils::TEST_CERT_PEM.end()));
 
         TString derBinary = HexDecode(NCertTestUtils::TEST_CERT_DER_HEX);
         std::string derFingerprint = GetCertificateFingerprint(derBinary, ECertificateFormat::DER);
@@ -51,7 +53,8 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
     }
 
     Y_UNIT_TEST(GetCertificatePublicKey_PEM_ValidCert) {
-        std::string publicKey = GetCertificatePublicKey(NCertTestUtils::TEST_CERT_PEM);
+        std::string publicKey = GetCertificatePublicKey(
+            std::string(NCertTestUtils::TEST_CERT_PEM.begin(), NCertTestUtils::TEST_CERT_PEM.end()));
         UNIT_ASSERT_VALUES_EQUAL(publicKey, NCertTestUtils::EXPECTED_PUBLIC_KEY);
     }
 
@@ -82,7 +85,8 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
     }
 
     Y_UNIT_TEST(GetCertificatePublicKey_PEMAndDERProduceSameResult) {
-        std::string pemPublicKey = GetCertificatePublicKey(NCertTestUtils::TEST_CERT_PEM);
+        std::string pemPublicKey = GetCertificatePublicKey(
+            std::string(NCertTestUtils::TEST_CERT_PEM.begin(), NCertTestUtils::TEST_CERT_PEM.end()));
 
         TString derBinary = HexDecode(NCertTestUtils::TEST_CERT_DER_HEX);
         std::string derPublicKey = GetCertificatePublicKey(derBinary, ECertificateFormat::DER);

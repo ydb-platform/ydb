@@ -61,7 +61,7 @@ struct X509CertificateReader {
 
     using X509Ptr = std::unique_ptr<X509, deleter_from_fn<&::X509_free>>;
     using BIOPtr = std::unique_ptr<BIO, deleter_from_fn<&::BIO_free>>;
-    using EVPPkeyPtr = std::unique_ptr<EVP_PKEY, deleter_from_fn<&::EVP_PKEY_free>>;
+    using EVPPKeyPtr = std::unique_ptr<EVP_PKEY, deleter_from_fn<&::EVP_PKEY_free>>;
 
     static X509Ptr ReadCertAsPEM(const TStringBuf& cert);
     static X509Ptr ReadCertAsDER(const TStringBuf& cert);

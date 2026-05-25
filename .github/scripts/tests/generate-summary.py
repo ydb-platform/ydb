@@ -1,18 +1,31 @@
 #!/usr/bin/env python3
 import argparse
 import dataclasses
+import json
+import math
 import os
 import sys
 import traceback
-import re
-import json
-from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from junit_utils import get_property_value, iter_xml_files
 from get_test_history import get_test_history
+from error_type_utils import (
+    failure_row_from_test_result,
+    get_debug_texts_from_cache,
+    is_not_launched_issue,
+    is_sanitizer_classification,
+    is_timeout_issue,
+    is_verify_classification,
+    is_xfailed_issue,
+    prefetch_text_cache_for_failure_rows,
+)
+
+_ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
+if _ANALYTICS_DIR not in sys.path:
+    sys.path.insert(0, _ANALYTICS_DIR)
+from testowners_utils import get_testowners_for_tests  # noqa: E402
 
 
 def load_owner_area_mapping():
@@ -26,39 +39,6 @@ def load_owner_area_mapping():
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
         return {}
-
-
-def is_sanitizer_issue(error_text):
-    """
-    Detect if a test failure is caused by a sanitizer.
-    Returns True if the error text contains sanitizer-specific patterns.
-    """
-    if not error_text:
-        return False
-    
-    # Sanitizer error patterns for comprehensive coverage
-    sanitizer_patterns = [
-        # Main sanitizer patterns with severity levels (covers most cases)
-        r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # Process ID prefixed patterns (format: ==PID==SEVERITY: SANITIZER)
-        r'==\d+==\s*(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)',
-        
-        # UndefinedBehaviorSanitizer runtime errors
-        r'runtime error:',
-        r'==\d+==.*runtime error:',
-        
-        # Memory leak detection (specific LeakSanitizer output)
-        r'detected memory leaks',
-        r'==\d+==.*detected memory leaks',
-    ]
-    
-    for pattern in sanitizer_patterns:
-        if re.search(pattern, error_text, re.IGNORECASE | re.MULTILINE):
-            return True
-    
-    return False
-
 
 class TestStatus(Enum):
     PASS = 0
@@ -85,25 +65,35 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    stderr_url: str = ""
+    log_url: str = ""
+    error_type: str = ""
     is_sanitizer_issue: bool = False
+    is_timeout_issue: bool = False
+    is_xfailed_issue: bool = False
+    is_verify_issue: bool = False
+    is_not_launched: bool = False
 
     @property
     def status_display(self):
-        return {
+        base = {
             TestStatus.PASS: "PASS",
             TestStatus.FAIL: "FAIL",
             TestStatus.ERROR: "ERROR",
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
+        return base
 
     @property
     def elapsed_display(self):
-        m, s = divmod(self.elapsed, 60)
+        # Round up to 1 decimal place: 10.545s -> 10.6s (ceiling to 0.1)
+        elapsed_rounded = math.ceil(self.elapsed * 10) / 10
+        m, s = divmod(elapsed_rounded, 60)
         parts = []
         if m > 0:
             parts.append(f'{int(m)}m')
-        parts.append(f"{s:.3f}s")
+        parts.append(f"{s:.1f}s")
         return ' '.join(parts)
 
     def __str__(self):
@@ -111,49 +101,103 @@ class TestResult:
 
     @property
     def full_name(self):
-        return f"{self.classname}/{self.name}"
+        if self.classname:
+            return f"{self.classname}/{self.name}"
+        return self.name
 
     @classmethod
-    def from_junit(cls, testcase):
-        classname, name = testcase.get("classname"), testcase.get("name")
-        status_description = None
-        if testcase.find("failure") is not None:
-            status = TestStatus.FAIL
-            if testcase.find("failure").text is not None:
-                status_description = testcase.find("failure").text
-        elif testcase.find("error") is not None:
-            status = TestStatus.ERROR
-            if testcase.find("error").text is not None:
-                status_description = testcase.find("error").text
-        elif get_property_value(testcase, "mute") is not None:
+    def from_build_results_report(cls, result):
+        """
+        Create TestResult from build-results-report JSON result.
+        
+        Required fields: path, status
+        Optional fields: name, subtest_name, error_type, rich-snippet, properties, links, metrics
+        """
+        # Validate required fields
+        path_str = result.get("path")
+        if path_str is None:
+            raise ValueError(f"Missing required field 'path' in result: {result}")
+        
+        status_str = result.get("status")
+        if status_str is None:
+            raise ValueError(f"Missing required field 'status' in result: {result}")
+        
+        # Extract fields
+        name_part = result.get("name")
+        subtest_name = result.get("subtest_name")
+        error_type = result.get("error_type")
+        status_description = result.get("rich-snippet")
+        properties = result.get("properties")
+        metrics = result.get("metrics")
+        
+        classname = path_str
+        if subtest_name and subtest_name.strip():
+            if name_part:
+                name = f"{name_part}.{subtest_name}"
+            else:
+                name = subtest_name
+        else:
+            name = name_part or ""
+        
+        # Status normalization (OK->PASSED, NOT_LAUNCHED->SKIPPED, mute->MUTE) is done by transform_build_results.py
+        # Map status to TestStatus enum
+        if status_str == "MUTE":
             status = TestStatus.MUTE
-            if testcase.find("skipped").text is not None:
-                status_description = testcase.find("skipped").text
-        elif testcase.find("skipped") is not None:
+        elif status_str == "FAILED":
+            status = TestStatus.FAIL
+        elif status_str == "ERROR":
+            status = TestStatus.ERROR
+        elif status_str == "SKIPPED":
             status = TestStatus.SKIP
-            if testcase.find("skipped").text is not None:
-                status_description = testcase.find("skipped").text
         else:
             status = TestStatus.PASS
-
+        
+        # Extract log URLs from links (updated by transform_build_results.py with URLs)
+        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
+        links = result.get("links", {})
+        
+        def get_link_url(link_type):
+            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
+                return links[link_type][0]  # Take first URL from array
+            return None
+        
         log_urls = {
-            'Log': get_property_value(testcase, "url:Log"),
-            'log': get_property_value(testcase, "url:log"),
-            'logsdir': get_property_value(testcase, "url:logsdir"),
-            'stdout': get_property_value(testcase, "url:stdout"),
-            'stderr': get_property_value(testcase, "url:stderr"),
+            'Log': get_link_url("Log"),
+            'log': get_link_url("log"),
+            'logsdir': get_link_url("logsdir"),
+            'stdout': get_link_url("stdout"),
+            'stderr': get_link_url("stderr"),
         }
         log_urls = {k: v for k, v in log_urls.items() if v}
+        log_url = get_link_url("log") or get_link_url("Log") or ""
 
-        elapsed = testcase.get("time")
-
+        # Get duration from result (same as upload_tests_results.py)
+        duration = result.get("duration", 0)
         try:
-            elapsed = float(elapsed)
+            elapsed = float(duration)
         except (TypeError, ValueError):
-            elapsed = 0
-            print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
-
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
+            elapsed = 0.0
+        
+        return cls(
+            classname=classname,
+            name=name,
+            status=status,
+            log_urls=log_urls,
+            elapsed=elapsed,
+            count_of_passed=0,
+            owners='',
+            status_description=status_description or '',
+            stderr_url=log_urls.get('stderr', ''),
+            log_url=log_url,
+            error_type=error_type or '',
+            # is_sanitizer_issue and is_verify_issue are set after stderr/log prefetch in gen_summary.
+            is_sanitizer_issue=False,
+            is_timeout_issue=is_timeout_issue(error_type),
+            is_xfailed_issue=is_xfailed_issue(error_type),
+            is_verify_issue=False,
+            # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
+            is_not_launched=is_not_launched_issue(error_type, status.name)
+        )
 
 
 class TestSummaryLine:
@@ -284,7 +328,6 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
-    last_n_runs = 5
     has_any_log = set()
 
     for t in rows:
@@ -303,13 +346,10 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     # get testowners
     all_tests = [test for status in status_order for test in status_test.get(status)]
         
-    dir = os.path.dirname(__file__)
-    git_root = f"{dir}/../../.."
-    codeowners = f"{git_root}/.github/TESTOWNERS"
-    get_codeowners_for_tests(codeowners, all_tests)
+    get_testowners_for_tests(all_tests)
     
     # statuses for history
-    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE, TestStatus.ERROR]
     status_for_history = [s for s in status_for_history if s in status_test]
     
     tests_names_for_history = []
@@ -321,33 +361,79 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         tests_names_for_history.append(test.full_name)
 
     try:
-        history = get_test_history(tests_names_for_history, last_n_runs, build_preset, branch)
+        # Get history for last 4 days instead of last N runs
+        history = get_test_history(tests_names_for_history, 4, build_preset, branch)
     except Exception:
         print(traceback.format_exc())
    
-    #geting count of passed tests in history for sorting
+    # Calculate success rate for each test
+    def calculate_success_rate(test_history):
+        """Calculate success rate separately for pr-check and other runs"""
+        pr_check_runs = []
+        other_runs = []
+        
+        for timestamp, run_data in test_history.items():
+            job_name = run_data.get("job_name", "").lower()
+            # Check if it's a pr-check run (common patterns: pr-check, pr_check, pr/check, etc.)
+            is_pr_check = "pr-check" in job_name or "pr_check" in job_name or "pr/check" in job_name
+            
+            if is_pr_check:
+                pr_check_runs.append(run_data)
+            else:
+                other_runs.append(run_data)
+        
+        def calc_rate(runs):
+            if not runs:
+                return None
+            passed = sum(1 for r in runs if r.get("status") == "passed")
+            total = len(runs)
+            return {
+                "rate": round(passed / total * 100, 1) if total > 0 else 0,
+                "passed": passed,
+                "total": total
+            }
+        
+        return {
+            "pr_check": calc_rate(pr_check_runs),
+            "other": calc_rate(other_runs)
+        }
+    
+    # Calculate success rates for all tests with history
+    test_success_rates = {}
+    
+    print(f"Processing history for {len(history)} tests with history data")
+    print(f"Total tests in statuses: {len(tests_in_statuses)}")
+    
     for test in tests_in_statuses:
         if test.full_name in history:
-            test.count_of_passed = len(
-                [
-                    history[test.full_name][x]
-                    for x in history[test.full_name]
-                    if history[test.full_name][x]["status"] == "passed"
-                ]
-            )
+            test_history = history[test.full_name]
+            if test_history:  # Check that history is not empty
+                rates = calculate_success_rate(test_history)
+                test_success_rates[test.full_name] = rates
+                # Also update count_of_passed for backward compatibility
+                test.count_of_passed = len(
+                    [
+                        history[test.full_name][x]
+                        for x in history[test.full_name]
+                        if history[test.full_name][x]["status"] == "passed"
+                    ]
+                )
+    
+    print(f"Calculated success rates for {len(test_success_rates)} tests")
+    
     # sorted by test name
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
-    buid_preset_params = '--build unknown_build_type'
+    build_preset_params = '--build unknown_build_type'
     if build_preset == 'release-asan' :
-        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-msan':
-        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-tsan':   
-        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+        build_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'relwithdebinfo':
-        buid_preset_params = '--build "relwithdebinfo"'
+        build_preset_params = '--build "relwithdebinfo"'
     
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
@@ -369,14 +455,73 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     
     # Load owner to area mapping
     owner_area_mapping = load_owner_area_mapping()
+    
+    # Prepare history data for JavaScript (without status_description to reduce HTML size)
+    # Store status_description separately - only for failed/error/mute entries to save space
+    history_for_js = {}
+    history_descriptions = {}  # Separate object for status descriptions (only non-empty, failed/error/mute)
+    if history:
+        for test_name, test_history in history.items():
+            history_for_js[test_name] = {}
+            history_descriptions[test_name] = {}
+            for timestamp, hist_data in test_history.items():
+                timestamp_str = str(timestamp)
+                status = hist_data.get("status", "")
+                history_for_js[test_name][timestamp_str] = {
+                    "status": status,
+                    "date": hist_data.get("datetime", ""),
+                    "commit": hist_data.get("commit", ""),
+                    "job_name": hist_data.get("job_name", ""),
+                    "job_id": hist_data.get("job_id", ""),
+                    "branch": hist_data.get("branch", "")
+                    # status_description removed to reduce HTML size - stored separately
+                }
+                # Store description separately (only for failed/error/mute and if not empty to save space)
+                desc = hist_data.get("status_description", "")
+                if desc and desc.strip() and status in ("failure", "error", "mute"):
+                    history_descriptions[test_name][timestamp_str] = desc
+    
+    # Prepare test descriptions for current tests (without embedding in HTML to reduce size)
+    # Store only for tests with errors (FAIL, ERROR, MUTE, SKIP) and if not empty
+    test_descriptions = {}
+    for test in all_tests:
+        if test.status in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP):
+            desc = test.status_description
+            if desc and desc.strip():
+                test_descriptions[test.full_name] = desc
+    
+    # Save data to separate JSON file to reduce HTML size
+    # fn is the full path to HTML file (e.g., /path/to/public_dir/try_1/ya-test.html)
+    data_file = fn.replace('.html', '_data.json')
+    data_to_save = {
+        'history_for_js': history_for_js,
+        'history_descriptions': history_descriptions,
+        'test_descriptions': test_descriptions,
+        'test_success_rates': test_success_rates
+    }
+    with open(data_file, "w", encoding="utf-8") as f:
+        json.dump(data_to_save, f, separators=(',', ':'))  # Minified JSON
+    
+    # Calculate data file URL (relative to HTML file location)
+    # JSON file is in the same directory as HTML file, so we use just the filename
+    # This way fetch() in browser will load JSON from the same directory as HTML
+    # Example: if HTML is at /path/to/try_1/ya-test.html,
+    #          JSON is at /path/to/try_1/ya-test_data.json,
+    #          and URL should be "ya-test_data.json" (relative to HTML location)
+    data_file_url = os.path.basename(data_file)
         
     content = env.get_template("summary.html").render(
         status_order=status_order,
         tests=status_test,
         has_any_log=has_any_log,
-        history=history,
+        history=history,  # Keep for template checks (test.full_name in history)
+        history_for_js={},  # Empty - will be loaded from JSON
+        history_descriptions={},  # Empty - will be loaded from JSON
+        test_descriptions={},  # Empty - will be loaded from JSON
+        test_success_rates={},  # Empty - will be loaded from JSON
+        data_file_url=data_file_url,  # URL to JSON data file
         build_preset=build_preset,
-        buid_preset_params=buid_preset_params,
+        build_preset_params=build_preset_params,
         branch=branch,
         pr_number=pr_number,
         pr_url=pr_url,
@@ -386,7 +531,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         commit_sha=github_sha
     )
 
-    with open(fn, "w") as fp:
+    with open(fn, "w", encoding="utf-8") as fp:
         fp.write(content)
 
 
@@ -406,29 +551,89 @@ def write_summary(summary: TestSummary):
         fp.close()
 
 
-def get_codeowners_for_tests(codeowners_file_path, tests_data):
-    with open(codeowners_file_path, 'r') as file:
-        data = file.read()
-        owners_odj = CodeOwners(data)
+def iter_build_results_files(path):
+    """Iterate over build-results-report JSON files"""
+    import glob
+    
+    if os.path.isfile(path):
+        files = [path]
+    else:
+        # If it's a directory, look for report.json files
+        files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
+        if not files:
+            files = glob.glob(os.path.join(path, "report.json"))
+    
+    for fn in files:
+        try:
+            with open(fn, 'r') as f:
+                report = json.load(f)
+            
+            for result in report.get("results") or []:
+                # Only include results that have a status field (indicates it's a test/check)
+                # Filtering (suite, build, configure) is done by transform_build_results.py
+                status = result.get("status")
+                if not status:
+                    continue
+                
+                yield fn, result
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
+            continue
 
-        tests_data_with_owners = []
-        for test in tests_data:
-            target_path = test.classname
-            owners = owners_odj.of(target_path)
-            test.owners = joined_owners = ";;".join(
-                [(":".join(x)) for x in owners])
-            tests_data_with_owners.append(test)
+
+def _status_string_for_error_utils(st: TestStatus) -> str:
+    """Map TestStatus to the failure|error|mute tokens used by is_failure_like_status."""
+    return {
+        TestStatus.FAIL: "failure",
+        TestStatus.ERROR: "error",
+        TestStatus.MUTE: "mute",
+    }.get(st, "")
+
+
+def _failure_row_pairs_for_summary_tests(tests):
+    """Return ``[(TestResult, FailureRow)]`` for tests with failure-like statuses."""
+    pairs = []
+    for test in tests:
+        st = getattr(test, "status", None)
+        if st is None or not getattr(st, "is_error", False):
+            continue
+        status_str = _status_string_for_error_utils(st)
+        if not status_str:
+            continue
+        pairs.append((test, failure_row_from_test_result(test, status_str)))
+    return pairs
 
 
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
+    stderr_fetch_cache = {}
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
 
-        for fn, suite, case in iter_xml_files(path):
-            test_result = TestResult.from_junit(case)
+        for fn, result in iter_build_results_files(path):
+            test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
+
+        pairs = _failure_row_pairs_for_summary_tests(summary_line.tests)
+        stderr_fetch_cache = prefetch_text_cache_for_failure_rows(
+            [fr for _, fr in pairs],
+            existing_cache=stderr_fetch_cache,
+            local_dir=public_dir,
+            local_url_prefix=public_dir_url,
+        )
+        # Set text-derived badge flags after prefetch.
+        # Each badge uses is_*_classification(snippet, stderr_text, log_text).
+        # To add a new badge: add is_<name>_issue field to TestResult (default False),
+        # then add one line here: test.is_<name>_issue = is_<name>_classification(...).
+        for test, fr in pairs:
+            stderr_text, log_text = get_debug_texts_from_cache(fr, stderr_fetch_cache)
+            test.is_sanitizer_issue = is_sanitizer_classification(
+                test.status_description, stderr_text, log_text
+            )
+            test.is_verify_issue = is_verify_classification(
+                test.status_description, stderr_text, log_text
+            )
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
@@ -502,7 +707,7 @@ def main():
     parser.add_argument('--comment_text_file', required=True)
     parser.add_argument('--pr_number', required=False, type=int, help="Pull request number")
     parser.add_argument('--workflow_run_id', required=False, help="GitHub workflow run ID")
-    parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
+    parser.add_argument("args", nargs="+", metavar="TITLE html_out build-results-report-path")
     args = parser.parse_args()
 
     if len(args.args) % 3 != 0:
@@ -537,8 +742,9 @@ def main():
         f.write('\n'.join(text))
         f.write('\n')
 
-    with open(args.status_report_file, "w") as f:
-        f.write(overall_status)
+    if args.status_report_file:
+        with open(args.status_report_file, "w") as f:
+            f.write(overall_status)
 
 
 if __name__ == "__main__":

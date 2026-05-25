@@ -38,7 +38,7 @@
 
 ### NFS {#nfs}
 
-Для выполнения резервного копирования в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запущена {{ ydb-short-name }} применяется команда `{{ ydb-cli }} export nfs`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/export-nfs.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения резервного копирования в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запущена {{ ydb-short-name }}, применяется команда `{{ ydb-cli }} export nfs`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/export-nfs.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
 Для выполнения восстановления из резервной копии, созданной в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запущена {{ ydb-short-name }}, применяется команда `{{ ydb-cli }} import nfs`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/import-nfs.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 

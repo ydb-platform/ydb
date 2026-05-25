@@ -47,7 +47,7 @@
 
 ## Выполнение выгрузки {#exec}
 
-{% include [_includes/server-export-workflow.md](_includes/server-export-workflow.md) %}
+{% include [server-export-workflow.md](_includes/server-export-workflow.md) %}
 
 ### Результат запуска {#result}
 

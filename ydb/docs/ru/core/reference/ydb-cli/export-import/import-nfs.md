@@ -47,7 +47,7 @@
 
 ## Выполнение загрузки {#exec}
 
-{% include [_includes/server-import-workflow.md](_includes/server-import-workflow.md) %}
+{% include [server-import-workflow.md](_includes/server-import-workflow.md) %}
 
 ### Результат запуска {#result}
 

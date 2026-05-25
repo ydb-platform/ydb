@@ -5,6 +5,8 @@
 #include <atomic>
 #include <map>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace NYdb::NTests {
@@ -99,6 +101,11 @@ private:
 struct TMetricKey {
     std::string Name;
     NMetrics::TLabels Labels;
+
+    TMetricKey(std::string_view name, const NMetrics::TLabels& labels)
+        : Name(name)
+        , Labels(labels)
+    {}
 
     bool operator==(const TMetricKey& other) const = default;
     bool operator<(const TMetricKey& other) const {

@@ -13,7 +13,10 @@ namespace NYdb::inline Dev {
 
 namespace {
     void ThrowContractViolation(std::string_view connectionString, std::string_view message) {
-        ythrow TContractViolation("Failed to parse connection string: \"" + connectionString + "\", error: " + message + "\n");
+        ythrow TContractViolation(
+            "Failed to parse connection string: \"" + std::string(connectionString) +
+            "\", error: " + std::string(message) + "\n"
+        );
     }
 }
 
@@ -22,13 +25,13 @@ TConnectionInfo ParseConnectionString(std::string_view connectionString) {
         ThrowContractViolation(connectionString, "empty connection string");
     }
 
-    std::string connectionStringWithScheme = connectionString;
+    std::string connectionStringWithScheme(connectionString);
 
     if (connectionString.find("://") == std::string::npos) {
         if (connectionString.starts_with("localhost:")) {
-            connectionStringWithScheme = "grpc://" + connectionString;
+            connectionStringWithScheme = "grpc://" + std::string(connectionString);
         } else {
-            connectionStringWithScheme = "grpcs://" + connectionString;
+            connectionStringWithScheme = "grpcs://" + std::string(connectionString);
         }
     }
 

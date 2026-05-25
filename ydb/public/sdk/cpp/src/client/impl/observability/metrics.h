@@ -7,13 +7,14 @@
 
 #include <chrono>
 #include <string>
+#include <string_view>
 
 namespace NYdb::inline Dev::NObservability {
 
 class TRequestMetrics {
 public:
     TRequestMetrics(NSdkStats::TStatCollector::TClientOperationStatCollector* operationCollector
-        , const std::string& requestName
+        , std::string_view requestName
         , const TLog& log
     );
     ~TRequestMetrics() noexcept;

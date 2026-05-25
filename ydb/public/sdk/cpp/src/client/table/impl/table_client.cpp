@@ -1429,7 +1429,7 @@ void TTableClient::TImpl::SetQueryCachePolicy(const TDataQuery&, const TExecData
 }
 
 std::optional<std::string> TTableClient::TImpl::GetQueryText(std::string_view queryText) {
-    return queryText;
+    return std::string(queryText);
 }
 
 std::optional<std::string> TTableClient::TImpl::GetQueryText(const TDataQuery& queryData) {

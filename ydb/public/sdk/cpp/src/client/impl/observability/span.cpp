@@ -36,7 +36,7 @@ void ParseEndpoint(std::string_view endpoint, std::string& host, int& port) {
             host = endpoint.substr(1, bracketEnd - 1);
             if (bracketEnd + 2 < endpoint.size() && endpoint[bracketEnd + 1] == ':') {
                 try {
-                    port = std::stoi(endpoint.substr(bracketEnd + 2));
+                    port = std::stoi(std::string(endpoint.substr(bracketEnd + 2)));
                 } catch (...) {}
             }
             return;
@@ -47,7 +47,7 @@ void ParseEndpoint(std::string_view endpoint, std::string& host, int& port) {
     if (pos != std::string::npos) {
         host = endpoint.substr(0, pos);
         try {
-            port = std::stoi(endpoint.substr(pos + 1));
+            port = std::stoi(std::string(endpoint.substr(pos + 1)));
         } catch (...) {}
     } else {
         host = endpoint;

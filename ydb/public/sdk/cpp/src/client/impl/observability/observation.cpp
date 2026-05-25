@@ -30,7 +30,10 @@ void TRequestObservation::End(EStatus status, std::string_view endpoint) noexcep
         std::string location;
         if (!endpoint.empty()) {
             if (auto state = DbDriverState_.lock()) {
-                const auto record = state->EndpointPool.GetEndpoint(TEndpointKey(endpoint, 0), /*onlyPreferred=*/true);
+                const auto record = state->EndpointPool.GetEndpoint(
+                    TEndpointKey(std::string(endpoint), 0),
+                    /*onlyPreferred=*/true
+                );
                 nodeId = record.NodeId;
                 location = record.Location;
             }

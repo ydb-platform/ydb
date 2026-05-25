@@ -126,7 +126,7 @@ public:
 private:
     static std::string Key(std::string_view name, const TLabels& labels) {
 
-        std::string k = name;
+        std::string k(name);
         for (const auto& [a, b] : labels) {
             k.push_back('|');
             k.append(a);

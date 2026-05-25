@@ -38,7 +38,7 @@ protected:
         return {
             {"db.system.name", "ydb"},
             {"db.namespace", kTestDbNamespace},
-            {"db.operation.name", op},
+            {"db.operation.name", std::string(op)},
             {"db.response.status_code", ToString(status)},
             {"server.address", kTestServerAddress},
             {"server.port", ToString(kTestServerPort)},
@@ -49,7 +49,7 @@ protected:
         return {
             {"db.system.name", "ydb"},
             {"db.namespace", kTestDbNamespace},
-            {"db.operation.name", op},
+            {"db.operation.name", std::string(op)},
             {"server.address", kTestServerAddress},
             {"server.port", ToString(kTestServerPort)},
         };
@@ -383,19 +383,19 @@ TEST(PoolNameResolutionTest, FallsBackToDatabaseAtEndpoint) {
 namespace {
     NMetrics::TLabels QueryPoolLabels(std::string_view poolName) {
         return {
-            {"ydb.query.session.pool.name", poolName},
+            {"ydb.query.session.pool.name", std::string(poolName)},
         };
     }
 
     NMetrics::TLabels QueryCountLabels(std::string_view poolName, std::string_view state) {
         auto labels = QueryPoolLabels(poolName);
-        labels["ydb.query.session.state"] = state;
+        labels["ydb.query.session.state"] = std::string(state);
         return labels;
     }
 
     NMetrics::TLabels TablePoolLabels(std::string_view poolName) {
         return {
-            {"ydb.table.session.pool.name", poolName},
+            {"ydb.table.session.pool.name", std::string(poolName)},
         };
     }
 } // namespace
@@ -646,7 +646,7 @@ protected:
         return {
             {"db.system.name", "ydb"},
             {"db.namespace", kTestDbNamespace},
-            {"db.operation.name", op},
+            {"db.operation.name", std::string(op)},
             {"server.address", kTestServerAddress},
             {"server.port", ToString(kTestServerPort)},
         };

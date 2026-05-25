@@ -187,15 +187,15 @@ private:
 
         {
             std::lock_guard lock(HistogramViewsLock_);
-            if (!HistogramViews_.insert(name).second) {
+            if (!HistogramViews_.insert(std::string(name)).second) {
                 return;
             }
         }
 
         auto selector = std::make_unique<sdk::metrics::InstrumentSelector>(
             sdk::metrics::InstrumentType::kHistogram,
-            name,
-            unit
+            std::string(name),
+            std::string(unit)
         );
         auto meterSelector = std::make_unique<sdk::metrics::MeterSelector>(
             std::string(NObservability::Meter::kSdkName),

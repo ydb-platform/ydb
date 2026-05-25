@@ -312,7 +312,14 @@ ELSE()
         export_s3_buffer.cpp
         export_s3_uploader.cpp
         export_ydb_dump.cpp
+        import_data_parser_csv.cpp
+        import_data_parser_parquet.cpp
+        import_parquet_s3_file.cpp
         import_s3.cpp
+    )
+    PEERDIR(
+        contrib/libs/apache/arrow
+        ydb/core/formats/arrow
     )
 ENDIF()
 

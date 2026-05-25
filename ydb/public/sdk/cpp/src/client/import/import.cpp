@@ -323,6 +323,8 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
         settingsProto.add_exclude_regexps(excludeRegexp);
     }
 
+    settingsProto.set_data_format(TProtoAccessor::GetProto(settings.DataFormat_));
+
     return Impl_->ImportFromS3(std::move(request), settings);
 }
 

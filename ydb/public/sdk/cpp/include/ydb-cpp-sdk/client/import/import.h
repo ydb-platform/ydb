@@ -36,6 +36,14 @@ enum class EIndexPopulationMode {
     Unknown = std::numeric_limits<int>::max(),
 };
 
+enum class EDataFormat {
+    Unspecified = 0,
+    Csv = 1,
+    Parquet = 2,
+
+    Unknown = std::numeric_limits<int>::max(),
+};
+
 struct TImportItemProgress {
     uint32_t PartsTotal = 0;
     uint32_t PartsCompleted = 0;
@@ -73,6 +81,7 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
     FLUENT_SETTING_DEFAULT(EIndexPopulationMode, IndexPopulationMode, EIndexPopulationMode::Build);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
+    FLUENT_SETTING_DEFAULT(EDataFormat, DataFormat, EDataFormat::Unspecified);
 };
 
 class TImportFromS3Response : public TOperation {

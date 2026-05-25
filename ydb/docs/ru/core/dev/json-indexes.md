@@ -10,7 +10,7 @@
 
 ## Обзор {#overview}
 
-JSON-индекс — глобальный **синхронный** вторичный индекс для [строковых](../core/concepts/datamodel/table.md#row-oriented-tables) таблиц. Он ускоряет фильтрацию строк по содержимому колонки типа `Json` или `JsonDocument`, если в предикате `WHERE` используются функции [JSON_EXISTS](../core/yql/reference/builtins/json.md) и [JSON_VALUE](../core/yql/reference/builtins/json.md) с выражениями [JsonPath](../core/yql/reference/builtins/json.md#jsonpath).
+JSON-индекс — глобальный **синхронный** вторичный индекс для [строковых](../concepts/datamodel/table.md#row-oriented-tables) таблиц. Он ускоряет фильтрацию строк по содержимому колонки типа `Json` или `JsonDocument`, если в предикате `WHERE` используются функции [JSON_EXISTS](../yql/reference/builtins/json.md) и [JSON_VALUE](../yql/reference/builtins/json.md) с выражениями [JsonPath](../yql/reference/builtins/json.md#jsonpath).
 
 Индекс обновляется синхронно вместе с основной таблицей и может быть выбран при выполнении запроса:
 

@@ -2244,14 +2244,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
             // JE: Cyrillic key with Cyrillic string value in equality filter
             ValidatePredicate(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))");
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))", {std::string("\x09ключ\0\3Я моп", 20)});
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))", {std::string("\x09ключ") + strSuffix("Я моп")});
 
             ValidatePredicate(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" starts with "Я")'))");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" starts with "Я")'))", {"\x09ключ"});
 
             // JV: Cyrillic key compared to Cyrillic Utf8 literal
             ValidatePredicate(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)", {std::string("\x09ключ\0\3Я моп", 20)});
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)", {std::string("\x09ключ") + strSuffix("Я моп")});
 
             // JV: Cyrillic key compared to external Utf8 parameter
             auto cyrParam = TParamsBuilder().AddParam("$p").Utf8("я").Build().Build();

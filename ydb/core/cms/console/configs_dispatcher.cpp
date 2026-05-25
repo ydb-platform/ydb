@@ -222,6 +222,7 @@ public:
         state.StorageYamlSize = StartupStorageYaml.size();
         state.YamlConfigEnabled = YamlConfigEnabled;
         state.SubscriptionsCount = SubscriptionsByKinds.size();
+        state.YamlSubscriptionsSkippedOnNonYamlUpdate = YamlSubscriptionsSkippedOnNonYamlUpdate;
         state.LastReplayUsedSeedNodesPath = LastReplayUsedSeedNodesPath;
         state.LastReplayUsedDynamicConfigPath = LastReplayUsedDynamicConfigPath;
         state.Labels = Labels;
@@ -325,6 +326,7 @@ private:
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
     bool YamlConfigEnabled = false;
+    ui64 YamlSubscriptionsSkippedOnNonYamlUpdate = 0;
 
 };
 
@@ -1157,6 +1159,20 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     }
 
     for (auto &[kinds, subscription] : SubscriptionsByKinds) {
+        // Skip YAML subscriptions early when YAML content is unchanged and there is
+        // no in-flight update that we would otherwise need to resend. The guard on
+        // UpdateInProcess must come before the reset below: an in-flight update means
+        // a previous YAML change was delivered but not yet acked; clearing it and
+        // skipping would leave CurrentConfig stale and the subscriber out-of-date if
+        // YAML later reverts to the value CurrentConfig records.
+        if (subscription->Yaml && YamlConfigEnabled
+                && !isYamlChanged && !yamlConfigTurnedOff
+                && CurrentStateFunc() != &TThis::StateInit
+                && !subscription->UpdateInProcess) {
+            ++YamlSubscriptionsSkippedOnNonYamlUpdate;
+            continue;
+        }
+
         if (subscription->UpdateInProcess) {
             subscription->UpdateInProcess = nullptr;
             subscription->SubscribersToUpdate.clear();

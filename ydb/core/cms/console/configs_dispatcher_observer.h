@@ -31,6 +31,7 @@ struct TConfigsDispatcherState {
     size_t StorageYamlSize = 0;
     bool YamlConfigEnabled = false;
     size_t SubscriptionsCount = 0;
+    ui64 YamlSubscriptionsSkippedOnNonYamlUpdate = 0;
     
     bool LastReplayUsedSeedNodesPath = false;
     bool LastReplayUsedDynamicConfigPath = false;

@@ -332,6 +332,14 @@ void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> k
     runtime.Send(new IEventHandle(aid, runtime.Sender, new TEvPrivate::TEvSetSubscription(kinds)));
 }
 
+TConfigsDispatcherState QueryState(TTenantTestRuntime &runtime, TActorId dispatcherId)
+{
+    runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStateRequest()));
+    TAutoPtr<IEventHandle> handle;
+    auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStateResponse>(handle);
+    return response->State;
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
@@ -973,6 +981,205 @@ config:
         controlValue = icb.DataShardControls.EnableLockedWrites.AtomicLoad()->Get();
         UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
     }
+
+    Y_UNIT_TEST(TestYamlSubscriptionSkippedOnNonYamlUpdate) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                if (ev->GetTypeRewrite() == TEvPrivate::EvGotNotification) {
+                    ++notifications;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        TString yamlConfig = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig);
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT(notifications > 0);
+        notifications = 0;
+
+        TActorId dispatcherId = MakeConfigsDispatcherID(runtime.GetNodeId(0));
+        const auto baseline = QueryState(runtime, dispatcherId).YamlSubscriptionsSkippedOnNonYamlUpdate;
+
+        // Push a non-YAML console kind. YAML content is unchanged, so the YAML
+        // subscriber must be skipped: no notification fires and the skip counter
+        // advances by exactly one. Wait for the dispatcher to process the CMS
+        // subscription notification before reading the counter — otherwise
+        // DispatchEvents with empty FinalEvents spins until DispatchTimeout.
+        ITEM_NET_CLASSIFIER_1.MutableConfig()->MutableNetClassifierDistributableConfig()->SetLastUpdateTimestamp(7);
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(ITEM_NET_CLASSIFIER_1));
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionNotification, 1);
+        runtime.DispatchEvents(options);
+
+        UNIT_ASSERT_VALUES_EQUAL(notifications, 0);
+        const auto after = QueryState(runtime, dispatcherId).YamlSubscriptionsSkippedOnNonYamlUpdate;
+        UNIT_ASSERT_VALUES_EQUAL(after - baseline, 1u);
+    }
+
+    Y_UNIT_TEST(TestYamlInFlightUpdatePreservedOnNonYamlChange) {
+        // Regression test: when a YAML update is in-flight (delivered but not yet
+        // acked) and a non-YAML notification arrives, the dispatcher must not drop
+        // the in-flight update. If it does, the eventual ack lands on a null
+        // UpdateInProcess (ignored), subscription->CurrentConfig stays pinned at the
+        // pre-in-flight value, and the next YAML revert to that value would be
+        // silently skipped because CompareConfigs reports no diff.
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                if (ev->GetTypeRewrite() == TEvPrivate::EvGotNotification) {
+                    ++notifications;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        TString yamlCluster1V0 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        TString yamlCluster2V1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
+
+config:
+  log_config:
+    cluster_name: cluster2
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        TString yamlCluster1V2 = R"(
+---
+metadata:
+  cluster: ""
+  version: 2
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlCluster1V0);
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        {
+            // Drain the auto-ack for the initial notification so the dispatcher's
+            // CurrentConfig is committed to cluster1 before we hold.
+            TDispatchOptions o;
+            o.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
+            runtime.DispatchEvents(o);
+        }
+
+        HoldSubscriber(runtime, subscriber);
+
+        // YAML change cluster1 -> cluster2 — leaves an unacked UpdateInProcess.
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlCluster2V1);
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        // Non-YAML console kind arrives while cluster2 is still in-flight.
+        ITEM_NET_CLASSIFIER_1.MutableConfig()->MutableNetClassifierDistributableConfig()->SetLastUpdateTimestamp(11);
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(ITEM_NET_CLASSIFIER_1));
+
+        UnholdSubscriber(runtime, subscriber);
+        {
+            // Wait for the held notification's ack to flush so CurrentConfig is
+            // committed to cluster2 before we revert.
+            TDispatchOptions o;
+            o.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
+            runtime.DispatchEvents(o);
+        }
+        notifications = 0;
+
+        // Revert YAML to cluster1 with a fresh version. The string differs so the
+        // dispatcher re-enters the notification handler; the fix ensures
+        // subscription->CurrentConfig was advanced to cluster2 by the ack above,
+        // so CompareConfigs sees a diff and the subscriber receives the revert.
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlCluster1V2);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Config.GetLogConfig().GetClusterName(), "cluster1");
+        UNIT_ASSERT(notifications >= 1);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
@@ -980,14 +1187,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
     TActorId GetRuntimeDispatcherId(TTenantTestRuntime& runtime) {
         return MakeConfigsDispatcherID(runtime.GetNodeId(0));
     }
-    
-    TConfigsDispatcherState QueryState(TTenantTestRuntime& runtime, TActorId dispatcherId) {
-        runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStateRequest()));
-        TAutoPtr<IEventHandle> handle;
-        auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStateResponse>(handle);
-        return response->State;
-    }
-    
+
     TString QueryStorageYaml(TTenantTestRuntime& runtime, TActorId dispatcherId) {
         runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStorageYamlRequest()));
         TAutoPtr<IEventHandle> handle;

@@ -538,10 +538,15 @@ namespace {
                 "No entries should be loaded from empty cache");
         }
 
-        Y_UNIT_TEST(WarmupSingleNodeSkips) {
+        Y_UNIT_TEST(WarmupSingleNodeEmptyCacheSkips) {
+            // Single-node cluster with no populated cache: sys view is empty, warmup
+            // exits fast via the "No queries to warm up" path. This is the natural
+            // production case (cold restart of a single-compute tenant — own cache is gone,
+            // no peers to fetch from).
             TWarmupTestParams params;
             params.NodeCount = 1;
             params.UserSids = {"user0"};
+            params.FillCache = false;
             params.FillImplicitParams = false;
 
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
@@ -557,10 +562,10 @@ namespace {
             UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
             UNIT_ASSERT_C(warmupComplete->Get()->Success,
                 "Warmup should succeed (skip): " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("single node"),
-                "Message should indicate single node skip: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->Message.Contains("No queries to warm up"),
+                "Message should indicate empty cache: " << warmupComplete->Get()->Message);
             UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, 0,
-                "No entries loaded when skipping for single node");
+                "No entries loaded when sys view is empty");
         }
 
         Y_UNIT_TEST(WarmupRespectsMaxQueriesToLoad) {

@@ -1041,8 +1041,12 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            if (!WarmupStarted && TableServiceConfig.GetEnableCompileCacheWarmup()) {
-                // Short polling interval until warmup starts
+            // Fast cadence (2s) until peers are seen — needed by warmup actor and
+            // .sys/compile_cache_queries scan via TEvListProxyNodesRequest.
+            // BoardLookupIntervalMs (30s default) is steady-state cadence.
+            // TODO(compile-cache-warmup-2): on single-node size() <= 1 is permanent;
+            // OR with !rm->GetInitialBoardSyncDone() to exit fast mode after first board sync.
+            if (PeerProxyNodeResources.size() <= 1) {
                 d = TDuration::Seconds(2);
             } else {
                 const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
@@ -1096,14 +1100,18 @@ public:
     }
 
     void TryStartWarmup() {
+        // Multi-node trigger for compile-cache warmup. Gated on size() > 1 because that's
+        // the same precondition that makes Handle(TEvListProxyNodesRequest) return the
+        // full peer list — required for the warmup's federated .sys/compile_cache_queries
+        // scan to see peers and not collapse to [self]-only.
+        // Single-node tenants never satisfy this; the warmup actor self-skips via RM's
+        // InitialBoardSync (see HandleCheckTopology).
         if (WarmupStarted) {
             return;
         }
-
         if (!TableServiceConfig.GetEnableCompileCacheWarmup()) {
             return;
         }
-
         if (PeerProxyNodeResources.size() > 1) {
             WarmupStarted = true;
             TVector<ui32> nodeIds;
@@ -1113,7 +1121,8 @@ public:
             }
             KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size()
                 << " proxy nodes, starting warmup");
-            Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
+            Send(MakeKqpWarmupActorId(SelfId().NodeId()),
+                new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
     }
 

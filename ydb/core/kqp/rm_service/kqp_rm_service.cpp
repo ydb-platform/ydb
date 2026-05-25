@@ -453,6 +453,18 @@ public:
         callback(std::move(resources));
     }
 
+    bool GetInitialBoardSyncDone() const override {
+        with_lock (ResourceSnapshotState->Lock) {
+            return ResourceSnapshotState->InitialBoardSyncReceived;
+        }
+    }
+
+    TVector<ui32> GetInitialBoardNodeIds() const override {
+        with_lock (ResourceSnapshotState->Lock) {
+            return ResourceSnapshotState->InitialBoardNodeIds;
+        }
+    }
+
     TKqpLocalNodeResources GetLocalResources() const override {
         TKqpLocalNodeResources result;
 

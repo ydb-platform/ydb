@@ -285,6 +285,17 @@ public:
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
 
+    // True once the kqpexch+ board lookup has received its first TEvBoardInfo.
+    // Distinguishes "snapshot empty because gossip hasn't started" from "no peers".
+    virtual bool GetInitialBoardSyncDone() const = 0;
+
+    // NodeIds of non-Dropped publishers observed at the first TEvBoardInfo. Authoritative
+    // for warm-restart (peer publishes are persistent in StateStorage). Empty until
+    // GetInitialBoardSyncDone() returns true; never mutates after capture.
+    // Note: board entries, not GetClusterResources() — the latter additionally requires
+    // per-peer interconnect TEvSendResources exchange (lags by RTT).
+    virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
+
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 
     virtual ui32 GetNodeId() {
@@ -296,6 +307,10 @@ public:
 struct TResourceSnapshotState {
     std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> Snapshot;
     TMutex Lock;
+    // Set on first TEvBoardInfo, never resets. See IKqpResourceManager::GetInitialBoardSyncDone.
+    bool InitialBoardSyncReceived = false;
+    // Captured once with InitialBoardSyncReceived. See IKqpResourceManager::GetInitialBoardNodeIds.
+    TVector<ui32> InitialBoardNodeIds;
 };
 
 struct TEvKqpResourceInfoExchanger {

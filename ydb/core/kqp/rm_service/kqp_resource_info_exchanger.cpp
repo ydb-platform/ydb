@@ -477,6 +477,22 @@ private:
 
         auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->InfoEntries);
 
+        with_lock (ResourceSnapshotState->Lock) {
+            if (!ResourceSnapshotState->InitialBoardSyncReceived) {
+                // Capture publishers from first quorum read; never updated by later
+                // TEvBoardInfo / TEvBoardInfoUpdate (consumers want boot-time snapshot).
+                TVector<ui32> initialNodeIds;
+                initialNodeIds.reserve(ev->Get()->InfoEntries.size());
+                for (const auto& [publisherId, entry] : ev->Get()->InfoEntries) {
+                    if (!entry.Dropped) {
+                        initialNodeIds.push_back(publisherId.NodeId());
+                    }
+                }
+                ResourceSnapshotState->InitialBoardNodeIds = std::move(initialNodeIds);
+                ResourceSnapshotState->InitialBoardSyncReceived = true;
+            }
+        }
+
         if (!nodeIds.empty()) {
             SendInfos({SelfId().NodeId()}, true, std::move(nodeIds));
         }

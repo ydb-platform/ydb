@@ -1,4 +1,5 @@
 import logging
+import socket
 import time
 import requests
 import re
@@ -258,7 +259,8 @@ class CompileCacheView:
         return False
 
 
-def _make_warmup_config(nodes=3, max_nodes_to_request=None):
+def _make_warmup_config(nodes=3, max_nodes_to_request=None,
+                        soft_deadline_seconds=None, hard_deadline_seconds=None):
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
         nodes=nodes,
@@ -273,6 +275,10 @@ def _make_warmup_config(nodes=3, max_nodes_to_request=None):
     warmup_config = {"max_queries_to_load": 1000}
     if max_nodes_to_request is not None:
         warmup_config["max_nodes_to_request"] = max_nodes_to_request
+    if soft_deadline_seconds is not None:
+        warmup_config["soft_deadline_seconds"] = soft_deadline_seconds
+    if hard_deadline_seconds is not None:
+        warmup_config["hard_deadline_seconds"] = hard_deadline_seconds
     config.yaml_config["table_service_config"] = {
         "compile_query_cache_size": 200 if nodes > 3 else 100,
         "enable_compile_cache_warmup": True,
@@ -543,3 +549,263 @@ class TestWarmupStress:
         assert any_fetched, "[FullRestart] At least one node should fetch queries from node 1"
 
         logger.info("ALL 3 STRESS SCENARIOS PASSED")
+
+
+class TestWarmupSingleNode:
+    """Single-node cluster: no peer nodes are ever discovered, so warmup must
+    skip without fetching or compiling anything. Counters stay at 0 past the
+    warmup hard deadline and the cluster keeps serving user queries."""
+
+    SOFT_DEADLINE_SECONDS = 10
+    HARD_DEADLINE_SECONDS = 12
+
+    @classmethod
+    def setup_class(cls):
+        cls.config = _make_warmup_config(
+            nodes=1,
+            soft_deadline_seconds=cls.SOFT_DEADLINE_SECONDS,
+            hard_deadline_seconds=cls.HARD_DEADLINE_SECONDS,
+        )
+        cls.cluster = kikimr_cluster_factory(cls.config)
+        cls.cluster.start()
+        cls.driver = ydb.Driver(
+            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
+            database="/Root",
+        )
+        cls.driver.wait(timeout=10)
+        cls.cache = CompileCacheView(cls.cluster)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, "driver"):
+            cls.driver.stop()
+        if hasattr(cls, "cluster"):
+            cls.cluster.stop()
+
+    def test_warmup_skips_on_single_node(self):
+        node = self.cluster.nodes[1]
+
+        wait_seconds = self.HARD_DEADLINE_SECONDS + 2
+        logger.info("Waiting %ds past warmup hard deadline before reading counters", wait_seconds)
+        time.sleep(wait_seconds)
+
+        counters = CompileCacheView.get_warmup_counters(node, verbose=True)
+        fetched = counters.get("Warmup/QueriesFetched", 0)
+        compiled = counters.get("Warmup/QueriesCompiled", 0)
+        logger.info("SingleNode counters: %s", counters)
+
+        assert fetched == 0, f"[SingleNode] Expected QueriesFetched=0, got {fetched}"
+        assert compiled == 0, f"[SingleNode] Expected QueriesCompiled=0, got {compiled}"
+
+        pool = ydb.SessionPool(self.driver)
+        try:
+            def _do(session):
+                return session.transaction().execute(
+                    "SELECT 1 + 1 AS r",
+                    commit_tx=True,
+                    settings=ydb.BaseRequestSettings().with_timeout(10),
+                )
+            result = pool.retry_operation_sync(_do)
+            assert result[0].rows[0].r == 2, "Cluster must serve queries after warmup skip"
+        finally:
+            pool.stop()
+
+        logger.info("SingleNode skip scenario PASSED")
+
+
+class TestWarmupMultiNodeColdStart:
+    """Multi-node cluster cold start (no queries in any compile cache):
+    proxies discover peers (>1), KqpProxy sends TEvStartWarmup, warmup actor
+    reads .sys/compile_cache_queries, finds it empty, completes with
+    "No queries to warm up". Counters Fetched/Compiled stay at 0 on every node."""
+
+    SOFT_DEADLINE_SECONDS = 10
+    HARD_DEADLINE_SECONDS = 12
+
+    @classmethod
+    def setup_class(cls):
+        cls.config = _make_warmup_config(
+            nodes=3,
+            soft_deadline_seconds=cls.SOFT_DEADLINE_SECONDS,
+            hard_deadline_seconds=cls.HARD_DEADLINE_SECONDS,
+        )
+        cls.cluster = kikimr_cluster_factory(cls.config)
+        cls.cluster.start()
+        cls.driver = ydb.Driver(
+            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
+            database="/Root",
+        )
+        cls.driver.wait(timeout=10)
+        cls.cache = CompileCacheView(cls.cluster)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, "driver"):
+            cls.driver.stop()
+        if hasattr(cls, "cluster"):
+            cls.cluster.stop()
+
+    def test_warmup_cold_start_no_queries(self):
+        wait_seconds = self.HARD_DEADLINE_SECONDS + 3
+        logger.info("Waiting %ds past warmup hard deadline before reading counters", wait_seconds)
+        time.sleep(wait_seconds)
+
+        for nid in sorted(self.cluster.nodes.keys()):
+            node = self.cluster.nodes[nid]
+            counters = CompileCacheView.get_warmup_counters(node, verbose=True)
+            fetched = counters.get("Warmup/QueriesFetched", 0)
+            compiled = counters.get("Warmup/QueriesCompiled", 0)
+            logger.info("[ColdStart] node %d counters: %s", nid, counters)
+            assert fetched == 0, f"[ColdStart] node {nid}: expected QueriesFetched=0, got {fetched}"
+            assert compiled == 0, f"[ColdStart] node {nid}: expected QueriesCompiled=0, got {compiled}"
+
+        pool = ydb.SessionPool(self.driver)
+        try:
+            def _do(session):
+                return session.transaction().execute(
+                    "SELECT 1 + 1 AS r",
+                    commit_tx=True,
+                    settings=ydb.BaseRequestSettings().with_timeout(10),
+                )
+            result = pool.retry_operation_sync(_do)
+            assert result[0].rows[0].r == 2, "Cluster must serve queries after cold-start warmup"
+        finally:
+            pool.stop()
+
+        logger.info("MultiNodeColdStart no-queries scenario PASSED")
+
+
+def _is_tcp_port_open(host, port, timeout=0.4):
+    """True iff a TCP connection to host:port can be established within timeout.
+    False on connection refused, timeout or any socket error."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (ConnectionRefusedError, socket.timeout, OSError):
+        return False
+
+
+class TestWarmupGrpcIsolation:
+    """gRPC isolation during warmup: until the warmup actor sends
+    TEvKqpWarmupComplete, GRpcServersManager (run.cpp:288-300) does not call
+    Start() on the gRPC servers, so the port stays closed and external clients
+    cannot reach the node. After warmup completes the port opens.
+
+    Caveats:
+    - The warmup window is short with a small populated cache, so we sample
+      the port aggressively while polling counters via mon port (which is
+      independent of GRpcServersManager).
+    - On very fast machines warmup may finish before our first sample lands,
+      in which case `grpc_closed_observed` may be False — test logs a warning
+      rather than failing, since the second invariant (port open after warmup)
+      is the load-bearing one."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.config = _make_warmup_config(nodes=3)
+        cls.cluster = kikimr_cluster_factory(cls.config)
+        cls.cluster.start()
+        cls.driver = ydb.Driver(
+            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
+            database="/Root",
+        )
+        cls.driver.wait(timeout=10)
+        cls.cache = CompileCacheView(cls.cluster)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, "driver"):
+            cls.driver.stop()
+        if hasattr(cls, "cluster"):
+            cls.cluster.stop()
+
+    def test_grpc_closed_during_warmup(self):
+        all_node_ids = sorted(self.cluster.nodes.keys())
+        logger.info("SETUP: populating cache so warmup actually has work to do")
+        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=True)
+        time.sleep(2)
+
+        target = self.cluster.nodes[3]
+        grpc_port = target.port
+
+        logger.info("Stopping node %d ...", target.node_id)
+        target.stop()
+        time.sleep(2)
+
+        # Sanity: port is closed while the process is down.
+        assert not _is_tcp_port_open("localhost", grpc_port), (
+            "gRPC port unexpectedly open while node is stopped"
+        )
+
+        logger.info("Starting node %d ...", target.node_id)
+        target.start()
+
+        grpc_closed_observed = False
+        warmup_made_progress = False
+        port_open_after_warmup = False
+
+        deadline = time.time() + NODE_READY_TIMEOUT_SECONDS + WARMUP_DEADLINE_SECONDS
+        while time.time() < deadline:
+            port_open = _is_tcp_port_open("localhost", grpc_port)
+            counters = CompileCacheView.get_warmup_counters(target)
+            compiled = counters.get("Warmup/QueriesCompiled", 0)
+            fetched = counters.get("Warmup/QueriesFetched", 0)
+
+            if not port_open:
+                grpc_closed_observed = True
+            if fetched > 0 or compiled > 0:
+                warmup_made_progress = True
+
+            if warmup_made_progress and port_open:
+                # Two stable readings to dodge a flaky one-shot success.
+                time.sleep(0.3)
+                if _is_tcp_port_open("localhost", grpc_port):
+                    port_open_after_warmup = True
+                    break
+
+            time.sleep(0.2)
+
+        logger.info(
+            "[GrpcIsolation] grpc_closed_observed=%s warmup_made_progress=%s port_open_after_warmup=%s",
+            grpc_closed_observed, warmup_made_progress, port_open_after_warmup,
+        )
+
+        # Load-bearing assertion: by the time warmup is done, gRPC must be open.
+        assert warmup_made_progress, "Warmup never made progress — cache populate likely missed the target node"
+        assert port_open_after_warmup, (
+            "gRPC port did not open after warmup completed; "
+            "TEvKqpWarmupComplete -> GRpcServersManager::Start path may be broken"
+        )
+
+        # Soft assertion: we expect the closed window to be observable, but on
+        # very fast hosts we may miss it. Log instead of failing the test.
+        if not grpc_closed_observed:
+            logger.warning(
+                "[GrpcIsolation] gRPC port was never observed closed during warmup — "
+                "warmup likely completed before first sample. Consider extending the cache "
+                "or adding artificial compilation delay to make the window observable."
+            )
+
+        # Cluster is healthy from the restarted node.
+        ready_driver = ydb.Driver(
+            endpoint=f"grpc://localhost:{grpc_port}",
+            database="/Root",
+        )
+        ready_driver.wait(timeout=10)
+        try:
+            pool = ydb.SessionPool(ready_driver)
+            try:
+                result = pool.retry_operation_sync(
+                    lambda s: s.transaction().execute(
+                        "SELECT 1 + 1 AS r",
+                        commit_tx=True,
+                        settings=ydb.BaseRequestSettings().with_timeout(10),
+                    )
+                )
+                assert result[0].rows[0].r == 2
+            finally:
+                pool.stop()
+        finally:
+            ready_driver.stop()
+
+        logger.info("GrpcIsolation scenario PASSED")

@@ -1639,9 +1639,11 @@ bool TKqpStatisticsTransformer::AfterLambdas(const TExprNode::TPtr& input, TExpr
     return matched;
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx, const NMiniKQL::IFunctionRegistry* funcRegistry) {
-    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx, funcRegistry));
+} // anonymous namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const NOpt::TKqpProviderContext& pctx) {
+    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
 }
 
 } // namespace NKikimr::NKqp

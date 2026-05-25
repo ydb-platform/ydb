@@ -344,7 +344,7 @@ private:
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
             .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem), "ColumnStatisticsRequester")
-            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx, &funcRegistry), "Statistics")
+            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize");
@@ -382,16 +382,8 @@ private:
             .AddTypeAnnotationTransformer()
             .AddPostTypeAnnotation()
             .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
-            .Add(CreateKqpTxsHashFuncPropagateTransformer(
-                    CreateTypeAnnotationTransformer(
-                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), *typesCtx
-                    ),
-                    *typesCtx,
-                    Config
-                ),
-                "HashFuncPropagate"
-            )
-            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx, &funcRegistry), "Statistics")
+            .Add(CreateKqpTxsHashFuncPropagateTransformer(*typesCtx, Config), "HashFuncPropagate")
+            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Build(false);
 
         auto physicalPeepholeTransformer = TTransformationPipeline(typesCtx)

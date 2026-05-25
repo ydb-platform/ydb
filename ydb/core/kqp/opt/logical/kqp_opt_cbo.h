@@ -2,7 +2,7 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
-
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 
 namespace NKikimr::NKqp::NOpt {

@@ -543,6 +543,7 @@ namespace Tests {
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
 #define MERGE_CFG_FROM_SETTINGS(cfg) MERGE_APP_CFG_FROM(cfg, Settings->cfg)
+#define ASSIGN_CFG_FROM_APP_CFG(cfg) appData.cfg = Settings->AppConfig->Get ## cfg()
             MERGE_CFG_FROM_SETTINGS(AuthConfig);
             MERGE_APP_CFG_FROM(StreamingConfig, Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
             MERGE_CFG_FROM_APP_CFG(PQConfig);
@@ -579,9 +580,10 @@ namespace Tests {
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
             MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
-            appData.AuditConfig = Settings->AppConfig->GetAuditConfig();
+            ASSIGN_CFG_FROM_APP_CFG(AuditConfig);
 #undef MERGE_APP_CFG_FROM
 #undef MERGE_CFG_FROM_APP_CFG
+#undef ASSIGN_CFG_FROM_APP_CFG
 
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();

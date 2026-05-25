@@ -13,6 +13,8 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
+#include <util/string/vector.h>
+
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_NOTICE
 #error log macro definition clash
 #endif
@@ -1180,6 +1182,229 @@ public:
     }
 };
 
+class TInitiaiteShrinkPool : public TActorBootstrapped<TInitiaiteShrinkPool> {
+private:
+    using TBase = TActorBootstrapped<TInitiaiteShrinkPool>;
+
+    TActorId OwnerId;
+    TTenantsManager::TTenant::TPtr Tenant;
+    TTenantsManager::TStoragePool::TPtr Pool;
+    ui64 HiveId = 72057594037968897;
+    TActorId HivePipe;
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    {
+        return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
+    }
+
+    TInitiaiteShrinkPool(TActorId ownerId,
+                         TTenantsManager::TTenant::TPtr tenant,
+                         TTenantsManager::TStoragePool::TPtr pool)
+        : OwnerId(ownerId)
+        , Tenant(tenant)
+        , Pool(pool)
+    {
+    }
+
+    void Bootstrap(const TActorContext &ctx) {
+        BLOG_D("TInitiaiteShrinkPool(" << Pool->Config.GetName() << ")::Bootstrap");
+
+        Become(&TThis::StateWork);
+        SendRequest(ctx);
+    }
+
+    void SendRequest(const TActorContext &ctx) {
+        OpenHivePipe(ctx);
+
+        auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
+        auto& record = request->Record;
+        record.MutableSubDomain()->SetSchemeShard(Tenant->DomainId.OwnerId);
+        record.MutableSubDomain()->SetPathId(Tenant->DomainId.LocalPathId);
+        record.SetStoragePool(Pool->Config.GetName());
+        record.SetNewSize(Pool->Config.GetNumGroups());
+        record.SetVersion(Tenant->SubdomainVersion);
+
+        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
+                    "Send TEvHive::TEvShrinkStoragePool: "
+                    << request->Record.ShortDebugString());
+
+        NTabletPipe::SendData(ctx, HivePipe, request.release());
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvHive::TEvShrinkStoragePoolReply, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+
+        default:
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
+                   ev->GetTypeRewrite(), ev->ToString().data());
+            break;
+        }
+    }
+
+    void Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev, const TActorContext& ctx) {
+        switch (ev->Get()->Record.GetStatus()) {
+            case NKikimrProto::OK:
+                ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolShrinking(Tenant, Pool), ctx);
+                break;
+            default:
+                LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                            "TInitiaiteShrinkPool got error reply"
+                            << ", reply# " << ev->Get()->Record.ShortDebugString());
+                ReplyAndDie(new TTenantsManager::TEvPrivate::TEvPoolFailed(Tenant, Pool, ev->Get()->Record.GetError()), ctx);
+                break;
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            OnPipeDestroyed(ctx);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext& ctx) {
+        OnPipeDestroyed(ctx);
+    }
+
+    void OnPipeDestroyed(const TActorContext &ctx) {
+        if (HivePipe) {
+            NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), HivePipe);
+        }
+        SendRequest(ctx);
+    }
+
+    void OpenHivePipe(const TActorContext &ctx) {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig);
+        HivePipe = ctx.Register(pipe);
+    }
+
+    void ReplyAndDie(IEventBase *resp,
+                     const TActorContext &ctx)
+    {
+        ctx.Send(OwnerId, resp);
+        Die(ctx);
+    }
+};
+
+class TDecommitGroups : public TActorBootstrapped<TDecommitGroups> {private:
+    using TBase = TActorBootstrapped<TDecommitGroups>;
+
+    TActorId OwnerId;
+    TTenantsManager::TTenant::TPtr Tenant;
+    TTenantsManager::TStoragePool::TPtr Pool;
+    TVector<ui32> Groups;
+    TVector<ui32> SuccessGroups;
+    size_t GroupsDone = 0;
+    TActorId BSControllerPipe;
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType()
+    {
+        return NKikimrServices::TActivity::CMS_TENANTS_MANAGER;
+    }
+
+    TDecommitGroups(TActorId ownerId,
+                    TTenantsManager::TTenant::TPtr tenant,
+                    TTenantsManager::TStoragePool::TPtr pool,
+                    TVector<ui32> groups)
+        : OwnerId(ownerId)
+        , Tenant(tenant)
+        , Pool(pool)
+        , Groups(std::move(groups))
+    {
+        SuccessGroups.reserve(Groups.size());
+    }
+
+    void Bootstrap(const TActorContext &ctx) {
+        Become(&TThis::StateWork);
+        SendRequests(ctx);
+    }
+
+    void SendRequests(const TActorContext &ctx) {
+        OpenPipe(ctx);
+
+        for (size_t i = 0; i < Groups.size(); ++i) {
+            LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send decommit request for group " << Groups[i]);
+            NTabletPipe::SendData(ctx, BSControllerPipe, new TEvBlobStorage::TEvControllerGroupDecommittedNotify(Groups[i], true), 0, i);
+        }
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+
+        default:
+            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
+                   ev->GetTypeRewrite(), ev->ToString().data());
+            break;
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr& ev, const TActorContext& ctx) {
+        auto cookie = ev->Cookie;
+        if (cookie >= Groups.size()) {
+            Y_DEBUG_ABORT_UNLESS(false, "Got invalid cookie %" PRIu64, cookie);
+            return;
+        }
+        if (auto group = std::exchange(Groups[cookie], 0)) {
+            ++GroupsDone;
+            switch (ev->Get()->Record.GetStatus()) {
+                case NKikimrProto::OK:
+                case NKikimrProto::ALREADY:
+                    SuccessGroups.push_back(group);
+                    break;
+                default:
+                    LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
+                                "TDecommitGroups got error reply"
+                                << ", reply# " << ev->Get()->Record.ShortDebugString());
+                    break;
+            }
+        }
+        if (GroupsDone == Groups.size()) {
+            ReplyAndDie(ctx);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            OnPipeDestroyed(ctx);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext& ctx) {
+        OnPipeDestroyed(ctx);
+    }
+
+    void OnPipeDestroyed(const TActorContext &ctx) {
+        if (BSControllerPipe) {
+            NTabletPipe::CloseAndForgetClient(TActorIdentity(ctx.SelfID), BSControllerPipe);
+        }
+        SendRequests(ctx);
+    }
+
+    void OpenPipe(const TActorContext &ctx) {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
+        auto tid = MakeBSControllerID();
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig);
+        BSControllerPipe = ctx.Register(pipe);
+    }
+
+    void ReplyAndDie(const TActorContext &ctx)
+    {
+        ctx.Send(OwnerId, new TTenantsManager::TEvPrivate::TEvGroupsDecommitted(Tenant, Pool, std::move(SuccessGroups)));
+        TBase::Die(ctx);
+    }
+
+};
+
 THashMap<ui64, TString> TSubDomainManip::IssuesMap;
 
 } // anonymous namespace
@@ -2034,7 +2259,9 @@ void TTenantsManager::OnTenantSlotBrokerPipeDestroyed(const TActorContext &ctx)
 
 void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorContext &ctx)
 {
+    BLOG_TRACE("AllocateTenantPools");
     if (!tenant->HasPoolsToCreate()) {
+        BLOG_TRACE("AllocateTenantPools - no pools to create");
         if (tenant->State == TTenant::CREATING_POOLS)
             TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::CREATING_SUBDOMAIN), ctx);
         return;
@@ -2046,8 +2273,14 @@ void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorCont
         return;
 
     for (auto &pr : tenant->StoragePools) {
-        if (pr.second->State != TStoragePool::ALLOCATED && !pr.second->Worker)
-            pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::ALLOCATE));
+        BLOG_TRACE("AllocateTenantPools: " << pr.first << " " << pr.second->State << " " << pr.second->AllocatedNumGroups << " " << pr.second->GetGroups() << " " << pr.second->Worker);
+        if (pr.second->State != TStoragePool::ALLOCATED && !pr.second->Worker) {
+            if (pr.second->AllocatedNumGroups > pr.second->GetGroups() || pr.second->State == TStoragePool::SHRINKING) {
+                pr.second->Worker = ctx.RegisterWithSameMailbox(new TInitiaiteShrinkPool(SelfId(), tenant, pr.second));
+            } else {
+                pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::ALLOCATE));
+            }
+        }
     }
 }
 
@@ -2671,12 +2904,15 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
     auto poolRowset = db.Table<Schema::TenantPools>().Range().Select<Schema::TenantPools::TColumns>();
     auto slotRowset = db.Table<Schema::TenantUnits>().Range().Select<Schema::TenantUnits::TColumns>();
     auto registeredRowset = db.Table<Schema::RegisteredUnits>().Range().Select<Schema::RegisteredUnits::TColumns>();
+    auto decommitRowset = db.Table<Schema::DecommitedGroups>().Range().Select<Schema::DecommitedGroups::TColumns>();
 
     if (!tenantRowset.IsReady()
         || !removedRowset.IsReady()
         || !poolRowset.IsReady()
         || !slotRowset.IsReady()
-        || !registeredRowset.IsReady())
+        || !registeredRowset.IsReady()
+        || !decommitRowset.IsReady()
+        )
         return false;
 
     while (!tenantRowset.EndOfSet()) {
@@ -2871,6 +3107,14 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
         if (!registeredRowset.Next())
             return false;
+    }
+
+    while (!decommitRowset.EndOfSet()) {
+        // TODO: remove old entries
+        DecommitedGroups.insert(decommitRowset.GetValue<Schema::DecommitedGroups::GroupId>());
+        if (!decommitRowset.EndOfSet()) {
+            return false;
+        }
     }
 
     for (auto &pr: Tenants) {
@@ -3471,6 +3715,17 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolAllocated::TPtr &ev, const TActo
                            ctx);
 }
 
+void TTenantsManager::Handle(TEvPrivate::TEvPoolShrinking::TPtr &ev, const TActorContext &ctx)
+{
+    auto tenant = ev->Get()->Tenant;
+    auto pool = ev->Get()->Pool;
+    pool->Worker = TActorId();
+
+    TxProcessor->ProcessTx(CreateTxUpdatePoolState(tenant, pool, ev->Sender,
+                                                   TStoragePool::SHRINKING),
+                           ctx);
+}
+
 void TTenantsManager::Handle(TEvPrivate::TEvPoolFailed::TPtr &ev, const TActorContext &ctx)
 {
     auto tenant = ev->Get()->Tenant;
@@ -3682,6 +3937,15 @@ void TTenantsManager::Handle(TEvPrivate::TEvSubdomainRemoved::TPtr &ev, const TA
     TxProcessor->ProcessTx(CreateTxRemoveComputationalUnits(tenant), ctx);
 }
 
+void TTenantsManager::Handle(TEvPrivate::TEvGroupsDecommitted::TPtr &ev, const TActorContext &ctx)
+{
+    auto tenant = ev->Get()->Tenant;
+    auto pool = ev->Get()->Pool;
+    auto groups = std::move(ev->Get()->Groups);
+
+    TxProcessor->ProcessTx(CreateDecommitGroups(tenant, pool, groups), ctx);
+}
+
 void TTenantsManager::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
 {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
@@ -3751,6 +4015,28 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
 
     if (tenant->State == TTenant::REMOVING_UNITS)
         TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::REMOVING_POOLS), ctx);
+}
+
+void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const TActorContext &ctx)
+{
+    const auto &poolName = ev->Get()->Record.GetStoragePool();
+    const auto split = SplitString(poolName, ":");
+    Y_ABORT_UNLESS(split.size() == 2);
+    const auto &tenantName = split[0];
+    const auto &poolKind = split[1];
+    auto tenant = GetTenant(tenantName);
+    if (!tenant) {
+        return;
+    }
+    auto pool = tenant->StoragePools[poolKind];
+    if (!pool) {
+        return;
+    }
+
+    auto newGroups = ev->Get()->Record.GetGroupsToRemove() | std::views::filter([&](ui32 group) { return !DecommitedGroups.contains(group); });
+    TVector<ui32> groups(newGroups.begin(), newGroups.end());
+
+    ctx.RegisterWithSameMailbox(new TDecommitGroups(SelfId(), tenant, pool, std::move(groups)));
 }
 
 TString MakeStoragePoolName(const TString &tenantName, const TString &poolTypeName)

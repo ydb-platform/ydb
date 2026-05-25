@@ -517,8 +517,11 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerGroupDecommittedNotify, EvControllerGroupDecommittedNotify> {
         TEvControllerGroupDecommittedNotify() = default;
 
-        TEvControllerGroupDecommittedNotify(ui32 groupId) {
+        TEvControllerGroupDecommittedNotify(ui32 groupId, bool force = false) {
             Record.SetGroupId(groupId);
+            if (force) {
+                Record.SetForce(true);
+            }
         }
     };
 

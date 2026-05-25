@@ -4110,6 +4110,7 @@ void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
     BLOG_D("ShrinkPool - done");
     auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
     ev->Record.SetStoragePool(pool.Name);
+    ev->Record.MutableGroupsToRemove()->Assign(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
     if (AreWeRootHive()) {
         SendToConsolePipe(ev.release());
     } else {

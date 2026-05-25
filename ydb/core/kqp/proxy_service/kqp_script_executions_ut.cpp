@@ -104,6 +104,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings->SetEnableSecureScriptExecutions(secureScriptExecutions);
         ServerSettings->SetGrpcPort(GrpcPort);
         ServerSettings->SetAppConfig(appConfig);
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
 

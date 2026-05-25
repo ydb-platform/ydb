@@ -24,6 +24,7 @@ SRCS(
 
 PEERDIR(
     ydb/apps/version
+    ydb/core/audit/audit_config
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/public/sdk/cpp/src/library/grpc/client

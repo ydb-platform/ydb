@@ -139,7 +139,7 @@ out << "fetch('/api/data')\n";
 
 ```cpp
 out << "<a href='docs'>docs</a>\n";
-out << "<button type='submit' formaction='../../../get_blob'>Query</button>\n";
+out << "<button type='submit' formaction='get_blob'>Query</button>\n";
 out << "fetch('api/data')\n";
 ```
 

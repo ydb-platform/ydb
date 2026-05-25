@@ -126,6 +126,7 @@ ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
 ydb/tests/functional/config test_config_with_metadata.py.TestKiKiMRStoreConfigDir.test_config_stored_in_config_store
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealOverrides.test_state_storage
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/secrets test_secrets.py.test_alter_without_grants
 ydb/tests/functional/secrets test_secrets.py.test_create_without_grants

@@ -239,6 +239,10 @@ private:
                 << ") must be < DurationSeconds (" << Config.GetDurationSeconds() << ")";
             return;
         }
+        if (Config.GetTabletConfig().GetDisableReplication() && Config.GetReadRatio() > 0) {
+            ErrorReason = "DisableReplication is incompatible with ReadRatio > 0 (reads require flush)";
+            return;
+        }
 
         IoSizeBytes = static_cast<ui32>(ioBytes);
         BytesPerDbg = static_cast<ui64>(TargetNumVChunks) * VChunkSizeBytes;

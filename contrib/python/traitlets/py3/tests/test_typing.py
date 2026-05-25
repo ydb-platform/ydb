@@ -407,27 +407,27 @@ def mypy_tcp_typing() -> None:
         otcp = TCPAddress(None, allow_none=True)
 
     t = T()
-    reveal_type(t.tcp)  # R: Tuple[builtins.str, builtins.int]
+    reveal_type(t.tcp)  # R: tuple[builtins.str, builtins.int]
     reveal_type(
-        T.tcp  # R: traitlets.traitlets.TCPAddress[Tuple[builtins.str, builtins.int], Tuple[builtins.str, builtins.int]]
+        T.tcp  # R: traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int], tuple[builtins.str, builtins.int]]
     )
     reveal_type(
-        T.tcp.tag(  # R:traitlets.traitlets.TCPAddress[Tuple[builtins.str, builtins.int], Tuple[builtins.str, builtins.int]]
+        T.tcp.tag(  # R:traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int], tuple[builtins.str, builtins.int]]
             sync=True
         )
     )
-    reveal_type(t.otcp)  # R: Union[Tuple[builtins.str, builtins.int], None]
+    reveal_type(t.otcp)  # R: Union[tuple[builtins.str, builtins.int], None]
     reveal_type(
-        T.otcp  # R: traitlets.traitlets.TCPAddress[Union[Tuple[builtins.str, builtins.int], None], Union[Tuple[builtins.str, builtins.int], None]]
+        T.otcp  # R: traitlets.traitlets.TCPAddress[Union[tuple[builtins.str, builtins.int], None], Union[tuple[builtins.str, builtins.int], None]]
     )
     reveal_type(
-        T.otcp.tag(  # R: traitlets.traitlets.TCPAddress[Union[Tuple[builtins.str, builtins.int], None], Union[Tuple[builtins.str, builtins.int], None]]
+        T.otcp.tag(  # R: traitlets.traitlets.TCPAddress[Union[tuple[builtins.str, builtins.int], None], Union[tuple[builtins.str, builtins.int], None]]
             sync=True
         )
     )
-    t.tcp = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Tuple[str, int]")  [assignment]
-    t.otcp = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Optional[Tuple[str, int]]")  [assignment]
-    t.tcp = None  # E: Incompatible types in assignment (expression has type "None", variable has type "Tuple[str, int]")  [assignment]
+    t.tcp = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "tuple[str, int]")  [assignment]
+    t.otcp = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Optional[tuple[str, int]]")  [assignment]
+    t.tcp = None  # E: Incompatible types in assignment (expression has type "None", variable has type "tuple[str, int]")  [assignment]
 
 
 @pytest.mark.mypy_testing

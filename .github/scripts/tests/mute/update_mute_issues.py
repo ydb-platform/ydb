@@ -548,7 +548,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
 
                 if field_name == "status" and 'name' in field_value:
                     status = field_value.get('name', 'N/A')
-                    status_updated = field_value.get('updatedAt', '1970-01-0901T00:00:01Z')
+                    status_updated = field_value.get('updatedAt', '1970-01-01T00:00:01Z')
                 elif field_name == "owner" and 'name' in field_value:
                     owner = field_value.get('name', 'N/A')
 

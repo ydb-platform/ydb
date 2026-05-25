@@ -1,0 +1,1 @@
+SELECT column_0 , column_2 FROM table_0 VIEW index_0 WHERE column_1 = 0

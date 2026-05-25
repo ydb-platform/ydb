@@ -140,9 +140,16 @@ void TVectorWorkloadParams::Init() {
             EmbeddingColumn = keyColumns.back();
 
             // Extract the distance metric from index settings
-            const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
-            Metric = indexSettings.Settings.Metric;
-            VectorOpts.VectorDimension = indexSettings.Settings.VectorDimension;
+            const auto& settingsVariant = index.GetIndexSettings();
+            const NYdb::NTable::TVectorIndexSettings* vectorSettings = nullptr;
+            if (const auto* kmeansTreeSettings = std::get_if<NYdb::NTable::TKMeansTreeSettings>(&settingsVariant)) {
+                vectorSettings = &kmeansTreeSettings->Settings;
+            } else if (const auto* ivfPqSettings = std::get_if<NYdb::NTable::TIvfPqSettings>(&settingsVariant)) {
+                vectorSettings = &ivfPqSettings->Settings;
+            }
+            Y_ABORT_UNLESS(vectorSettings, "Unsupported index settings type for index %s", IndexName.c_str());
+            Metric = vectorSettings->Metric;
+            VectorOpts.VectorDimension = vectorSettings->VectorDimension;
 
             break;
         }

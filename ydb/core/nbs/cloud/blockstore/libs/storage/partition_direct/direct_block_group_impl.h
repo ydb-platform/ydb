@@ -121,7 +121,10 @@ public:
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     // IHostStateController implementation
-    void SetHostState(THostIndex hostIndex, EHostState state) override;
+    void SetHostState(
+        THostIndex hostIndex,
+        EHostState oldState,
+        EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
@@ -201,8 +204,6 @@ private:
     IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
-    TVector<THostStat> HostStatistics;
-    TVector<THostState> HostStates;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;

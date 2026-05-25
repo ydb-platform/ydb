@@ -40,7 +40,7 @@ void TWriteWithDirectReplicationRequestExecutor::Run()
 {
     ScheduleRequestTimeoutCallback();
     ScheduleHedging();
-    for (auto host: VChunkConfig.PBufferHosts.GetPrimary()) {
+    for (auto host: VChunkConfig.GetDesiredPBuffers()) {
         SendWriteRequest(host);
     }
 }

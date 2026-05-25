@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include "ddisk_data_copier.h"
 #include "erase_request.h"
 #include "flush_request.h"
 #include "write_request.h"
@@ -42,6 +43,7 @@ public:
     ~TVChunk();
 
     void Start();
+    NThreading::TFuture<void> Stop();
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -60,14 +62,24 @@ public:
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
-    // Persists newConfig to the partition's local DB. The in-memory config is
-    // unchanged; the new value applies after the next partition restart.
-    void UpdateConfig(const TVChunkConfig& newConfig);
-
 private:
+    friend struct TBaseFixture;
+
+    using TPrepareConfigFunc = std::function<TVChunkConfig()>;
+    using TApplyPersistedConfigFunc = std::function<void()>;
+
+    struct TPendingVChunkConfig
+    {
+        TPrepareConfigFunc PrepareConfig;
+        TApplyPersistedConfigFunc ApplyPersisted;
+
+        TVChunkConfig Config;
+    };
+
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
     void DoStart();
+    void DoStop();
 
     void DoReadBlocksLocal(
         TTracedPromise<TReadBlocksLocalResponse> promise,
@@ -106,6 +118,21 @@ private:
 
     void UpdatePendingCounters();
 
+    // Persists newConfig to the partition's local DB. The in-memory config is
+    // unchanged; the new value applies after config persisted.
+    void UpdateConfig(
+        TPrepareConfigFunc prepareConfig,
+        TApplyPersistedConfigFunc applyPersisted);
+    void PersistNextPendingConfig();
+    void OnConfigPersisted();
+
+    TVChunkConfig PrepareNewConfig(
+        THostIndex hostIndex,
+        EHostState state) const;
+    void ApplyConfig();
+
+    void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
     const TExecutorPtr Executor;
@@ -117,14 +144,18 @@ private:
 
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
+    TList<TPendingVChunkConfig> PendingVChunkConfigs;
     TBlocksDirtyMap BlocksDirtyMap;
     bool DirtyMapRestored = false;
+    TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
 
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
 
     TVChunkCounters Counters;
+
+    NThreading::TPromise<void> StopPromise = NThreading::NewPromise();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

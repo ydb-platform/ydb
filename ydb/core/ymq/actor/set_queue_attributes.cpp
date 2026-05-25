@@ -170,6 +170,17 @@ private:
         auto* consumer = request.add_alter_consumers();
         consumer->set_name(ConsumerName);
 
+        if (ValidatedAttributes_.ContentBasedDeduplication) {
+            request.set_set_content_based_deduplication(*ValidatedAttributes_.ContentBasedDeduplication);
+            if (*ValidatedAttributes_.ContentBasedDeduplication) {
+                request.set_set_partition_write_speed_messages_per_second(500);
+                request.set_set_partition_write_burst_messages(750);
+            } else {
+                request.set_set_partition_write_speed_messages_per_second(1000000);
+                request.set_set_partition_write_burst_messages(1000000);
+            }
+        }
+
         auto* type = consumer->mutable_alter_shared_consumer_type();
         if (ValidatedAttributes_.VisibilityTimeout) {
             type->mutable_set_default_processing_timeout()->set_seconds(*ValidatedAttributes_.VisibilityTimeout);

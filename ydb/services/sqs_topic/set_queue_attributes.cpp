@@ -183,6 +183,13 @@ namespace NKikimr::NSqsTopic::V1 {
 
             if (NewQueueAttributes.ContentBasedDeduplication.Defined()) {
                 topicRequest.set_set_content_based_deduplication(*NewQueueAttributes.ContentBasedDeduplication);
+                if (*NewQueueAttributes.ContentBasedDeduplication) {
+                    topicRequest.set_set_partition_write_speed_messages_per_second(500);
+                    topicRequest.set_set_partition_write_burst_messages(750);
+                } else {
+                    topicRequest.set_set_partition_write_speed_messages_per_second(1000000);
+                    topicRequest.set_set_partition_write_burst_messages(1000000);
+                }
             }
 
             auto* consumer = topicRequest.add_alter_consumers();

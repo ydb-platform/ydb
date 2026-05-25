@@ -23,8 +23,13 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
     request.mutable_retention_period()->set_seconds(params.PartitionLifetimeSeconds);
     request.set_partition_write_speed_bytes_per_second(1048576);
     request.set_partition_write_burst_bytes(1048576);
+
     if (params.HasContentBasedDeduplication) {
         request.set_content_based_deduplication(params.ContentBasedDeduplication);
+        if (params.ContentBasedDeduplication) {
+            request.set_partition_write_speed_messages_per_second(500);
+            request.set_partition_write_burst_messages(750);
+        }
     }
 
     auto* partitioningSettings = request.mutable_partitioning_settings();

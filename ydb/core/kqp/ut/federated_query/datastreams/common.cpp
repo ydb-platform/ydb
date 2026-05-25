@@ -99,7 +99,6 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
         tableServiceConfig.SetDqChannelVersion(2u);
-        tableServiceConfig.SetEnableIndexStreamWrite(true);
 
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)

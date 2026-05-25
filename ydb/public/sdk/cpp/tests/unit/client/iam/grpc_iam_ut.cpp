@@ -387,15 +387,28 @@ TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
     ASSERT_TRUE(authProvider->WaitUntilBlocked(std::chrono::seconds(10)))
         << "FillContext should block inside slow AuthTokenProvider during refresh";
 
-    std::future<void> done = std::async(std::launch::async, [provider, facility]() mutable {
-        provider.reset();
-        facility.reset();
-    });
+    // Move-capture provider so provider.reset() is the last owner and triggers Stop().
+    // facility stays here: its destructor joins the worker thread (still blocked in
+    // GetAuthInfo()), so it must be destroyed after authProvider->Release().
+    //
+    // Mirrors production (TOwningFacilityCredentialsProvider): Inner_ dies first (Stop()),
+    // then Facility_ dies (joins worker). No self-join: TImpl holds facility as weak_ptr,
+    // callbacks capture only weak_ptr<TImpl>. If a callback locks TImpl temporarily, TImpl's
+    // destructor is trivial (no joins), and it never strong-refs the facility.
+    std::future<void> stopDone = std::async(std::launch::async,
+        [provider = std::move(provider)]() mutable {
+            // Last owner: triggers ~TGrpcIamCredentialsProvider -> Stop().
+            // Stop() must return even though the worker thread is still blocked in GetAuthInfo().
+            provider.reset();
+        });
 
-    ASSERT_EQ(done.wait_for(std::chrono::seconds(20)), std::future_status::ready)
-        << "provider destructor must complete while FillContext is blocked in GetAuthInfo()";
-    done.get();
+    ASSERT_EQ(stopDone.wait_for(std::chrono::seconds(20)), std::future_status::ready)
+        << "provider destructor (Stop()) must complete while FillContext is blocked in GetAuthInfo()";
+    stopDone.get();
 
+    // Now unblock the worker thread so facility can be destroyed cleanly.
     authProvider->Release();
+    facility.reset();  // joins the worker thread (now unblocked)
+
     server.Stop();
 }

@@ -332,7 +332,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void LogHttpRequestResponse(const TActorContext& ctx, NYdb::EStatus status, const std::optional<size_t> issueCode, TStringBuf errorText) {
-                const int httpCode = issueCode ? static_cast<ui32>(MapToException(status, Method, *issueCode).second) : 200;
+                const int httpCode = issueCode ? MapToException(status, Method, *issueCode).second : 200;
                 const bool isServerError = IsServerError(httpCode);
                 auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
                 LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::HTTP_PROXY,

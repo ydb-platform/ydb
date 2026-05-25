@@ -5,6 +5,7 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
@@ -173,11 +174,11 @@ private:
         if (ValidatedAttributes_.ContentBasedDeduplication) {
             request.set_set_content_based_deduplication(*ValidatedAttributes_.ContentBasedDeduplication);
             if (*ValidatedAttributes_.ContentBasedDeduplication) {
-                request.set_set_partition_write_speed_messages_per_second(500);
-                request.set_set_partition_write_burst_messages(750);
+                request.set_set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
+                request.set_set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
             } else {
-                request.set_set_partition_write_speed_messages_per_second(1000000);
-                request.set_set_partition_write_burst_messages(1000000);
+                request.set_set_partition_write_speed_messages_per_second(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+                request.set_set_partition_write_burst_messages(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
             }
         }
 

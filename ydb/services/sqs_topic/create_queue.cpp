@@ -7,6 +7,7 @@
 #include "utils.h"
 
 #include <ydb/core/http_proxy/events.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -161,8 +162,8 @@ namespace NKikimr::NSqsTopic::V1 {
 
             topicRequest.set_content_based_deduplication(QueueAttributes.ContentBasedDeduplication.GetOrElse(false));
             if (QueueAttributes.ContentBasedDeduplication.GetOrElse(false)) {
-                topicRequest.set_partition_write_speed_messages_per_second(500);
-                topicRequest.set_partition_write_burst_messages(750);
+                topicRequest.set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
+                topicRequest.set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
             }
 
             AddConsumerToRequest(topicRequest.add_consumers());

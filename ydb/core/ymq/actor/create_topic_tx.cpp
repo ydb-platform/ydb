@@ -1,5 +1,6 @@
 #include "create_topic_tx.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/ymq/base/constants.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -27,8 +28,8 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
     if (params.HasContentBasedDeduplication) {
         request.set_content_based_deduplication(params.ContentBasedDeduplication);
         if (params.ContentBasedDeduplication) {
-            request.set_partition_write_speed_messages_per_second(500);
-            request.set_partition_write_burst_messages(750);
+            request.set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
+            request.set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
         }
     }
 

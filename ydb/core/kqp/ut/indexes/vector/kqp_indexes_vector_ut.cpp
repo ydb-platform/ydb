@@ -1242,8 +1242,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
         const int flags = F_NULLABLE;
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+        kikimr.RunCall([&] {
+            auto db = kikimr.GetTableClient();
+            DoCreateTableAndVectorIndex(db, flags);
+        });
 
         int capturedCount = 0;
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -1271,6 +1273,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )"));
 
             auto result = kikimr.RunCall([&] {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
                 return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                     .ExtractValueSync();
             });

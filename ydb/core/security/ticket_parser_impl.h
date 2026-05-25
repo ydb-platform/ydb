@@ -2307,8 +2307,8 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::TICKET_PARSER_ACTOR; }
 
     void Bootstrap() {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = NSecurity::GetCountersForTicketParser(AppData()->Counters);
-        GetDerived()->InitCounters(rootCounters);
+        TIntrusivePtr<NMonitoring::TDynamicCounters> ticketParserCounters = NSecurity::GetCountersForTicketParser(AppData()->Counters);
+        GetDerived()->InitCounters(ticketParserCounters);
 
         CreateServiceTokens();
 

@@ -1,3 +1,4 @@
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -6,6 +7,7 @@
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/import_common.h>
 
 #include <ydb/apps/ydbd/export/export.h>
@@ -21,6 +23,35 @@ namespace NKikimr {
 namespace {
 
 using TRuntimePtr = std::shared_ptr<TTestActorRuntime>;
+using EDataFormat = NDataShard::NBackupRestoreTraits::EDataFormat;
+
+TStringBuf FormatName(EDataFormat format) {
+    switch (format) {
+        case EDataFormat::YdbDump:
+            return "csv";
+        case EDataFormat::Parquet:
+            return "parquet";
+        case EDataFormat::Invalid:
+            break;
+    }
+    Y_ABORT("Unexpected data format");
+    return {};
+}
+
+void SetBackupFormat(NKikimrSchemeOp::TBackupTask& backupTask, EDataFormat format) {
+    auto& settings = *backupTask.MutableS3Settings()->MutableExportDataSettings();
+    switch (format) {
+        case EDataFormat::YdbDump:
+            settings.MutableYdbDump();
+            return;
+        case EDataFormat::Parquet:
+            settings.MutableParquet();
+            return;
+        case EDataFormat::Invalid:
+            break;
+    }
+    Y_ABORT("Unexpected data format");
+}
 
 std::shared_ptr<arrow::RecordBatch> TestRecordBatch() {
     std::vector<std::string> keys = { "foo", "bar", "baz" };
@@ -112,12 +143,13 @@ THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>> MakeYdbSchema3ColsReverse
     };
 }
 
-NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName) {
+NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName, EDataFormat format) {
     NKikimrSchemeOp::TBackupTask backupTask;
     backupTask.SetEnablePermissions(true);
     auto& s3Settings = *backupTask.MutableS3Settings();
     s3Settings.SetBucket(bucketName);
     s3Settings.SetEndpoint(GetEnv("S3_ENDPOINT"));
+    SetBackupFormat(backupTask, format);
     auto& table = *backupTask.MutableTable();
     auto& tableDescription = *table.MutableColumnTableDescription();
     tableDescription.SetColumnShardCount(4);
@@ -132,12 +164,13 @@ NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName) {
     return backupTask;
 }
 
-NKikimrSchemeOp::TBackupTask MakeBackupTask3Cols(const TString& bucketName) {
+NKikimrSchemeOp::TBackupTask MakeBackupTask3Cols(const TString& bucketName, EDataFormat format) {
     NKikimrSchemeOp::TBackupTask backupTask;
     backupTask.SetEnablePermissions(true);
     auto& s3Settings = *backupTask.MutableS3Settings();
     s3Settings.SetBucket(bucketName);
     s3Settings.SetEndpoint(GetEnv("S3_ENDPOINT"));
+    SetBackupFormat(backupTask, format);
     auto& table = *backupTask.MutableTable();
     auto& tableDescription = *table.MutableColumnTableDescription();
     tableDescription.SetColumnShardCount(4);
@@ -209,19 +242,24 @@ NKikimrSchemeOp::TRestoreTask MakeRestoreTask3Cols(const TString& bucketName) {
 using namespace NColumnShard;
 
 Y_UNIT_TEST_SUITE(AsyncJobs) {
-    Y_UNIT_TEST(Import) {
+    void Import(EDataFormat format) {
+        const TString bucketName = TStringBuilder() << "test-import-" << FormatName(format);
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test2", s3Client);
+        NTestUtils::CreateBucket(bucketName, s3Client);
 
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        if (format == EDataFormat::Parquet) {
+            runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+            runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        }
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
-        auto actor =
-            NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(edge, MakeBackupTask("test2"), exportFactory.get(), MakeYdbColumns(), 0);
+        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
+            edge, MakeBackupTask(bucketName, format), exportFactory.get(), MakeYdbColumns(), 0);
         auto exporter = runtime->Register(actor.release());
 
         TAutoPtr<IEventHandle> handle;
@@ -234,22 +272,29 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         UNIT_ASSERT(event2->IsFinish);
 
         runtime->DispatchEvents({}, TDuration::Seconds(5));
-        std::vector<TString> result = NTestUtils::GetObjectKeys("test2", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test2", s3Client), 0);
-        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), "data_00.csv,metadata.json,permissions.pb,scheme.pb");
-        auto scheme = NTestUtils::GetObject("test2", "scheme.pb", s3Client);
+        std::vector<TString> result = NTestUtils::GetObjectKeys(bucketName, s3Client);
+        UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount(bucketName, s3Client), 0);
+        const TString dataKey = format == EDataFormat::Parquet ? "data_00.parquet" : "data_00.csv";
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", result), TStringBuilder() << dataKey << ",metadata.json,permissions.pb,scheme.pb");
+        auto scheme = NTestUtils::GetObject(bucketName, "scheme.pb", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(scheme,
             "columns {\n  name: \"key\"\n  type {\n    optional_type {\n      item {\n        type_id: UTF8\n      }\n    }\n  }\n}\ncolumns "
             "{\n  name: \"value\"\n  type {\n    optional_type {\n      item {\n        type_id: UTF8\n      }\n    }\n  "
             "}\n}\npartitioning_settings {\n  min_partitions_count: 4\n}\nstore_type: STORE_TYPE_COLUMN\n");
-        auto metadata = NTestUtils::GetObject("test2", "metadata.json", s3Client);
+        auto metadata = NTestUtils::GetObject(bucketName, "metadata.json", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(
             metadata, "{\"version\":0,\"full_backups\":[{\"snapshot_vts\":[0,0]}],\"permissions\":1,\"changefeeds\":[],\"indexes\":[]}");
-        auto data = NTestUtils::GetObject("test2", "data_00.csv", s3Client);
-        UNIT_ASSERT_VALUES_EQUAL(
-            data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+        auto data = NTestUtils::GetObject(bucketName, dataKey, s3Client);
+        if (format == EDataFormat::Parquet) {
+            UNIT_ASSERT_GE(data.size(), 8);
+            UNIT_ASSERT(data.StartsWith("PAR1"));
+            UNIT_ASSERT(data.EndsWith("PAR1"));
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(
+                data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+        }
 
-        auto restoreTask = MakeRestoreTask("test2");
+        auto restoreTask = MakeRestoreTask(bucketName);
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
 
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
@@ -269,21 +314,34 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         UNIT_ASSERT(!event4->Data);
     }
 
-    Y_UNIT_TEST(ImportSchemaOrder) {
+    Y_UNIT_TEST(ImportCsv) {
+        Import(EDataFormat::YdbDump);
+    }
+
+    Y_UNIT_TEST(ImportParquet) {
+        Import(EDataFormat::Parquet);
+    }
+
+    void ImportSchemaOrder(EDataFormat format) {
+        const TString bucketName = TStringBuilder() << "test-schema-order-" << FormatName(format);
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test_schema_order", s3Client);
+        NTestUtils::CreateBucket(bucketName, s3Client);
 
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
+        if (format == EDataFormat::Parquet) {
+            runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+            runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        }
 
         const auto edge = runtime->AllocateEdgeActor(0);
 
         // Export 3-column data (key, col_a, col_b) to S3
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
         auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
-            edge, MakeBackupTask3Cols("test_schema_order"), exportFactory.get(), MakeYdbColumns3Cols(), 0);
+            edge, MakeBackupTask3Cols(bucketName, format), exportFactory.get(), MakeYdbColumns3Cols(), 0);
         auto exporter = runtime->Register(actor.release());
 
         TAutoPtr<IEventHandle> handle;
@@ -294,7 +352,17 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
 
         runtime->DispatchEvents({}, TDuration::Seconds(5));
 
-        auto restoreTask = MakeRestoreTask3Cols("test_schema_order");
+        const TString dataKey = format == EDataFormat::Parquet ? "data_00.parquet" : "data_00.csv";
+        const auto keys = NTestUtils::GetObjectKeys(bucketName, s3Client);
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", keys), TStringBuilder() << dataKey << ",metadata.json,permissions.pb,scheme.pb");
+        const auto data = NTestUtils::GetObject(bucketName, dataKey, s3Client);
+        if (format == EDataFormat::Parquet) {
+            UNIT_ASSERT_GE(data.size(), 8);
+            UNIT_ASSERT(data.StartsWith("PAR1"));
+            UNIT_ASSERT(data.EndsWith("PAR1"));
+        }
+
+        auto restoreTask = MakeRestoreTask3Cols(bucketName);
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
 
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
@@ -322,6 +390,14 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         auto event4 = runtime->GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
         UNIT_ASSERT(event4->IsLast);
         UNIT_ASSERT(!event4->Data);
+    }
+
+    Y_UNIT_TEST(ImportSchemaOrderCsv) {
+        ImportSchemaOrder(EDataFormat::YdbDump);
+    }
+
+    Y_UNIT_TEST(ImportSchemaOrderParquet) {
+        ImportSchemaOrder(EDataFormat::Parquet);
     }
 }
 

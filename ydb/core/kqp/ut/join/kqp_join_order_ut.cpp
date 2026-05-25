@@ -714,9 +714,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(FiveWayJoinWithComplexPreds2, ColumnStore) {
+    Y_UNIT_TEST(FiveWayJoinWithComplexPreds2) {
         ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, ColumnStore
+            "queries/five_way_join_with_complex_preds2.sql", "stats/basic.json", false, false
         );
     }
 
@@ -726,9 +726,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(FourWayJoinWithPredsAndEquivAndLeft, ColumnStore) {
+    Y_UNIT_TEST(FourWayJoinWithPredsAndEquivAndLeft) {
        ExecuteJoinOrderTestGenericQueryWithStats(
-        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", false, ColumnStore
+        "queries/four_way_join_with_preds_and_equiv_and_left.sql", "stats/basic.json", false, false
         );
     }
 

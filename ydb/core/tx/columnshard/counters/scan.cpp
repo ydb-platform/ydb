@@ -191,7 +191,7 @@ TConcreteScanCounters::TPerStepAtomicCounters TConcreteScanCounters::CountersFor
         auto lock = AtomicStepCounters.ReadGuard();
         auto* counterIfExists = lock.Value.FindPtr(stepName);
         if (counterIfExists) [[likely]] {
-            return *counterIfExists;  // Copy made while lock is held
+            return *counterIfExists;   // Copy made while lock is held
         }
     }
     auto lock = AtomicStepCounters.WriteGuard();

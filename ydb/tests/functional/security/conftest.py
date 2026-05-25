@@ -157,51 +157,49 @@ def certificates(tmp_path_factory):
     return generate_certificates(str(certs_tmp_dir))
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_with_enforce_user_token(certificates):
+_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
+    pytest.param(
+        {
+            'case_name': 'enforce_user_token',
+            'enforce_user_token_requirement': True,
+        },
+        id='enforce_user_token',
+    ),
+    pytest.param(
+        {
+            'case_name': 'without_enforce_user_token',
+            'enforce_user_token_requirement': False,
+        },
+        id='without_enforce_user_token',
+    ),
+    pytest.param(
+        {
+            'case_name': 'require_counters_authentication',
+            'enforce_user_token_requirement': True,
+            'require_counters_authentication': True,
+        },
+        id='require_counters_authentication',
+    ),
+    pytest.param(
+        {
+            'case_name': 'require_healthcheck_authentication',
+            'enforce_user_token_requirement': True,
+            'require_healthcheck_authentication': True,
+        },
+        id='require_healthcheck_authentication',
+    ),
+)
+
+
+@pytest.fixture(scope='module', params=_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS)
+def ydb_cluster_for_mon_endpoints_auth(request, certificates):
+    params = request.param.copy()
+    case_name = params.pop('case_name')
     configurator = create_ydb_configurator(
         certificates,
-        enforce_user_token_requirement=True,
+        **params,
     )
     cluster = KiKiMR(configurator)
     cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_without_enforce_user_token(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=False,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_counters_auth(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_counters_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_healthcheck_auth(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_healthcheck_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
+    yield case_name, cluster
     cluster.stop()

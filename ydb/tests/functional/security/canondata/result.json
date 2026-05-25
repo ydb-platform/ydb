@@ -1,14 +1,14 @@
 {
-    "test_mon_endpoints_auth.test_mon_endpoints_auth__enforce_user_token": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth__enforce_user_token/mon_endpoints_auth__enforce_user_token.json"
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token]/mon_endpoints_auth-enforce_user_token.json"
     },
-    "test_mon_endpoints_auth.test_mon_endpoints_auth__require_counters_authentication": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth__require_counters_authentication/mon_endpoints_auth__require_counters_authentication.json"
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[require_counters_authentication]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth[require_counters_authentication]/mon_endpoints_auth-require_counters_authentication.json"
     },
-    "test_mon_endpoints_auth.test_mon_endpoints_auth__require_healthcheck_authentication": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth__require_healthcheck_authentication/mon_endpoints_auth__require_healthcheck_authentication.json"
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[require_healthcheck_authentication]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth[require_healthcheck_authentication]/mon_endpoints_auth-require_healthcheck_authentication.json"
     },
-    "test_mon_endpoints_auth.test_mon_endpoints_auth__without_enforce_user_token": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth__without_enforce_user_token/mon_endpoints_auth__without_enforce_user_token.json"
+    "test_mon_endpoints_auth.test_mon_endpoints_auth[without_enforce_user_token]": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth[without_enforce_user_token]/mon_endpoints_auth-without_enforce_user_token.json"
     }
 }

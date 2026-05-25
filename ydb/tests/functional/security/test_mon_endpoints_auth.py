@@ -150,29 +150,9 @@ def _canonize(name, results):
     return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
 
 
-def test_mon_endpoints_auth__enforce_user_token(ydb_cluster_with_enforce_user_token):
+def test_mon_endpoints_auth(ydb_cluster_for_mon_endpoints_auth):
+    case_name, cluster = ydb_cluster_for_mon_endpoints_auth
     return _canonize(
-        'mon_endpoints_auth__enforce_user_token',
-        _collect_endpoints(ydb_cluster_with_enforce_user_token),
-    )
-
-
-def test_mon_endpoints_auth__without_enforce_user_token(ydb_cluster_without_enforce_user_token):
-    return _canonize(
-        'mon_endpoints_auth__without_enforce_user_token',
-        _collect_endpoints(ydb_cluster_without_enforce_user_token),
-    )
-
-
-def test_mon_endpoints_auth__require_counters_authentication(ydb_cluster_with_require_counters_auth):
-    return _canonize(
-        'mon_endpoints_auth__require_counters_authentication',
-        _collect_endpoints(ydb_cluster_with_require_counters_auth),
-    )
-
-
-def test_mon_endpoints_auth__require_healthcheck_authentication(ydb_cluster_with_require_healthcheck_auth):
-    return _canonize(
-        'mon_endpoints_auth__require_healthcheck_authentication',
-        _collect_endpoints(ydb_cluster_with_require_healthcheck_auth),
+        f'mon_endpoints_auth-{case_name}',
+        _collect_endpoints(cluster),
     )

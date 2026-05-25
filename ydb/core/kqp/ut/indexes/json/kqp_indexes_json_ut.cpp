@@ -2187,6 +2187,78 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_STRING_CONTAINS_C(yson, "INDEX `json_idx_2` GLOBAL USING json ON (`Data`)", yson);
         }
     }
+
+    Y_UNIT_TEST_TWIN(CyrillicIndexImplTable, IsJsonDocument) {
+        const auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        CreateTestTable(db, jsonType);
+
+        {
+            const auto query = std::format(R"(
+                UPSERT INTO TestTable (Key, Text) VALUES (1, {0}({1}));
+            )", jsonType, R"('{"ключ": "я mop"}')");
+
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = R"(
+                ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text);
+            )";
+
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        CompareYson(R"([
+            [[1u];""];
+            [[1u];"\x09ключ"];
+            [[1u];"\x09ключ\0\3я mop"]
+        ])", FormatResultSetYson(ReadIndex(db)));
+    }
+
+    Y_UNIT_TEST_TWIN(CyrillicPredicates, IsJsonDocument) {
+        const std::string jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        TestSelectJsonWithIndex(jsonType, std::nullopt, [&](TQueryClient& db, const auto&) {
+            {
+                const auto query = std::format(R"(
+                    UPSERT INTO TestTable (Key, Text) VALUES
+                        (100, {0}({1})),
+                        (101, {0}({2})),
+                        (102, {0}({3})),
+                        (103, {0}({4}));
+                )", jsonType, R"('{"ключ": "Я моп"}')", R"('{"другой ключ": "в стойло!"}')", R"('{"ключ": "Я empty"}')", "'{}'");
+
+                auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            // JE: Cyrillic key in jsonpath
+            ValidatePredicate(db, R"(JSON_EXISTS(Text, '$."ключ"'))");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$."ключ"'))", {"\x09ключ"});
+
+            // JE: Cyrillic key with Cyrillic string value in equality filter
+            ValidatePredicate(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" == "Я моп")'))", {std::string("\x09ключ\0\3Я моп", 20)});
+
+            ValidatePredicate(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" starts with "Я")'))");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@."ключ" starts with "Я")'))", {"\x09ключ"});
+
+            // JV: Cyrillic key compared to Cyrillic Utf8 literal
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == "Я моп"u)", {std::string("\x09ключ\0\3Я моп", 20)});
+
+            // JV: Cyrillic key compared to external Utf8 parameter
+            auto cyrParam = TParamsBuilder().AddParam("$p").Utf8("я").Build().Build();
+            ValidatePredicate(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == $p)", cyrParam);
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$."ключ"' RETURNING Utf8) == $p)", {NJsonIndex::TToken{"\x09ключ", "$p"}}, cyrParam);
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {

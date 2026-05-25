@@ -98,6 +98,52 @@ inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
     return builder.Finalize();
 }
 
+void fooo() {
+    int size = 5;
+    void* arr = new int[5];
+    int write_index = 1; 
+    // arr[0] = arr[0];
+    for (int i = 1; i < size; ++i) {
+        if (arr[i] != arr[i-1]) {
+            arr[write_index++] = arr[i];
+        }
+    }
+}
+
+inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
+    auto sortSchema = MakeSortSchema();
+    auto fullSchema = MakeFullSchema();
+
+    arrow::compute::SortOptions sortOptions({
+        arrow::compute::SortKey("ts", arrow::compute::SortOrder::Ascending),
+        arrow::compute::SortKey("a",  arrow::compute::SortOrder::Ascending),
+        arrow::compute::SortKey("b",  arrow::compute::SortOrder::Ascending),
+        arrow::compute::SortKey("ver", arrow::compute::SortOrder::Descending),
+    });
+    auto tableRes = arrow::Table::FromRecordBatches(fullSchema, f.Batches);
+    Y_ABORT_UNLESS(tableRes.ok());
+    auto table = *tableRes;
+
+    auto indicesRes = arrow::compute::SortIndices(arrow::Datum(table), sortOptions);
+    Y_ABORT_UNLESS(indicesRes.ok());
+    auto indices = *indicesRes;
+
+
+    auto all_indices_but_first = indices->SliceSafe(1).ValueOrDie();
+    auto all_indices_but_last = indices->SliceSafe(0, indices->length() - 1).ValueOrDie();
+    
+    // arrow::VisitArrayInline(indices, nullptr);
+
+    auto takenRes = arrow::compute::Take(arrow::Datum(table), arrow::Datum(indices));
+    Y_ABORT_UNLESS(takenRes.ok());
+    auto result = takenRes->table();
+
+
+
+    return result;
+
+}
+
 
 
 // ---- фикстуры: (источников, строк на источник) ----

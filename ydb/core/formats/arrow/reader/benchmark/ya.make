@@ -1,4 +1,4 @@
-Y_BENCHMARK()
+UNITTEST_FOR(ydb/core/formats/arrow/reader)
 
 
 PEERDIR(

@@ -10,6 +10,7 @@ void RunMerge(const TFixture& f, NBench::NCpu::TParams& iface) {
         Y_DO_NOT_OPTIMIZE_AWAY(result.get());
     }
 }
+
 // Альтернативный алгоритм: concat всех источников + arrow::compute::SortIndices + Take.
 // Не делает дедупликацию по версии — голый sort+gather для сравнения стоимости сортировки.
 void RunSortIndicesMerge(const TFixture& f, NBench::NCpu::TParams& iface) {
@@ -19,6 +20,7 @@ void RunSortIndicesMerge(const TFixture& f, NBench::NCpu::TParams& iface) {
         arrow::compute::SortKey("ts", arrow::compute::SortOrder::Ascending),
         arrow::compute::SortKey("a",  arrow::compute::SortOrder::Ascending),
         arrow::compute::SortKey("b",  arrow::compute::SortOrder::Ascending),
+        arrow::compute::SortKey("ver", arrow::compute::SortOrder::Descending),
     });
 
     for (size_t i = 0; i < iface.Iterations(); ++i) {
@@ -29,6 +31,8 @@ void RunSortIndicesMerge(const TFixture& f, NBench::NCpu::TParams& iface) {
         auto indicesRes = arrow::compute::SortIndices(arrow::Datum(table), sortOptions);
         Y_ABORT_UNLESS(indicesRes.ok());
         auto indices = *indicesRes;
+
+
 
         auto takenRes = arrow::compute::Take(arrow::Datum(table), arrow::Datum(indices));
         Y_ABORT_UNLESS(takenRes.ok());

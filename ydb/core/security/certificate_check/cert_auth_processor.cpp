@@ -172,6 +172,10 @@ TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
 }
 
 TString X509CertificateReader::GetPublicKey(const X509Ptr& x509) {
+    if (x509 == nullptr) {
+        return "";
+    }
+
     auto* rawPubkey = X509_get_pubkey(x509.get());
     if (rawPubkey == nullptr) {
         return "";

@@ -73,7 +73,7 @@ namespace NKikimr::NKqp {
         NYql::TPqGatewayConfig PqGatewayConfig;
         NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
-        TScriptExecutionSettings ScriptExecutionSettings;
+        TScriptExecutionSettings ScriptExecutionSettings = {};
     };
 
     struct IKqpFederatedQuerySetupFactory {

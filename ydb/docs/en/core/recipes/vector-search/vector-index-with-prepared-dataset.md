@@ -117,11 +117,7 @@ ADD INDEX idx_vector
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine,
-  vector_type="float",
-  vector_dimension=768,
-  levels=1,
-  clusters=200);
+  distance=cosine);
 ```
 
 This creates a `vector_kmeans_tree` index. For more on this index type, see [here](../../dev/vector-indexes.md#kmeans-tree-type).

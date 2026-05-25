@@ -35,11 +35,13 @@
 
 ## Применение таймаутов {#usage}
 
+### TableService {#usage-tableservice}
+
 Всегда рекомендуется устанавливать и таймаут на операцию, и транспортный таймаут. Значение транспортного таймаута следует делать на 50-100 миллисекунд больше, чем значение таймаута на операцию, чтобы оставался некоторый запас времени, за который клиент сможет получить серверную ошибку c кодом ``Timeout``.
 
 Пример использования таймаутов:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 * Python
 
@@ -103,6 +105,89 @@
   tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
   _, res, err := s.Execute(ctx, tx, query, table.NewQueryParameters())
   }
+  ```
+
+{% endlist %}
+
+### QueryService {#usage-queryservice}
+
+QueryService использует исключительно клиентские таймауты (дедлайны). Значение по умолчанию не задано, поэтому время выполнения запроса не ограничено.
+
+Рекомендуется всегда явно устанавливать таймаут, чтобы не ждать ответов на запросы, которые уже не нужны. Это также позволяет избежать бесконечного ожидания ответа от сервера в условиях нестабильной сети. Для своевременного обнаружения разрывов соединения рекомендуется дополнительно настраивать параметры gRPC KeepAlive.
+
+{% list tabs group=lang %}
+
+* Python
+
+  ```python
+  import ydb
+  
+  settings = (
+      ydb.BaseRequestSettings()
+      .with_timeout(5)
+  )
+  
+  for result_set in session.execute(query, settings=settings):
+      ...
+  
+  # Or via pool with retry
+  result_sets = pool.execute_with_retries(query, settings=settings)
+  ```
+
+{% if oss == true %}
+
+* C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+  
+  auto settings = NYdb::NQuery::TExecuteQuerySettings()
+      .Deadline(TDeadline::AfterDuration(std::chrono::seconds(5)));
+  
+  auto result = session.ExecuteQuery(
+      query,
+      NYdb::NQuery::TTxControl::NoTx(),
+      {},
+      settings
+  ).GetValueSync();
+  ```
+
+{% endif %}
+
+* Go
+
+  ```go
+  import (
+      "context"
+      "time"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+  )
+  
+  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+  defer cancel()
+  
+  err := db.Query().Do(ctx, func(ctx context.Context, s query.Session) error {
+      res, err := s.Query(ctx, `SELECT 1`)
+      return err
+  }, query.WithIdempotent())
+  ```
+
+* Java
+
+  ```java
+  import tech.ydb.query.settings.ExecuteQuerySettings;
+  import java.time.Duration;
+  
+  ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
+      .withRequestTimeout(Duration.ofSeconds(5))
+      .build();
+  
+  session.createQuery(query, TxMode.NONE, Params.empty(), settings)
+      .execute(part -> {
+          ResultSetReader rs = part.getResultSetReader();
+          // ...
+      }).join();
+  
   ```
 
 {% endlist %}

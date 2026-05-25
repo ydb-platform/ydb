@@ -1355,9 +1355,9 @@
     ],
     "test.test[select_yql-window_fn_ntile_3-default.txt-Debug]": [
         {
-            "checksum": "bbd537fdd5185b5093ad5a8a0323c1ab",
-            "size": 1193,
-            "uri": "https://{canondata_backend}/1917492/53531106e44e755ea77008ec27c01bc41d81b31c/resource.tar.gz#test.test_select_yql-window_fn_ntile_3-default.txt-Debug_/opt.yql"
+            "checksum": "9fe8b0b5a35c5841d155d0fb23513440",
+            "size": 1187,
+            "uri": "https://{canondata_backend}/1946324/c8c3a62c287a7f6a5b775052a3e9fafe254ab713/resource.tar.gz#test.test_select_yql-window_fn_ntile_3-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_fn_ntile_3-default.txt-Results]": [
@@ -1369,9 +1369,9 @@
     ],
     "test.test[select_yql-window_fn_percentrank_1-default.txt-Debug]": [
         {
-            "checksum": "17e793057709520e76d94345aa4d41be",
-            "size": 1150,
-            "uri": "https://{canondata_backend}/1917492/53531106e44e755ea77008ec27c01bc41d81b31c/resource.tar.gz#test.test_select_yql-window_fn_percentrank_1-default.txt-Debug_/opt.yql"
+            "checksum": "50c2e6e23fe4a5b254f15d81951263e0",
+            "size": 1144,
+            "uri": "https://{canondata_backend}/1946324/c8c3a62c287a7f6a5b775052a3e9fafe254ab713/resource.tar.gz#test.test_select_yql-window_fn_percentrank_1-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_fn_percentrank_1-default.txt-Results]": [
@@ -1383,9 +1383,9 @@
     ],
     "test.test[select_yql-window_fn_rownumber_0-default.txt-Debug]": [
         {
-            "checksum": "c64b363527d439c313fa626112a5ceae",
-            "size": 1071,
-            "uri": "https://{canondata_backend}/1917492/53531106e44e755ea77008ec27c01bc41d81b31c/resource.tar.gz#test.test_select_yql-window_fn_rownumber_0-default.txt-Debug_/opt.yql"
+            "checksum": "0fde3444628a3c8ed05d73bf886b4bca",
+            "size": 1065,
+            "uri": "https://{canondata_backend}/1946324/c8c3a62c287a7f6a5b775052a3e9fafe254ab713/resource.tar.gz#test.test_select_yql-window_fn_rownumber_0-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_fn_rownumber_0-default.txt-Results]": [

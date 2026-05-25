@@ -9,9 +9,9 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetString(const TSharedRef& sharedRef)
+std::string GetString(const TSharedRef& sharedRef)
 {
-    return TString(sharedRef.Begin(), sharedRef.Size());
+    return std::string(sharedRef.Begin(), sharedRef.Size());
 }
 
 TEST(TAsyncStreamPipeTest, Simple)

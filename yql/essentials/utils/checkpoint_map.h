@@ -107,7 +107,7 @@ public:
         }
     }
 
-    const TValue& Get(const TKey& key) const {
+    [[nodiscard]] const TValue& Get(const TKey& key) const {
         return Map_.at(key);
     }
 
@@ -123,43 +123,43 @@ public:
         return 0;
     }
 
-    const_iterator find(const TKey& key) const {
+    [[nodiscard]] const_iterator find(const TKey& key) const {
         return Map_.find(key);
     }
 
-    size_type count(const TKey& key) const {
+    [[nodiscard]] size_type count(const TKey& key) const {
         return Map_.count(key);
     }
 
-    bool contains(const TKey& key) const {
+    [[nodiscard]] bool contains(const TKey& key) const {
         return Map_.find(key) != Map_.end();
     }
 
-    const_iterator begin() const {
+    [[nodiscard]] const_iterator begin() const {
         return Map_.begin();
     }
 
-    const_iterator cbegin() const {
+    [[nodiscard]] const_iterator cbegin() const {
         return Map_.cbegin();
     }
 
-    const_iterator end() const {
+    [[nodiscard]] const_iterator end() const {
         return Map_.end();
     }
 
-    const_iterator cend() const {
+    [[nodiscard]] const_iterator cend() const {
         return Map_.cend();
     }
 
-    bool empty() const {
+    [[nodiscard]] bool empty() const {
         return Map_.empty();
     }
 
-    size_type size() const {
+    [[nodiscard]] size_type size() const {
         return Map_.size();
     }
 
-    size_type max_size() const {
+    [[nodiscard]] size_type max_size() const {
         return Map_.max_size();
     }
 
@@ -171,11 +171,11 @@ public:
         return !(*this == other);
     }
 
-    const THashMap<TKey, TValue>& GetUnderlyingMap() const {
+    [[nodiscard]] const THashMap<TKey, TValue>& GetUnderlyingMap() const {
         return Map_;
     }
 
-    size_t GetCommandCount() const {
+    [[nodiscard]] size_t GetCommandCount() const {
         return Commands_.size();
     }
 

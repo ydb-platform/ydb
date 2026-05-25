@@ -3,6 +3,9 @@
 #include "kqp_opt_phy_olap_filter.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -16,6 +19,7 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace {
+
 TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNode);
 
@@ -43,7 +47,7 @@ TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TExprBase>& conjunc
         }
     }
 }
-} // namespace
+} // anonymous namespace
 
 TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TOLAPPredicateNode>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd,
                                                bool trueForEmpty) {
@@ -709,7 +713,7 @@ TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx,
             .Build()
         .Done();
 }
-}
+} // anonymous namespace
 
 TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
     const auto parameters = FindNodes(apply.Ptr(), [](const TExprNode::TPtr& node) {
@@ -878,7 +882,7 @@ void CollectPredicateMembers(TExprNode::TPtr predicate, THashSet<TString>& predi
     }
 }
 
-}  // anonymous namespace end
+} // anonymous namespace
 
 bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& arg, const THashSet<TString>& predicateMembers, THashSet<TString>& projectionMembers,
                                        TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>>& projectionCandidates,

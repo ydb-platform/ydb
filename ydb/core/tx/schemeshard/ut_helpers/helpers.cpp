@@ -20,6 +20,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
 
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -3236,7 +3237,7 @@ namespace NSchemeShardUT_Private {
             NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
             NYql::IDataProvider::TFillSettings fillSettings;
             bool truncated;
-            KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
+            NYql::KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
             UNIT_ASSERT(!truncated);
             shardRows.push_back(ysonStream.Str());
         }

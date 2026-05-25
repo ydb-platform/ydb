@@ -513,13 +513,22 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
 
     auto reconnectFromNode2 = [&](TStringBuf description) {
         const TString handshakeBefore = GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone");
+        auto sessionStaysAliveOnEof = [&](ui32 fromNode, ui32 toNode) {
+            const ui64 numEventsInQueue = GetSessionCounter(cluster, fromNode, toNode, "NumEventsInQueue");
+            const ui64 outputCounter = GetSessionCounter(cluster, fromNode, toNode, "OutputCounter");
+            const ui64 lastConfirmed = GetSessionCounter(cluster, fromNode, toNode, "LastConfirmed");
+            return numEventsInQueue > 0 || outputCounter != lastConfirmed;
+        };
+
+        // Keep both session instances alive after the socket is closed. This matches the session lifetime predicate
+        // used on EOF; otherwise the peer may destroy its idle session before accepting the continuation request.
         WaitForCondition(TDuration::Seconds(10), [&] {
             try {
-                return GetSessionCounter(cluster, 2, 1, "NumEventsInQueue") > 0;
+                return sessionStaysAliveOnEof(2, 1) && sessionStaysAliveOnEof(1, 2);
             } catch (const TPatternNotFound&) {
                 return false;
             }
-        }, "session has pending output before forced reconnect");
+        }, "both sessions stay alive on EOF before forced reconnect");
         cluster.GetNode(2)->Send(cluster.InterconnectProxy(1, 2), new TEvInterconnect::TEvClosePeerSocket);
         WaitForCondition(TDuration::Seconds(20), [&] {
             try {

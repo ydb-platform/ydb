@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: markdown-it-py
-Version: 4.0.0
+Version: 4.2.0
 Summary: Python port of markdown-it. Markdown parsing, done right!
 Keywords: markdown,lexer,parser,commonmark,markdown-it
 Author-email: Chris Sewell <chrisj_sewell@hotmail.com>
@@ -46,6 +46,7 @@ Requires-Dist: coverage ; extra == "testing"
 Requires-Dist: pytest ; extra == "testing"
 Requires-Dist: pytest-cov ; extra == "testing"
 Requires-Dist: pytest-regressions ; extra == "testing"
+Requires-Dist: pytest-timeout ; extra == "testing"
 Requires-Dist: requests ; extra == "testing"
 Project-URL: Documentation, https://markdown-it-py.readthedocs.io
 Project-URL: Homepage, https://github.com/executablebooks/markdown-it-py
@@ -160,11 +161,12 @@ Render markdown to HTML with markdown-it-py from the
 command-line:
 
 ```console
-usage: markdown-it [-h] [-v] [filenames [filenames ...]]
+usage: markdown-it [-h] [-v] [--stdin|filenames [filenames ...]]
 
 Parse one or more markdown files, convert each to HTML, and print to stdout
 
 positional arguments:
+  --stdin        read source Markdown file from standard input
   filenames      specify an optional list of files to convert
 
 optional arguments:

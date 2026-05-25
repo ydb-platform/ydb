@@ -10,6 +10,15 @@ TKikimrRunner Kikimr(NKikimrConfig::TFeatureFlags&& featureFlags) {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner Kikimr(bool enableIndexStreamWrite) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
+    return TKikimrRunner(settings);
+}
+
 TKikimrRunner Kikimr() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);

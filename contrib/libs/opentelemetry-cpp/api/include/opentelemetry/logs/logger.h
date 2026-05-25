@@ -3,6 +3,12 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <type_traits>
+#include <utility>
+
+#include "opentelemetry/context/context.h"
+#include "opentelemetry/logs/event_id.h"
 #include "opentelemetry/logs/logger_type_traits.h"
 #include "opentelemetry/logs/severity.h"
 #include "opentelemetry/nostd/string_view.h"
@@ -27,7 +33,12 @@ class LogRecord;
 class Logger
 {
 public:
-  virtual ~Logger() = default;
+  Logger()                              = default;
+  Logger(const Logger &)                = default;
+  Logger(Logger &&) noexcept            = default;
+  Logger &operator=(const Logger &)     = default;
+  Logger &operator=(Logger &&) noexcept = default;
+  virtual ~Logger()                     = default;
 
   /* Returns the name of the logger */
   virtual const nostd::string_view GetName() noexcept = 0;
@@ -266,6 +277,29 @@ public:
   // OpenTelemetry C++ user-facing Logs API
   //
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  inline bool Enabled(const opentelemetry::context::Context &context,
+                      Severity severity = Severity::kInvalid) const noexcept
+  {
+    if OPENTELEMETRY_LIKELY_CONDITION (!Enabled(severity))
+    {
+      return false;
+    }
+    return EnabledImplementation(context, severity);
+  }
+
+  inline bool Enabled(const opentelemetry::context::Context &context,
+                      Severity severity,
+                      const EventId &event_id) const noexcept
+  {
+    if OPENTELEMETRY_LIKELY_CONDITION (!Enabled(severity))
+    {
+      return false;
+    }
+    return EnabledImplementation(context, severity, event_id);
+  }
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
+
   inline bool Enabled(Severity severity, const EventId &event_id) const noexcept
   {
     if OPENTELEMETRY_LIKELY_CONDITION (!Enabled(severity))
@@ -459,7 +493,6 @@ public:
   //
 
 protected:
-  // TODO: discuss with community about naming for internal methods.
   virtual bool EnabledImplementation(Severity /*severity*/,
                                      const EventId & /*event_id*/) const noexcept
   {
@@ -470,6 +503,21 @@ protected:
   {
     return false;
   }
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  virtual bool EnabledImplementation(const opentelemetry::context::Context & /*context*/,
+                                     Severity /*severity*/) const noexcept
+  {
+    return false;
+  }
+
+  virtual bool EnabledImplementation(const opentelemetry::context::Context & /*context*/,
+                                     Severity /*severity*/,
+                                     const EventId & /*event_id*/) const noexcept
+  {
+    return false;
+  }
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 
   void SetMinimumSeverity(uint8_t severity_or_max) noexcept
   {

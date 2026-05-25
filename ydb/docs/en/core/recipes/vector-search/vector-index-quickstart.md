@@ -54,14 +54,10 @@ ADD INDEX EmbeddingIndex
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine,
-  vector_type="float",
-  vector_dimension=5,
-  levels=1,
-  clusters=2)
+  distance=cosine)
 ```
 
-This command creates an index of the `vector_kmeans_tree` type. For more information about indexes of this type, see [{#T}](../../dev/vector-indexes.md#kmeans-tree-type). In this model example, the parameter `clusters=2` is specified (splitting the set of vectors when building the index into two clusters at each level); for real data, values in the range from 64 to 512 are recommended.
+This command creates an index of the `vector_kmeans_tree` type. For more information about indexes of this type, see [{#T}](../../dev/vector-indexes.md#kmeans-tree-type). In this model example, only the `distance=cosine` parameter is specified — it sets the distance function used by the index. This is an important parameter: the distance function must match the one the embedding model was trained for. The parameters `clusters`, `levels`, and `overlap_clusters` are autodetected and not shown here; if you have a large dataset and want to tune the index, see the detailed parameter reference in [{#T}](../../yql/reference/syntax/create_table/vector_index.md).
 
 For general information about vector indexes, their creation parameters, and current limitations, see the section [{#T}](../../dev/vector-indexes.md).
 

@@ -20,7 +20,7 @@ client_certificate_authorization:
     - member_groups: <массив SID>
       require_same_issuer: Bool
       subject_dns:
-      - suffixes: <массив разрешенных суффиксов>
+        suffixes: <массив разрешенных суффиксов>
         values: <массив допустимых значений>
       subject_terms:
       - short_name: <имя компонента Subject Name>
@@ -62,7 +62,7 @@ client_certificate_authorization:
   client_certificate_definitions:
     - member_groups: ["registerNode@cert"]
       subject_dns:
-      - suffixes: [".cluster1.ydb.company.net"]
+        suffixes: [".cluster1.ydb.company.net"]
       subject_terms:
       - short_name: "OU"
         values: ["cluster1"]

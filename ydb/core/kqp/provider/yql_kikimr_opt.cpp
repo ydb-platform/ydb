@@ -1,11 +1,15 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/common_opt/yql_co.h>
-#include<yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
+
 namespace {
 
 using namespace NNodes;
@@ -38,7 +42,7 @@ TExprNode::TPtr KiEmptyCommit(TExprBase node) {
     return innerCommit.Ptr();
 }
 
-} // namespace
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types)

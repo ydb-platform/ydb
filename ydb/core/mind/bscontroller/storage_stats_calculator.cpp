@@ -222,6 +222,9 @@ private:
                             if (pdisk.HasEnforcedDynamicSlotSize()) {
                                 pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
                             }
+                            if (pdisk.HasSlotSizeInUnits()) {
+                                pm.SetSlotSizeInUnits(pdisk.GetSlotSizeInUnits());
+                            }
                             vm.SetAllocatedSize(0);
                             disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
                         }
@@ -230,7 +233,7 @@ private:
             }
 
             NKikimrSysView::TGroupInfo groupInfo;
-            CalculateGroupUsageStats(&groupInfo, disks, erasureType);
+            CalculateGroupUsageStats(&groupInfo, disks, erasureType, 1u);
             groupSizes.push_back(groupInfo.GetAvailableSize());
 
             group.clear();

@@ -4,13 +4,13 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/protos/table_service_config.pb.h>
-
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -103,7 +103,7 @@ bool IsIdLambda(TExprBase body) {
     return false;
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprBase KqpTopSortSelectIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
@@ -598,7 +598,6 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
     *input = readMatch->BuildProcessNodes(*input, ctx);
     return std::make_pair(*input, residualLambda);
 }
-
 
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap)

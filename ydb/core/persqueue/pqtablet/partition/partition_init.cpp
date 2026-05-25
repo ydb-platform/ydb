@@ -1105,6 +1105,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+    TotalPartitionWriteSpeedInMessages = Config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();

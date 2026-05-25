@@ -1,13 +1,17 @@
+#include "kqp_opt.h"
+
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
-#include "yql/essentials/core/type_ann/type_ann_impl.h"
+#include <yql/essentials/core/type_ann/type_ann_impl.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>

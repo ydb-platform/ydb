@@ -4,7 +4,7 @@
 
     Lexers for computer algebra systems.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -151,16 +151,17 @@ class MathematicaLexer(RegexLexer):
     Lexer for Mathematica source code.
     """
     name = 'Mathematica'
-    url = 'http://www.wolfram.com/mathematica/'
-    aliases = ['mathematica', 'mma', 'nb']
-    filenames = ['*.nb', '*.cdf', '*.nbp', '*.ma']
+    url = 'https://www.wolfram.com/language/'
+    aliases = ['mathematica', 'mma', 'nb', 'wl', 'wolfram']
+    filenames = ['*.nb', '*.cdf', '*.nbp', '*.ma', '*.wl', '*.wls']
     mimetypes = ['application/mathematica',
                  'application/vnd.wolfram.mathematica',
                  'application/vnd.wolfram.mathematica.package',
-                 'application/vnd.wolfram.cdf']
+                 'application/vnd.wolfram.cdf',
+                 'application/vnd.wolfram.wl']
     version_added = '2.0'
 
-    # http://reference.wolfram.com/mathematica/guide/Syntax.html
+    # https://reference.wolfram.com/language/guide/Syntax.html
     operators = (
         ";;", "=", "=.", "!=" "==", ":=", "->", ":>", "/.", "+", "-", "*", "/",
         "^", "&&", "||", "!", "<>", "|", "/;", "?", "@", "//", "/@", "@@",

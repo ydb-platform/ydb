@@ -852,7 +852,11 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin")
+        );
         ::NFq::TPrivateClient client(driver);
         const TString historyId = "id";
         const TString folderId = "folder_id";
@@ -881,7 +885,11 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin")
+        );
         ::NFq::TPrivateClient client(driver);
         {
             Fq::Private::GetTaskRequest req;
@@ -905,7 +913,11 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
-        auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint(location)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin")
+        );
         ::NFq::TPrivateClient client(driver);
         const auto instanceId = CreateGuidAsString();
         {

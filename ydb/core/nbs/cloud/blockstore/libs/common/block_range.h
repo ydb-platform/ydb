@@ -184,6 +184,12 @@ struct TBlockRange
         return lhs.Start == rhs.Start && lhs.End == rhs.End;
     }
 
+    friend bool operator<(const TBlockRange& lhs, const TBlockRange& rhs)
+    {
+        return std::make_tuple(lhs.Start, lhs.End) <
+               std::make_tuple(rhs.Start, rhs.End);
+    }
+
     [[nodiscard]] TString Print() const;
 
 private:

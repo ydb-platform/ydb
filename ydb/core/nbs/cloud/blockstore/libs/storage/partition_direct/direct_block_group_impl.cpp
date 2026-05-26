@@ -16,6 +16,11 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <execinfo.h>
+
+#include <cstdlib>
+#include <iostream>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -123,6 +128,14 @@ TDirectBlockGroup::TDirectBlockGroup(
         pbufferIds,
         PBufferConnections,
         EConnectionType::PBuffer);
+}
+
+TDirectBlockGroup::~TDirectBlockGroup()
+{
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "ololo TDirectBlockGroup is destroying.");
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr vChunk)
@@ -488,8 +501,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     return result;
 }
 
-NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-TDirectBlockGroup::WriteBlocksToManyPBuffers(
+void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
     TVector<THostIndex> hostIndexes,
@@ -497,42 +509,38 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     TBlockRange64 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
-    const NWilson::TTraceId& traceId)
+    const NWilson::TTraceId& traceId,
+    TWriteBlocksToManyPBuffersCallback callback)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.size() > 0);
-
-    using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
-        NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
 
     const auto startAt = TMonotonic::Now();
 
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds;
     disksIds.reserve(hostIndexes.size());
+    std::shared_ptr<TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess>>
+        waitingReplies = std::make_shared<
+            TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess>>();
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
             PBufferConnections[hostIndex].HostConnection.DDiskId;
 
         disksIds.push_back({});
         ddiskId.Serialize(&disksIds.back());
+        waitingReplies->emplace(disksIds.back());
     }
 
     if (!Initialized) {
-        return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(
-            TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
-                E_REJECTED,
-                "Connections are not established"));
+        callback(TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+            E_REJECTED,
+            "Connections are not established"));
+        return;
     }
-
-    auto childSpan =
-        CreateChildSpan(traceId, "NbsPartition.WriteBlocksToManyPBuffers");
-
-    auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
-    auto result = promise.GetFuture();
 
     OnRequest(coordinatorHostIndex, EOperation::WriteToManyPBuffers);
 
-    auto future = StorageTransport->WriteToManyPBuffers(
+    StorageTransport->WriteToManyPBuffers(
         PBufferConnections[coordinatorHostIndex].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
@@ -543,53 +551,72 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         std::move(disksIds),
         replyTimeout,
         guardedSglist,
-        childSpan.get());
-
-    future.Subscribe(
-        [promise = std::move(promise),
-         childSpan = std::move(childSpan),
-         startAt,
+        CreateChildSpan(traceId, "NbsPartition.WriteBlocksToManyPBuffers"),
+        [startAt,
          coordinatorHostIndex,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         callback = std::move(callback),
+         waitingReplies,
          weakSelf = weak_from_this()](
-            const TEvWriteToManyPersistentBuffersResultFuture& f) mutable
+            NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult
+                result,
+            std::shared_ptr<NWilson::TSpan> span) mutable
         {
-            // ActorSystem thread
+            for (const auto& singlePBufferResponse: result.GetResult()) {
+                auto it = waitingReplies->find(
+                    singlePBufferResponse.GetPersistentBufferId());
+                if (it != waitingReplies->end()) {
+                    waitingReplies->erase(it);
+                }
+            }
 
+            NTransport::EWriteStatus status =
+                waitingReplies->empty() ? NTransport::EWriteStatus::FINISHED
+                                        : NTransport::EWriteStatus::IN_PROGRESS;
+
+            auto responseSpan =
+                span ? std::make_shared<NWilson::TSpan>(span->CreateChild(
+                           NKikimr::TWilsonNbs::NbsBasic,
+                           "WriteBlocksToManyPBuffers.Response",
+                           NWilson::EFlags::AUTO_END))
+                     : nullptr;
             executor->ExecuteSimple(
-                [promise = std::move(promise),
-                 childSpan = std::move(childSpan),
+                [responseSpan = std::move(responseSpan),
                  startAt,
                  coordinatorHostIndex,
                  threadChecker,
-                 f,
-                 weakSelf = std::move(weakSelf)]() mutable
+                 result = std::move(result),
+                 callback,
+                 weakSelf]() mutable -> void
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
+                    if (responseSpan) {
+                        responseSpan->Event("Reply on DBG thread");
+                    }
+
                     if (auto self = weakSelf.lock()) {
                         self->OnWriteBlocksToManyPBuffersResponse(
-                            f.GetValue(),
+                            result,
                             coordinatorHostIndex,
-                            std::move(promise),
+                            std::move(callback),
                             TMonotonic::Now() - startAt);
-                    } else {
-                        promise.SetValue(
-                            TDBGWriteBlocksToManyPBuffersResponse::
-                                MakeOverallError(
-                                    E_FAIL,
-                                    "WriteBlocksToManyPBuffersResponse: DBG is "
-                                    "destroyed already."));
+                        return;
                     }
+                    callback(
+                        TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+                            E_FAIL,
+                            "WriteBlocksToManyPBuffersResponse: DBG is "
+                            "destroyed already."));
                 });
+            return status;
         });
-    return result;
 }
 
 void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
     const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult& response,
     THostIndex coordinatorHostIndex,
-    TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
+    TWriteBlocksToManyPBuffersCallback callback,
     TDuration executionTime)
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
@@ -636,7 +663,8 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         executionTime,
         EOperation::WriteToManyPBuffers,
         coordinatorError);
-    promise.SetValue(std::move(dbgResponse));
+
+    callback(std::move(dbgResponse));
 }
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(

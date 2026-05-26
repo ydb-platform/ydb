@@ -630,6 +630,9 @@ class KikimrConfigGenerator(object):
                     "pipe_client_max_retry_time": 10,
                     "sync_requests_batch_size": 3,
                     "vchunk_size": vchunk_size,
+                    "write_hedging_delay": 900,
+                    "pbuffer_reply_timeout_microseconds": 1000,
+                    "write_mode": 0,
                 }
             }
 

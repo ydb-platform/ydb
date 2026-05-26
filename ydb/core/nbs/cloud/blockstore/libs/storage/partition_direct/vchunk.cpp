@@ -271,7 +271,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     DirtyMapRestored = true;
 
     DoFlush(false);
-    DoErase(false);
+    DoErase(false, TBlocksDirtyMap::EEraseType::USUAL);
 }
 
 void TVChunk::DoStart()
@@ -431,13 +431,11 @@ void TVChunk::DoWriteBlocksLocal(
         lsn,
         span->GetTraceId());
 
-    auto future = writeExecutor->GetFuture();
-    future.Subscribe(
+    writeExecutor->SetReplyCallback(
         [weakSelf = weak_from_this(),
          vchunkRange,
          promise = std::move(promise),
-         span]   //
-        (const TFuture<TBaseWriteRequestExecutor::TResponse>& f) mutable
+         span](TBaseWriteRequestExecutor::TResponse response) mutable
         {
             auto self = weakSelf.lock();
             if (!self) {
@@ -448,8 +446,18 @@ void TVChunk::DoWriteBlocksLocal(
             self->OnWriteBlocksResponse(
                 std::move(promise),
                 vchunkRange,
-                f.GetValue(),
+                response,
                 std::move(span));
+        });
+
+    writeExecutor->SetNotifyCallback(
+        [weakSelf = weak_from_this(),
+         vchunkRange](THostMask completedWrites, ui64 lsn) mutable
+        {
+            auto self = weakSelf.lock();
+            if (self) {
+                self->OnWriteBlocksNotify(vchunkRange, completedWrites, lsn);
+            }
         });
 
     span->Event("Run");
@@ -500,10 +508,27 @@ void TVChunk::OnWriteBlocksResponse(
     ScheduleCleaningUp();
 }
 
-void TVChunk::DoFlush(bool force)
+void TVChunk::OnWriteBlocksNotify(
+    TBlockRange64 range,
+    THostMask completedWrites,
+    ui64 lsn)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "OnWriteBlocksNotify. Range %s",
+        range.Print().c_str());
+
+    BlocksDirtyMap.UpdateAdditionalEraseQueue(completedWrites, lsn, range);
+
+    DoErase(false, TBlocksDirtyMap::EEraseType::HANGING);
+}
+
+void TVChunk::DoFlush(bool force)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     if (!BlocksDirtyMap.NeedFlush()) {
         return;
     }
@@ -569,11 +594,12 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     }
 
     UpdatePendingCounters();
-    DoErase(false);
+
+    DoErase(false, TBlocksDirtyMap::EEraseType::USUAL);
     ScheduleCleaningUp();
 }
 
-void TVChunk::DoErase(bool force)
+void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -581,8 +607,21 @@ void TVChunk::DoErase(bool force)
         return;
     }
 
-    auto hints =
-        BlocksDirtyMap.MakeEraseHint(force ? 1 : SyncRequestsBatchSize);
+    TEraseHints hints;
+    switch (eraseType) {
+        case TBlocksDirtyMap::EEraseType::USUAL:
+            hints =
+                BlocksDirtyMap.MakeEraseHint(force ? 1 : SyncRequestsBatchSize);
+            break;
+        case TBlocksDirtyMap::EEraseType::HANGING:
+            hints = BlocksDirtyMap.MakeEraseHangingHint(SyncRequestsBatchSize);
+            LOG_DEBUG(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "TVChunk::DoErase HANGING count: %d",
+                hints.GetAllHints().size());
+            break;
+    };
 
     LOG_DEBUG(
         *ActorSystem,
@@ -603,12 +642,19 @@ void TVChunk::DoErase(bool force)
 
         auto future = eraseExecutor->GetFuture();
         future.Subscribe(
-            [weakSelf = weak_from_this()]   //
+            [weakSelf = weak_from_this(), eraseType]   //
             (const TFuture<TEraseRequestExecutor::TResponse>& f) mutable
             {
                 // Executor thread
                 if (auto self = weakSelf.lock()) {
-                    self->OnEraseResponse(f.GetValue());
+                    switch (eraseType) {
+                        case TBlocksDirtyMap::EEraseType::USUAL:
+                            self->OnEraseResponse(f.GetValue());
+                            break;
+                        case TBlocksDirtyMap::EEraseType::HANGING:
+                            self->OnEraseHangingResponse(f.GetValue());
+                            break;
+                    };
                 }
             });
 
@@ -636,6 +682,21 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     }
     for (size_t i = 0; i < response.EraseFailed.size(); ++i) {
         Counters.RequestFinished(EVChunkOperation::Erase, false);
+    }
+
+    UpdatePendingCounters();
+}
+
+void TVChunk::OnEraseHangingResponse(
+    const TEraseRequestExecutor::TResponse& response)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    for (size_t i = 0; i < response.EraseOk.size(); ++i) {
+        Counters.RequestFinished(EVChunkOperation::EraseHanging, true);
+    }
+    for (size_t i = 0; i < response.EraseFailed.size(); ++i) {
+        Counters.RequestFinished(EVChunkOperation::EraseHanging, false);
     }
 
     UpdatePendingCounters();
@@ -691,7 +752,7 @@ void TVChunk::CleaningUp()
         BlocksDirtyMap.NeedErase() ? "NeedErase" : "");
 
     DoFlush(true);
-    DoErase(true);
+    DoErase(true, TBlocksDirtyMap::EEraseType::USUAL);
 }
 
 void TVChunk::UpdatePendingCounters()
@@ -704,6 +765,9 @@ void TVChunk::UpdatePendingCounters()
     Counters.UpdatePending(
         EVChunkOperation::Erase,
         BlocksDirtyMap.GetErasePendingCount());
+    Counters.UpdatePending(
+        EVChunkOperation::EraseHanging,
+        BlocksDirtyMap.GetEraseHangingCount());
     Counters.UpdateMinLsn(
         EVChunkOperation::Flush,
         BlocksDirtyMap.GetMinFlushPendingLsn());

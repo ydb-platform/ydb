@@ -1,7 +1,10 @@
 #pragma once
 
 #include "base_test_fixture.h"
+#include "write_request.h"
 #include "write_with_pb_replication_request.h"
+
+#include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -20,9 +23,12 @@ struct TWriteWithPbTestFixture: public TBaseFixture
 
     TVector<NThreading::TPromise<TDBGWriteBlocksResponse>> DirectWritePromises;
 
-    NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse>
-        ManyPBufferPromise;
+    // Stored callback from the last WriteBlocksToManyPBuffers call.
+    // Tests can invoke it to simulate a response (possibly multiple times).
+    IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback ManyPBufferCallback;
     TVector<std::pair<TDuration, TCallback>> Scheduled;
+
+    std::optional<TBaseWriteRequestExecutor::TResponse> CallbackResult;
 
     TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
     GetManyPBuffersHandlerWithImmediateOkResponse();

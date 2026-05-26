@@ -59,7 +59,9 @@ void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
                     TWriteWithDirectReplicationRequestExecutor>(
                     weakSelf.lock()))
             {
-                self->SendWriteRequestsToHandoffPBuffers();
+                if (!self->IsAlreadyReplied()) {
+                    self->SendWriteRequestsToHandoffPBuffers();
+                }
             }
         });
 }
@@ -67,10 +69,6 @@ void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
 void TWriteWithDirectReplicationRequestExecutor::
     SendWriteRequestsToHandoffPBuffers()
 {
-    if (Promise.IsReady()) {
-        return;
-    }
-
     const auto availableHandOffHosts = GetAvailableHandOffHosts();
     const size_t neededHedgingRequestsCount = std::min(
         QuorumDirectBlockGroupHostCount - CompletedWrites.Count(),

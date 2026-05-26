@@ -16,7 +16,8 @@ TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
 
 TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
 {
-    Y_ABORT_UNLESS(Promise.IsReady());
+    // Callback may be called multiple times (for each response), so no check
+    // here unlike other requests that use Promise.
 }
 
 TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()

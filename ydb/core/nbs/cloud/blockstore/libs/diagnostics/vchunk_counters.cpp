@@ -42,6 +42,8 @@ TVChunkCounters::TVChunkCounters(NMonitoring::TDynamicCounterPtr parent)
     , Write(parent ? parent->GetSubgroup("operation", "Write") : nullptr)
     , Flush(parent ? parent->GetSubgroup("operation", "Flush") : nullptr)
     , Erase(parent ? parent->GetSubgroup("operation", "Erase") : nullptr)
+    , EraseHanging(
+          parent ? parent->GetSubgroup("operation", "EraseHanging") : nullptr)
 {}
 
 void TVChunkCounters::RequestFinished(EVChunkOperation operation, bool ok)
@@ -70,6 +72,8 @@ TVChunkRequestCounters& TVChunkCounters::Get(EVChunkOperation operation)
             return Flush;
         case EVChunkOperation::Erase:
             return Erase;
+        case EVChunkOperation::EraseHanging:
+            return EraseHanging;
 
         case EVChunkOperation::MAX:
             Y_ABORT("Invalid operation");

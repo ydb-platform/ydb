@@ -92,9 +92,7 @@ void TWriteWithPbReplicationRequestExecutor::Run()
 void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
     TVector<THostIndex> hosts)
 {
-    if (Promise.IsReady()) {
-        return;
-    }
+    Y_ABORT_IF(IsAlreadyReplied());
 
     LOG_DEBUG(
         *ActorSystem,
@@ -115,7 +113,7 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         RequestedWrites.Set(host);
     }
 
-    auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
+    DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
         coordinatorHostIndex,
         std::move(hosts),
@@ -123,14 +121,12 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
         VChunkRange,
         PbufferReplyTimeout,
         Request->Sglist,
-        NWilson::TTraceId(TraceId));
-
-    future.Subscribe(
+        NWilson::TTraceId(TraceId),
         [self =
              std::static_pointer_cast<TWriteWithPbReplicationRequestExecutor>(
                  shared_from_this())](
-            const NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>& f)
-        { self->OnWriteToManyPBuffersResponse(f.GetValue()); });
+            TDBGWriteBlocksToManyPBuffersResponse response)
+        { self->OnWriteToManyPBuffersResponse(response); });
 }
 
 void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
@@ -148,9 +144,11 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         return;
     }
 
+    THostMask completedWritesOfCurrentResponse;
     for (const auto& pbufferResponse: response.Responses) {
         const auto host = pbufferResponse.HostIndex;
         AvailableHostsForDirectSending.Reset(host);
+
         if (!HasError(pbufferResponse.Error)) {
             LOG_DEBUG(
                 *ActorSystem,
@@ -159,7 +157,8 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
                 host,
                 Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
                 Request->Headers.Range.Print().c_str());
-            CompletedWrites.Set(host);
+
+            completedWritesOfCurrentResponse.Set(host);
         } else {
             LOG_WARN(
                 *ActorSystem,
@@ -173,8 +172,10 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
         }
     }
 
+    CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
+
     if (ShouldReplyOk()) {
-        Reply(MakeError(S_OK));
+        ReplyOrNotify(MakeError(S_OK), completedWritesOfCurrentResponse);
         return;
     }
 
@@ -192,7 +193,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    bool needToSend = CompletedWrites.Count() + ActiveDirectWritesNumber <
+    bool needToSend = CompletedWrites.Count() + ActiveDirectWrites.Count() <
                       QuorumDirectBlockGroupHostCount;
 
     // We are relying on the IC layer: a reply will eventually arrive,
@@ -203,7 +204,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
 
     size_t neededRequestsNumber = QuorumDirectBlockGroupHostCount -
                                   CompletedWrites.Count() -
-                                  ActiveDirectWritesNumber;
+                                  ActiveDirectWrites.Count();
     bool haveEnoughAvailableHostsForSending =
         neededRequestsNumber <= AvailableHostsForDirectSending.Count();
 
@@ -219,7 +220,7 @@ void TWriteWithPbReplicationRequestExecutor::TryToSendDirectWrites(bool isHedge)
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
 
-        Reply(resultError);
+        ReplyOrNotify(resultError, {});
         return;
     }
 
@@ -250,7 +251,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    LOG_DEBUG(
+    LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "OnWriteToManyPBuffersResponse DirectResponse on %d host %s %s",
@@ -258,18 +259,18 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
         Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
         Request->Headers.Range.Print().c_str());
 
-    --ActiveDirectWritesNumber;
-    if (Promise.IsReady()) {
-        return;
-    }
+    ActiveDirectWrites.Reset(host);
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
         if (ShouldReplyOk()) {
-            Reply(MakeError(S_OK));
+            ReplyOrNotify(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
     }
+    // There is no necessity of vchunk's notifying in case of error.
+    // Notifying has sense only for CompletedWrites.
+    // RequestedWrites will be registered in any case.
 
     LOG_WARN(
         *ActorSystem,
@@ -302,7 +303,7 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
             if (auto self = std::static_pointer_cast<
                     TWriteWithPbReplicationRequestExecutor>(weakSelf.lock()))
             {
-                if (!self->Promise.IsReady()) {
+                if (!self->IsAlreadyReplied()) {
                     self->TryToSendDirectWrites(true);
                 }
             }
@@ -312,8 +313,18 @@ void TWriteWithPbReplicationRequestExecutor::ScheduleHedging()
 void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
     THostIndex host)
 {
-    ++ActiveDirectWritesNumber;
+    ActiveDirectWrites.Set(host);
     SendWriteRequest(host);
+}
+
+TString TWriteWithPbReplicationRequestExecutor::ExtendedDebugState() const
+{
+    TString result = TBaseWriteRequestExecutor::ExtendedDebugState();
+    result += "AvailableHostsForDirectSending: " +
+              AvailableHostsForDirectSending.Print();
+    result += "ActiveDirectWrites" + ActiveDirectWrites.Print();
+
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

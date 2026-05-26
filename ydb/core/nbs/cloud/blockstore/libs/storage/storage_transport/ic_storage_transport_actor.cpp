@@ -90,7 +90,10 @@ TICStorageTransportActor::~TICStorageTransportActor()
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             DestroyErrorMessage,
             request->PersistentBufferIds);
-        request->Promise.SetValue(std::move(response->Record));
+        if (request->Callback) {
+            // Ignore the return value on destruction.
+            request->Callback(std::move(response->Record));
+        }
     }
 }
 
@@ -321,12 +324,16 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
         auto& request = **r;
-        request.Promise.SetValue(std::move(ev->Get()->Record));
-        WriteToManyPBuffersRequests.erase(requestId);
+        if (request.Callback) {
+            const EWriteStatus status = request.Callback(ev->Get()->Record);
+            if (status == EWriteStatus::FINISHED) {
+                WriteToManyPBuffersRequests.erase(requestId);
+            }
+            // If status is IN_PROGRESS, do NOT erase from map: the callback
+            // may be called again when the next response arrives.
+        }
     } else {
-        // That means that request is already completed
-        // TODO handle this case in writeRequests through weak_ptr with erase
-        LOG_DEBUG(
+        LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "

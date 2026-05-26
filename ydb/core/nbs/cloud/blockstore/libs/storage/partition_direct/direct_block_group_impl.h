@@ -38,7 +38,7 @@ public:
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
 
-    ~TDirectBlockGroup() override = default;
+    ~TDirectBlockGroup() override;
 
     // IDirectBlockGroup implementation
 
@@ -86,8 +86,7 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
@@ -95,7 +94,8 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) override;
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
@@ -157,7 +157,7 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
             response,
         THostIndex coordinatorHostIndex,
-        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
+        TWriteBlocksToManyPBuffersCallback callback,
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(

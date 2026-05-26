@@ -201,8 +201,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
+void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
     TVector<THostIndex> hostIndexes,
@@ -210,9 +209,10 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     TBlockRange64 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
-    const NWilson::TTraceId& traceId)
+    const NWilson::TTraceId& traceId,
+    TWriteBlocksToManyPBuffersCallback callback)
 {
-    return WriteBlocksToManyPBuffersHandler(
+    WriteBlocksToManyPBuffersHandler(
         vChunkIndex,
         coordinatorHostIndex,
         std::move(hostIndexes),
@@ -220,7 +220,8 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
         range,
         replyTimeout,
         guardedSglist,
-        traceId);
+        traceId,
+        std::move(callback));
 }
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(

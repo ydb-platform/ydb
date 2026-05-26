@@ -463,6 +463,27 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
     return result;
 }
 
+TEraseHints TBlocksDirtyMap::MakeEraseHangingHint(size_t batchSize)
+{
+    TEraseHints result;
+
+    if (ReadyToEraseHanging.size() < batchSize) {
+        return result;
+    }
+
+    TSet<TInfoEraseHanging> readyToEraseHanging;
+    readyToEraseHanging.swap(ReadyToEraseHanging);
+    for (auto& item: readyToEraseHanging) {
+        auto hostMask = item.Hosts;
+        auto range = item.Range;
+        for (auto host: hostMask) {
+            result.AddHint(host, item.Lsn, range);
+        }
+    }
+
+    return result;
+}
+
 void TBlocksDirtyMap::WriteFinished(
     ui64 lsn,
     TBlockRange64 range,
@@ -532,6 +553,29 @@ void TBlocksDirtyMap::EraseFinished(
     }
 }
 
+void TBlocksDirtyMap::UpdateAdditionalEraseQueue(
+    THostMask completedWrites,
+    ui64 lsn,
+    TBlockRange64 range)
+{
+    bool needToRegister = true;
+    auto item = Inflight.GetValue(lsn);
+    if (item) {
+        auto& inflight = item->Value;
+        needToRegister = inflight.GetState() == TInflightInfo::EState::PBufferErasing ||
+            inflight.GetState() == TInflightInfo::EState::PBufferErased;
+    }
+
+    if (!needToRegister) {
+        return;
+    }
+    // TODO use Register() method
+    ReadyToEraseHanging.emplace(TInfoEraseHanging{
+        .Lsn = lsn,
+        .Hosts = completedWrites,
+        .Range = range});
+}
+
 void TBlocksDirtyMap::MarkFresh(THostIndex host, ui64 bytesOffset)
 {
     DDiskStates[host].SetReadWatermark(bytesOffset / BlockSize);
@@ -569,6 +613,11 @@ size_t TBlocksDirtyMap::GetFlushPendingCount() const
 size_t TBlocksDirtyMap::GetErasePendingCount() const
 {
     return ReadyToErase.size();
+}
+
+size_t TBlocksDirtyMap::GetEraseHangingCount() const
+{
+    return ReadyToEraseHanging.size();
 }
 
 ui64 TBlocksDirtyMap::GetMinFlushPendingLsn() const
@@ -731,7 +780,7 @@ bool TBlocksDirtyMap::NeedFlush() const
 
 bool TBlocksDirtyMap::NeedErase() const
 {
-    return !ReadyToErase.empty();
+    return !ReadyToErase.empty() || !ReadyToEraseHanging.empty();
 }
 
 TString TBlocksDirtyMap::DebugPrintPBuffers()
@@ -832,7 +881,10 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
         mask = FilterLocations(mask, range);
     }
     mask = mask.Exclude(DisabledHosts);
-    Y_ABORT_UNLESS(!mask.Empty());
+    if (mask.Empty()) {
+        mask = mask.Include(DesiredDDisks);
+    }
+    Y_ABORT_UNLESS(!mask.Empty(), "MakeReadRangeHint empty mask");
 
     return TReadRangeHint(
         mask,

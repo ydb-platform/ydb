@@ -936,3 +936,4 @@ class YDBWrapper:
                 'statistics_database': self.stats_path,
                 'statistics_table': self.stats_table
             }
+

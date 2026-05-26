@@ -501,7 +501,6 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev);
         void Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev);
         void Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev);
-        void Handle(NMon::TEvHttpInfo::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
@@ -556,6 +555,10 @@ namespace NLongTxService {
         void UnlinkWaitNode(TWaitNode&);
 
         void ScheduleDeadlockDetection(TLockIsland&, TDuration delay);
+
+    private:
+        void Handle(NMon::TEvHttpInfo::TPtr& ev);
+        TString RenderLocksMonPage();
 
     private:
         const TLongTxServiceSettings Settings;

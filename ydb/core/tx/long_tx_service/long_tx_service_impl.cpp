@@ -5,6 +5,7 @@
 #include <util/string/builder.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
@@ -36,8 +37,10 @@ void TLongTxServiceActor::Bootstrap() {
     Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
 
     if (NActors::TMon* mon = AppData()->Mon) {
-        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "long_tx_service", "Long Tx Service",
+        NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+        NMonitoring::TIndexMonPage* longTxMonPage = actorsMonPage->RegisterIndexPage(
+            "long_tx_service", "Long Tx Service");
+        mon->RegisterActorPage(longTxMonPage, "locks", "Locks",
             false, TActivationContext::ActorSystem(), SelfId());
     }
 
@@ -1797,6 +1800,23 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
 }
 
 void TLongTxServiceActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
+    TString path(ev->Get()->Request.GetPath());
+    auto pathParts = SplitPath(path);
+    if (pathParts.empty()) {
+        Send(ev->Sender, new NMon::TEvHttpInfoRes("Bad path: " + path));
+        return;
+    }
+    const auto& page = pathParts[pathParts.size() - 1];
+    TString res;
+    if (page == "locks") {
+        res = RenderLocksMonPage();
+    } else {
+        res = "Unknown page: " + page;
+    }
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(std::move(res)));
+}
+
+TString TLongTxServiceActor::RenderLocksMonPage() {
     auto now = AppData()->TimeProvider->Now();
     TStringStream str;
     HTML(str) {
@@ -1804,8 +1824,6 @@ void TLongTxServiceActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
             str << "Local locks: " << Locks.size() << Endl;
             for (const auto& [id, lock] : Locks) {
                 str << "    Id: " << id
-                    << " Local subscribers: " << lock.LocalSubscribers.size()
-                    << " Remote subscribers: " << lock.RemoteSubscribers.size()
                     << " Timestamp: " << lock.Timestamp
                     << " (Age: " << (now - lock.Timestamp).MilliSeconds() << "ms)"
                     << Endl;
@@ -1866,7 +1884,7 @@ void TLongTxServiceActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
             }
         }
     }
-    Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+    return str.Str();
 }
 
 } // namespace NLongTxService

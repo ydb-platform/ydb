@@ -122,6 +122,7 @@ namespace NKikimr::NHttpProxy {
                     std::move(Request),
                     HttpContext.DatabasePath,
                     HttpContext.SerializedUserToken,
+                    Nothing(),
                     ctx.ActorSystem(),
                     peerMetadata
                 );

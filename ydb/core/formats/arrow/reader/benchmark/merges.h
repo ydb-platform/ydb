@@ -8,6 +8,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h>
@@ -22,7 +23,8 @@
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/grouper.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/type_fwd.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h>
-
+#include <yql/essentials/public/udf/arrow/defs.h>
+#include <ydb/core/base/backtrace.h>
 
 
 using namespace NKikimr::NArrow::NMerger;
@@ -75,6 +77,7 @@ struct TFixture {
     std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
 
     TFixture(int numSources) {
+        NKikimr::EnableYDBBacktraceFormat();
         Batches.reserve(numSources);
         for (int i = 0; i < numSources; ++i) {
             Batches.push_back(MakeBatch(10000, i));
@@ -98,19 +101,7 @@ inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
     return builder.Finalize();
 }
 
-void fooo() {
-    int size = 5;
-    void* arr = new int[5];
-    int write_index = 1; 
-    // arr[0] = arr[0];
-    for (int i = 1; i < size; ++i) {
-        if (arr[i] != arr[i-1]) {
-            arr[write_index++] = arr[i];
-        }
-    }
-}
-
-inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
+inline std::shared_ptr<arrow::Table> MergeOnceArrow(const TFixture& f) {
     auto sortSchema = MakeSortSchema();
     auto fullSchema = MakeFullSchema();
 
@@ -138,11 +129,40 @@ inline std::shared_ptr<arrow::RecordBatch> MergeOnce(const TFixture& f) {
     Y_ABORT_UNLESS(takenRes.ok());
     auto result = takenRes->table();
 
+    auto all_data_but_first_tuple = result->Slice(1);
 
+    auto all_data_but_last_tuple = result->Slice(0, result->num_rows() - 1);
+    auto names = all_data_but_first_tuple->ColumnNames();
+    for(auto& name: names) {
+        Cerr << name << ", "; 
+    }
+    Cerr << '\n';
+    auto bools_without_first = arrow::compute::CallFunction("not_equal", {all_data_but_first_tuple->column(0), all_data_but_last_tuple->column(0)}).ValueOrDie();
+    for(ui64 index = 1; index + 1 < names.size(); ++index) {
+        bools_without_first = arrow::compute::And(bools_without_first, arrow::compute::CallFunction("not_equal", {all_data_but_first_tuple->column(index), all_data_but_last_tuple->column(index)}).ValueOrDie()).ValueOrDie();
+    }
+    arrow::BooleanBuilder bb;
+    ARROW_OK(bb.Append(true));
+    std::shared_ptr<arrow::Array> head;
+    ARROW_OK(bb.Finish(&head));
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    chunks.push_back(head);
+    chunks.insert(chunks.end(), bools_without_first.chunked_array()->chunks().begin(), bools_without_first.chunked_array()->chunks().end());
 
-    return result;
+    auto bitmap = arrow::ChunkedArray::Make(chunks).ValueOrDie();
+
+    auto indices_ok = arrow::compute::CallFunction("indices_nonzero", {bitmap}).ValueOrDie();
+
+    auto res_without_first = arrow::compute::Take(result, indices_ok).ValueOrDie();
+    
+    return res_without_first.table();
 
 }
+
+// (1,1), (1,0), (2,1), (2,0)
+
+// all_but_first: (1,0), (2,1), (2,0)
+// all_but_last: (1,1), (1,0), (2,1)
 
 
 

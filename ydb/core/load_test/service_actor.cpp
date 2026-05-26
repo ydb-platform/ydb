@@ -1,5 +1,8 @@
 #include "service_actor.h"
 
+#include "events.h"
+#include "nbs_dbg_like_load.h"
+#include "nbs_dbg_like_load_service.h"
 #include "aggregated_result.h"
 #include "archive.h"
 #include "config_examples.h"
@@ -54,6 +57,22 @@ ui32 GetCgiParamNumber(const TCgiParameters& params, const TStringBuf name, ui32
     return defaultValue;
 }
 
+TString EscapeHtmlAttr(TStringBuf in) {
+    TString out;
+    out.reserve(in.size() + 8);
+    for (char c : in) {
+        switch (c) {
+            case '&':  out += "&amp;"; break;
+            case '<':  out += "&lt;"; break;
+            case '>':  out += "&gt;"; break;
+            case '"':  out += "&quot;"; break;
+            case '\'': out += "&#39;"; break;
+            default:   out += c;
+        }
+    }
+    return out;
+}
+
 bool IsLegacyRequest(const TEvLoadTestRequest& request) {
     return !request.HasTag() || !request.HasUuid() || !request.HasTimestamp();
 }
@@ -86,6 +105,8 @@ const google::protobuf::Message* GetCommandFromRequest(const TEvLoadTestRequest&
         return &request.GetYCSBLoad();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return &request.GetInterconnectLoad();
+    case TEvLoadTestRequest::CommandCase::kNbsDbgLikeLoad:
+        return &request.GetNbsDbgLikeLoad();
 #ifdef __linux__
     case TEvLoadTestRequest::CommandCase::kNBS2Load:
         return &request.GetNBS2Load();
@@ -123,6 +144,8 @@ ui64 ExtractTagFromCommand(const TEvLoadTestRequest& request) {
         return request.GetYCSBLoad().GetTag();
     case TEvLoadTestRequest::CommandCase::kInterconnectLoad:
         return request.GetInterconnectLoad().GetTag();
+    case TEvLoadTestRequest::CommandCase::kNbsDbgLikeLoad:
+        return request.GetNbsDbgLikeLoad().GetTag();
 #ifdef __linux__
     case TEvLoadTestRequest::CommandCase::kNBS2Load:
         return request.GetNBS2Load().GetTag();
@@ -179,6 +202,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         int SubRequestId; // origin subrequest id
         TMap<TActorId, TActorInfo> ActorMap; // per-actor status
         ui32 HttpInfoResPending; // number of requests pending
+        TString NbsTabletListHtml; // async Hive-backed tablet list fragment (?mode=tablet)
         TString Mode; // mode of page content
         TString AcceptFormat;
         ui32 Offset = 0;
@@ -653,6 +677,18 @@ public:
                 break;
             }
 
+            case NKikimr::TEvLoadTestRequest::CommandCase::kNbsDbgLikeLoad: {
+                const auto& cmd = record.GetNbsDbgLikeLoad();
+                if (LoadActors.count(tag) != 0) {
+                    ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
+                }
+                LOG_D("Create new NBS-DBG-Like load actor with tag# " << tag);
+                LoadActors.emplace(tag, TlsActivationContext->Register(
+                    NNbsDbgLike::CreateNbsDbgLikeLoadActor(
+                        cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), tag)));
+                break;
+            }
+
 #ifdef __linux__
             case NKikimr::TEvLoadTestRequest::CommandCase::kNBS2Load: {
                 const auto& cmd = record.GetNBS2Load();
@@ -677,6 +713,19 @@ public:
             }
         }
         return tag;
+    }
+
+    void Handle(TEvLoad::TEvNbsTabletListPageReady::TPtr& ev) {
+        const ui32 id = ev->Get()->HttpRequestId;
+        auto it = InfoRequests.find(id);
+        if (it == InfoRequests.end()) {
+            LOG_E("NbsTabletListPageReady for unknown HttpRequestId# " << id);
+            return;
+        }
+        THttpInfoRequest& info = it->second;
+        info.NbsTabletListHtml = std::move(ev->Get()->HtmlFragment);
+        info.HttpInfoResPending = 0;
+        GenerateHttpInfoRes("tablet", id);
     }
 
     void Handle(TEvLoad::TEvLoadTestFinished::TPtr& ev) {
@@ -872,6 +921,9 @@ public:
             } else {
                 StartReadingResultsFromTable(offset, limit);
             }
+        } else if (mode == "tablet") {
+            info.HttpInfoResPending = 1;
+            Register(NNbsDbgLike::CreateNbsLoadTabletListPageActor(SelfId(), id, info.SubRequestId));
         } else {
             GenerateHttpInfoRes(mode, id);
         }
@@ -933,7 +985,7 @@ public:
             }
 
             GenerateJsonTagInfoRes(id, tag, uuid, errorMsg);
-        } else if (mode = "stop") {
+        } else if (mode == "stop") {
             auto record = ParseMessage<NKikimr::TEvLoadTestRequest::TStop>(request, content);
             if (!record) {
                 record = NKikimr::TEvLoadTestRequest::TStop{};
@@ -953,6 +1005,51 @@ public:
                 ProcessCmd(loadReq);
             }
             GenerateJsonTagInfoRes(id, 0, "", "OK");
+        } else if (mode == "tablet_create" || mode == "tablet_delete") {
+            const auto it = InfoRequests.find(id);
+            if (it == InfoRequests.end()) {
+                LOG_E("tablet_* mode " << mode << " has no InfoRequests entry id=" << id);
+                return;
+            }
+            const TActorId origin = it->second.Origin;
+            const ui32 subRequestId = it->second.SubRequestId;
+            InfoRequests.erase(it);  // helper actor will reply directly
+
+            const ui64 ownerIdx = params.Has("owner_idx")
+                ? FromStringWithDefault<ui64>(params.Get("owner_idx"), 1) : 1;
+            const TString cfg = params.Has("config") ? params.Get("config") : TString();
+            const TString pools = params.Has("storage_pools")
+                ? params.Get("storage_pools") : TString();
+
+            NNbsDbgLike::ENbsLoadTabletOp op = NNbsDbgLike::ENbsLoadTabletOp::Create;
+            if (mode == "tablet_delete") {
+                op = NNbsDbgLike::ENbsLoadTabletOp::Delete;
+            }
+
+            const TActorId helperId = Register(NNbsDbgLike::CreateNbsDbgLikeLoadTabletHttpRequest(
+                op, ownerIdx, cfg, origin, subRequestId, pools));
+            LOG_I("Dispatch tablet helper mode# " << mode
+                << " ownerIdx# " << ownerIdx
+                << " helper# " << helperId
+                << " origin# " << origin);
+        } else {
+            // Unknown POST mode: reply so the HTTP client does not hang.
+            const auto it = InfoRequests.find(id);
+            if (it == InfoRequests.end()) {
+                LOG_E("POST mode " << mode.Quote() << " has no InfoRequests entry id=" << id);
+                return;
+            }
+            const TActorId origin = it->second.Origin;
+            const ui32 subRequestId = it->second.SubRequestId;
+            InfoRequests.erase(it);
+            TStringStream s;
+            s << "HTTP/1.1 400 Bad Request\r\n"
+              << "Content-Type: text/html; charset=utf-8\r\n"
+              << "Connection: Close\r\n\r\n"
+              << "<div class='alert alert-danger'><strong>Unknown POST mode</strong> "
+              << EscapeHtmlAttr(mode) << "</div>";
+            Send(origin, new NMon::TEvHttpInfoRes(
+                s.Str(), subRequestId, NMon::IEvHttpInfoRes::EContentType::Custom));
         }
     }
 
@@ -1211,11 +1308,14 @@ public:
             printTabs("stop", "Stop load");
             printTabs("results", "Results");
             printTabs("archive", "Archive");
+            printTabs("tablet", "NBS-DBG-Like Tablet");
             str << "<br>";
 
             str << "<div>";
             if (mode == "start") {
                 RenderStartForm(str);
+            } else if (mode == "tablet") {
+                NNbsDbgLike::RenderTabletForm(str, info.NbsTabletListHtml);
             } else if (mode == "stop") {
                 str << R"___(
                     <script>
@@ -1246,6 +1346,7 @@ public:
                 auto printUuidTag = [&str](const TString& uuid, ui64 tag) {
                     str << "UUID# " << uuid << " (node tag# " << tag << ")";
                 };
+
                 for (auto it = info.ActorMap.rbegin(); it != info.ActorMap.rend(); ++it) {
                     const TActorInfo& perActorInfo = it->second;
                     auto uuidIter = UuidByTag.find(perActorInfo.Tag);
@@ -1388,6 +1489,7 @@ public:
         hFunc(TEvLoad::TEvLoadTestResponse, Handle)
         hFunc(TEvLoad::TEvLoadTestFinished, Handle)
         hFunc(TEvLoad::TEvNodeFinishResponse, Handle)
+        hFunc(TEvLoad::TEvNbsTabletListPageReady, Handle)
         hFunc(NMon::TEvHttpInfo, Handle)
         hFunc(NMon::TEvHttpInfoRes, Handle)
         hFunc(TEvStateStorage::TEvBoardInfo, Handle)

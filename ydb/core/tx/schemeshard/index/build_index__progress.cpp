@@ -916,6 +916,10 @@ private:
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
         ev->Record.SetK(buildInfo.KMeans.K);
+        if (buildInfo.KMeans.Adaptive) {
+            ev->Record.SetAdaptive(true);
+            ev->Record.SetLevels(buildInfo.KMeans.Levels);
+        }
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
 
         ev->Record.SetNeedsRounds(buildInfo.KMeans.Rounds);

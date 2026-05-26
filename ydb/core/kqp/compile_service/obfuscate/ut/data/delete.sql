@@ -1,0 +1,1 @@
+DELETE FROM orders WHERE id = 42 AND status = 'cancelled'

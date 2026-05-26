@@ -4,6 +4,7 @@
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
 #include "changes/counters/general.h"
+#include "changes/general_compaction.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
 
@@ -430,6 +431,35 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCo
         return {};
     }
     return changes;
+}
+
+bool TColumnEngineForLogs::UsesPullCompactionScheduling() const noexcept {
+    const auto granules = GranulesStorage->GetGranulesForCompaction();
+    if (granules.empty()) {
+        return false;
+    }
+    return granules.front().GetGranule()->UsesPullCompactionScheduling();
+}
+
+std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> TColumnEngineForLogs::GetNextCompactionTask(
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+    AFL_VERIFY(dataLocksManager);
+    auto granulesSortedDesc = GranulesStorage->GetGranulesForCompaction();
+    for (auto& orderedG : granulesSortedDesc) {
+        auto granule = orderedG.GetGranule();
+        TMonotonic startTime = TMonotonic::Now();
+        auto change = granule->GetNextOptimizationTask(granule, dataLocksManager);
+        NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), change ? 1 : 0);
+        if (change) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "found next compaction task")("weight", orderedG.GetPriority().DebugString())(
+                "path_id", granule->GetPathId());
+            return std::static_pointer_cast<NCompaction::TGeneralCompactColumnEngineChanges>(change);
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build next optimization task for granule")(
+            "weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no next compaction task");
+    return nullptr;
 }
 
 std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(

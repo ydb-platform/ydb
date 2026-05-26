@@ -1,6 +1,8 @@
 #include "shard_impl.h"
 #include "log.h"
 #include <library/cpp/json/json_writer.h>
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/mon_auth.h>
 
 namespace NKikimr {
 namespace NGraph {
@@ -8,11 +10,15 @@ namespace NGraph {
 class TTxMonitoring : public TTransactionBase<TGraphShard> {
 private:
     NMon::TEvRemoteHttpInfo::TPtr Event;
+    TString PathInfo;
+    TString CgiQuery;
 
 public:
     TTxMonitoring(TGraphShard* shard, NMon::TEvRemoteHttpInfo::TPtr ev)
         : TBase(shard)
         , Event(std::move(ev))
+        , PathInfo(Event->Get()->PathInfo())
+        , CgiQuery(Event->Get()->Cgi().Print())
     {}
 
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_MONITORING; }
@@ -64,6 +70,12 @@ public:
                 html << "External";
                 break;
         }
+        html << "</td></tr>";
+
+        html << "<tr><td>Change backend (admin)</td><td>";
+        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 0) << "\">Memory</a> | ";
+        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 1) << "\">Local</a> | ";
+        html << "<a href=\"" << Self->ChangeBackendSecureHref(PathInfo, CgiQuery, 2) << "\">External</a>";
         html << "</td></tr>";
 
         html << "<tr><td>Memory.MetricsSize</td><td>" << DumpMetricsIndex(Self->MemoryBackend.MetricsIndex) << "</td></tr>";
@@ -158,8 +170,12 @@ void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
         if (ev->Get()->Cgi().Get("action") == "change_backend") {
             ui64 backend = FromStringWithDefault(ev->Get()->Cgi().Get("backend"), 0);
             if (backend >= 0 && backend <= 2) {
-                ExecuteTxChangeBackend(static_cast<EBackendType>(backend));
-                Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>ok</p></html>"));
+                if (CanChangeBackendViaDevUi(ev->Get()->PathInfo(), ev->Get()->GetUserToken())) {
+                    ExecuteTxChangeBackend(static_cast<EBackendType>(backend));
+                    Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>ok</p></html>"));
+                    return;
+                }
+                Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
                 return;
             }
         }
@@ -171,6 +187,23 @@ void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
         return;
     }
     Execute(new TTxMonitoring(this, std::move(ev)));
+}
+
+TString TGraphShard::ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf baseQuery, ui64 backend) const {
+    TStringBuilder href;
+    if (!IsTabletDevUiSecurePath(pathInfo)) {
+        href << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
+    }
+    href << '?';
+    if (!baseQuery.empty()) {
+        href << baseQuery << '&';
+    }
+    href << "action=change_backend&backend=" << backend;
+    return href;
+}
+
+bool TGraphShard::CanChangeBackendViaDevUi(TStringBuf pathInfo, const TString& userToken) const {
+    return IsTabletDevUiSecurePath(pathInfo) && IsAdministrator(AppData(), userToken);
 }
 
 } // NGraph

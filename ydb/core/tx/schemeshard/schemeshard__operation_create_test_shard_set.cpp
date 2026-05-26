@@ -34,6 +34,7 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateTestShardSet& op, TString& err
 TTestShardSetInfo::TPtr CreateTestShardSet(const NKikimrSchemeOp::TCreateTestShardSet& op, TTxState& state, TSchemeShard* ss)
 {
     TTestShardSetInfo::TPtr testShardSet = new TTestShardSetInfo(1);
+    testShardSet->CmdInitialize = op.GetCmdInitialize();
 
     state.Shards.clear();
     testShardSet->TestShards.clear();
@@ -54,7 +55,6 @@ TTestShardSetInfo::TPtr CreateTestShardSet(const NKikimrSchemeOp::TCreateTestSha
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
-    const NKikimrSchemeOp::TCreateTestShardSet& Op;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -63,13 +63,10 @@ private:
     }
 
 public:
-    TConfigureParts(TOperationId id, const NKikimrSchemeOp::TCreateTestShardSet& op)
+    explicit TConfigureParts(TOperationId id)
         : OperationId(id)
-        , Op(op)
     {
-        IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             NKikimr::NTestShard::TEvControlResponse::EventType});
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(NKikimr::NTestShard::TEvControlResponse::TPtr& ev, TOperationContext& context) override {
@@ -125,7 +122,7 @@ public:
 
             auto event = MakeHolder<NKikimr::NTestShard::TEvControlRequest>();
             event->Record.SetTabletId(ui64(tabletId));
-            *event->Record.MutableInitialize() = Op.GetCmdInitialize();
+            *event->Record.MutableInitialize() = testShardInfo->CmdInitialize;
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shardIdx, event.Release());
             txState->ShardsInProgress.insert(shardIdx);
@@ -222,7 +219,7 @@ class TCreateTestShardSet: public TSubOperation {
         case TTxState::CreateParts:
             return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId, Transaction.GetCreateTestShardSet());
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:

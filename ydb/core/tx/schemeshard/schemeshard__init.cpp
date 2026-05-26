@@ -5878,6 +5878,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::TestShardSet::PathId>());
                 ui64 alterVersion = rowset.GetValue<Schema::TestShardSet::AlterVersion>();
                 TString serializedTestShards = rowset.GetValue<Schema::TestShardSet::TestShards>();
+                TString serializedCmdInitialize = rowset.GetValue<Schema::TestShardSet::CmdInitialize>();
 
                 TTestShardSetInfo::TPtr testShardSetInfo = new TTestShardSetInfo(alterVersion);
 
@@ -5890,6 +5891,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TTabletId tabletId(ui64(shardDesc.GetTabletId()));
                         testShardSetInfo->TestShards[shardIdx] = tabletId;
                     }
+                }
+
+                if (!serializedCmdInitialize.empty()) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD testShardSetInfo->CmdInitialize.ParseFromString(serializedCmdInitialize);
                 }
 
                 Self->TestShardSets[pathId] = testShardSetInfo;

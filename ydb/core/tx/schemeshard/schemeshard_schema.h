@@ -2667,9 +2667,10 @@ struct Schema : NIceDb::Schema {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
         struct TestShards : Column<3, NScheme::NTypeIds::String> { using Type = TString; };
+        struct CmdInitialize : Column<4, NScheme::NTypeIds::String> { using Type = TString; };
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, TestShards>;
+        using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
     using TTables = SchemaTables<

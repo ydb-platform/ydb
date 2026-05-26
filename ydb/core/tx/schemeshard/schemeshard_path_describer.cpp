@@ -1225,12 +1225,16 @@ void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pat
     entry.SetPathId(pathId.LocalPathId);
     entry.SetVersion(testShardSetInfo->AlterVersion);
 
-    for (const auto& [shardIdx, tabletId] : testShardSetInfo->TestShards) {
+    TVector<std::pair<TShardIdx, TTabletId>> sortedShards(testShardSetInfo->TestShards.begin(), testShardSetInfo->TestShards.end());
+    std::sort(sortedShards.begin(), sortedShards.end(),
+              [](const auto& l, const auto& r) { return l.first < r.first; });
+
+    for (const auto& [shardIdx, tabletId] : sortedShards) {
         entry.AddTabletIds(ui64(tabletId));
     }
 
-    if (testShardSetInfo->TestShards.size() > 0) {
-        auto shardIdx = testShardSetInfo->TestShards.begin()->first;
+    if (!sortedShards.empty()) {
+        const auto& shardIdx = sortedShards.front().first;
         auto shardInfo = Self->ShardInfos.FindPtr(shardIdx);
         Y_ABORT_UNLESS(shardInfo);
         for (const auto& channel : shardInfo->BindedChannels) {

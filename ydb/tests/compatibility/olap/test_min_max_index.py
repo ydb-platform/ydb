@@ -146,8 +146,6 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
     def _do_queries(self, queries):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for select_result_or_none, query in queries:
-                result_sets = session_pool.execute_with_retries("SELECT level FROM `olap_min_max_numeric`;")
-                print(result_sets[0].rows, flush=True)
                 result_sets = session_pool.execute_with_retries(query)
                 if select_result_or_none is not None:
                     assert len(result_sets[0].rows) == 1, f"Query '{query}' returned {len(result_sets[0].rows)} rows instead of 1"

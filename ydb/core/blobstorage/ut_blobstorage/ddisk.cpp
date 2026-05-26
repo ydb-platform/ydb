@@ -487,7 +487,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
     Y_UNIT_TEST(Basic) {
         TDDiskTestContext f;
-        auto& item = f.AllocateDDiskBlockGroup()[0];
+        auto group = f.AllocateDDiskBlockGroup();
+        auto& item = group[0];
         for (auto& node : item.GetNodes()) {
             f.ChangeTestingNode(node);
             Cerr << "next iteration\n";
@@ -530,7 +531,8 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
     Y_UNIT_TEST(PersistentBufferWithRestarts) {
         TDDiskTestContext f;
-        auto& item = f.AllocateDDiskBlockGroup()[0];
+        auto group = f.AllocateDDiskBlockGroup();
+        auto& item = group[0];
         for (auto& node : item.GetNodes()) {
             f.ChangeTestingNode(node);
             Cerr << "next iteration\n";

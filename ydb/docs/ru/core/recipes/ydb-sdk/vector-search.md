@@ -5,12 +5,12 @@
 Подробно будут разобраны операции:
 
 - [Векторный поиск](#векторный-поиск)
-  - [Подключение к {{ ydb-short-name }} {#connect-ydb}](#подключение-к--ydb-short-name--connect-ydb)
-  - [Создание таблицы {#create-table}](#создание-таблицы-create-table)
-  - [Вставка векторов {#insert-vectors}](#вставка-векторов-insert-vectors)
-  - [Добавление индекса {#add-vector-index}](#добавление-индекса-add-vector-index)
-  - [Поиск по вектору {#search-by-vector}](#поиск-по-вектору-search-by-vector)
-  - [Итоговый пример {#full-example}](#итоговый-пример-full-example)
+  - [Подключение к {{ ydb-short-name }}](#connect-ydb)
+  - [Создание таблицы](#create-table)
+  - [Вставка векторов](#insert-vectors)
+  - [Добавление индекса](#add-vector-index)
+  - [Поиск по вектору](#search-by-vector)
+  - [Итоговый пример](#full-example)
 
 В данном рецепте будет создано хранилище текстов со следующей структурой:
 
@@ -940,10 +940,7 @@
         const std::string& database,
         const std::string& tableName,
         const std::string& indexName,
-        const std::string& strategy,
-        std::uint64_t dim,
-        std::uint64_t levels,
-        std::uint64_t clusters)
+        const std::string& strategy)
     {
         std::string query = std::format(R"(
             ALTER TABLE `{0}`
@@ -951,14 +948,9 @@
             GLOBAL USING vector_kmeans_tree
             ON (embedding)
             WITH (
-                {2},
-                vector_type="Float",
-                vector_dimension={3},
-                levels={4},
-                clusters={5},
-                overlap_clusters=3
+                {2}
             );
-        )", tableName, indexName, strategy, dim, levels, clusters);
+        )", tableName, indexName, strategy);
 
         NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
             return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -985,8 +977,7 @@
     func addVectorIndex(
       ctx context.Context,
       db *ydb.Driver,
-      tableName, indexName, strategy string,
-      dimension, levels, clusters int,
+      tableName, indexName, strategy string
     ) error {
       tempIndexName := indexName + "__temp"
       query := fmt.Sprintf(`
@@ -995,13 +986,9 @@
         GLOBAL USING vector_kmeans_tree
         ON (embedding)
         WITH (
-          %s,
-          vector_type="Float",
-          vector_dimension=%d,
-          levels=%d,
-          clusters=%d
+          %s
         );
-      `, "`"+tableName+"`", tempIndexName, strategy, dimension, levels, clusters)
+      `, "`"+tableName+"`", tempIndexName, strategy)
 
       if err := db.Query().Exec(ctx, query); err != nil {
         return err
@@ -1027,10 +1014,7 @@
         driver: ydb.aio.Driver,
         table_name: str,
         index_name: str,
-        strategy: str,
-        dimension: int,
-        levels: int = 2,
-        clusters: int = 128,
+        strategy: str
     ):
         temp_index_name = f"{index_name}__temp"
         query = f"""
@@ -1039,12 +1023,7 @@
         GLOBAL USING vector_kmeans_tree
         ON (embedding)
         WITH (
-            {strategy},
-            vector_type="Float",
-            vector_dimension={dimension},
-            levels={levels},
-            clusters={clusters},
-            overlap_clusters=3
+            {strategy}
         );
         """
 
@@ -1071,9 +1050,6 @@
         table_name: str,
         index_name: str,
         strategy: str,
-        dimension: int,
-        levels: int = 2,
-        clusters: int = 128,
     ):
         temp_index_name = f"{index_name}__temp"
         query = f"""
@@ -1082,12 +1058,7 @@
         GLOBAL USING vector_kmeans_tree
         ON (embedding)
         WITH (
-            {strategy},
-            vector_type="Float",
-            vector_dimension={dimension},
-            levels={levels},
-            clusters={clusters},
-            overlap_clusters=3
+            {strategy}
         );
         """
 
@@ -1126,10 +1097,7 @@
           driver: ydb.aio.Driver,
           table_name: str,
           index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
+          strategy: str
       ):
           temp_index_name = f"{index_name}__temp"
           query = f"""
@@ -1138,11 +1106,7 @@
           GLOBAL USING vector_kmeans_tree
           ON (embedding)
           WITH (
-              {strategy},
-              vector_type="Float",
-              vector_dimension={dimension},
-              levels={levels},
-              clusters={clusters}
+              {strategy}
           );
           """
 
@@ -1161,54 +1125,6 @@
           print(f"Table index {index_name} created.")
       ```
 
-- C++
-
-    ```cpp
-    void AddIndex(
-        NYdb::TDriver& driver,
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& database,
-        const std::string& tableName,
-        const std::string& indexName,
-        const std::string& strategy,
-        std::uint64_t dim,
-        std::uint64_t levels,
-        std::uint64_t clusters)
-    {
-        std::string query = std::format(R"(
-            ALTER TABLE `{0}`
-            ADD INDEX {1}__temp
-            GLOBAL USING vector_kmeans_tree
-            ON (embedding)
-            WITH (
-                {2},
-                vector_type="Float",
-                vector_dimension={3},
-                levels={4},
-                clusters={5},
-                overlap_clusters=3
-            );
-        )", tableName, indexName, strategy, dim, levels, clusters);
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        }));
-
-        NYdb::NTable::TTableClient tableClient(driver);
-        NYdb::NStatusHelpers::ThrowOnError(tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
-            return session.AlterTable(database + "/" + tableName, NYdb::NTable::TAlterTableSettings()
-                .AppendRenameIndexes(NYdb::NTable::TRenameIndex{
-                    .SourceName_ = indexName + "__temp",
-                    .DestinationName_ = indexName,
-                    .ReplaceDestination_ = true
-                })
-            ).ExtractValueSync();
-        }));
-
-        std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
-    }
-    ```
-    
 - C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1233,10 +1149,7 @@
             SessionRetryContext tableRetry,
             String tableName,
             String indexName,
-            String strategy,
-            long dimension,
-            long levels,
-            long clusters) {
+            String strategy) {
 
         String tempIndexName = indexName + "__temp";
         String query = String.format("""
@@ -1245,13 +1158,9 @@
                 GLOBAL USING vector_kmeans_tree
                 ON (embedding)
                 WITH (
-                    %s,
-                    vector_type="Float",
-                    vector_dimension=%d,
-                    levels=%d,
-                    clusters=%d
+                    %s
                 );
-                """, tableName, tempIndexName, strategy, dimension, levels, clusters);
+                """, tableName, tempIndexName, strategy);
 
         queryRetry.supplyResult(session -> QueryReader.readFrom(
                 session.createQuery(query, TxMode.NONE, Params.empty())

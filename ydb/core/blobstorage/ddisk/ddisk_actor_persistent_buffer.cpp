@@ -38,6 +38,37 @@ namespace NKikimr::NDDisk {
         PersistentBufferBarriersManager.Initialize(PersistentBufferUniqueId, BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
     }
 
+    void TDDiskActor::CollectPbStatsSnapshot() {
+        const TInstant now = TActivationContext::Now();
+        auto take = [&](const TString& name, const auto& opCounters) {
+            TPbOpSnapshot snap;
+            snap.Timestamp = now;
+            snap.Requests = opCounters.Requests ? opCounters.Requests->Val() : 0;
+            if (opCounters.ResponseTime) {
+                auto s = opCounters.ResponseTime->Snapshot();
+                const ui32 n = s->Count();
+                snap.BucketCounts.resize(n);
+                for (ui32 i = 0; i < n; ++i) {
+                    snap.BucketCounts[i] = s->Value(i);
+                }
+            }
+            auto& dq = PbStatsHistory[name];
+            dq.push_back(std::move(snap));
+            // Keep snapshots within [now - PbStatsWindow - PbStatsSnapshotPeriod, now]
+            // so we can always find one ~PbStatsWindow old.
+            const TInstant cutoff = now - PbStatsWindow - PbStatsSnapshotPeriod;
+            while (dq.size() > 1 && dq.front().Timestamp < cutoff) {
+                dq.pop_front();
+            }
+        };
+#define DDISK_TAKE_PB_SNAP(NAME) take(#NAME, Counters.Interface.NAME);
+        DDISK_TAKE_PB_SNAP(WritePersistentBuffer)
+        DDISK_TAKE_PB_SNAP(ReadPersistentBuffer)
+        DDISK_TAKE_PB_SNAP(ErasePersistentBuffer)
+#undef DDISK_TAKE_PB_SNAP
+        Schedule(PbStatsSnapshotPeriod, new TEvents::TEvWakeup(EWakeupTag::WakeupCollectPbStats));
+    }
+
     void TDDiskActor::UpdateFreeSpaceInfo() {
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvCheckSpace(PDiskParams->Owner, PDiskParams->OwnerRound));
         Schedule(TDuration::MilliSeconds(PersistentBufferFormat.UpdateFreeSpaceInfoMilliseconds), new TEvents::TEvWakeup(EWakeupTag::WakeupUpdateFreeSpaceInfo));
@@ -55,6 +86,8 @@ namespace NKikimr::NDDisk {
         IssuePersistentBufferChunkAllocationInflight = false;
         PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
         PersistentBufferAllocatedChunks.insert(chunkIdx);
+        *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+
         if (!PersistentBufferReady) {
             StartRestorePersistentBuffer();
         } else {
@@ -92,6 +125,9 @@ namespace NKikimr::NDDisk {
             STLOG_D("TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
             UpdateFreeSpaceInfo();
+            *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+            *Counters.PersistentBuffer.TotalBytes =
+                (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
             return;
         }
         for (ui32 pos = 0; pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < PersistentBufferFormat.MaxChunkRestoreInflight; pos++) {
@@ -177,6 +213,7 @@ namespace NKikimr::NDDisk {
         while (!PendingPersistentBufferEvents.empty()) {
             auto temp = PendingPersistentBufferEvents.front().Release();
             PendingPersistentBufferEvents.pop();
+            Counters.PersistentBuffer.PendingEventsQueueSize->Dec();
             auto size = PendingPersistentBufferEvents.size();
             Receive(temp);
             if (PendingPersistentBufferEvents.size() != size) {
@@ -282,6 +319,9 @@ namespace NKikimr::NDDisk {
 
             STLOG_D("TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
+            *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
+            *Counters.PersistentBuffer.TotalBytes =
+                (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
             ProcessPersistentBufferQueue();
         }
     }
@@ -325,6 +365,8 @@ namespace NKikimr::NDDisk {
                     } else {
                         pr.Data = std::move(inflight.JoinData(SectorSize));
                         PersistentBufferInMemoryCacheSize += pr.Size;
+                        *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
+
                         auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
                         Y_ABORT_UNLESS(inserted2);
                         ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
@@ -361,7 +403,6 @@ namespace NKikimr::NDDisk {
             if (ev->Get()->IsErase) {
                 Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
                     HPMilliSecondsFloat(HPNow() - inflight.StartTs));
-
                 PersistentBufferSpaceAllocator.Free(inflight.Sectors);
                 auto replyEv = std::make_unique<TEvErasePersistentBufferResult>(
                     inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
@@ -391,6 +432,7 @@ namespace NKikimr::NDDisk {
                     buffer.Size += pr.Size;
                     pr.Data = std::move(inflight.DataParts.begin()->second);
                     PersistentBufferInMemoryCacheSize += pr.Size;
+                    *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
                     auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
                     Y_ABORT_UNLESS(inserted2);
                     SanitizePersistentBufferInMemoryCache();
@@ -416,6 +458,8 @@ namespace NKikimr::NDDisk {
                 }
                 PersistentBufferWriteInflightsByRecord.erase(it);
             }
+            *Counters.PersistentBuffer.TotalBytes =
+                (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
         }
     }
 
@@ -541,6 +585,7 @@ namespace NKikimr::NDDisk {
                 STLOG_D("TDDiskActor::ProcessPersistentBufferWrite pending",
                     (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
+                Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
                 IssuePersistentBufferChunkAllocation();
             } else {
                 STLOG_D("TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
@@ -636,6 +681,7 @@ namespace NKikimr::NDDisk {
             STLOG_D("TDDiskActor::Handle(TEvWritePersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
+            Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
             return;
         }
         ProcessPersistentBufferWrite(ev);
@@ -661,6 +707,7 @@ namespace NKikimr::NDDisk {
             STLOG_D("TDDiskActor::Handle(TEvReadPersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferRead");
+            Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
             return;
         }
 
@@ -843,6 +890,7 @@ namespace NKikimr::NDDisk {
             auto& pr = pb.Records.at(lsnIt->Lsn);
             Y_ABORT_UNLESS(pr.Data.size() == pr.Size);
             PersistentBufferInMemoryCacheSize -= pr.Size;
+            *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
             recordIt->second.erase(lsnIt);
             if (recordIt->second.empty()) {
                 PersistentBuffersInMemoryCacheUptime.erase(recordIt);
@@ -857,6 +905,7 @@ namespace NKikimr::NDDisk {
             Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
             Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize >= record.Size);
             PersistentBufferInMemoryCacheSize -= record.Size;
+            *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
             auto icuIt = PersistentBuffersInMemoryCacheUptime.find(record.Timestamp);
             Y_ABORT_UNLESS(icuIt != PersistentBuffersInMemoryCacheUptime.end());
             auto count = icuIt->second.erase(TPersistentBufferRecordId{tabletId, generation, lsn});
@@ -1041,6 +1090,7 @@ namespace NKikimr::NDDisk {
             STLOG_I("TDDiskActor::Handle(TEvBatchErasePersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferBatchErase");
+            Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
             return;
         }
 
@@ -1083,6 +1133,7 @@ namespace NKikimr::NDDisk {
             STLOG_I("TDDiskActor::Handle(TEvErasePersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferErase");
+            Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
             return;
         }
 
@@ -1129,6 +1180,97 @@ namespace NKikimr::NDDisk {
         reply->InMemoryCacheLimit = PersistentBufferFormat.MaxInMemoryCache;
         reply->DiskOperationsInflight = PersistentBufferDiskOperationInflight.size();
         reply->PendingEvents = PendingPersistentBufferEvents.size();
+        reply->PerTabletStorageLimit = PersistentBufferFormat.PerTabletStorageLimit;
+
+        auto fillOpStats = [&](const TString& name, const auto& opCounters) {
+            TEvPersistentBufferInfo::TOpStats stats;
+            stats.Name = name;
+
+            if (opCounters.Requests && opCounters.ReplyOk && opCounters.ReplyErr) {
+                const ui64 reqs = opCounters.Requests->Val();
+                const ui64 done = opCounters.ReplyOk->Val() + opCounters.ReplyErr->Val();
+                stats.RequestsInFlight = reqs > done ? reqs - done : 0;
+            }
+
+            auto histIt = PbStatsHistory.find(name);
+            if (histIt == PbStatsHistory.end() || histIt->second.size() < 2) {
+                reply->OpStats.push_back(std::move(stats));
+                return;
+            }
+            const auto& dq = histIt->second;
+            const TPbOpSnapshot& cur = dq.back();
+            // Choose the oldest snapshot that is still within (cur.Timestamp - PbStatsWindow).
+            // If we don't have a full window of history yet, fall back to the oldest snapshot.
+            const TInstant target = cur.Timestamp - PbStatsWindow;
+            const TPbOpSnapshot* base = &dq.front();
+            for (const auto& s : dq) {
+                if (s.Timestamp <= target) {
+                    base = &s;
+                } else {
+                    break;
+                }
+            }
+            const TDuration dt = cur.Timestamp - base->Timestamp;
+            const double dtSec = dt.SecondsFloat();
+            if (dtSec <= 0) {
+                reply->OpStats.push_back(std::move(stats));
+                return;
+            }
+
+            const ui64 dReq = cur.Requests >= base->Requests ? cur.Requests - base->Requests : 0;
+            stats.Requests = dReq;
+            stats.WindowSeconds = dtSec;
+
+            if (!opCounters.ResponseTime || cur.BucketCounts.empty()) {
+                reply->OpStats.push_back(std::move(stats));
+                return;
+            }
+            auto histSnap = opCounters.ResponseTime->Snapshot();
+            const ui32 nBuckets = histSnap->Count();
+            std::vector<ui64> deltaBuckets(nBuckets, 0);
+            ui64 total = 0;
+            for (ui32 i = 0; i < nBuckets; ++i) {
+                const ui64 curVal = i < cur.BucketCounts.size() ? cur.BucketCounts[i] : 0;
+                const ui64 baseVal = i < base->BucketCounts.size() ? base->BucketCounts[i] : 0;
+                deltaBuckets[i] = curVal >= baseVal ? curVal - baseVal : 0;
+                total += deltaBuckets[i];
+            }
+            if (total > 0) {
+                // Linear interpolation inside the matching bucket gives much
+                // better precision than reporting the bucket upper bound.
+                // Histogram bucket bounds are already in milliseconds.
+                auto percentile = [&](double frac) -> double {
+                    const double target = frac * static_cast<double>(total);
+                    double acc = 0.0;
+                    for (ui32 i = 0; i < nBuckets; ++i) {
+                        const double bucketCount = static_cast<double>(deltaBuckets[i]);
+                        const double next = acc + bucketCount;
+                        if (next >= target && bucketCount > 0) {
+                            const double lowerMs = i == 0 ? 0.0 : histSnap->UpperBound(i - 1);
+                            const double upperMs = histSnap->UpperBound(i);
+                            const double withinBucket = (target - acc) / bucketCount;
+                            return lowerMs + withinBucket * (upperMs - lowerMs);
+                        }
+                        acc = next;
+                    }
+                    return histSnap->UpperBound(nBuckets - 1);
+                };
+                stats.LatencyP50Ms = percentile(0.5);
+                stats.LatencyP99Ms = percentile(0.99);
+                // Max: upper bound of the last non-empty bucket.
+                for (ui32 i = 0; i < nBuckets; ++i) {
+                    if (deltaBuckets[i] > 0) {
+                        stats.LatencyMaxMs = histSnap->UpperBound(i);
+                    }
+                }
+            }
+            reply->OpStats.push_back(std::move(stats));
+        };
+#define DDISK_FILL_PB_OP_STATS(NAME) fillOpStats(#NAME, Counters.Interface.NAME);
+        DDISK_FILL_PB_OP_STATS(WritePersistentBuffer)
+        DDISK_FILL_PB_OP_STATS(ReadPersistentBuffer)
+        DDISK_FILL_PB_OP_STATS(ErasePersistentBuffer)
+#undef DDISK_FILL_PB_OP_STATS
 
         if (ev->Get()->DescribeTablets) {
             for (auto& [k, v] : PersistentBuffers) {
@@ -1162,6 +1304,7 @@ namespace NKikimr::NDDisk {
             STLOG_I("TDDiskActor::Handle(TEvListPersistentBuffer) pending",
                 (PendingPersistentBufferEvents.size(), PendingPersistentBufferEvents.size()));
             PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferList");
+            Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
             return;
         }
 

@@ -103,6 +103,7 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
             ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+            ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Create issues for muted tests
         id: create_issues
@@ -174,6 +175,7 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Export GitHub issues to YDB
         env:

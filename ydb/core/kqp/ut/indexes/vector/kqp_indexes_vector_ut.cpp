@@ -375,12 +375,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     // Test that vector index queries work when selecting only non-PK columns
-    Y_UNIT_TEST_TWIN(VectorIndexSelectWithoutPkColumns, Overlap) {
+    Y_UNIT_TEST_QUAD(VectorIndexSelectWithoutPkColumns, Overlap, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -407,12 +408,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    void DoTestOrderByCosine(ui32 indexLevels, int flags) {
+    void DoTestOrderByCosine(ui32 indexLevels, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -486,8 +490,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
     }
 
-    Y_UNIT_TEST_TWIN(OrderByCosineLevel2WithCover, Nullable) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING);
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithCover, Nullable, EnableIndexStreamWrite) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING, EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithOverlap, Nullable, Covered) {
@@ -532,20 +536,21 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session, 0);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
-        DoTestOrderByCosine(3, 0);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3, EnableIndexStreamWrite) {
+        DoTestOrderByCosine(3, 0, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3WithOverlap) {
-        DoTestOrderByCosine(3, F_OVERLAP);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3WithOverlap, EnableIndexStreamWrite) {
+        DoTestOrderByCosine(3, F_OVERLAP, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(BadFormat, OnBuild) {
+    Y_UNIT_TEST_QUAD(BadFormat, OnBuild, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -644,12 +649,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(OrderByNoUnwrap) {
+    Y_UNIT_TEST_TWIN(OrderByNoUnwrap, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -690,12 +696,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(BuildIndexTimesAndUser) {
+    Y_UNIT_TEST_TWIN(BuildIndexTimesAndUser, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
 
@@ -733,12 +740,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(VectorIndexNoBulkUpsert) {
+    Y_UNIT_TEST_TWIN(VectorIndexNoBulkUpsert, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -770,13 +778,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
     }
 
-    void DoTestVectorIndexDelete(const TString& deleteQuery, int flags) {
+    void DoTestVectorIndexDelete(const TString& deleteQuery, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -812,14 +822,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteFilter, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteFilter, Covered, EnableIndexStreamWrite) {
         // DELETE WHERE with non-PK filter from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteOn, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteOn, Covered, EnableIndexStreamWrite) {
         // DELETE ON from the table with index should succeed too (it uses a different code path)
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexDeletePkReturning, Covered, Overlap) {
@@ -828,14 +838,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteFilterReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteFilterReturning, Covered, EnableIndexStreamWrite) {
         // DELETE WHERE with non-PK filter from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeleteOnReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeleteOnReturning, Covered, EnableIndexStreamWrite) {
         // DELETE ON from the table with index should succeed too (it uses a different code path)
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     void DoTestVectorIndexInsert(int flags) {
@@ -902,12 +912,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestVectorIndexInsert(F_OVERLAP | (Returning ? F_RETURNING : 0) | (Covered ? F_COVERING : 0));
     }
 
-    void DoTestVectorIndexUpdateNoChange(int flags) {
+    void DoTestVectorIndexUpdateNoChange(int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -937,17 +950,17 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoChange, Overlap) {
-        DoTestVectorIndexUpdateNoChange((Overlap ? F_OVERLAP : 0));
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateNoChange, Overlap, EnableIndexStreamWrite) {
+        DoTestVectorIndexUpdateNoChange((Overlap ? F_OVERLAP : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoChangeCovered, Overlap) {
-        DoTestVectorIndexUpdateNoChange(F_COVERING | (Overlap ? F_OVERLAP : 0));
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateNoChangeCovered, Overlap, EnableIndexStreamWrite) {
+        DoTestVectorIndexUpdateNoChange(F_COVERING | (Overlap ? F_OVERLAP : 0), EnableIndexStreamWrite);
     }
 
     // Similar to VectorIndexUpdateNoChange, but data column is named ___data to make it appear before __ydb_parent in struct types
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateColumnOrder, Overlap) {
-        DoTestVectorIndexUpdateNoChange(F_COVERING | F_UNDERSCORE_DATA | (Overlap ? F_OVERLAP : 0));
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateColumnOrder, Overlap, EnableIndexStreamWrite) {
+        DoTestVectorIndexUpdateNoChange(F_COVERING | F_UNDERSCORE_DATA | (Overlap ? F_OVERLAP : 0), EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexUpdateNoClusterChange, Covered, Overlap) {
@@ -1008,13 +1021,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, int flags) {
+    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -1056,14 +1071,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChange, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateFilterClusterChange, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9";)"),
-            (Covered ? F_COVERING : 0));
+            (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChange, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpsertClusterChange, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9");)"),
-            (Covered ? F_COVERING : 0));
+            (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexUpdatePkClusterChangeReturning, Covered, Overlap) {
@@ -1071,14 +1086,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChangeReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateFilterClusterChangeReturning, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"),
-            F_RETURNING | (Covered ? F_COVERING : 0));
+            F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChangeReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpsertClusterChangeReturning, Covered, EnableIndexStreamWrite) {
         DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9") RETURNING `data`, `emb`, `pk`;)"),
-            F_RETURNING | (Covered ? F_COVERING : 0));
+            F_RETURNING | (Covered ? F_COVERING : 0), EnableIndexStreamWrite);
     }
 
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
@@ -1231,12 +1246,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         CheckTableReads(session, mainTableName, true, false);
     }
 
-    Y_UNIT_TEST(OrderByReject) {
+    Y_UNIT_TEST_TWIN(OrderByReject, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -1283,7 +1299,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(VectorResolveDuplicateEvent) {
+    Y_UNIT_TEST_TWIN(VectorResolveDuplicateEvent, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -1291,13 +1307,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
         const int flags = F_NULLABLE;
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+        kikimr.RunCall([&] {
+            auto db = kikimr.GetTableClient();
+            DoCreateTableAndVectorIndex(db, flags);
+        });
 
         int capturedCount = 0;
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -1325,6 +1344,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )"));
 
             auto result = kikimr.RunCall([&] {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
                 return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                     .ExtractValueSync();
             });
@@ -1344,7 +1365,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(VectorSearchPushdown, Covered, Followers) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(300_MB);
+
+        auto serverSettings = TKikimrSettings(appConfig)
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false)
             .SetEnableForceFollowers(Followers)
@@ -1355,23 +1379,25 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
         const int flags = F_NULLABLE | (Covered ? F_COVERING : 0);
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+        kikimr.RunCall([&] {
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableAndVectorIndex(db, flags);
 
-        if (Followers) {
-            std::vector<TString> tableNames = {
-                "/Root/TestTable",
-                "/Root/TestTable/index1/indexImplLevelTable",
-                "/Root/TestTable/index1/indexImplPostingTable"
-            };
-            for (const TString& tableName: tableNames) {
-                const TString alterTable(Q_(Sprintf(R"(
-                    ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
-                )", tableName.c_str())));
-                auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(alterTable).ExtractValueSync(); });
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (Followers) {
+                std::vector<TString> tableNames = {
+                    "/Root/TestTable",
+                    "/Root/TestTable/index1/indexImplLevelTable",
+                    "/Root/TestTable/index1/indexImplPostingTable"
+                };
+                for (const TString& tableName: tableNames) {
+                    const TString alterTable(Q_(Sprintf(R"(
+                        ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
+                    )", tableName.c_str())));
+                    auto result = session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                }
             }
-        }
+        });
 
         constexpr static ui32 levelType = 1, postingType = 2, mainType = 3;
         constexpr static ui32 followerTypeFlag = 8;
@@ -1401,7 +1427,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 // Check that level & posting are read from followers
                 UNIT_ASSERT(isFollower == (Followers && (shardType == levelType || shardType == postingType)));
                 auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
-                if (shardType == (Covered ? mainType : postingType)) {
+                if (shardType == levelType) {
+                    // Level table reads do full scan for caching (VectorTopK cleared by cache layer)
+                    UNIT_ASSERT(!read.HasVectorTopK());
+                } else if (shardType == (Covered ? mainType : postingType)) {
                     // Non-covering index does topK on main table, covering does it on posting
                     UNIT_ASSERT(!read.HasVectorTopK());
                 } else {
@@ -1410,10 +1439,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     auto & topK = read.GetVectorTopK();
                     // Check that target and limit are pushed down
                     UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
-                    if (shardType == levelType) {
-                        // Equal to pragma
-                        UNIT_ASSERT(topK.GetLimit() == 2);
-                    } else if (shardType == (Covered ? postingType : mainType)) {
+                    if (shardType == (Covered ? postingType : mainType)) {
                         // Equal to LIMIT
                         UNIT_ASSERT(topK.GetLimit() == 3);
                     }
@@ -1433,6 +1459,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             )"));
 
             auto result = kikimr.RunCall([&] {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
                 return session.ExecuteDataQuery(query1, TTxControl::BeginTx(
                     Followers ? TTxSettings::StaleRO() : TTxSettings::SerializableRW()).CommitTx())
                     .ExtractValueSync();
@@ -1484,10 +1512,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoPositiveQueriesVectorIndexOrderByCosine(session);
     }
 
-    void DoTestCustomParallel(const TString& createIndex) {
+    void DoTestCustomParallel(const TString& createIndex, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         auto serverSettings = TKikimrSettings()
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false);
+        if (enableIndexStreamWrite) {
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+        }
 
         TKikimrRunner kikimr(serverSettings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
@@ -1511,24 +1542,247 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
     }
 
-    Y_UNIT_TEST(VectorIndexBuildCustomParallel) {
+    Y_UNIT_TEST_TWIN(VectorIndexBuildCustomParallel, EnableIndexStreamWrite) {
         DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`
                 ADD INDEX index1
                 GLOBAL USING vector_kmeans_tree
                 ON (emb)
                 WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2, parallel=2);
-        )");
+        )", EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(SecondaryIndexBuildCustomParallel) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexBuildCustomParallel, EnableIndexStreamWrite) {
         DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`
                 ADD INDEX index1
                 GLOBAL ON (emb)
                 WITH (parallel=2);
-        )");
+        )", EnableIndexStreamWrite);
     }
+
+    Y_UNIT_TEST(VectorIndexLevelTableCache) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(300_MB);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings(appConfig)
+            // SetUseRealThreads(false) is required to capture events
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        const int flags = F_NULLABLE;
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+
+        // Resolve level table shards to track reads
+        constexpr ui32 levelType = 1, postingType = 2, mainType = 3;
+        THashMap<TActorId, ui32> actorTypes;
+        auto resolveActors = [&](const char* tableName, ui32 type) {
+            auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), tableName);
+            for (auto shardId: shards) {
+                auto actorId = ResolveTablet(*runtime, shardId);
+                actorTypes[actorId] = type;
+            }
+        };
+        resolveActors("/Root/TestTable/index1/indexImplLevelTable", levelType);
+        resolveActors("/Root/TestTable/index1/indexImplPostingTable", postingType);
+        resolveActors("/Root/TestTable", mainType);
+
+        // Counter for level table reads
+        std::atomic<int> levelTableReadCount{0};
+        std::atomic<int> postingTableReadCount{0};
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                ui32 shardType = actorTypes[ev->GetRecipientRewrite()];
+                if (shardType == levelType) {
+                    levelTableReadCount++;
+                } else if (shardType == postingType) {
+                    postingTableReadCount++;
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        const TString query1(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "2";
+            $TargetEmbedding = String::HexDecode("677102");
+            SELECT * FROM `/Root/TestTable`
+            VIEW index1 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3
+        )"));
+
+        // First query - should read from level table
+        {
+            levelTableReadCount = 0;
+            postingTableReadCount = 0;
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            // First query should read from level table
+            UNIT_ASSERT_C(levelTableReadCount.load() > 0,
+                "First query should read from level table, but read count is " << levelTableReadCount.load());
+            Cerr << "First query: level table reads = " << levelTableReadCount.load()
+                 << ", posting table reads = " << postingTableReadCount.load() << Endl;
+        }
+
+        int firstLevelReads = levelTableReadCount.load();
+
+        // Second query with the same target - should NOT read from level table (cached)
+        {
+            levelTableReadCount = 0;
+            postingTableReadCount = 0;
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            Cerr << "Second query: level table reads = " << levelTableReadCount.load()
+                 << ", posting table reads = " << postingTableReadCount.load() << Endl;
+
+            // Second query should NOT read from level table (cached)
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Second query should use cached level table data, but level table read count is "
+                << levelTableReadCount.load() << " (first query had " << firstLevelReads << ")");
+        }
+
+        // Third query - should still use cache
+        {
+            levelTableReadCount = 0;
+            postingTableReadCount = 0;
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            Cerr << "Third query: level table reads = " << levelTableReadCount.load()
+                 << ", posting table reads = " << postingTableReadCount.load() << Endl;
+
+            // Third query should NOT read from level table (still cached)
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Third query should use cached level table data, but level table read count is "
+                << levelTableReadCount.load());
+        }
+    }
+
+    Y_UNIT_TEST(VectorIndexLevelTableCacheAcrossSnapshots) {
+        // Test that level table cache works across different snapshots
+        // Level tables are immutable after index creation, so cache should hit
+        // regardless of snapshot changes
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(300_MB);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings(appConfig)
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        const int flags = F_NULLABLE;
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+
+        // Resolve level table shards to track reads
+        constexpr ui32 levelType = 1;
+        THashMap<TActorId, ui32> actorTypes;
+        auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(),
+            "/Root/TestTable/index1/indexImplLevelTable");
+        for (auto shardId: shards) {
+            auto actorId = ResolveTablet(*runtime, shardId);
+            actorTypes[actorId] = levelType;
+        }
+
+        std::atomic<int> levelTableReadCount{0};
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                if (actorTypes[ev->GetRecipientRewrite()] == levelType) {
+                    levelTableReadCount++;
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        const TString query(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "2";
+            $TargetEmbedding = String::HexDecode("677102");
+            SELECT * FROM `/Root/TestTable`
+            VIEW index1 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3
+        )"));
+
+        // First query - should read from level table (cache miss)
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(levelTableReadCount.load() > 0,
+                "First query should read from level table, got " << levelTableReadCount.load());
+            Cerr << "Query 1 (first session tx): level reads = " << levelTableReadCount.load() << Endl;
+        }
+
+        // Second query in NEW TRANSACTION (different snapshot!) - should still hit cache
+        // because level tables are immutable
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Cerr << "Query 2 (new tx, different snapshot): level reads = " << levelTableReadCount.load() << Endl;
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Second query should use cache despite different snapshot, got " << levelTableReadCount.load());
+        }
+
+        // Third query in yet another transaction - should still use cache
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Cerr << "Query 3 (another new tx): level reads = " << levelTableReadCount.load() << Endl;
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Third query should use cache, got " << levelTableReadCount.load());
+        }
+
+        // Create a NEW session (completely different connection) - should still hit cache
+        auto session2 = kikimr.RunCall([&] {
+            return db.CreateSession().GetValueSync().GetSession();
+        });
+        {
+            levelTableReadCount = 0;
+            auto result = kikimr.RunCall([&] {
+                return session2.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Cerr << "Query 4 (new session): level reads = " << levelTableReadCount.load() << Endl;
+            UNIT_ASSERT_C(levelTableReadCount.load() == 0,
+                "Query from new session should use cache, got " << levelTableReadCount.load());
+        }
+    }
+
 }
 
 }

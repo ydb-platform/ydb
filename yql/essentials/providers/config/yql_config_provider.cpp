@@ -1,5 +1,6 @@
 #include "yql_config_provider.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
@@ -32,6 +33,9 @@ const TString YqlCoreActivationLabel = "YqlCore";
 
 namespace {
 using namespace NNodes;
+
+constexpr TStringBuf RuntimeSettingsActivationLabel = "RuntimeSetting/";
+constexpr TStringBuf CoreActivationLabel = "";
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
@@ -139,6 +143,7 @@ public:
         : Types_(types)
         , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
+        , RuntimeSettingsConfig_(config && config->HasRuntimeSettings() ? &config->GetRuntimeSettings() : nullptr)
         , Username_(std::move(username))
         , Policy_(std::move(policy))
     {
@@ -160,20 +165,15 @@ public:
                 return true;
             }
             if (NConfig::Allow(attr.GetActivation(), Username_, isRobot, groups)) {
-                Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
+                RecordActivation(CoreActivationLabel, attr.GetName());
                 return true;
             }
             return false;
         };
         if (CoreConfig_) {
             TPosition pos;
-            TVector<TCoreAttr> flags;
-            if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TCoreAttr>(YqlCoreActivationLabel, Types_.QContext)) {
-                flags = std::move(*loadedFlags);
-            } else {
-                const auto& configFlags = CoreConfig_->GetFlags();
-                CopyIf(configFlags.begin(), configFlags.end(), std::back_inserter(flags), filter);
-            }
+            const auto flags = NCommon::SelectAndSaveActivatedFlags<TCoreAttr>(
+                YqlCoreActivationLabel, Types_.QContext, CoreConfig_->GetFlags(), filter, /*hasProviderName=*/true);
             for (const auto& flag : flags) {
                 const auto& flagArgs = flag.GetArgs();
                 TVector<TStringBuf> args(flagArgs.begin(), flagArgs.end());
@@ -181,7 +181,13 @@ public:
                     return false;
                 }
             }
-            NCommon::SaveActivatedFlagsToQContext<TCoreAttr>(flags, YqlCoreActivationLabel, Types_.QContext);
+        }
+        if (RuntimeSettingsConfig_) {
+            Types_.RuntimeSettings = CreateRuntimeSettingsFromProto(
+                *RuntimeSettingsConfig_, Username_, Types_.Credentials, Types_.QContext,
+                [this](const TString& name) {
+                    RecordActivation(RuntimeSettingsActivationLabel, name);
+                });
         }
         return true;
     }
@@ -1482,12 +1488,17 @@ private:
     }
 
 private:
+    void RecordActivation(TStringBuf activationLabel, TStringBuf feature) {
+        Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << activationLabel << feature, 0, 0, 0, 0, 1);
+    }
+
     TTypeAnnotationContext& Types_;
     const bool ForPartialTypeCheck_;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
     TAutoPtr<IGraphTransformer> ConfigurationTransformer_;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
     const TYqlCoreConfig* CoreConfig_;
+    const NProto::TRuntimeSettings* RuntimeSettingsConfig_;
     TString Username_;
     const TAllowSettingPolicy Policy_;
     TOperationStatistics Statistics_;

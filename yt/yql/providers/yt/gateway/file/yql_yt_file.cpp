@@ -1669,6 +1669,13 @@ private:
         return MakeFuture<IYtGateway::TDownloadTableResult>();
     }
 
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        TUploadFilesToCacheResult res;
+        res.SetSuccess();
+        res.Files = options.Files();
+        return MakeFuture(std::move(res));
+    }
+
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {
         return nullptr;
     }

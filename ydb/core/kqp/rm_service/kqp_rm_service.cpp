@@ -527,14 +527,31 @@ public:
     }
 
     void UpdatePatternCache(ui64 maxSizeBytes, ui64 maxCompiledSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
-        if (maxSizeBytes == 0) {
-            PatternCache.reset();
-            return;
-        }
+        std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> tmp;
+        with_lock(Lock) {
+            if (maxSizeBytes == 0) {
+                tmp.swap(PatternCache);
+                return;
+            }
 
-        NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, maxCompiledSizeBytes, patternAccessTimesBeforeTryToCompile};
-        if (!PatternCache || PatternCache->GetConfiguration() != config) {
-            PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+            NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, maxCompiledSizeBytes, patternAccessTimesBeforeTryToCompile};
+            if (!PatternCache) {
+                PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+                return;
+            }
+
+            auto currentConfig = PatternCache->GetConfiguration();
+            if (currentConfig == config) {
+                return;
+            }
+
+            if (currentConfig.PatternAccessTimesBeforeTryToCompile == config.PatternAccessTimesBeforeTryToCompile) {
+                auto unguard = Unguard(Lock);
+                PatternCache->UpdateConfiguration(config);
+            } else {
+                tmp = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+                tmp.swap(PatternCache);
+            }
         }
     }
 

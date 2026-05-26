@@ -11,6 +11,7 @@ from rich.text import Text
 from typing_extensions import Literal
 
 from textual import events
+from textual.actions import SkipAction
 from textual.expand_tabs import expand_tabs_inline
 from textual.screen import Screen
 from textual.scroll_view import ScrollView
@@ -70,6 +71,7 @@ class Selection(NamedTuple):
 class Input(ScrollView):
     """A text input widget."""
 
+    BINDING_GROUP_TITLE = "Input"
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("left", "cursor_left", "Move cursor left", show=False),
         Binding(
@@ -126,7 +128,7 @@ class Input(ScrollView):
         ),
         Binding("ctrl+k", "delete_right_all", "Delete all to the right", show=False),
         Binding("ctrl+x", "cut", "Cut selected text", show=False),
-        Binding("ctrl+c", "copy", "Copy selected text", show=False),
+        Binding("ctrl+c,super+c", "copy", "Copy selected text", show=False),
         Binding("ctrl+v", "paste", "Paste text from the clipboard", show=False),
     ]
     """
@@ -181,6 +183,7 @@ class Input(ScrollView):
         width: 100%;
         height: 3;
         scrollbar-size-horizontal: 0;
+        pointer: text;
 
         &.-textual-compact {
             border: none !important;
@@ -202,6 +205,7 @@ class Input(ScrollView):
         }
         &>.input--selection {
             background: $input-selection-background;
+            color: $input-selection-foreground;
         }
         &>.input--placeholder, &>.input--suggestion {
             color: $text-disabled;
@@ -217,7 +221,8 @@ class Input(ScrollView):
             background: ansi_default;
             color: ansi_default;
             &>.input--cursor {
-                text-style: reverse;
+                background: ansi_white;
+                color: ansi_black;
             }
             &>.input--placeholder, &>.input--suggestion {
                 text-style: dim;
@@ -491,7 +496,7 @@ class Input(ScrollView):
             character: A character associated with the key, or `None` if there isn't one.
 
         Returns:
-            `True` if the widget may capture the key in it's `Key` message, or `False` if it won't.
+            `True` if the widget may capture the key in its `Key` message, or `False` if it won't.
         """
         return character is not None and character.isprintable()
 
@@ -601,7 +606,7 @@ class Input(ScrollView):
 
     def render_line(self, y: int) -> Strip:
         if y != 0:
-            return Strip.blank(self.size.width)
+            return Strip.blank(self.size.width, self.rich_style)
 
         console = self.app.console
         console_options = self.app.console_options
@@ -1106,7 +1111,11 @@ class Input(ScrollView):
 
     def action_copy(self) -> None:
         """Copy the current selection to the clipboard."""
-        self.app.copy_to_clipboard(self.selected_text)
+        selected_text = self.selected_text
+        if selected_text:
+            self.app.copy_to_clipboard(selected_text)
+        else:
+            raise SkipAction()
 
     def action_paste(self) -> None:
         """Paste from the local clipboard."""

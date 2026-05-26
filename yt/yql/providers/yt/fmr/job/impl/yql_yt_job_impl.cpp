@@ -2,7 +2,9 @@
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/folder/tempdir.h>
+#include <util/generic/buffer.h>
 #include <util/stream/file.h>
+#include <util/stream/str.h>
 
 #include <util/system/shellcommand.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -382,6 +384,44 @@ public:
         return HandleFmrJob(reduceFunc, ETaskType::Reduce);
     }
 
+    std::variant<TFmrError, TString> Pull(
+        const TPullTaskParams& params,
+        std::shared_ptr<std::atomic<bool>> cancelFlag
+    ) override {
+        try {
+            TString data;
+            TStringOutput output(data);
+            for (const auto& taskTableRef : params.Input.Inputs) {
+                auto& fmrInputRef = std::get<TFmrTableInputRef>(taskTableRef);
+                auto reader = MakeIntrusive<TFmrTableDataServiceReader>(
+                    fmrInputRef.TableId,
+                    fmrInputRef.TableRanges,
+                    TableDataService_,
+                    fmrInputRef.Columns,
+                    fmrInputRef.SerializedColumnGroups,
+                    Settings_.FmrReaderSettings
+                );
+                TBuffer buf(Settings_.ParseRecordSettings.DonwloadReadBlockSize);
+                while (true) {
+                    if (cancelFlag && cancelFlag->load()) {
+                        throw yexception() << "Pull job cancelled";
+                    }
+                    size_t bytesRead = reader->Read(buf.Data(), buf.Capacity());
+                    if (bytesRead == 0) {
+                        break;
+                    }
+                    output.Write(buf.Data(), bytesRead);
+                }
+            }
+            return std::move(data);
+        } catch (...) {
+            TString errorMessage = CurrentExceptionMessage();
+            EFmrErrorReason reason = ParseFmrReasonFromErrorMessage(errorMessage);
+            YQL_CLOG(ERROR, FastMapReduce) << "Exception inside fmr Pull job: " << errorMessage;
+            return TFmrError{.Reason = reason, .ErrorMessage = errorMessage};
+        }
+    }
+
 private:
     std::variant<TFmrError, TStatistics> HandleFmrJob(auto fmrJobFunc, ETaskType fmrJobType) {
         TString errorLogMessage;
@@ -462,6 +502,14 @@ TJobResult RunJob(
             return job->LocalSort(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TReduceTaskParams>) {
             return job->Reduce(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
+        } else if constexpr (std::is_same_v<T, TPullTaskParams>) {
+            auto pullResult = job->Pull(taskParams, cancelFlag);
+            if (auto* err = std::get_if<TFmrError>(&pullResult)) {
+                return std::variant<TFmrError, TStatistics>{*err};
+            }
+            TStatistics stats;
+            stats.TaskResult = TTaskPullResult{.Data = std::move(std::get<TString>(pullResult))};
+            return std::variant<TFmrError, TStatistics>{std::move(stats)};
         } else {
             ythrow yexception() << "Unsupported task type";
         }

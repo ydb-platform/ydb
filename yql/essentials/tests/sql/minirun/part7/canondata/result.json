@@ -1044,9 +1044,9 @@
     ],
     "test.test[select_yql-window_fn_lag_2-default.txt-Debug]": [
         {
-            "checksum": "572d0bdd6682329001401d4e9c30d704",
-            "size": 1233,
-            "uri": "https://{canondata_backend}/1903280/44f4f1690f38bce1fadfbce889480224fbb8b527/resource.tar.gz#test.test_select_yql-window_fn_lag_2-default.txt-Debug_/opt.yql"
+            "checksum": "11533c2674d775fae62cfadca07460f5",
+            "size": 1202,
+            "uri": "https://{canondata_backend}/1925821/7d68b2f01047644ac6f6a4c865f6380887799c7b/resource.tar.gz#test.test_select_yql-window_fn_lag_2-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_fn_lag_2-default.txt-Results]": [
@@ -1058,9 +1058,9 @@
     ],
     "test.test[select_yql-window_fn_ntile_2-default.txt-Debug]": [
         {
-            "checksum": "b11d7dfef6c7337fd9efbf2bc14a7aea",
-            "size": 1111,
-            "uri": "https://{canondata_backend}/1903280/44f4f1690f38bce1fadfbce889480224fbb8b527/resource.tar.gz#test.test_select_yql-window_fn_ntile_2-default.txt-Debug_/opt.yql"
+            "checksum": "79a7557e7ac63e5dd49494c714cacb8e",
+            "size": 1105,
+            "uri": "https://{canondata_backend}/1925821/7d68b2f01047644ac6f6a4c865f6380887799c7b/resource.tar.gz#test.test_select_yql-window_fn_ntile_2-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_fn_ntile_2-default.txt-Results]": [
@@ -1072,9 +1072,9 @@
     ],
     "test.test[select_yql-window_fn_percentrank_0-default.txt-Debug]": [
         {
-            "checksum": "a82129de6268c51ac6d6afefbbc26fa0",
-            "size": 1201,
-            "uri": "https://{canondata_backend}/1031349/dfe7d66014175a37cee3b83de938f9a55cf3d93f/resource.tar.gz#test.test_select_yql-window_fn_percentrank_0-default.txt-Debug_/opt.yql"
+            "checksum": "920ee8991bd57f9e15bc5f08d7f0b765",
+            "size": 1195,
+            "uri": "https://{canondata_backend}/1925821/7d68b2f01047644ac6f6a4c865f6380887799c7b/resource.tar.gz#test.test_select_yql-window_fn_percentrank_0-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_fn_percentrank_0-default.txt-Results]": [

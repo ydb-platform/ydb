@@ -1,8 +1,13 @@
 #include "kqp_opt_impl.h"
 
-#include <yql/essentials/core/yql_expr_optimize.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy_finalizing.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -286,7 +291,6 @@ bool FindPrecomputedOutputs(TDqStageBase stage, const TParentsMap& parentsMap) {
 
     return false;
 }
-
 
 TExprBase ReplicatePrecompute(TDqStageBase stage, TExprContext& ctx, const TParentsMap& parentsMap) {
     for (size_t i = 0; i < stage.Inputs().Size(); ++i) {

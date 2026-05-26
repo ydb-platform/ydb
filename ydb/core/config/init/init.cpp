@@ -888,10 +888,6 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
             return slot.GetDomainName();
         }
 
-        auto &tenantName = slot.GetTenantName();
-        if (IsStartWithSlash(tenantName)) {
-            return ToString(ExtractDomain(tenantName));
-        }
     }
 
     return "";

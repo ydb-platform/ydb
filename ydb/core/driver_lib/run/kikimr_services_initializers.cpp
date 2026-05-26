@@ -69,6 +69,7 @@
 
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/core/test_tablet/test_tablet.h>
+#include <ydb/core/load_test/nbs_dbg_like_load_tablet.h>
 #include <ydb/core/test_tablet/state_server_interface.h>
 
 #include <ydb/core/blob_depot/blob_depot.h>
@@ -182,12 +183,13 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 
-#include <ydb/core/util/aws.h>
 #include <ydb/core/util/failure_injection.h>
 #include <ydb/core/util/memory_tracker.h>
 #include <ydb/core/util/sig.h>
 
 #include <ydb/core/viewer/viewer.h>
+
+#include <ydb/library/aws_init/aws.h>
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
@@ -1296,6 +1298,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::Hive, &CreateDefaultHive, TMailboxType::ReadAsFilled, importantPoolId);
     addToLocalConfig(TTabletTypes::SysViewProcessor, &NSysView::CreateSysViewProcessor, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::TestShard, &NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::NbsLoadTablet, &NKikimr::NNbsDbgLike::CreateNbsDbgLikeLoadTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::ColumnShard, &CreateColumnShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::SequenceShard, &NSequenceShard::CreateSequenceShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::ReplicationController, &NReplication::CreateController, TMailboxType::ReadAsFilled, appData->UserPoolId);

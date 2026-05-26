@@ -1080,6 +1080,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
         for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
             TPath implTable = childPath.Child(implTableName);
+            if (implTable.IsDeleted()) {
+                continue;
+            }
             Y_ABORT_UNLESS(implTable.Base()->PathId == implTablePathId);
 
             NKikimrSchemeOp::TModifyScheme schema;

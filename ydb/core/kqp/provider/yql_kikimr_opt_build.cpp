@@ -4,14 +4,18 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
+
 namespace NYql {
+
 namespace {
 
 using namespace NNodes;
@@ -920,7 +924,7 @@ TString GetShowCreateType(const TExprNode& settings) {
     return "";
 }
 
-} // namespace
+} // anonymous namespace
 
 TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
     TTypeAnnotationContext& types, bool concurrentResults) {

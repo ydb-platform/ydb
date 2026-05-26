@@ -1,4 +1,6 @@
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/threading/future/wait/wait.h>
+#include <library/cpp/yson/node/node_io.h>
 #include <queue>
 #include <thread>
 #include <util/system/mutex.h>
@@ -498,6 +500,30 @@ private:
 };
 
 } // namespace
+
+TFmrWorkerSettings GetDefaultWorkerSettings(const TMaybe<NYT::TNode>& configOverride) {
+    TFmrWorkerSettings settings;
+    const auto configNode = configOverride.Defined()
+        ? *configOverride
+        : NYT::NodeFromYsonString(NResource::Find("default_worker_settings.yson"));
+    YQL_ENSURE(configNode.IsMap());
+    if (configNode.HasKey("time_to_sleep_between_requests_ms")) {
+        settings.TimeToSleepBetweenRequests = TDuration::MilliSeconds(configNode["time_to_sleep_between_requests_ms"].AsInt64());
+    }
+    if (configNode.HasKey("memory_limit_bytes")) {
+        settings.MemoryLimitBytes = static_cast<ui64>(configNode["memory_limit_bytes"].AsInt64());
+    }
+    if (configNode.HasKey("job_factory")) {
+        auto& jobFactoryNode = configNode["job_factory"];
+        if (jobFactoryNode.HasKey("num_threads")) {
+            settings.JobFactorySettings.NumThreads = jobFactoryNode["num_threads"].AsInt64();
+        }
+        if (jobFactoryNode.HasKey("max_queue_size")) {
+            settings.JobFactorySettings.MaxQueueSize = jobFactoryNode["max_queue_size"].AsInt64();
+        }
+    }
+    return settings;
+}
 
 IFmrWorker::TPtr MakeFmrWorker(IFmrCoordinator::TPtr coordinator, IFmrJobFactory::TPtr jobFactory, IFmrJobPreparer::TPtr jobPreparer, const TFmrWorkerSettings& settings) {
     return MakeIntrusive<TFmrWorker>(coordinator, jobFactory, jobPreparer, settings);

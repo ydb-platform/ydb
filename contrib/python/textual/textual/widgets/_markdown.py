@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import weakref
 from contextlib import suppress
 from functools import partial
 from pathlib import Path, PurePath
@@ -38,7 +39,7 @@ The triples encode the level, the label, and the optional block id of each headi
 
 
 class MarkdownStream:
-    """An object to manager streaming markdown.
+    """An object to manage streaming markdown.
 
     This will accumulate markdown fragments if they can't be rendered fast enough.
 
@@ -210,7 +211,7 @@ class MarkdownBlock(Static):
         *args,
         **kwargs,
     ) -> None:
-        self._markdown: Markdown = markdown
+        self._markdown_ref = weakref.ref(markdown)
         """A reference to the Markdown document that contains this block."""
         self._content: Content = Content()
         self._token: Token = token
@@ -223,6 +224,13 @@ class MarkdownBlock(Static):
         super().__init__(
             *args, name=token.type, classes=f"level-{token.level}", **kwargs
         )
+
+    @property
+    def _markdown(self) -> Markdown:
+        """Resolve the weak ref to _markdown"""
+        markdown = self._markdown_ref()
+        assert markdown is not None
+        return markdown
 
     @property
     def select_container(self) -> Widget:
@@ -649,7 +657,7 @@ class MarkdownTableContent(Widget):
     def pre_layout(self, layout: Layout) -> None:
         assert isinstance(layout, GridLayout)
         layout.auto_minimum = True
-        layout.expand = True
+        layout.expand = not self.query_ancestor(MarkdownTable).styles.is_auto_width
         layout.shrink = True
         layout.stretch_height = True
 
@@ -862,20 +870,57 @@ class MarkdownFence(MarkdownBlock):
             padding: 1 2;
         }
     }
+    MarkdownFence:ansi {
+        background: transparent;
+
+        margin: 0;
+        & > Label {
+            padding: 1 0;
+        }
+        
+    }
     """
 
     def __init__(self, markdown: Markdown, token: Token, code: str) -> None:
         super().__init__(markdown, token)
         self.code = code
         self.lexer = token.info
-        self._highlighted_code = self.highlight(self.code, self.lexer)
+        self._highlighted_code = self.highlight(
+            self.code,
+            self.lexer,
+            ansi=self.app.native_ansi_color,
+            dark=self.app.current_theme.dark,
+        )
 
+    def notify_style_update(self) -> None:
+        """Update highlight theme when App theme changes."""
+        self._highlighted_code = self.highlight(
+            self.code,
+            self.lexer,
+            ansi=self.app.native_ansi_color,
+            dark=self.app.current_theme.dark,
+        )
+        self.set_content(self._highlighted_code)
+        return super().notify_style_update()
+
+    @property
     def allow_horizontal_scroll(self) -> bool:
         return True
 
     @classmethod
-    def highlight(cls, code: str, language: str) -> Content:
-        return highlight(code, language=language)
+    def highlight(
+        cls, code: str, language: str, ansi: bool = False, dark: bool = False
+    ) -> Content:
+        if ansi:
+            if dark:
+                from textual.highlight import ANSIDarkHighlightTheme as HighlightTheme
+            else:
+                from textual.highlight import ANSILightHighlightTheme as HighlightTheme
+
+        else:
+            from textual.highlight import HighlightTheme
+
+        return highlight(code, language=language or None, theme=HighlightTheme)
 
     def _copy_context(self, block: MarkdownBlock) -> None:
         if isinstance(block, MarkdownFence):
@@ -910,6 +955,12 @@ class Markdown(Widget):
         color: $foreground;
         overflow-y: hidden;
 
+        &:ansi {
+            MarkdownBlock > .code_inline {
+                background: ansi_default !important;
+            }
+        }
+        
         MarkdownBlock {
             &:dark > .code_inline {
                 background: $warning 10%;
@@ -918,7 +969,7 @@ class Markdown(Widget):
             &:light > .code_inline {
                 background: $error 5%;
                 color: $text-error 95%;
-            }
+            }           
             & > .em {
                 text-style: italic;
             }

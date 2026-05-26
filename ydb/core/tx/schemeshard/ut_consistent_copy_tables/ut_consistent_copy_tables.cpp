@@ -1,7 +1,9 @@
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NSchemeShardUT_Private;
+using namespace NKikimr;
 using NKikimrSchemeOp::EIndexType;
 
 Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
@@ -9,65 +11,183 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     }
 
-    // Priority 1 Test 1: Regular consistent copy with global sync index
-    // This test would have caught the OmitIndexes bug
-    Y_UNIT_TEST(ConsistentCopyTableWithGlobalSyncIndex) {
+    void ConsistentCopyTableWithIndex(
+        const TString& indexDescription,
+        NKikimrSchemeOp::EIndexType expectedIndexType,
+        const TVector<TString>& indexKeyColumns)
+    {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
         SetupLogging(runtime);
 
-        // 1. Create table with global sync index
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
                 Name: "TableWithIndex"
-                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "embedding" Type: "String" }
+                Columns { Name: "prefix" Type: "String" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-            IndexDescription {
-                Name: "ValueIndex"
-                KeyColumnNames: ["value"]
-                Type: EIndexTypeGlobal
-            }
-        )");
+            %s
+        )", indexDescription.c_str()));
         env.TestWaitNotification(runtime, txId);
 
-        // 2. Perform consistent copy (NOT backup - this is the critical test case)
         TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/TableWithIndex"
-                DstPath: "/MyRoot/TableWithIndexCopy"
+                DstPath: "/MyRoot/TableCopy"
             }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // 3. Verify ALL components exist
-        // Main table
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableWithIndexCopy"),
-                          {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
+                          {NLs::PathExist, NLs::IsTable, NLs::IndexesCount(1)});
 
-        // Index structure
-        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndexCopy/ValueIndex", true, true);
-        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
-        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().GetTableIndex().GetState(),
-                                NKikimrSchemeOp::EIndexStateReady);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableCopy/index", true, true),
+                          {NLs::PathExist,
+                           NLs::IndexType(expectedIndexType),
+                           NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+                           NLs::IndexKeys(indexKeyColumns)});
 
-        // CRITICAL: Verify index impl table exists (THIS WOULD HAVE FAILED WITH THE BUG)
-        UNIT_ASSERT_C(indexDesc.GetPathDescription().ChildrenSize() == 1,
-                     "Index should have exactly one impl table child");
-
-        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
-        Cerr << "Index impl table name: " << indexImplTableName << Endl;
-
-        auto indexImplTableDesc = DescribePrivatePath(runtime,
-            "/MyRoot/TableWithIndexCopy/ValueIndex/" + indexImplTableName, true, true);
-        UNIT_ASSERT_C(indexImplTableDesc.GetPathDescription().HasTable(),
-                     "Index impl table should exist - this is what the bug broke!");
+        for (const auto& implTable : NTableIndex::GetImplTables(expectedIndexType, indexKeyColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime,
+                    TString::Join("/MyRoot/TableCopy/index/", implTable), true, true),
+                {NLs::PathExist, NLs::IsTable});
+        }
     }
 
-    // Priority 1 Test 2: OmitIndexes flag should be respected
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalSyncIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobal,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalAsyncIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobalAsync
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalAsync,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalUniqueIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobalUnique
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalUnique,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalVectorKmeansTreeIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["embedding"]
+                Type: EIndexTypeGlobalVectorKmeansTree
+                VectorIndexKmeansTreeDescription {
+                    Settings {
+                        settings {
+                            metric: DISTANCE_COSINE
+                            vector_type: VECTOR_TYPE_FLOAT
+                            vector_dimension: 1024
+                        }
+                        clusters: 4
+                        levels: 5
+                    }
+                }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"embedding"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalVectorKmeansTreePrefixIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["prefix", "embedding"]
+                Type: EIndexTypeGlobalVectorKmeansTree
+                VectorIndexKmeansTreeDescription {
+                    Settings {
+                        settings {
+                            metric: DISTANCE_COSINE
+                            vector_type: VECTOR_TYPE_FLOAT
+                            vector_dimension: 1024
+                        }
+                        clusters: 4
+                        levels: 5
+                    }
+                }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+        {"prefix", "embedding"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalFulltextPlainIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobalFulltextPlain
+                FulltextIndexDescription {
+                    Settings {
+                        columns: {
+                            column: "value"
+                            analyzers: {
+                                tokenizer: STANDARD
+                                use_filter_lowercase: true
+                            }
+                        }
+                    }
+                }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain,
+        {"value"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalFulltextRelevanceIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobalFulltextRelevance
+                FulltextIndexDescription {
+                    Settings {
+                        columns: {
+                            column: "value"
+                            analyzers: {
+                                tokenizer: STANDARD
+                                use_filter_lowercase: true
+                            }
+                        }
+                    }
+                }
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance,
+        {"value"});
+    }
+
     Y_UNIT_TEST(ConsistentCopyWithOmitIndexesTrueSkipsIndexes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -271,5 +391,50 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 {NLs::PathExist});
             i++;
         }
+    }
+
+    // After a real vector index build, the transient 'indexImplPostingTable<N>build' intermediates are dropped
+    // but their entries linger in the parent index's Children map.
+    // CreateConsistentCopyTables should not fail on these stale references.
+    Y_UNIT_TEST(ConsistentCopyTableAfterVectorIndexBuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table", 0, 0, 200);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableCopy"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
+            {NLs::PathExist, NLs::IsTable, NLs::IndexesCount(1)});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableCopy/index1", true, true), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
     }
 }

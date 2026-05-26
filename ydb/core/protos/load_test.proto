@@ -372,6 +372,189 @@ message TEvLoadTestRequest {
         optional uint64 IntervalUs = 4;
     }
 
+    // NBS-DBG-like persistent tablet load.
+    //
+    // TNbsDbgLikeLoadTablet imitates a simplified NBS tablet: it owns one or more
+    // DBGs, allows configuring performance-related functionality, and provides
+    // interface to write/read similarly to real NBS users. TNbsDbgLikeLoadActor
+    // generates the actual load.
+    //
+    // TAllocConfig and TWorkloadConfig are split because allocation persists
+    // across runs — Create once, Run many times with different
+    // TWorkloadConfig (typically varying InFlightWrites).
+    message TNbsDbgLikeLoad {
+        // Allocation-time configuration. Persisted once at Create time and
+        // reused across Runs. Editing it after Create requires Delete first.
+        message TAllocConfig {
+            // BSC-side TabletId — the credential PB / DDisk validate on every
+            // request (TQueryCredentials, ddisk.h:47-79). Distinct from the
+            // YDB tablet id (which is Hive-assigned).
+            optional uint64 TabletId = 1;
+
+            optional string DDiskPoolName = 2 [default = "ddp1"];
+            optional string PersistentBufferDDiskPoolName = 3 [default = "ddp1"];
+
+            // Number of DBGs this tablet owns. Each DBG = 5 (DDisk, PB) pairs
+            // with 10 wire connections; production-like value is 32.
+            optional uint32 NumDirectBlockGroups = 4 [default = 1];
+
+            // Per-DDisk vChunk capacity reservation; v1 uses 1 (one vChunk
+            // per DBG, indexed by VChunkIndex=0).
+            optional uint32 TargetNumVChunks = 5 [default = 1];
+
+            // Upper bound on in-vChunk offset; must be <= cluster PDisk
+            // chunk size. Default 128 MiB matches DefaultVChunkSize.
+            optional uint64 VChunkSizeBytes = 6 [default = 134217728];
+
+            // Storage-pool bindings used when Hive creates the tablet.
+            // Forwarded onto each TEvHive::TEvCreateTablet::AddBindedChannels
+            // entry so the tablet can boot. Empty means "use a single
+            // empty-name binding" (lets Hive pick the default).
+            repeated string TabletStoragePools = 7;
+
+            // Number of hosts/nodes/disks per DBG that worker should use.
+            // Must not exceed the current max fan-out supported by the worker.
+            optional uint32 HostsPerDbg = 8 [default = 5];
+        }
+
+        // On-disk schema row for one DBG (see Schema::Dbgs in
+        // nbs_dbg_like_load_tablet.cpp). Replaces the legacy host-byte-order
+        // memcpy pack. Older rows that fail to parse are dropped at boot.
+        message TPersistedDbgIds {
+            repeated NKikimrBlobStorage.NDDisk.TDDiskId DDiskIds = 1;
+            repeated NKikimrBlobStorage.NDDisk.TDDiskId PBIds = 2;
+        }
+
+        message TConfigureTablet {
+            // Global cap on tracked LSNs across DBGs
+            optional uint32 MaxInflightLsns = 1 [default = 4096];
+
+            // FlushBatchSize / EraseBatchSize are arbitrary trade-offs;
+            // By default we set a large value to mimic original "all"
+            // behaviour of NBS partition
+            optional uint32 FlushBatchSize = 2 [default = 10000];
+            optional uint32 EraseBatchSize = 3 [default = 10000];
+
+            // SyncRequestsBatchSize mirrors the partition's
+            // TStorageConfig::SyncRequestsBatchSize
+            // (nbs/cloud/blockstore/config/config.cpp:30, default 10). Gate is
+            // checked per-DBG, before per-destination batching: DoFlush /
+            // DoErase early-return on a DBG when its ready-queue size is below
+            // this value. Set to 1 to disable the gate. Bypassed during drain
+            // so the shutdown sweep can finalize any leftover LSNs.
+            optional uint32 SyncRequestsBatchSize = 4 [default = 10];
+
+            // Forwarded onto the wire (TEvWritePersistentBuffers
+            // .ReplyTimeoutMicroseconds, blobstorage_ddisk.proto:192). Default
+            // 50 ms matches the partition's DefaultPBufferReplyTimeout.
+            optional uint32 PBufferReplyTimeoutMicroseconds = 5 [default = 50000];
+
+            // Percent PB occupancy that gates erase startup (per DBG)
+            optional uint32 FillRatio = 6 [default = 50];
+
+            // How many of the persisted DBGs participate in the next Run.
+            // 0 = use all N. The worker validates every TNbsWrite/Read address
+            // against the slice [0, NumDirectBlockGroupsToUse) of Dbgs.
+            optional uint32 NumDirectBlockGroupsToUse = 7 [default = 0];
+
+            // Per-Run fixed I/O size (= ReadWriteSizeKiB * 1024 from TWorkloadConfig).
+            // The worker rejects TNbsWrite/Read with SizeBytes != IoSizeBytes.
+            // 0 = uninitialised (worker stays idle until the first
+            // TConfigureTablet with a nonzero value arrives).
+            optional uint32 IoSizeBytes = 8 [default = 0];
+        }
+
+        // Load-actor -> worker: "write SizeBytes at this flat address".
+        // The flat address is decoded by the worker as
+        //   bytesPerDbg    = TargetNumVChunks * VChunkSizeBytes
+        //   dbgIndex       = Address / bytesPerDbg          // [0, M_eff)
+        //   rem            = Address % bytesPerDbg
+        //   vChunkIndex    = rem / VChunkSizeBytes
+        //   offsetInVChunk = rem % VChunkSizeBytes
+        // SizeBytes must equal the IoSizeBytes installed by the last
+        // TConfigureTablet (worker rejects with ERROR otherwise).
+        message TNbsWrite {
+            optional uint64 Address = 1;
+            optional uint32 SizeBytes = 2;
+
+            // Required rope payload referenced by the AddPayload() return
+            // value. The tablet rejects writes without PayloadId.
+            oneof Payload {
+                uint32 PayloadId = 3;
+                // <-- add RDMA here
+            }
+        }
+
+        // Worker -> load-actor: exactly one reply per TNbsWrite, emitted
+        // when write quorum is reached or definitively fails. The load
+        // actor times the request itself (start timestamp held in its
+        // own in-flight map keyed by event cookie) and recovers
+        // SizeBytes from the same map.
+        message TNbsWriteResult {
+            optional uint32 Status = 1;
+        }
+
+        // Load-actor -> worker: "read SizeBytes at this flat address";
+        // worker picks PB or DDisk source based on per-LSN state at the slot.
+        message TNbsRead {
+            optional uint64 Address = 1;
+            optional uint32 SizeBytes = 2;
+        }
+
+        // Worker -> load-actor: read complete. Read payload travels as a
+        // TRope payload on the actor event and is referenced by PayloadId,
+        // matching the DDisk TReadResult payload convention.
+        message TNbsReadResult {
+            optional uint32 Status = 1;
+
+            oneof Payload {
+                uint32 PayloadId = 2;
+                // <-- add RDMA here
+            }
+        }
+
+        // Per-Run workload-shaping configuration.
+        message TWorkloadConfig {
+            optional uint64 Tag = 1;
+            optional uint32 DurationSeconds = 2;
+            optional uint32 DelayBeforeMeasurementsSeconds = 3 [default = 15];
+
+            // How many of the allocated DBGs (TAllocConfig.NumDirectBlockGroups = N)
+            // participate in this run. 0 = use all N; otherwise use the first M
+            // DBGs in tablet/actor order (1 <= M <= N).
+            optional uint32 NumDirectBlockGroupsToUse = 4 [default = 0];
+
+            // Global cap on in-flight TEvWritePersistentBuffers across DBGs.
+            optional uint32 InFlightWrites = 5 [default = 32];
+
+            optional uint32 ReadRatio = 6 [default = 0];
+
+            // false = uniform random over the user-level address space
+            //         (M * TargetNumVChunks * VChunkSizeBytes; M = effective DBG
+            //         count for this run, see NumDirectBlockGroupsToUse);
+            // true  = sequential round-robin over the same flat space.
+            optional bool Sequential = 7 [default = false];
+
+            // Read/write payload size in KiB. Must be >= 4, a multiple of 4,
+            // and ReadWriteSizeKiB * 1024 <= VChunkSizeBytes (from TAllocConfig).
+            optional uint32 ReadWriteSizeKiB = 8 [default = 4];
+
+            optional TConfigureTablet TabletConfig = 15;
+
+            // If non-zero, stop the run once this many writes have completed
+            // successfully and then drain. Whichever condition fires first
+            // wins (DurationSeconds or StopOnWritesDoneCount). 0 = no limit.
+            optional uint32 StopOnWritesDoneCount = 16 [default = 0];
+        }
+
+        // Hive-assigned tablet ID; the load actor opens a tablet pipe to this
+        // tablet to deliver TEvNbsWrite / TEvNbsRead.
+        optional uint64 NbsDbgLikeTabletId = 101;
+
+        optional TWorkloadConfig WorkloadConfig = 102;
+        optional uint64 Tag = 100;
+    }
+
     message TInterconnectLoad {
         optional uint64 Tag = 1;
         optional string Name = 2;
@@ -404,10 +587,56 @@ message TEvLoadTestRequest {
         TNBS2Load NBS2Load = 16;
         TDDiskLoad DDiskLoad = 17;
         TPersistentBufferWriteLoad PersistentBufferWriteLoad = 18;
+        TNbsDbgLikeLoad NbsDbgLikeLoad = 19;
     }
     optional uint64 Tag = 12;
     optional string Uuid = 13;
     optional uint64 Timestamp = 14;
+}
+
+// ----------------------------------------------------------------------------
+// NBS-DBG-like load tablet wire protocol (sent over a tablet pipe to the
+// TNbsDbgLikeLoadTablet — see ydb/core/load_test/nbs_dbg_like_load_tablet.h).
+// ----------------------------------------------------------------------------
+
+enum ENbsLoadTabletStatus {
+    NBSLT_OK = 0;
+    NBSLT_ALREADY_INITIALIZED = 1;
+    NBSLT_BSC_ERROR = 2;
+    NBSLT_BUSY = 3;
+    NBSLT_NOT_INITIALIZED = 4;
+    NBSLT_INTERNAL_ERROR = 5;
+}
+
+message TEvNbsLoadTabletAllocateGroups {
+    optional TEvLoadTestRequest.TNbsDbgLikeLoad.TAllocConfig AllocConfig = 1;
+}
+
+message TEvNbsLoadTabletAllocateGroupsResult {
+    optional ENbsLoadTabletStatus Status = 1;
+    optional string ErrorReason = 2;
+}
+
+message TEvNbsLoadTabletDelete {
+}
+
+message TEvNbsLoadTabletDeleteResult {
+    optional ENbsLoadTabletStatus Status = 1;
+    optional string ErrorReason = 2;
+}
+
+// Read-only alloc summary for monitoring / load-test UI listing.
+message TEvNbsLoadTabletGetSummary {
+}
+
+message TEvNbsLoadTabletGetSummaryResult {
+    optional ENbsLoadTabletStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional string DDiskPoolName = 3;
+    optional string PersistentBufferDDiskPoolName = 4;
+    optional uint32 NumDirectBlockGroups = 5;
+    optional uint64 VChunkSizeBytes = 6;
+    optional uint32 TargetNumVChunks = 7;
 }
 
 message TEvLoadTestResponse {

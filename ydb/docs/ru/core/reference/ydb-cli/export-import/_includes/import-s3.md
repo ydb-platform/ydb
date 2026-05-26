@@ -49,7 +49,9 @@
 
 {% endcut %}
 
-{% include [import-aux-params-table.md](_includes/import-aux-params-table.md) %}
+{% include [import-aux-params-table.md](./import-aux-params-table.md) %}
+
+| `--skip-checksum-validation` | Пропустить этап валидации [контрольных сумм](../file-structure.md#checksums) загружаемых объектов. |
 | `--list` | Перечислить объекты в существующей выгрузке. |
 
 ## Выполнение загрузки {#exec}

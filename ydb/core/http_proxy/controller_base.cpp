@@ -21,7 +21,7 @@ namespace NKikimr::NHttpProxy {
                 case IHttpController::EError::MethodNotFound:
                     context.DoReply(MakeError(contentType, NYdb::EStatus::UNSUPPORTED,
                         TStringBuilder() << "Unknown method name " << name.Quote(),
-                        static_cast<size_t>(static_cast<size_t>(name.empty() ? NYds::EErrorCodes::MISSING_ACTION : NYds::EErrorCodes::ERROR))));
+                        static_cast<size_t>(name.empty() ? NYds::EErrorCodes::MISSING_ACTION : NYds::EErrorCodes::ERROR)));
                     return false;
                 case IHttpController::EError::ServiceDisabled:
                     context.DoReply(MakeError(contentType, NYdb::EStatus::BAD_REQUEST,

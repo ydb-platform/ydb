@@ -1,5 +1,6 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
 #include <ydb/core/http_proxy/http_req.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -1310,6 +1311,31 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         TString queueUrl = GetPathFromQueueUrlMap(json);
         UNIT_ASSERT(queueUrl.Contains("ExampleQueueName"));
         UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueSetsDefaultTopicMessageRateLimit, TFixture) {
+        const TString queueName = "CreateQueueDefaultRateLimit";
+
+        auto json = CreateQueue({{"QueueName", queueName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        auto desc = client.DescribeTopic(queueName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        auto description = desc.GetTopicDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithCustomConsumer, TFixture) {

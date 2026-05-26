@@ -465,6 +465,8 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_DLQ_MOVER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_SCHEMA, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_DESCRIBER, NLog::PRI_DEBUG);
 
     if (initParameters.EnableMetering) {
         ActorRuntime->RegisterService(
@@ -773,6 +775,8 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
         TDuration::Seconds(5000),
         "root@builtin"
     );
+
+    client.Grant("/", "Root", "root@builtin", NACLib::EAccessRights::GenericFull);
 }
 
 void THttpProxyTestMock::InitAccessServiceService() {

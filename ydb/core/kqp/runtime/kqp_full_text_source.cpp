@@ -3030,7 +3030,13 @@ public:
 
             rows++;
             auto& doc = readItems.GetItem();
-            YQL_ENSURE(doc->DocumentNumId == row.at(0).AsValue<TDocId>(), "detected out of order document reading");
+            // In UseRowIdAsDocId mode the main table is keyed by the user PK (not
+            // the synthetic doc_id), so row[0] is a PK cell and cannot be parsed
+            // as TDocId. The queue is FIFO and the datashard returns rows in key
+            // order, matching the order we issued point lookups.
+            if (!UseRowIdAsDocId) {
+                YQL_ENSURE(doc->DocumentNumId == row.at(0).AsValue<TDocId>(), "detected out of order document reading");
+            }
             doc->AddRow(row);
             ResultQueue.push_back(std::move(doc));
             readItems.PopItem();

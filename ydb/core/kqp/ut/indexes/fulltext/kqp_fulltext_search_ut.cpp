@@ -2915,6 +2915,190 @@ Y_UNIT_TEST(ExplainHybridFulltextVectorQuery) {
     UNIT_ASSERT_C(itemsLimit.IsDefined(), "Pushed limit (ItemsLimit) not found on ReadFullTextIndex node");
 }
 
+// __rowId opt-in: tests for fulltext search over a table with non-integer PK,
+// using a __rowId Uint64 NOT NULL column plus a unique secondary index on __rowId.
+// The runtime actor must resolve __rowId -> PK via the unique index before reading the main table.
+
+namespace {
+
+TKikimrRunner KikimrRowIdOptIn() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableUniqConstraint(true);
+    // EnableAddUniqueIndex gates `ALTER TABLE ADD INDEX ... GLOBAL UNIQUE`. The unique index over
+    // __rowId is added after the table exists, so this flag must be on.
+    featureFlags.SetEnableAddUniqueIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()
+        ->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    return TKikimrRunner(settings);
+}
+
+void CreateRowIdTable(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        CREATE TABLE `/Root/RowIdTexts` (
+            Pk Utf8 NOT NULL,
+            Text Utf8,
+            Data Utf8,
+            __rowId Uint64 NOT NULL,
+            PRIMARY KEY (Pk)
+        );
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void AddUniqueRowIdIndex(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/RowIdTexts` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__rowId);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void UpsertRowIdData(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        UPSERT INTO `/Root/RowIdTexts` (Pk, Text, Data, __rowId) VALUES
+            ("pk-100"u, "cats love cats"u,         "cats data"u,    100),
+            ("pk-200"u, "dogs chase small cats"u,  "dogs data"u,    200),
+            ("pk-300"u, "foxes love dogs"u,        "foxes data"u,   300),
+            ("pk-400"u, "small birds"u,            "birds data"u,   400);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void AddFulltextIndexPlain(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/RowIdTexts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext_plain
+            ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void AddFulltextIndexRelevance(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/RowIdTexts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext_relevance
+            ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_Plain) {
+    // End-to-end: a table keyed by string PK plus __rowId Uint64 NOT NULL and a unique secondary
+    // index on __rowId must support fulltext search. The runtime must resolve __rowId -> PK before
+    // reading the main table and surface the original PK + text to the caller.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+    AddFulltextIndexPlain(db);
+
+    // Query exactly one term that matches three rows (100, 200, 300) and not the fourth (400).
+    TString query = R"sql(
+        SELECT Pk, Text FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(Text, "cats")
+        ORDER BY Pk;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+    NYdb::TResultSetParser parser(resultSet);
+    THashSet<TString> seenPks;
+    while (parser.TryNextRow()) {
+        // Pk is Utf8 NOT NULL — Primitive, not Optional.
+        seenPks.emplace(TString{parser.ColumnParser("Pk").GetUtf8()});
+    }
+    UNIT_ASSERT(seenPks.contains("pk-100"));
+    UNIT_ASSERT(seenPks.contains("pk-200"));
+    UNIT_ASSERT(!seenPks.contains("pk-300"));
+    UNIT_ASSERT(!seenPks.contains("pk-400"));
+}
+
+Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CoveredAvoidsResolve) {
+    // When the fulltext index covers all requested columns, the runtime must NOT resolve through
+    // the unique index — the index alone has the data. Sanity check that a covered query still
+    // returns rows (the covered shortcut is documented in TFullTextSource::FetchDocumentDetails).
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/RowIdTexts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text) COVER (Data)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Project only the covered column (Data). With covered shortcut, runtime must not need PK.
+    TString query = R"sql(
+        SELECT Data FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextMatch(Text, "cats")
+        ORDER BY Data;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+}
+
+Y_UNIT_TEST(SelectWithFulltextRelevance_RowIdOptIn_TopK) {
+    // Relevance variant with ORDER BY score LIMIT N must work over __rowId opt-in. Once the TopK
+    // is selected the runtime resolves __rowId -> PK only for the final N rows.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+    AddFulltextIndexRelevance(db);
+
+    TString query = R"sql(
+        SELECT Pk, Text, FulltextScore(Text, "cats") as Relevance
+        FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+        WHERE FulltextScore(Text, "cats") > 0
+        ORDER BY Relevance DESC
+        LIMIT 5;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+    NYdb::TResultSetParser parser(resultSet);
+    double prev = std::numeric_limits<double>::infinity();
+    while (parser.TryNextRow()) {
+        double rel = parser.ColumnParser("Relevance").GetDouble();
+        UNIT_ASSERT_C(rel <= prev + 1e-9, "Relevance must be descending");
+        prev = rel;
+        // Pk is Utf8 NOT NULL — Primitive, not Optional.
+        TString pk{parser.ColumnParser("Pk").GetUtf8()};
+        UNIT_ASSERT_C(pk.StartsWith("pk-"), "Resolved PK must look like a main-table PK");
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

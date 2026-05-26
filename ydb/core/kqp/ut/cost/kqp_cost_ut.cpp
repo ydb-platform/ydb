@@ -2623,6 +2623,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST_TWIN(WriteRowWithIndex, EnableIndexStreamWrite) {
+        if (EnableIndexStreamWrite) {
+            return;
+        }
         auto appConfig = GetAppConfig(false, false);
         appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
         appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);

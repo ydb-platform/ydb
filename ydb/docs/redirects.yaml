@@ -82,7 +82,7 @@ common:
   - from: /deploy/index.md
     to: /devops/index.md
   - from: /deploy/manual/deploy-ydb-on-premises.md
-    to: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /deploy/configuration/config.md
     to: /reference/configuration/index.md
   - from: /deploy/manual/connector.md
@@ -507,7 +507,18 @@ ru:
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
 
+<<<<<<< HEAD
 en:
+=======
+  - from: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+  - from: /devops/manual/initial-deploym  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.mdent.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+
+>>>>>>> ef92ba5423f ([Backport MAIN] PR #41066 [YDBDOCS-2112] Нужно пофиксить документацию по результатам https://github.com/ydb-platform/ydb/issues/39503 (#41287))
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md

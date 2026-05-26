@@ -39,8 +39,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
         "ref": "main",
         "pull_number": str(pr_number),
         "test_targets": "ydb/",
-        "test_type": "unittest,py3test,py2test,pytest",
-        "test_size": "small,medium,large",  # All test sizes
+        "test_size": "small,medium",
         "additional_ya_make_args": "",
         "build_preset": "relwithdebinfo",  # Default preset
         "collect_coredumps": "false",

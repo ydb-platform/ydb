@@ -1,5 +1,7 @@
 # Scan queries in {{ ydb-short-name }}
 
+{% include notitle [warning](../../_includes/scan_query_deprecated_warning.md) %}
+
 Scan queries are a separate data access interface primarily intended for running analytical ad-hoc queries against a database.
 
 This execution mode has the following distinctive properties:

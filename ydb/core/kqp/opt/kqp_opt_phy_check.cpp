@@ -131,16 +131,11 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrus
                             auto stageParentsIt = parentsMap.find(stage.Raw());
                             YQL_ENSURE(stageParentsIt != parentsMap.end());
                             if (stageParentsIt->second.size() != 1) {
-                                bool hasOutput = false;
                                 bool hasTableEffect = false;
                                 for (const auto& parent : stageParentsIt->second) {
                                     YQL_ENSURE(TExprBase(parent).Maybe<TDqOutput>()
                                             || TExprBase(parent).Maybe<TKqpSinkEffect>());
-                                    if (TExprBase(parent).Maybe<TDqOutput>()) {
-                                        YQL_ENSURE(!hasOutput, "Stage #" << PrintKqpStageOnly(stage, ctx)
-                                            << " has multiple outputs");
-                                        hasOutput = true;
-                                    } else if (auto sinkEffect = TExprBase(parent).Maybe<TKqpSinkEffect>()) {
+                                   if (auto sinkEffect = TExprBase(parent).Maybe<TKqpSinkEffect>()) {
                                         YQL_ENSURE(stage.Outputs(), "Stage #" << PrintKqpStageOnly(stage, ctx)
                                             << " has no outputs");
                                         const auto outputs = stage.Outputs().Cast();

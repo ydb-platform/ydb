@@ -1,81 +1,82 @@
-# Deployment Preparation
+# Deployment preparation
 
-## Getting Started {#before-start}
+## Before you start {#before-start}
 
-### Prerequisites {#requirements}
+### Requirements {#requirements}
 
-Review the [system requirements](../../../concepts/system-requirements.md) and the [cluster topology](../../../../concepts/topology.md).
+Review the [system requirements](../../../../devops/concepts/system-requirements.md) and [cluster topology](../../../../concepts/topology.md).
 
-Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} executable.
+You must have SSH access to all servers. This is required to install the artifacts and run the {{ ydb-short-name }} executable file.
 
-The network configuration must allow TCP connections on the following ports (these are defaults, but you can change them by settings):
+The network configuration must allow TCP connections on the following ports (default, can be changed by settings):
 
-* 22: SSH service
-* 2135, 2136: GRPC for client-cluster interaction.
-* 19001, 19002: Interconnect for intra-cluster node interaction
-* 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* 22: SSH service;
+* 2135, 2136: gRPC for client-cluster interaction;
+* 19001, 19002: Interconnect for intra-cluster node interaction;
+* 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI;
+* 9092, 9093: ports for Kafka API operations.
 
-Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
+If you place multiple dynamic nodes on one server, you will need separate ports for gRPC, Interconnect, the HTTP interface, and Kafka API for each dynamic node on the server.
 
-Make sure that the system clocks running on all the cluster's servers are synced by `ntpd` or `chrony`. We recommend using the same time source for all servers in the cluster to maintain consistent leap seconds processing.
+Make sure that the system clocks on all servers in the cluster are synchronized using `ntpd` or `chrony` tools. It is advisable to use a single time source for all cluster servers to ensure consistent handling of leap seconds.
 
-If the Linux flavor run on the cluster servers uses `syslogd` for logging, set up log file rotation using`logrotate` or similar tools. {{ ydb-short-name }} services can generate substantial amounts of system logs, particularly when you elevate the logging level for diagnostic purposes. That's why it's important to enable system log file rotation to prevent the `/var` file system overflow.
+If the Linux type used on the cluster servers uses `syslogd` for logging, you need to set up log rotation using `logrotate` or its analogs. {{ ydb-short-name }} services can generate a significant amount of system logs, especially when the logging level is increased for diagnostic purposes, so it is important to enable log rotation to prevent the `/var` file system from filling up.
 
-Select the servers and disks to be used for storing data:
+Select the servers and disks that will be used for data storage:
 
-* Use the `block-4-2` fault tolerance model for cluster deployment in one availability zone (AZ). Use at least eight servers to safely survive the loss of two servers.
-* Use the `mirror-3-dc` fault tolerance model for cluster deployment in three availability zones (AZ). To survive the loss of one AZ and one server in another AZ, use at least nine servers. Make sure that the number of servers running in each AZ is the same.
+* Use the `block-4-2` fault tolerance scheme to deploy the cluster in a single availability zone (AZ), using at least 8 servers. This scheme allows you to withstand the failure of 2 servers.
+* Use the `mirror-3-dc` fault tolerance scheme to deploy the cluster in three availability zones (AZ), using at least 9 servers. This scheme allows you to withstand the failure of 1 AZ and 1 server in another AZ. The number of servers involved in each AZ must be the same.
 
 {% note info %}
 
-Run each static node (data node) on a separate server. Both static and dynamic nodes can run together on the same server. A server can also run multiple dynamic nodes if it has enough computing power.
+Run each static node (data storage node) on a separate server. It is possible to combine static and dynamic nodes on the same server, as well as place multiple dynamic nodes on one server if there are sufficient computing resources.
 
 {% endnote %}
 
-For more information about hardware requirements, see [{#T}](../../../concepts/system-requirements.md).
+For more details on hardware requirements, see the section [{#T}](../../../../devops/concepts/system-requirements.md).
 
-### Preparing TLS Keys and Certificates {#tls-certificates}
+### Preparing TLS keys and certificates {#tls-certificates}
 
-The TLS protocol provides traffic protection and authentication for {{ ydb-short-name }} server nodes. Before you install your cluster, determine which servers it will host, establish the node naming convention, come up with node names, and prepare your TLS keys and certificates.
+Traffic protection and server node authentication in {{ ydb-short-name }} is carried out using the TLS protocol. Before installing the cluster, you need to plan the composition of the servers, decide on the node naming scheme and specific names, and prepare TLS keys and certificates.
 
-You can use existing certificates or generate new ones. Prepare the following files with TLS keys and certificates in the PEM format:
+You can use existing certificates or generate new ones. The following TLS key and certificate files must be prepared in PEM format:
 
-* `ca.crt`: CA-issued certificate used to sign the other TLS certificates (these files are the same on all the cluster nodes).
-* `node.key`: Secret TLS keys for each cluster node (one key per cluster server).
-* `node.crt`: TLS certificates for each cluster node (each certificate corresponds to a key).
-* `web.pem`: Concatenation of the node secret key, node certificate, and the CA certificate needed for the monitoring HTTP interface (a separate file is used for each server in the cluster).
+* `ca.crt` — the certificate of the certification authority (CA) that signs the other TLS certificates (the same files on all cluster nodes);
+* `node.key` — TLS private keys for each of the cluster nodes (a separate key for each cluster server);
+* `node.crt` — TLS certificates for each of the cluster nodes (a certificate corresponding to the key);
+* `web.pem` — concatenation of the node's private key, the node certificate, and the CA certificate for the monitoring HTTP interface (a separate file for each cluster server).
 
-Your organization should define the parameters required for certificate generation in its policy. The following parameters are commonly used for generating certificates and keys for {{ ydb-short-name }}:
+The necessary parameters for generating certificates are determined by the organization's policy. Typically, certificates and keys for {{ ydb-short-name }} are generated with the following parameters:
 
-* 2048-bit or 4096-bit RSA keys
-* Certificate signing algorithm: SHA-256 with RSA encryption
-* Validity period of node certificates: at least 1 year
-* CA certificate validity period: at least 3 years.
+* RSA keys with a length of 2048 or 4096 bits;
+* SHA-256 certificate signing algorithm with RSA encryption;
+* cluster node certificates must be valid for at least 1 year;
+* CA certificate must be valid for at least 3 years.
 
-Make sure that the CA certificate is appropriately labeled, with the CA property enabled along with the "Digital Signature, Non Repudiation, Key Encipherment, Certificate Sign" usage types.
+The CA certificate must be marked accordingly: the CA flag must be set, and the following uses must be enabled: "Digital Signature, Non Repudiation, Key Encipherment, Certificate Sign".
 
-For node certificates, it's key that the actual host name (or names) match the values in the "Subject Alternative Name" field. Enable both the regular usage types ("Digital Signature, Key Encipherment") and advanced usage types ("TLS Web Server Authentication, TLS Web Client Authentication") for the certificates. Node certificates must support both server authentication and client authentication (the `extendedKeyUsage = serverAuth,clientAuth` option in the OpenSSL settings).
+For node certificates, it is important that the actual hostname (or hostnames) matches the values specified in the "Subject Alternative Name" field. The following uses must be enabled for the certificates: "Digital Signature, Key Encipherment" and extended uses "TLS Web Server Authentication, TLS Web Client Authentication". It is necessary that the node certificates support both server and client authentication (the `extendedKeyUsage = serverAuth,clientAuth` option in OpenSSL settings).
 
-For batch generation or update of {{ ydb-short-name }} cluster certificates by OpenSSL, you can use the [sample script](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/tls_cert_gen/) from the {{ ydb-short-name }} GitHub repository. Using the script, you can streamline preparation for installation, automatically generating all the key files and certificate files for all your cluster nodes in a single step.
+To batch generate or update {{ ydb-short-name }} cluster certificates using OpenSSL software, you can use the [script example](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/tls_cert_gen/) hosted in the {{ ydb-short-name }} GitHub repository. The script allows you to automatically generate the necessary key and certificate files for the entire set of cluster nodes in a single operation, simplifying preparation for installation.
 
-## Create a System User and a Group to Run {{ ydb-short-name }} {#create-user}
+## Create a system user and group on behalf of which {{ ydb-short-name }} will run {#create-user}
 
-On each server that will be running {{ ydb-short-name }}, execute the command below:
+On each server where {{ ydb-short-name }} will be running, execute:
 
 ```bash
 sudo groupadd ydb
 sudo useradd ydb -g ydb
 ```
 
-To ensure that {{ ydb-short-name }} can access block disks, add the user that will run {{ ydb-short-name }} processes, to the `disk` group:
+To allow the {{ ydb-short-name }} service to access block disks, you need to add the user under which the {{ ydb-short-name }} processes will run to the `disk` group:
 
 ```bash
 sudo usermod -aG disk ydb
 ```
 
-## Configure File Descriptor Limits {#file-descriptors}
+## Set file descriptor limits {#file-descriptors}
 
-For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../../concepts/query_execution/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
+For {{ ydb-short-name }} to work correctly, especially when using [spilling](../../../../concepts/query_execution/spilling.md) in multi-node clusters, it is recommended to increase the limit on the number of simultaneously open file descriptors.
 
 To change the file descriptor limit, add the following lines to the `/etc/security/limits.conf` file:
 
@@ -84,49 +85,64 @@ ydb soft nofile 10000
 ydb hard nofile 10000
 ```
 
-Where `ydb` is the username under which `ydbd` runs.
+Where `ydb` is the username under which `ydbd` is running.
 
-After changing the file, you need to reboot the system or log in again to apply the new limits.
+After changing the file, you need to reboot the system or log in again for the new limits to take effect.
 
 {% note info %}
 
-For more information about spilling configuration and its relationship with file descriptors, see the [Spilling Configuration](../../../../reference/configuration/table_service_config.md#file-system-requirements) section.
+For more information about spilling configuration and its relationship with file descriptors, see the [«Spilling configuration»](../../../../reference/configuration/table_service_config.md#file-system-requirements) section.
 
 {% endnote %}
 
-## Install {{ ydb-short-name }} Software on Each Server {#install-binaries}
+## Install {{ ydb-short-name }} software on each server {#install-binaries}
 
-1. Download and unpack an archive with the `ydbd` executable and the libraries required for {{ ydb-short-name }} to run:
+### Download and unpack the archive with the `ydbd` executable file and the libraries required for {{ ydb-short-name }} to work
+
+{% list tabs %}
+
+  - OSS
+
+    ```bash
+    mkdir ydbd-stable-linux-amd64
+    curl -L <binaries_url> | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
+    ```
+
+  - Enterprise
+
+    ```bash
+    mkdir ydbd-stable-linux-amd64
+    curl -L <binaries_url> | tar -xJ --strip-component=1 -C ydbd-stable-linux-amd64
+    ```
+
+{% endlist %}
+
+where `binaries_url` is the link to the archive of the version you need from the [downloads page](../../../../downloads/index.md).
+
+### Create a directory on the server
 
   ```bash
-  mkdir ydbd-stable-linux-amd64
-  curl -L {{ ydb-binaries-url }}/{{ ydb-stable-binary-archive }} | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
+  sudo mkdir -p  /opt/ydb
   ```
 
-1. Create directories for {{ ydb-short-name }} software:
-
-  ```bash
-  sudo mkdir -p /opt/ydb /opt/ydb/cfg
-  ```
-
-1. Copy the executable and libraries to the appropriate directories:
+### Copy the executable file and libraries to the appropriate directories
 
   ```bash
   sudo cp -iR ydbd-stable-linux-amd64/bin /opt/ydb/
   sudo cp -iR ydbd-stable-linux-amd64/lib /opt/ydb/
   ```
 
-1. Set the owner of files and folders:
+### Set the owner of the files and directories
 
   ```bash
   sudo chown -R root:bin /opt/ydb
   ```
 
-## Prepare and Clear Disks on Each Server {#prepare-disks}
+## Prepare and clean disks on each server {#prepare-disks}
 
 {% include [_includes/storage-device-requirements.md](../../../../_includes/storage-device-requirements.md) %}
 
-To get a list of available block devices on the server, you can use the `lsblk` command. Example output:
+You can get a list of block devices on the server using the `lsblk` command. Example output:
 
 ```txt
 NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
@@ -139,48 +155,93 @@ vdb    252:16   0   186G  0 disk
 └─vdb1 252:17   0   186G  0 part
 ```
 
-The names of block devices depend on the operating system settings provided by the base image or manually configured. Typically, device names consist of up to three parts:
+The names of block devices depend on the operating system settings specified by the base image or configured manually. Typically, device names consist of three parts:
 
-- A fixed prefix or a prefix indicating the device type
-- A device sequential identifier (which can be a letter or a number)
-- A partition sequential identifier on the given device (usually a number)
+* A fixed prefix or a prefix indicating the device type;
+* A sequential device identifier (can be a letter or a number);
+* A sequential partition identifier on this device (usually a number).
 
 1. Create partitions on the selected disks:
 
-  {% note alert %}
+    {% note alert %}
 
-  The next operation will delete all partitions on the specified disk. Make sure that you specified a disk that contains no external data.
+    The following operation will delete all partitions on the specified disk! Make sure you have specified a disk that does not contain other data!
 
-  {% endnote %}
+    {% endnote %}
 
-  ```bash
-  DISK=/dev/nvme0n1
-  sudo parted ${DISK} mklabel gpt -s
-  sudo parted -a optimal ${DISK} mkpart primary 0% 100%
-  sudo parted ${DISK} name 1 ydb_disk_ssd_01
-  sudo partx --u ${DISK}
-  ```
+    ```bash
+    DISK=/dev/nvme0n1
+    sudo parted ${DISK} mklabel gpt -s
+    sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+    sudo parted ${DISK} name 1 ydb_disk_ssd_01
+    sudo partx --u ${DISK}
+    ```
 
-  Execute the command `ls -l /dev/disk/by-partlabel/` to ensure that a disk with the label `/dev/disk/by-partlabel/ydb_disk_ssd_01` has appeared in the system.
+    Run the `ls -l /dev/disk/by-partlabel/` command to make sure that the system has a disk with the label `/dev/disk/by-partlabel/ydb_disk_ssd_01`.
 
-  If you plan to use more than one disk on each server, replace `ydb_disk_ssd_01` with a unique label for each one. Disk labels should be unique within each server. They are used in configuration files, see the following guides.
+    If you plan to use more than one disk on each server, specify a unique label for each instead of `ydb_disk_ssd_01`. Disk labels must be unique within each server and are used in configuration files as shown in the following instructions.
 
-  To streamline the next setup step, it makes sense to use the same disk labels on cluster servers having the same disk configuration.
+    To simplify subsequent configuration, it is convenient to use the same disk labels on cluster servers with identical disk configurations.
 
-2. Clear the disk by this command built-in the `ydbd` executable:
+2. Clean the disk using the command built into the `ydbd` executable file:
 
-{% note warning %}
+    {% note warning %}
 
-After executing this command, data on the disk will be erased.
+    Data on the disk will be erased after running the command.
 
-{% endnote %}
+    {% endnote %}
 
-  ```bash
-  sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
-  ```
+    ```bash
+    sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
+    ```
 
-  Perform this operation for each disk to be used for {{ ydb-short-name }} data storage.
+    Perform this operation for each disk that will be used to store {{ ydb-short-name }} data.
 
-After completing the preparation steps, proceed to deployment. Select the guide that matches your configuration:
+### Example of a complete command for partitioning 3 disks
 
-- [Deploying a cluster using configuration V1](deployment-configuration-v1.md)
+```bash
+DISK=/dev/vdb
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_01
+sudo partx --u ${DISK}
+sleep 5
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
+
+DISK=/dev/vdc
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_02
+sudo partx --u ${DISK}
+sleep 5
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_02
+
+DISK=/dev/vdd
+sudo parted ${DISK} mklabel gpt -s
+sudo parted -a optimal ${DISK} mkpart primary 0% 100%
+sudo parted ${DISK} name 1 ydb_disk_ssd_03
+sudo partx --u ${DISK}
+sleep 5
+sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_03
+```
+
+### Verify disk preparation
+
+To check the correct disk partitioning, run the command on each cluster server:
+
+```bash
+ls -al /dev/disk/by-partlabel/
+```
+
+The command output should show the disks you created and partitioned
+
+```bash
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_01 -> ../../vdb1
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_02 -> ../../vdc1
+lrwxrwxrwx 1 root root    10 Nov 26 12:54 ydb_disk_ssd_03 -> ../../vdd1
+```
+
+After completing the preparatory steps, you can proceed with system deployment. Choose an instruction according to your configuration:
+
+* [Deploying a cluster using configuration V1](deployment-configuration-v1.md)
+* [Deploying a cluster using configuration V2](deployment-configuration-v2.md)

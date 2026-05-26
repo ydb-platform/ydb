@@ -1,5 +1,6 @@
 #include "test_client.h"
 
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
@@ -1434,6 +1435,9 @@ namespace Tests {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
             }
+
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),

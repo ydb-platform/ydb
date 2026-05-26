@@ -7,6 +7,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+namespace {
+
+TString GetImportDisabledMessage(const TImportInfo& importInfo) {
+    return TStringBuilder() << "Imports from "
+        << (importInfo.Kind == TImportInfo::EKind::FS ? "FS" : "S3")
+        << " are disabled";
+}
+
+} // anonymous namespace
+
 class TSchemeGetterFallback: public TActorBootstrapped<TSchemeGetterFallback> {
 public:
     explicit TSchemeGetterFallback(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
@@ -17,7 +27,7 @@ public:
     }
 
     void Bootstrap() {
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, false, "Imports from S3 are disabled"));
+        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, false, GetImportDisabledMessage(*ImportInfo)));
         PassAway();
     }
 
@@ -36,7 +46,7 @@ public:
     }
 
     void Bootstrap() {
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemaMappingReady(ImportInfo->Id, false, "Imports from S3 are disabled"));
+        Send(ReplyTo, new TEvPrivate::TEvImportSchemaMappingReady(ImportInfo->Id, false, GetImportDisabledMessage(*ImportInfo)));
         PassAway();
     }
 

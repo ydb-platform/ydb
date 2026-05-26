@@ -22,6 +22,19 @@ bool IsUiExcludedQuery(TStringBuf queryText) {
     return queryText.StartsWith(UI_QUERY_EXCLUDE_MARKER);
 }
 
+TString SafeExtractQueryText(const TKqpQueryState& state) {
+    if (state.CompileResult) {
+        if (state.CompileResult->Query) {
+            return state.CompileResult->Query->Text;
+        }
+        return {};
+    }
+    if (state.RequestEv) {
+        return state.RequestEv->GetQuery();
+    }
+    return {};
+}
+
 struct TBaseFields {
     TStringBuf Database;
     TStringBuf DatabaseId;
@@ -162,17 +175,15 @@ NActors::NLog::EPriority PickCompletedPriority(Ydb::StatusIds::StatusCode status
 
 void FillBaseFields(TBaseFields& base, const TKqpQueryState& state, ui64 queryLen, bool includeQueryId) {
     base.Database = state.Database;
-    base.DatabaseId = state.UserRequestContext
-        ? TStringBuf(state.UserRequestContext->DatabaseId)
-        : TStringBuf{};
-    base.TraceId = state.UserRequestContext
-        ? TStringBuf(state.UserRequestContext->TraceId)
-        : TStringBuf{};
-    if (includeQueryId && state.CompileResult) {
+    if (const auto* userCtx = state.UserRequestContext.Get()) {
+        base.DatabaseId = userCtx->DatabaseId;
+        base.TraceId = userCtx->TraceId;
+    }
+    if (includeQueryId && state.CompileResult && !state.CompileResult->Uid.empty()) {
         base.QueryId = state.CompileResult->Uid;
     }
-    base.Action = NKikimrKqp::EQueryAction_Name(state.GetAction());
-    base.Type = NKikimrKqp::EQueryType_Name(state.GetType());
+    base.Action = TString{NKikimrKqp::EQueryAction_Name(state.GetAction())};
+    base.Type = TString{NKikimrKqp::EQueryType_Name(state.GetType())};
     base.QueryLen = queryLen;
     base.StartedAt = state.StartTime;
 }
@@ -185,22 +196,19 @@ TLogQuery TLogQuery::Started(const TKqpQueryState& state) {
             return;
         }
 
-        auto query = state.ExtractQueryText();
+        const TString query = SafeExtractQueryText(state);
         if (IsUiExcludedQuery(query)) {
             return;
         }
 
-        TStringBuf poolId = state.UserRequestContext
-            ? TStringBuf(state.UserRequestContext->PoolId)
-            : TStringBuf{};
+        const auto* userCtx = state.UserRequestContext.Get();
+        TStringBuf poolId = userCtx ? TStringBuf(userCtx->PoolId) : TStringBuf{};
+        TStringBuf sessionId = userCtx ? TStringBuf(userCtx->SessionId) : TStringBuf{};
 
-        TStringBuf sessionId = state.UserRequestContext
-            ? TStringBuf(state.UserRequestContext->SessionId)
-            : TStringBuf{};
-
-        TString userSid = state.UserToken
-            ? state.UserToken->GetUserSID()
-            : TString{};
+        TString userSid;
+        if (state.UserToken) {
+            userSid = state.UserToken->GetUserSID();
+        }
 
         TBaseFields base;
         FillBaseFields(base, state, query.size(), /*includeQueryId=*/false);
@@ -233,18 +241,18 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
             return;
         }
 
-        auto queryText = state.ExtractQueryText();
+        const TString queryText = SafeExtractQueryText(state);
         if (IsUiExcludedQuery(queryText) && status == Ydb::StatusIds::SUCCESS) {
             return;
         }
 
-        TStringBuf sessionId = state.UserRequestContext
-            ? TStringBuf(state.UserRequestContext->SessionId)
-            : TStringBuf{};
+        const auto* userCtx = state.UserRequestContext.Get();
+        TStringBuf sessionId = userCtx ? TStringBuf(userCtx->SessionId) : TStringBuf{};
 
-        TString userSID = state.UserToken
-            ? state.UserToken->GetUserSID()
-            : TString{};
+        TString userSID;
+        if (state.UserToken) {
+            userSID = state.UserToken->GetUserSID();
+        }
 
         const ui64 origQueryLen = queryText.size();
 
@@ -254,10 +262,8 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
         if (record.HasResponse()) {
             poolId = TStringBuf(record.GetResponse().GetEffectivePoolId());
             NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-        } else {
-            poolId = state.UserRequestContext
-                ? TStringBuf(state.UserRequestContext->PoolId)
-                : TStringBuf{};
+        } else if (userCtx) {
+            poolId = TStringBuf(userCtx->PoolId);
         }
 
         TBaseFields base;

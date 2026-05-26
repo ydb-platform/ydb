@@ -1,8 +1,35 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
+
 #include "auth.h"
 
 using namespace NKikimr;
+
+namespace {
+
+class TStrictDatabaseOnlyFixture {
+public:
+    TStrictDatabaseOnlyFixture()
+        : AppData(0, 0, 0, 0, TMap<TString, ui32>{}, nullptr, nullptr, nullptr, nullptr)
+    {
+        auto& securityConfig = *AppData.DomainsConfig.MutableSecurityConfig();
+        securityConfig.AddDatabaseAllowedSIDs("database");
+        securityConfig.AddViewerAllowedSIDs("viewer");
+        securityConfig.AddMonitoringAllowedSIDs("monitoring");
+        securityConfig.AddAdministrationAllowedSIDs("admin");
+    }
+
+    const TAppData* GetAppData() const {
+        return &AppData;
+    }
+
+private:
+    TAppData AppData;
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(AuthTokenAllowed) {
 
@@ -78,6 +105,42 @@ Y_UNIT_TEST_SUITE(AuthTokenAllowed) {
         NACLib::TUserToken token({ .UserSID = "no-match-user", .GroupSIDs = {"no-match-group"} });
         UNIT_ASSERT_EQUAL(IsTokenAllowed(&token, {"group1", "group2", "user1", "user2"}), false);
         UNIT_ASSERT_EQUAL(IsTokenAllowed(token.SerializeAsString(), {"group1", "group2", "user1", "user2"}), false);
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(AuthStrictDatabaseOnly) {
+
+    const TStrictDatabaseOnlyFixture Fixture;
+
+    Y_UNIT_TEST(PassOnDatabaseAllowedSidOnly) {
+        NACLib::TUserToken token({ .UserSID = "database" });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), true);
+    }
+
+    Y_UNIT_TEST(PassOnDatabaseAllowedGroupSidOnly) {
+        NACLib::TUserToken token({ .UserSID = "user", .GroupSIDs = {"database"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), true);
+    }
+
+    Y_UNIT_TEST(FailWithoutDatabaseAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "user" });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
+    }
+
+    Y_UNIT_TEST(FailOnViewerAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"viewer"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
+    }
+
+    Y_UNIT_TEST(FailOnMonitoringAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"monitoring"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
+    }
+
+    Y_UNIT_TEST(FailOnAdministrationAllowedSid) {
+        NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"admin"} });
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
 }

@@ -12,6 +12,9 @@ TMaxTasksGraph::TMaxTasksGraph(size_t maxChannelsCount) : MaxChannelsCount(maxCh
 void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot) {
     YQL_ENSURE(!resourcesSnapshot.empty());
 
+    Y_ENSURE(Nodes.empty() && NodeIds.empty(), "AddNodes must be called on an empty graph");
+    Y_ENSURE(Stages.empty(), "AddNodes must be called before any stages are added");
+
     Nodes.reserve(resourcesSnapshot.size());
     Nodes.resize(resourcesSnapshot.size(), {.MaxChannelsCount=MaxChannelsCount});
 
@@ -19,9 +22,13 @@ void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& reso
     for (const auto& node : resourcesSnapshot) {
         Y_ENSURE(NodeIds.emplace(node.GetNodeId(), nodeIdx++).second);
     }
+
+    CheckInvariants();
 }
 
 void TMaxTasksGraph::AddNode(TNodeId node) {
+    Y_ENSURE(Stages.empty(), "AddNode must be called before any stages are added");
+
     auto nodeIt = NodeIds.find(node);
     if (nodeIt == NodeIds.end()) {
         {
@@ -37,6 +44,8 @@ void TMaxTasksGraph::AddNode(TNodeId node) {
         NodeIds.emplace(node, Nodes.size());
         Nodes.push_back({.MaxChannelsCount=MaxChannelsCount});
     }
+
+    CheckInvariants();
 }
 
 void TMaxTasksGraph::AddStage(const TStageId& stage, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput) {
@@ -77,6 +86,8 @@ void TMaxTasksGraph::AddStage(const TStageId& stage, EStageType type, const std:
     TasksPerStage.push_back(0);
 
     Y_DEBUG_ABORT_UNLESS(Stages.size() == Inputs.size() && Inputs.size() == Tasks.size() && Inputs.size() == Outputs.size());
+
+    CheckInvariants();
 }
 
 void TMaxTasksGraph::AddTasks(const TStageId& stage, TNodeId node, size_t tasksCount) {
@@ -84,13 +95,14 @@ void TMaxTasksGraph::AddTasks(const TStageId& stage, TNodeId node, size_t tasksC
 
     auto stageIdx = StageIds.at(stage);
     auto nodeIdx = NodeIds.find(node);
-    if (nodeIdx == NodeIds.end()) {
-        nodeIdx = NodeIds.emplace(node, NodeIds.size()).first;
-    }
+
+    Y_ENSURE(nodeIdx != NodeIds.end(), "Trying to add tasks to unknown node: " << node); // TODO: how can there be unknown nodes?
 
     Tasks.at(stageIdx).at(nodeIdx->second) += tasksCount;
     Nodes.at(nodeIdx->second).TasksCount += tasksCount;
     TasksPerStage.at(stageIdx) += tasksCount;
+
+    CheckInvariants();
 }
 
 void TMaxTasksGraph::AddTasks(const TStageId& stage, size_t tasksCount) {
@@ -106,6 +118,8 @@ void TMaxTasksGraph::AddTasks(const TStageId& stage, size_t tasksCount) {
             Stages.at(stageIdx).RoundRobin = 0;
         }
     }
+
+    CheckInvariants();
 }
 
 void TMaxTasksGraph::Shrink() {
@@ -165,7 +179,7 @@ void TMaxTasksGraph::Print() const {
     // Nodes
     out << "--- Nodes (" << Nodes.size() << ") ---" << Endl;
     for (const auto& [nodeId, nodeIdx] : NodeIds) {
-        const auto& node = Nodes[nodeIdx];
+        const auto& node = Nodes.at(nodeIdx);
         out << "  Node[" << nodeIdx << "] (id=" << nodeId << ")"
             << " MaxChannels=" << node.MaxChannelsCount
             << " TasksCount=" << node.TasksCount
@@ -253,7 +267,7 @@ bool TMaxTasksGraph::IsFeasible(double alpha) const {
 
     for (TNodeId nodeId = 0; nodeId < Nodes.size(); ++nodeId) {
         uint64_t channels = CountChannelsOnNode(tasks, nodeId);
-        if (channels > Nodes[nodeId].MaxChannelsCount) {
+        if (channels > Nodes.at(nodeId).MaxChannelsCount) {
             return false;
         }
     }
@@ -370,6 +384,125 @@ ui64 TMaxTasksGraph::CountChannelsOnNode(const std::vector<TTasksPerNode>& tasks
     }
 
     return totalChannels;
+}
+
+void TMaxTasksGraph::CheckInvariants() const {
+    // --- 1) Согласованность размеров основных контейнеров ---
+    Y_ENSURE(Nodes.size()  == NodeIds.size(),
+        "Nodes/NodeIds size mismatch: " << Nodes.size() << " vs " << NodeIds.size());
+    Y_ENSURE(Stages.size() == StageIds.size(),
+        "Stages/StageIds size mismatch: " << Stages.size() << " vs " << StageIds.size());
+    Y_ENSURE(Stages.size() == Inputs.size(),
+        "Stages/Inputs size mismatch: " << Stages.size() << " vs " << Inputs.size());
+    Y_ENSURE(Stages.size() == Outputs.size(),
+        "Stages/Outputs size mismatch: " << Stages.size() << " vs " << Outputs.size());
+    Y_ENSURE(Stages.size() == Tasks.size(),
+        "Stages/Tasks size mismatch: " << Stages.size() << " vs " << Tasks.size());
+    Y_ENSURE(Stages.size() == TasksPerStage.size(),
+        "Stages/TasksPerStage size mismatch: " << Stages.size() << " vs " << TasksPerStage.size());
+
+    // --- 2) NodeIds: значения - валидные индексы в Nodes, без дыр ---
+    {
+        std::vector<bool> seenNode(Nodes.size(), false);
+        for (const auto& [nodeId, idx] : NodeIds) {
+            Y_ENSURE(idx < Nodes.size(),
+                "NodeIds entry (nodeId=" << nodeId << ") has out-of-range idx=" << idx);
+            Y_ENSURE(!seenNode[idx],
+                "NodeIds has duplicate idx=" << idx << " (nodeId=" << nodeId << ")");
+            seenNode[idx] = true;
+        }
+        for (size_t i = 0; i < Nodes.size(); ++i) {
+            Y_ENSURE(seenNode[i], "Node idx=" << i << " is not present in NodeIds");
+        }
+    }
+
+    // --- 3) StageIds: значения - валидные индексы в Stages, без дыр ---
+    {
+        std::vector<bool> seenStage(Stages.size(), false);
+        for (const auto& [stageKey, idx] : StageIds) {
+            Y_ENSURE(idx < Stages.size(),
+                "StageIds entry (txId=" << stageKey.TxId << ", stageId=" << stageKey.StageId
+                << ") has out-of-range idx=" << idx);
+            Y_ENSURE(!seenStage[idx],
+                "StageIds has duplicate idx=" << idx);
+            seenStage[idx] = true;
+        }
+        for (size_t i = 0; i < Stages.size(); ++i) {
+            Y_ENSURE(seenStage[i], "Stage idx=" << i << " is not present in StageIds");
+        }
+    }
+
+    // --- 4) Ширина каждой строки Tasks равна числу нод ---
+    for (size_t s = 0; s < Tasks.size(); ++s) {
+        Y_ENSURE(Tasks[s].size() == Nodes.size(),
+            "Tasks[" << s << "].size()=" << Tasks[s].size()
+            << " != Nodes.size()=" << Nodes.size());
+    }
+
+    // --- 5) Stage.Source и Stage.RoundRobin ---
+    for (size_t s = 0; s < Stages.size(); ++s) {
+        const auto& stage = Stages[s];
+        if (stage.Source) {
+            Y_ENSURE(*stage.Source < s,
+                "Stage[" << s << "].Source=" << *stage.Source << " must be < " << s);
+            // После нормализации в AddStage Source никогда не должен указывать на COPY.
+            Y_ENSURE(Stages[*stage.Source].Type != COPY,
+                "Stage[" << s << "].Source=" << *stage.Source << " points to a COPY stage");
+            // У COPY должен быть Source; у не-COPY (после AddStage) — он опционален.
+        }
+        if (stage.Type == COPY) {
+            Y_ENSURE(stage.Source.has_value(),
+                "COPY Stage[" << s << "] has no Source");
+        }
+        Y_ENSURE(!Nodes.empty() ? stage.RoundRobin < Nodes.size() : stage.RoundRobin == 0,
+            "Stage[" << s << "].RoundRobin=" << stage.RoundRobin
+            << " out of range (Nodes.size()=" << Nodes.size() << ")");
+    }
+
+    // --- 6) Inputs/Outputs: индексы валидны, DAG topologически упорядочен, симметрия ---
+    for (size_t s = 0; s < Stages.size(); ++s) {
+        for (auto in : Inputs[s]) {
+            Y_ENSURE(in < Stages.size(),
+                "Inputs[" << s << "] has out-of-range idx=" << in);
+            Y_ENSURE(in < s,
+                "Inputs[" << s << "]=" << in << " must be < " << s << " (topological order)");
+            // Должна быть встречная запись в Outputs[in]
+            const auto& outs = Outputs[in];
+            Y_ENSURE(std::ranges::find(outs, s) != outs.end(),
+                "Inputs[" << s << "] contains " << in
+                << " but Outputs[" << in << "] does not contain " << s);
+        }
+        for (auto out : Outputs[s]) {
+            Y_ENSURE(out < Stages.size(),
+                "Outputs[" << s << "] has out-of-range idx=" << out);
+            Y_ENSURE(out > s,
+                "Outputs[" << s << "]=" << out << " must be > " << s << " (topological order)");
+            const auto& ins = Inputs[out];
+            Y_ENSURE(std::ranges::find(ins, s) != ins.end(),
+                "Outputs[" << s << "] contains " << out
+                << " but Inputs[" << out << "] does not contain " << s);
+        }
+    }
+
+    // --- 7) TasksPerStage == sum(Tasks[s]); агрегаты по нодам совпадают с Nodes[n].TasksCount ---
+    {
+        std::vector<size_t> perNode(Nodes.size(), 0);
+        for (size_t s = 0; s < Stages.size(); ++s) {
+            size_t rowSum = 0;
+            for (size_t n = 0; n < Nodes.size(); ++n) {
+                rowSum += Tasks[s][n];
+                perNode[n] += Tasks[s][n];
+            }
+            Y_ENSURE(rowSum == TasksPerStage[s],
+                "TasksPerStage[" << s << "]=" << TasksPerStage[s]
+                << " != sum(Tasks[" << s << "])=" << rowSum);
+        }
+        for (size_t n = 0; n < Nodes.size(); ++n) {
+            Y_ENSURE(perNode[n] == Nodes.at(n).TasksCount,
+                "Nodes[" << n << "].TasksCount=" << Nodes.at(n).TasksCount
+                << " != sum over stages=" << perNode[n]);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

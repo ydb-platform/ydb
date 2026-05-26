@@ -63,6 +63,8 @@ private:
     TTasksPerNode ScaleTasks(TStageIdx stageId, double alpha) const;
     size_t CountChannelsOnNode(const std::vector<TTasksPerNode>& tasks, TNodeIdx nodeId) const;
 
+    void CheckInvariants() const;
+
 private:
     const size_t MaxChannelsCount;
 

@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
@@ -1830,7 +1831,7 @@ TString TLongTxServiceActor::RenderLocksMonPage() {
             }
         }
         PRE() {
-            str << "Proxy nodes: " << ProxyNodes.size() << Endl;
+            str << "Remote locks proxy nodes: " << ProxyNodes.size() << Endl;
             for (const auto& [nodeId, node] : ProxyNodes) {
                 str << "    NodeId: " << nodeId
                     << " State: " << static_cast<int>(node.State)

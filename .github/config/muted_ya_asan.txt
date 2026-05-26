@@ -111,6 +111,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueMultiConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueNonExisting
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesFifoDlq0Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesFifoWithConsumersRetentionExtended
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesFifoWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStd0Consumers
@@ -129,6 +130,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthWithEnforceU
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthWithEnforceUserTokenSendMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageGroup
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageInvalidSize
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestReceiveMessageReturnToQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesInvalidValues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesNonExistentQueue
@@ -187,6 +189,7 @@ ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtl
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithResultsTtlAndForgetAfter
+ydb/core/kqp/ut/service KqpWarmup.WarmupQueryTypePropagation
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.InvisibleRowSkips
@@ -217,6 +220,12 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.CDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
+ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.CheckAccess
+ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
+ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_PreferedPartition_OtherPartition_Test
+ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionActive_BoundaryFalse_Test
+ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionInactive_0_Test
+ydb/core/persqueue/ut TPartitionChooserSuite.TPartitionChooserActor_SplitMergeEnabled_SourceId_PartitionNotExists_Test
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
@@ -331,17 +340,44 @@ ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFall
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
+ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadMessages_CsvFormat_Unlimited
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.CloseWriteSessionImmediately
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PreferredDatabaseNoFallback
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.SimpleHandlers
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.WriteSessionNoAvailableDatabase
+ydb/public/sdk/cpp/src/client/federated_topic/ut SimpleBlockingFederatedWriteSession.BasicWriteAndClose
+ydb/public/sdk/cpp/src/client/persqueue_public/ut BasicUsage.CreateTopicWithCustomAdvancedMonitoringSettings
+ydb/public/sdk/cpp/src/client/persqueue_public/ut BasicUsage.TWriteSession_BatchingProducesContinueTokens
+ydb/public/sdk/cpp/src/client/persqueue_public/ut Compression.WriteWithMixedCodecs
+ydb/public/sdk/cpp/src/client/persqueue_public/ut PersQueueSdkReadSessionTest.StopResumeReadingData
+ydb/public/sdk/cpp/src/client/persqueue_public/ut RetryPolicy.RetryWithBatching
+ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut BasicUsage.CreateTopicWithCustomAdvancedMonitoringSettings
+ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut BasicUsage.TWriteSession_BatchingProducesContinueTokens
+ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut PersQueueSdkReadSessionTest.ClosesAfterFailedConnectionToCds
+ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut ReadSessionImplTest.CommonHandler
+ydb/public/sdk/cpp/src/client/persqueue_public/ut/with_offset_ranges_mode_ut RetryPolicy.RetryWithBatching
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.AutoPartitioning_Producer_SmallMessages
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_BasicWrite
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_TimeoutError
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.DirectWriteWithoutDescribeResourcesPermission
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.WithoutPartitionWithSplit
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Olap_WriteToTopicAndTable_3_Query_SkipConflictOn
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_5_Query_SkipConflictOn
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_19_RestartAfterCommit_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_21_RestartAfterCommit_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_38_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_And_Read_Small_Messages_2
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
+ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTopicAbsoluteTransferPath

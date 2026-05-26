@@ -10,10 +10,17 @@ TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration()
 {
 }
 
-TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration(const TRuntimeSettings& settings)
-    : TRuntimeSettings(settings)
+TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration(const TQContext& QContext)
+    : TRuntimeSettingsConfiguration(TRuntimeSettings(), QContext)
+{
+}
+
+TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration(const TRuntimeSettings& settings, const TQContext& QContext)
+    : TSettingDispatcher("runtime_settings", QContext)
+    , TRuntimeSettings(settings)
 {
     REGISTER_RUNTIME_SETTING(DatumValidation);
+    REGISTER_RUNTIME_SETTING(TestHostSetting);
 }
 
 } // namespace NYql

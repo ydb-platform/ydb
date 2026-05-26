@@ -2,6 +2,8 @@
 
 import os
 import sys
+import tempfile
+import uuid
 import pexpect
 import pytest
 
@@ -24,10 +26,34 @@ class BaseInteractiveTest(BaseCliTestWithDatabase):
         child.sendline(query)
         child.send('\r')
 
+    @staticmethod
+    def _isolated_profile_file() -> str:
+        """Return a unique path to a non-existent file for --profile-file.
+
+        Without this, the CLI falls back to the user's default profile config
+        (~/.ydb/config/config.yaml), which on developer machines may contain an
+        active profile that overrides --endpoint/--database in the welcome
+        message and leaks into other interactive tests. Pointing --profile-file
+        to a non-existent path makes the CLI behave as if no profile config
+        exists, regardless of the host environment.
+        """
+        return os.path.join(
+            tempfile.gettempdir(),
+            f"ydb_cli_test_no_profile_{os.getpid()}_{uuid.uuid4().hex}.yaml",
+        )
+
     @classmethod
-    def spawn_interactive(cls, timeout: int = 15, extra_args: Optional[List[str]] = None, env_name: str = "YDB_CLI_BINARY", env: Optional[dict[str, str]] = None) -> pexpect.spawn:
+    def _with_profile_isolation(cls, extra_args: Optional[List[str]]) -> List[str]:
+        """Inject --profile-file pointing to an empty path unless the caller already set it."""
         if extra_args is None:
             extra_args = []
+        if "--profile-file" in extra_args:
+            return list(extra_args)
+        return ["--profile-file", cls._isolated_profile_file()] + list(extra_args)
+
+    @classmethod
+    def spawn_interactive(cls, timeout: int = 15, extra_args: Optional[List[str]] = None, env_name: str = "YDB_CLI_BINARY", env: Optional[dict[str, str]] = None) -> pexpect.spawn:
+        extra_args = cls._with_profile_isolation(extra_args)
         if env is None:
             env = os.environ.copy()
 

@@ -46,6 +46,7 @@ SRCS(
     logoblob.cpp
     logoblob.h
     memory_controller_iface.h
+    mon_auth.cpp
     nameservice.h
     nodestate.h
     path.cpp
@@ -128,6 +129,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
+    library/cpp/json
 )
 
 YQL_LAST_ABI_VERSION()
@@ -147,8 +149,11 @@ RECURSE(
     generated
 )
 
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
     ut_board_subscriber
 )
+ENDIF()
+

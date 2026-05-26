@@ -8,7 +8,12 @@ PEERDIR(
 SRCS(
     actors.cpp
     alter_topic.cpp
+    create_topic.cpp
     drop_topic.cpp
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

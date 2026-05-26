@@ -1,5 +1,6 @@
 #include "partition_direct_actor.h"
 
+#include "direct_block_group_impl.h"
 #include "fast_path_service.h"
 #include "load_actor_adapter.h"
 
@@ -7,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -34,12 +36,24 @@ TPartitionActor::TPartitionActor(
           tablet,
           NKikimr::TTabletStorageInfoPtr(info),
           nullptr)
+    , LogTitle{GetCycleCount(), TLogTitle::TPartitionDirect{.TabletId = TabletID()}}
     , StorageConfig(GetNbsService()->StorageConfig)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "TPartitionActor: initialization started");
+        "%s TPartitionActor: initialization started",
+        LogTitle.GetWithTime().c_str());
+}
+
+TPartitionActor::~TPartitionActor() = default;
+
+void TPartitionActor::PassAway()
+{
+    LOG_INFO(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "TPartitionActor: before detach");
 }
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)
@@ -62,14 +76,16 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Started NBS partition: actor id %s",
+        "%s Started NBS partition: actor id %s",
+        LogTitle.GetWithTime().c_str(),
         SelfId().ToString().data());
 
     if (!Executor()->GetStats().IsFollower()) {
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "Executing InitSchema transaction");
+            "%s Executing InitSchema transaction",
+            LogTitle.GetWithTime().c_str());
         ExecuteTx(ctx, CreateTx<TInitSchema>());
     }
 
@@ -104,7 +120,8 @@ void TPartitionActor::HandleServerConnected(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Pipe client %s server %s connected to volume",
+        "%s Pipe client %s server %s connected to volume",
+        LogTitle.GetWithTime().c_str(),
         ToString(msg->ClientId).c_str(),
         ToString(msg->ServerId).c_str());
 }
@@ -118,7 +135,8 @@ void TPartitionActor::HandleServerDisconnected(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Pipe client %s server %s disconnected from volume",
+        "%s Pipe client %s server %s disconnected from volume",
+        LogTitle.GetWithTime().c_str(),
         ToString(msg->ClientId).c_str(),
         ToString(msg->ServerId).c_str());
 }
@@ -132,7 +150,8 @@ void TPartitionActor::HandleServerDestroyed(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Pipe client %s server %s got destroyed for volume",
+        "%s Pipe client %s server %s got destroyed for volume",
+        LogTitle.GetWithTime().c_str(),
         ToString(msg->ClientId).c_str(),
         ToString(msg->ServerId).c_str());
 }
@@ -147,11 +166,12 @@ void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     TDirectBlockGroupsConnections directBlockGroupsConnections)
 {
+    const auto nbsService = GetNbsService();
     TVector<IDirectBlockGroupPtr> directBlockGroups;
     auto executors =
-        GetNbsService()->ExecutorPool.GetExecutors(NumDirectBlockGroups);
+        nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
-    for (size_t i = 0; i < NumDirectBlockGroups; i++) {
+    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
         const auto& conn =
             directBlockGroupsConnections.GetDirectBlockGroupConnections(i);
         TVector<NBsController::TDDiskId> ddiskIds;
@@ -167,15 +187,13 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
-            GetNbsService()->Scheduler,
-            GetNbsService()->Timer,
+            nbsService->StorageConfig,
             executors[i],
             TabletID(),
-            1,   // generation
+            Executor()->Generation(),   // generation
+            i,                          // direct block group index
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds));
-
-        directBlockGroup->EstablishConnections();
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -210,7 +228,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
         RegionSize;
 
-    for (size_t i = 0; i < NumDirectBlockGroups; i++) {
+    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
         auto* query = request->Record.AddQueries();
         query->SetDirectBlockGroupId(i);
         query->SetTargetNumVChunks(regionsCount);
@@ -221,30 +239,45 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
-    TDirectBlockGroupsConnections directBlockGroupsConnections)
+    TDirectBlockGroupsConnections directBlockGroupsConnections,
+    TVector<TVChunkConfig> vChunkConfigs)
 {
-    LOG_INFO(ctx, NKikimrServices::NBS_PARTITION, "starting partition_direct");
+    LogTitle.SetDiskId(VolumeConfig.GetDiskId());
+    LogTitle.SetGeneration(Executor()->Generation());
 
-    auto directBlockGroups =
-        CreateDirectBlockGroups(std::move(directBlockGroupsConnections));
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Starting",
+        LogTitle.GetWithTime().c_str());
 
     auto nbsService = GetNbsService();
     Y_ABORT_UNLESS(nbsService);
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
+    TVChunkConfigByIndex vChunkConfigsByIndex;
+    vChunkConfigsByIndex.reserve(vChunkConfigs.size());
+    for (const auto& cfg: vChunkConfigs) {
+        vChunkConfigsByIndex[cfg.VChunkIndex] = cfg;
+    }
+
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
+        SelfId(),
         TabletID(),
         VolumeConfig.GetDiskId(),
         blockCount,
         VolumeConfig.GetBlockSize(),
-        std::move(directBlockGroups),
+        CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
+        std::move(vChunkConfigsByIndex),
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,
         AppData()->Counters);
+
+    fastPathService->Run();
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, fastPathService);
 
@@ -259,7 +292,7 @@ void TPartitionActor::Start(
             .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
             .VChunkSize = StorageConfig->GetVChunkSize(),
-            .VhostQueuesCount = 1};
+            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
             fastPathService,
@@ -270,8 +303,9 @@ void TPartitionActor::Start(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Started NBS partition LoadActorAdapter: actor id %s",
-        LoadActorAdapter.ToString().data());
+        "%s Started NBS LoadActorAdapter: %s",
+        LogTitle.GetWithTime().c_str(),
+        LoadActorAdapter.ToString().c_str());
 }
 
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
@@ -283,15 +317,16 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "HandleControllerAllocateDDiskBlockGroupResult record is: %s",
+        "%s HandleControllerAllocateDDiskBlockGroupResult record is: %s",
+        LogTitle.GetWithTime().c_str(),
         msg->Record.DebugString().data());
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
         Y_ABORT_UNLESS(
-            msg->Record.GetResponses().size() == NumDirectBlockGroups);
+            msg->Record.GetResponses().size() == DirectBlockGroupsCount);
 
         TDirectBlockGroupsConnections ids;
-        for (size_t i = 0; i < NumDirectBlockGroups; i++) {
+        for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
             auto* directBlockGroupConnections =
                 ids.AddDirectBlockGroupConnections();
             const auto& response = msg->Record.GetResponses()[i];
@@ -310,8 +345,9 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "HandleControllerAllocateDDiskBlockGroupResult finished with "
+            "%s HandleControllerAllocateDDiskBlockGroupResult finished with "
             "error: %d, reason: %s",
+            LogTitle.GetWithTime().c_str(),
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }
@@ -337,19 +373,19 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO_S(
-        TActivationContext::AsActorContext(),
+    LOG_INFO(
+        ctx,
         NKikimrServices::NBS_PARTITION,
-        "Handle UpdateVolumeConfig request"
-            << ", tabletId: " << TabletID()
-            << ", txId: " << msg->Record.GetTxId() << ", sender: " << ev->Sender
-            << ", version: " << msg->Record.GetVolumeConfig().GetVersion());
+        "%s Handle UpdateVolumeConfig request. Version: %d",
+        LogTitle.GetWithTime().c_str(),
+        msg->Record.GetVolumeConfig().GetVersion());
 
     if (DdiskBlockGroupAllocated) {
-        LOG_ERROR_S(
-            TActivationContext::AsActorContext(),
+        LOG_ERROR(
+            ctx,
             NKikimrServices::NBS_PARTITION,
-            "PartitionDirectActor already has ddisk connections");
+            "%s Already has ddisk connections",
+            LogTitle.GetWithTime().c_str());
 
         auto response = std::make_unique<
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
@@ -362,10 +398,11 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
 
     LOG_INFO(
-        TActivationContext::AsActorContext(),
+        ctx,
         NKikimrServices::NBS_PARTITION,
-        "Handle UpdateVolumeConfig request VolumeConfig: %s",
-        volumeConfig.DebugString().data());
+        "%s Handle UpdateVolumeConfig request VolumeConfig: %s",
+        LogTitle.GetWithTime().c_str(),
+        volumeConfig.DebugString().c_str());
 
     ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
@@ -376,14 +413,28 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     response->Record.SetOrigin(TabletID());
     response->Record.SetStatus(NKikimrBlockStore::OK);
 
-    LOG_INFO_S(
+    LOG_INFO(
         TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "Sending UpdateVolumeConfig response"
-            << ", tabletId: " << TabletID()
-            << ", txId: " << response->Record.GetTxId() << ", status: OK");
+        "%s Sending UpdateVolumeConfig response OK",
+        LogTitle.GetWithTime().c_str());
 
     ctx.Send(ev->Sender, response.release());
+}
+
+void TPartitionActor::HandleUpdateVChunkConfig(
+    const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto& cfg = ev->Get()->VChunkConfig;
+
+    LOG_DEBUG_S(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        LogTitle.GetWithTime().c_str()
+            << " Handle UpdateVChunkConfig, vChunkIndex: " << cfg.VChunkIndex);
+
+    ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -393,7 +444,8 @@ STFUNC(TPartitionActor::StateWork)
     LOG_DEBUG(
         TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "Processing event: %s from sender: %lu",
+        "%s Processing event: %s from sender: %lu",
+        LogTitle.GetWithTime().c_str(),
         ev->GetTypeName().data(),
         ev->Sender.LocalId());
 
@@ -408,6 +460,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
+            HandleUpdateVChunkConfig);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

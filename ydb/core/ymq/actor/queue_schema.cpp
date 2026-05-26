@@ -483,7 +483,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
 }
 
 void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString& dirName) {
-    TPersQueueGroupTopicParams params;
+    TTopicParams params;
     params.PartitionLifetimeSeconds = Max<ui64>(1, *ValidatedAttributes_.MessageRetentionPeriod);
     if (ValidatedAttributes_.ContentBasedDeduplication) {
         params.HasContentBasedDeduplication = true;
@@ -507,8 +507,12 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     params.AccountName = AccountName_;
     params.FolderId = FolderId_;
 
-    auto ev = BuildCreateTopicTx(workingDir, dirName, IsFifo_, params);
-    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
+    auto request = BuildCreateTopicTx(workingDir, dirName, IsFifo_, params);
+    Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
+        .Database = Cfg().GetRoot() == "/Root/SQS" ? "/Root" : Cfg().GetRoot(),
+        .Request = std::move(request),
+        .IfNotExists = true,
+    }));
 }
 
 void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
@@ -579,6 +583,7 @@ STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
         hFunc(TSqsEvents::TEvExecuted, OnExecuted);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult);
         hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
+        hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
         cFunc(TEvPoisonPill::EventType, PassAway);
     }
 }
@@ -659,6 +664,22 @@ void TCreateQueueSchemaActorV2::Step() {
     }
 
     CreateComponents();
+}
+
+void TCreateQueueSchemaActorV2::Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+    const auto& response = *ev->Get();
+    if (response.Status == Ydb::StatusIds::SUCCESS) {
+        Step();
+    } else {
+        RLOG_SQS_WARN("CreateTopic failed for [" << QueuePath_.UserName << "/" << QueuePath_.QueueName << "]: " << response.ErrorMessage);
+
+        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
+        resp->State = EQueueState::Creating;
+        resp->Error = std::move(ev->Get()->ErrorMessage);
+        Send(Sender_, std::move(resp));
+
+        PassAway();
+    }
 }
 
 void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {

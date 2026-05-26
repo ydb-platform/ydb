@@ -2,8 +2,9 @@
 
 #include <library/cpp/ipv6_address/ipv6_address.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
-#include <util/string/cast.h>
+#include <util/network/address.h>
 
 namespace NKikimr::NSecurity {
 
@@ -11,59 +12,52 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr TStringBuf IPV6_PREFIX = "ipv6:";
 constexpr TStringBuf IPV4_PREFIX = "ipv4:";
 
-bool IsGoodIPv4Part2(TStringBuf peername) {
-    const auto colonPos = peername.find(':');
-    if (colonPos == TStringBuf::npos ||
-        colonPos == 0 || peername.length() <= colonPos + 1) {
-        return false;
-    }
+////////////////////////////////////////////////////////////////////////////////
 
-    const TIpPort port = FromStringWithDefault<TIpPort>(peername.substr(colonPos + 1), 0);
-    return (port != 0) && IsIPv4(peername.substr(0, colonPos));
-}
-
-bool IsGoodIPv4Part3(TStringBuf peername) {
-    return peername.starts_with(IPV4_PREFIX) &&
-           IsIPv4(peername.Skip(IPV4_PREFIX.length()));
-}
-
-bool IsGoodIPv4Part4(TStringBuf peername) {
-    return peername.starts_with(IPV4_PREFIX) &&
-           IsGoodIPv4Part2(peername.Skip(IPV4_PREFIX.size()));
+TMaybe<TIpv6Address> GetAddress(TStringBuf address) {
+    bool isValid = false;
+    const auto ip = TIpv6Address::FromString(address, isValid);
+    return isValid ? MakeMaybe(ip) : Nothing();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr TStringBuf IPV6_PREFIX = "ipv6:";
+TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
+    const auto parsePeername = [](TStringBuf normPeername,
+                                  TMaybe<TIpv6Address::TIpType> target) -> TMaybe<THostAddressAndPort> {
+        bool isOk = false;
+        auto [addrPort, host, port] = ParseHostAndMayBePortFromString(normPeername, 0, isOk);
+        if (!isOk) {
+            return Nothing();
+        }
 
-bool IsGoodIPv6Part2(TStringBuf peername) {
-    if (peername.length() < 1 || peername[0] != '[') {
-        return false;
+        if (target.Defined()) {
+            return (addrPort.Ip.Type() == target.GetRef())
+                ? MakeMaybe<THostAddressAndPort>(std::move(addrPort))
+                : Nothing();
+        } else {
+            return (addrPort.Ip.Type() == TIpv6Address::TIpType::Ipv6
+                    || addrPort.Ip.Type() == TIpv6Address::TIpType::Ipv4)
+                ? MakeMaybe<THostAddressAndPort>(std::move(addrPort))
+                : Nothing();
+        }
+    };
+
+    // ipv6:<ipv6> / ipv6:[<ipv6>] / ipv6:[<ipv6>]:<port>
+    if (peername.SkipPrefix(IPV6_PREFIX)) {
+        return parsePeername(peername, TIpv6Address::TIpType::Ipv6);
     }
 
-    const auto lastClosedBracketPos = peername.find_last_of(']');
-    if (lastClosedBracketPos == TStringBuf::npos || lastClosedBracketPos < 2) {
-        return false;
+    // ipv4:<ipv4> / ipv4:<ipv4>:<port>
+    if (peername.SkipPrefix(IPV4_PREFIX)) {
+        return parsePeername(peername, TIpv6Address::TIpType::Ipv4);
     }
 
-    if (peername.length() <= lastClosedBracketPos + 2 || peername[lastClosedBracketPos + 1] != ':') {
-        return false;
-    }
-
-    const TIpPort port = FromStringWithDefault<TIpPort>(peername.substr(lastClosedBracketPos + 2), 0);
-    return (port != 0) && IsIPv6(peername.substr(1, lastClosedBracketPos - 1));
-}
-
-bool IsGoodIPv6Part3(TStringBuf peername) {
-    return peername.starts_with(IPV6_PREFIX) &&
-           IsIPv6(peername.Skip(IPV6_PREFIX.length()));
-}
-
-bool IsGoodIPv6Part4(TStringBuf peername) {
-    return peername.starts_with(IPV6_PREFIX) &&
-           IsGoodIPv6Part2(peername.Skip(IPV6_PREFIX.length()));
+    // <ipv6> / [<ipv6>] / [<ipv6>]:<port> / <ipv4> / <ipv4>:<port>
+    return parsePeername(peername, Nothing());
 }
 
 } // namespace
@@ -71,22 +65,33 @@ bool IsGoodIPv6Part4(TStringBuf peername) {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool IsIPv4(TStringBuf address) {
-    bool isValid = false;
-    const auto ip = TIpv6Address::FromString(address, isValid);
-    return isValid && !ip.IsIpv6();
+    const auto addr = GetAddress(address);
+    if (addr.Defined()) {
+        return addr->Type() == TIpv6Address::Ipv4;
+    }
+    return false;
 }
 
 bool IsIPv6(TStringBuf address) {
-    bool isValid = false;
-    const auto ip = TIpv6Address::FromString(address, isValid);
-    return isValid && ip.IsIpv6();
+    const auto addr = GetAddress(address);
+    if (addr.Defined()) {
+        return addr->Type() == TIpv6Address::Ipv6;
+    }
+    return false;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 bool IsGoodPeernameFormat(TStringBuf peername) {
-    return IsGoodIPv6Part4(peername) || IsGoodIPv4Part4(peername)
-        || IsGoodIPv6Part3(peername) || IsGoodIPv4Part3(peername)
-        || IsGoodIPv6Part2(peername) || IsGoodIPv4Part2(peername)
-        || IsIPv6(peername) || IsIPv4(peername);
+    return TryParsePeername(peername).Defined();
+}
+
+NAddr::IRemoteAddrPtr ParsePeername(TStringBuf peername) {
+    const auto addrWithPort = TryParsePeername(peername);
+    if (addrWithPort.Defined()) {
+        return THolder{ToIRemoteAddr(addrWithPort->Ip, addrWithPort->Port)};
+    }
+    return nullptr;
 }
 
 } // namespace NKikimr::NSecurity

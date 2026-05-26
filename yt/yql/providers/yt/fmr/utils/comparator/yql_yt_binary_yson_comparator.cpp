@@ -7,6 +7,22 @@ int CompareKeyRows(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary
     return CompareKeyRowsAcrossYsonBlocks(lhs.Row, lhs.Markup, rhs.Row, rhs.Markup, lhs.SortOrders);
 }
 
+void TSortingColumns::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        Columns,
+        SortOrders
+    );
+}
+
+void TSortingColumns::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        Columns,
+        SortOrders
+    );
+}
+
 int TBinaryYsonComparator::CompareYsonValues(TColumnOffsetRange lhs, TColumnOffsetRange rhs) const {
     Y_ENSURE(lhs.IsValid(), "Invalid column offset range");
     Y_ENSURE(rhs.IsValid(), "Invalid column offset range");

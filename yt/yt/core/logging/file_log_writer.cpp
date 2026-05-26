@@ -127,11 +127,16 @@ public:
                 }
             } else {
                 if (Disabled_.load(std::memory_order::acquire)) {
-                    Reload(); // Reinitialize all descriptors.
-
-                    YT_LOG_INFO("Log file enabled: space check passed (FileName: %v)",
-                        BaseFileName_);
-                    Disabled_ = false;
+                    try {
+                        // Reinitialize all descriptors.
+                        Reload();
+                        YT_LOG_INFO("Log file enabled: space check passed (FileName: %v)",
+                            BaseFileName_);
+                        Disabled_ = false;
+                    } catch (const std::exception& ex) {
+                        YT_LOG_ERROR(ex, "Log file disabled: reload failed (FileName: %v)",
+                            BaseFileName_);
+                    }
                 }
             }
         } catch (const std::exception& ex) {

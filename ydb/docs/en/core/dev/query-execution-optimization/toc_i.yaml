@@ -1,0 +1,5 @@
+items:
+- name: Using query plans for query optimization
+  href: query-plans-optimization.md
+- name: Optimizer hints
+  href: query-hints.md

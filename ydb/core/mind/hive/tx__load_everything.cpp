@@ -293,6 +293,7 @@ public:
                     domain.SetScaleRecommenderPolicies(domainRowset.GetValue<Schema::SubDomain::ScaleRecommenderPolicies>());
                 }
                 domain.Stopped = domainRowset.GetValueOrDefault<Schema::SubDomain::Stopped>();
+                domain.ParseShrinkingPools(domainRowset.GetValueOrDefault<Schema::SubDomain::ShrinkingStoragePools>());
 
                 if (!domainRowset.Next())
                     return false;
@@ -814,6 +815,26 @@ public:
                         << numMissingNodes << " for missing nodes)");
         }
 
+        {
+            auto groupRowset = db.Table<Schema::Group>().Select();
+            if (!groupRowset.IsReady()) {
+                return false;
+            }
+            while (!groupRowset.EndOfSet()) {
+                TStorageGroupId groupId = groupRowset.GetValue<Schema::Group::Id>();
+                TString storagePoolName = groupRowset.GetValue<Schema::Group::StoragePool>();
+                auto& storagePool = Self->GetStoragePool(storagePoolName);
+                auto& group = storagePool.GetStorageGroup(groupId);
+                group.Status = groupRowset.GetValue<Schema::Group::Status>();
+                if (!group.IsActive()) {
+                    storagePool.InactiveGroups.push_back(groupId);
+                }
+                if (!groupRowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         size_t numDeletedNodes = 0;
         size_t numDeletedRestrictions = 0;
         TInstant now = TActivationContext::Now();
@@ -940,6 +961,16 @@ public:
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
             Self->ScheduleUnlockTabletExecution(it->second, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
+        }
+
+        for (const auto& [_, domainInfo] : Self->Domains) {
+            for (const auto& pool : domainInfo.ShrinkingStoragePools) {
+                auto& poolInfo = Self->GetStoragePool(pool);
+                if (domainInfo.HiveId) {
+                    poolInfo.NeedShrinkFromTenant = true;
+                }
+                Self->StartShrinkPool(poolInfo);
+            }
         }
     }
 };

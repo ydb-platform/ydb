@@ -207,6 +207,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
                     pbufferFormat.InitChunks = Cfg->PBufferConfig->GetInitChunks();
                 }
+                if (Cfg->PBufferConfig->HasMaxChunks()) {
+                    pbufferFormat.MaxChunks = Cfg->PBufferConfig->GetMaxChunks();
+                }
                 if (Cfg->PBufferConfig->HasMaxInMemoryCache()) {
                     pbufferFormat.MaxInMemoryCache = Cfg->PBufferConfig->GetMaxInMemoryCache();
                 }
@@ -218,6 +221,12 @@ namespace NKikimr::NStorage {
                 }
                 if (Cfg->PBufferConfig->HasPerTabletStorageLimit()) {
                     pbufferFormat.PerTabletStorageLimit = Cfg->PBufferConfig->GetPerTabletStorageLimit();
+                }
+                if (Cfg->PBufferConfig->HasMaxBarriersLimit()) {
+                    pbufferFormat.MaxBarriersLimit = Cfg->PBufferConfig->GetMaxBarriersLimit();
+                }
+                if (Cfg->PBufferConfig->HasMaxPendingEventsQueueSize()) {
+                    pbufferFormat.MaxPendingEventsQueueSize = Cfg->PBufferConfig->GetMaxPendingEventsQueueSize();
                 }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
@@ -276,6 +285,7 @@ namespace NKikimr::NStorage {
 
             vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
+            vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
@@ -315,6 +325,10 @@ namespace NKikimr::NStorage {
             if (Cfg->TinySyncLog) {
                 vdiskConfig->SyncLogMaxDiskAmount = 1;
                 vdiskConfig->SyncLogMaxMemAmount = 1;
+            }
+
+            if (Cfg->VDiskConfigPreprocessor) {
+                Cfg->VDiskConfigPreprocessor(*vdiskConfig);
             }
 
             // issue initial report to whiteboard before creating actor to avoid races

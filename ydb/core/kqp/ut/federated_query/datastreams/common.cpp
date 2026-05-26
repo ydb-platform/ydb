@@ -1,10 +1,12 @@
 #include "common.h"
 
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
 #include <ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <fmt/format.h>
@@ -22,6 +24,15 @@ using namespace NYdb::NQuery;
 using namespace NYql::NConnector::NApi;
 using namespace NYql::NConnector::NTest;
 
+TStreamingTestFixture::~TStreamingTestFixture () {
+    if (InternalDriver) {
+        InternalDriver->Stop(true);
+    }
+    if (ExternalDriver) {
+        ExternalDriver->Stop(true);
+    }
+}
+
 // Local kikimr settings
 
 NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {
@@ -29,8 +40,26 @@ NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {
     EnsureNotInitialized("AppConfig");
 
     auto& result = AppConfig.emplace();
-    result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
+    result.MutableTableServiceConfig()->SetDqChannelVersion(2u);
     return result;
+}
+
+void TStreamingTestFixture::UpdateConfig(NKikimrConfig::TAppConfig& appConfig) {
+    auto& runtime = GetRuntime();
+    const auto edgeActor = runtime.AllocateEdgeActor();
+    auto evProxy = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    *evProxy->Record.MutableConfig() = appConfig;
+
+    runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, evProxy.release());
+    auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+    UNIT_ASSERT(response);
+
+    auto evStorage = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    *evStorage->Record.MutableConfig() = appConfig;
+
+    runtime.Send(NYql::NDq::MakeCheckpointStorageID(), edgeActor, evStorage.release());
+    response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+    UNIT_ASSERT(response);
 }
 
 TIntrusivePtr<IMockPqGateway> TStreamingTestFixture::SetupMockPqGateway() {
@@ -69,7 +98,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         queryServiceConfig.SetEnableMatchRecognize(true);
 
         auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
-        tableServiceConfig.SetDqChannelVersion(1u);
+        tableServiceConfig.SetDqChannelVersion(2u);
 
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
@@ -79,12 +108,14 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = NodeCount,
+            .DynamicNodeCount = DynamicNodeCount,
             .CredentialsFactory = CreateCredentialsFactory(),
             .PqGateway = PqGateway,
             .CheckpointPeriod = CheckpointPeriod,
             .LogSettings = LogSettings,
             .UseLocalCheckpointsInStreamingQueries = true,
             .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+            .StoragePoolTypes = StoragePoolTypes,
         });
 
         Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
@@ -239,7 +270,13 @@ void TStreamingTestFixture::ReadTopicMessage(const std::string& topicName, const
     ReadTopicMessages(topicName, {expectedMessage}, disposition, /* sort */ false, local);
 }
 
-void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std::vector<std::string> expectedMessages, TInstant disposition, bool sort, bool local) {
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessages(
+    const std::string& topicName,
+    std::vector<std::string> expectedMessages,
+    TInstant disposition,
+    bool sort,
+    bool local,
+    bool checkResult) {
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
         .WithoutConsumer()
@@ -255,7 +292,8 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
     );
 
     auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
-    std::vector<std::string> received;
+    std::vector<std::pair<std::string, TInstant>> received;
+
     WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
         if (!readSession->WaitEvent().HasValue()) {
             error = TStringBuilder() << "no event set, received #" << received.size() << " / " << expectedMessages.size() << " messages";
@@ -265,7 +303,7 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
         auto event = readSession->GetEvent(/* block */ true);
         if (const auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             for (const auto& message : dataEvent->GetMessages()) {
-                received.push_back(message.GetData());
+                received.push_back(std::make_pair(message.GetData(), message.GetWriteTime()));
             }
 
             if (received.size() == expectedMessages.size()) {
@@ -273,26 +311,29 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
             }
         }
 
+        auto firsts_view = received | std::views::transform([](const auto& p) { return p.first; });
         UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
             << "expected #" << expectedMessages.size() << " messages ("
             << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ", received) << ")");
+            << JoinSeq(", ",  std::vector<std::string>(firsts_view.begin(), firsts_view.end())) << ")");
 
         error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
         return false;
     });
 
-    if (sort) {
-        Sort(expectedMessages);
-        Sort(received);
+    if (checkResult) {
+        if (sort) {
+            Sort(expectedMessages);
+            Sort(received);
+        }
+        
+        UNIT_ASSERT(received.size() == expectedMessages.size());
+        for (size_t i = 0; i < received.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedMessages[i]);
+        }
     }
-
-    UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessages.size());
-    for (size_t i = 0; i < received.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(received[i], expectedMessages[i]);
-    }
+    return received;
 }
-
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;

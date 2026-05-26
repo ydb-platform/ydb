@@ -233,7 +233,7 @@ public:
             }
         }
     }
-    
+
     static void CollectStats(TOperationId operationId, const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) {
         const auto& evRecord = ev->Get()->Record;
         if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) {
@@ -664,9 +664,8 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TxType, path->PathId);
 
         txState.Shards.reserve(table->GetPartitions().size());
-        for (const auto& shard : table->GetPartitions()) {
-            auto shardIdx = shard.ShardIdx;
-            txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
+        for (const auto* shard : table->GetPartitions()) {
+            txState.Shards.emplace_back(shard->ShardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
         }
 
         NIceDb::TNiceDb db(context.GetDB());

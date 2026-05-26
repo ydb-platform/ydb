@@ -295,7 +295,7 @@ public:
         for (const auto& tabletIdx : tabletIdIndex) {
             TTabletInfo& x = *tabletIdx.second;
             if (BadOnly) {
-                if (x.IsAlive()) {
+                if (x.IsAlive() && !x.RestartsOften()) {
                     continue;
                 }
                 if (x.IsLeader() && (x.AsLeader().IsLockedToActor() || x.AsLeader().IsExternalBoot())) {
@@ -1280,7 +1280,9 @@ public:
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
              TTabletTypes::BlobDepot,
-             TTabletTypes::ColumnShard}) {
+             TTabletTypes::ColumnShard,
+             TTabletTypes::FileStore,
+        }) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
                    "<td>" << GetTabletTypeShortName(tabletType) << "</td>";
@@ -3144,6 +3146,14 @@ public:
 
     };
 
+    struct TMonitoringReassignCallback : IReassignCallback {
+        virtual IEventBase* MakeEvent(ui64 tabletsDone) override {
+            NJson::TJsonValue response;
+            response["total"] = tabletsDone;
+            return new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(response, false));
+        }
+    };
+
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TTabletFilter TabletFilter;
@@ -3280,7 +3290,7 @@ public:
         jsonOperation["Reassign"] = description;
         WriteOperation(db, jsonOperation);
 
-        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description);
+        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
         return true;
     }
 

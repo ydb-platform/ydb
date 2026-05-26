@@ -637,7 +637,7 @@ int Main(int argc, const char** argv)
 
         ui64 outputGenSize = std::transform_reduce(
             outputGenStream.cbegin(), outputGenStream.cend(),
-            0l, std::plus{}, [](const auto& b) {
+            0L, std::plus{}, [](const auto& b) {
                 return NYql::NUdf::GetSizeOfArrowExecBatchInBytes(b);
             });
 

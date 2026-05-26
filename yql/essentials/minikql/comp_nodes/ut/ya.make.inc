@@ -88,12 +88,14 @@ SET(ORIG_SOURCES
     mkql_listfromrange_ut.cpp
     mkql_mapnext_ut.cpp
     mkql_rh_hash_ut.cpp
+    mkql_runtime_feature_ut.cpp
 )
 
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/minikql/udf_value_test_support
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/sql/pg

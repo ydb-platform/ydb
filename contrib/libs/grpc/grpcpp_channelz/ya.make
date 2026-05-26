@@ -10,10 +10,10 @@ LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/libs/grpc
-    contrib/libs/grpc/src/proto/grpc/channelz
     contrib/libs/grpc/third_party/address_sorting
     contrib/libs/grpc/third_party/upb
     contrib/libs/protobuf
+    contrib/proto/grpc/grpc/channelz/v1
     contrib/restricted/abseil-cpp-tstring
 )
 

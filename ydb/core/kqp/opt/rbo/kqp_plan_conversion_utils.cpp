@@ -1,10 +1,14 @@
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_utils.h"
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
 
-namespace NKikimr {
-namespace NKqp {
+#include <ydb/core/kqp/common/kqp_yql.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
+
+namespace {
 
 using namespace NYql;
 using namespace NNodes;
@@ -79,6 +83,18 @@ TVector<DependencyPairType> ComputeDependentVariables(TIntrusivePtr<IOperator> o
     return subplanDependencies;
 }
 
+bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
+    auto maybeForceOptional = mapElement.ForceOptional();
+    return maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True";
+}
+
+bool GetOrdered(const TKqpOpMap& map) {
+    auto maybeOrdered = map.Ordered();
+    return maybeOrdered && maybeOrdered.Cast().StringValue() == "True";
+}
+
+} // anonymous namespace
+
 TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
     auto lambdaBody = lambda.Body().Ptr();
@@ -86,8 +102,7 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto sublink = FindNode(lambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
     if (!sublink) {
         return node;
-    }
-    else {
+    } else {
         TExprNode::TPtr newLambdaBody = lambdaBody;
 
         while(sublink){
@@ -218,16 +233,6 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
     return result;
 }
 
-bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
-    auto maybeForceOptional = mapElement.ForceOptional();
-    return maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True";
-}
-
-bool GetOrdered(const TKqpOpMap& map) {
-    auto maybeOrdered = map.Ordered();
-    return maybeOrdered && maybeOrdered.Cast().StringValue() == "True";
-}
-
 TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceOptional, TExprContext& ctx) {
     auto lambda = TCoLambda(lambdaPtr);
     auto body = lambda.Body().Ptr();
@@ -302,7 +307,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::T
 
     return MakeIntrusive<TOpAddDependencies>(input, node->Pos(), columns, types);
 }
-
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {
     auto opFilter = TKqpOpFilter(node);
@@ -416,8 +420,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
     }
 
     const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
-    return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Final, distinctAll, node->Pos());
+    return MakeIntrusive<TOpAggregate>(input, opAggTraitsList, keyColumns, EOpPhase::Undefined, distinctAll, node->Pos());
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

@@ -1,4 +1,5 @@
 """Traitlets Python configuration system"""
+
 from __future__ import annotations
 
 import typing as _t
@@ -12,14 +13,15 @@ from .utils.importstring import import_item
 from .utils.warnings import warn
 
 __all__ = [
-    "traitlets",
-    "__version__",
-    "version_info",
     "Bunch",
-    "signature_has_traits",
-    "import_item",
     "Sentinel",
+    "__version__",
+    "import_item",
+    "signature_has_traits",
+    "traitlets",
+    "version_info",
 ]
+__all__ += traitlets.__all__
 
 
 class Sentinel(traitlets.Sentinel):  # type:ignore[name-defined, misc]

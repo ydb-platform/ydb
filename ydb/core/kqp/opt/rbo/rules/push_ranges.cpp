@@ -1,10 +1,17 @@
-#include "kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
+namespace NKikimr::NKqp {
 
 namespace {
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
-using namespace NKikimr::NKqp;
 
 bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     TExprBase expr(node);
@@ -87,7 +94,7 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
 
     TExprNode::TPtr afterPeephole;
     bool hasNonDeterministicFunctions;
-    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx, rboCtx.TypeCtx, &(rboCtx.PeepholeTypeAnnTransformer),
+    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx, rboCtx.TypeCtx, nullptr,
                                                  hasNonDeterministicFunctions);
         status != IGraphTransformer::TStatus::Ok) {
         YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO] Peephole failed with status: " << status << Endl;
@@ -153,10 +160,7 @@ const TStructExprType* PrepareSchemeType(const TString& alias, const TStructExpr
     return schemeType;
 }
 
-} // namespace
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
@@ -219,5 +223,5 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                                           read->Limit, ranges, TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(buildResult.PrunedLambda, &ctx, &props));
 }
-} // namespace NKqp
-} // namespace NKikimr
+
+} // namespace NKikimr::NKqp

@@ -222,7 +222,7 @@ private:
             THROW_ERROR_EXCEPTION("Queue cluster must be specified");
         }
 
-        ConsumerClient_ = CreateConsumerClient(Client_, ConsumerPath_.GetPath())->GetSubConsumerClient(
+        ConsumerClient_ = CreateConsumerClient(Client_, ConsumerPath_)->GetSubConsumerClient(
             Client_,
             {
                 .Cluster = *queueCluster,

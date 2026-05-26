@@ -29,7 +29,7 @@ void TGRpcYmqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                        \
         YDB_API_DEFAULT_COUNTER_BLOCK(ymq, methodName),     \
         auditMode,                                          \
-        EEmptyDatabaseMode::EmptyDatabaseAllowed,           \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,         \
         COMMON,                                             \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall, \
         GRpcRequestProxyId_,                                \

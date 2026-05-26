@@ -1,5 +1,7 @@
 #include "kqp_opt_log_impl.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 #include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -135,6 +137,38 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableBase read, TExprCon
     };
 }
 
+bool IsSuitableToReturnInputColumns(const TCoLambda &lambda) {
+    auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
+    if (!maybeOptionalIf) {
+        return false;
+    }
+
+    const auto optionalIf = maybeOptionalIf.Cast();
+    if (auto maybeStruct = optionalIf.Value().Maybe<TCoAsStruct>()) {
+        for (const auto& child : maybeStruct.Cast()) {
+            // Make sure there are no complex expressions and renames.
+            if (child.Size() != 2) {
+                return false;
+            }
+            auto maybeRename = child.Item(0).Maybe<TCoAtom>();
+            if (!maybeRename) {
+                return false;
+            }
+            auto maybeMember = child.Item(1).Maybe<TCoMember>();
+            if (!maybeMember) {
+                return false;
+            }
+            if (maybeRename.Cast().StringValue() != maybeMember.Cast().Name().StringValue()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // If not a struct, it returs all columns already.
+    return false;
+}
+
 TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TMaybe<size_t> maxKeys) {
     TString lookupTable;
     TString indexName;
@@ -209,7 +243,31 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
             for (auto&& column :  usedColumnsList.Cast()) {
                 usedColumns->insert(column.StringValue());
             }
-            extraFilter = filter;
+
+            auto lambda = filter.Cast();
+            // We will save all the columns because they can be used further in the pipeline.
+            if (IsSuitableToReturnInputColumns(lambda)) {
+                const auto optionalIf = lambda.Body().Cast<TCoOptionalIf>();
+                const auto predicate = optionalIf.Predicate();
+
+                // clang-format off
+                const auto newOptionalIf = Build<TCoOptionalIf>(ctx, read.Pos())
+                    .Predicate(predicate)
+                    .Value(lambda.Args().Arg(0))
+                .Done();
+
+                extraFilter = Build<TCoLambda>(ctx, read.Pos())
+                    .Args({"new_arg"})
+                    .Body<TExprApplier>()
+                        .Apply(newOptionalIf)
+                        .With(lambda.Args().Arg(0), "new_arg")
+                    .Build()
+                .Done();
+                // clang-format on
+            } else {
+                extraFilter = filter;
+            }
+
             lookupColumns = MakeAllColumnsList(mainTableDesc, ctx, read.Pos());
         }
 
@@ -264,7 +322,7 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
     };
 }
 
-} // namespace
+} // anonymous namespace
 
 TCoLambda MakeFilterForRange(TKqlKeyRange range, TExprContext& ctx, TPositionHandle pos, TVector<TString> keyColumns) {
     size_t prefix = 0;

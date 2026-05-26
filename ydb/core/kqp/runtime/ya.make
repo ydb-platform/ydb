@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_arrow_memory_pool.cpp
+    kqp_buffer_lock_actor.cpp
     kqp_buffer_lookup_actor.cpp
     kqp_compute.cpp
     kqp_full_text_source.cpp
@@ -23,7 +24,11 @@ SRCS(
     kqp_stream_lookup_factory.h
     kqp_stream_lookup_worker.cpp
     kqp_stream_lookup_worker.h
+    kqp_stream_lock_worker.cpp
+    kqp_stream_lock_worker.h
     kqp_transport.cpp
+    kqp_vector_index_levels_cache.cpp
+    kqp_vector_index_levels_cache.h
     kqp_vector_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
@@ -31,6 +36,7 @@ SRCS(
 
     scheduler/kqp_compute_scheduler_service.cpp
     scheduler/kqp_schedulable_actor.cpp
+    scheduler/kqp_schedulable_read.cpp
     scheduler/kqp_schedulable_task.cpp
     scheduler/tree/dynamic.cpp
     scheduler/tree/snapshot.cpp
@@ -47,9 +53,11 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/mon
     ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/tx/scheme_board
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/yql/dq/actors

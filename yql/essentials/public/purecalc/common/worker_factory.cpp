@@ -3,6 +3,7 @@
 #include "type_from_schema.h"
 #include "worker.h"
 #include "compile_mkql.h"
+#include "default_runtime_settings.h"
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
@@ -59,6 +60,10 @@ NSQLTranslation::TSqlFlags GetSqlFlags(EBlockEngineMode blockEngineMode) {
     return flags;
 }
 
+NYql::TRuntimeSettings::TConstPtr GetRuntimeSettings() {
+    return NYql::NPureCalc::NPrivate::GetDefaultRuntimeSettings();
+}
+
 } // namespace
 
 template <typename TBase>
@@ -75,6 +80,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
+    , RuntimeSettings_(::GetRuntimeSettings())
     , IssueReportTarget_(options.IssueReportTarget)
 {
     HandleInternalSettings(options.InternalSettings);
@@ -192,11 +198,10 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
     typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
+    typeContext->RuntimeSettings = RuntimeSettings_;
 
     if (BlockEngineMode_ != EBlockEngineMode::Disable) {
-        typeContext->OptimizerFlags.insert(to_lower(ToString("ExpandLMapOrShuffleByKeysViaBlock")));
         typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
-        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverCollect")));
         typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));
     }
 
@@ -334,7 +339,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
             LangVer_,
-            true);
+            true,
+            RuntimeSettings_);
 
         with_lock (graph.ScopedAlloc) {
             const auto value = graph.ComputationGraph->GetValue();
@@ -583,7 +589,8 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
             CountersProvider_,                                                      \
             NativeYtTypeFlags_,                                                     \
             DeterministicTimeProviderSeed_,                                         \
-            LangVer_));                                                             \
+            LangVer_,                                                               \
+            RuntimeSettings_));                                                     \
     }
 
 DEFINE_WORKER_MAKER(PullStream)

@@ -396,6 +396,9 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     if (initParameters.EnableTopicPartitionSplitBasedOnKllSketch) {
         appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnKllSketch(true);
     }
+    if (initParameters.EnableTopicPartitionSplitBasedOnMessages) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnMessages(true);
+    }
     if (initParameters.EnforceUserTokenRequirement) {
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);
@@ -804,7 +807,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     config.SetTestMode(true);
     config.MutableHttpConfig()->SetPort(HttpServicePort);
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
-    config.MutableHttpConfig()->SetYmqEnabled(true);
+    config.MutableHttpConfig()->SetYmqEnabled(!enableSqsTopic);
     config.MutableHttpConfig()->SetSqsTopicEnabled(enableSqsTopic);
     SqsTopicMode = enableSqsTopic;
 

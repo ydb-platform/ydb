@@ -2,6 +2,8 @@
 #include "distconf_quorum.h"
 #include "distconf_invoke.h"
 
+#include <ydb/library/actors/retro_tracing/retro_span.h>
+#include <ydb/library/actors/retro_tracing/span_buffer.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NKikimr::NStorage {
@@ -160,6 +162,9 @@ namespace NKikimr::NStorage {
             case TEvGather::kProposeStorageConfig:
                 return ProcessProposeStorageConfig(res->MutableProposeStorageConfig());
 
+            case TEvGather::kDemandRetroTrace:
+                return;
+
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
         }
@@ -177,7 +182,7 @@ namespace NKikimr::NStorage {
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
-            TEvGather::TCollectConfigs *res, std::optional<TStringBuf> selfAssemblyUUID, bool dryRun) {
+            TEvGather::TCollectConfigs *res, std::optional<TString> selfAssemblyUUID, bool dryRun) {
         TStringStream err;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -415,8 +420,7 @@ namespace NKikimr::NStorage {
                         selfAssemblyUUID.emplace(CurrentSelfAssemblyUUID.value());
                     } else {
                         // in dry run mode, use a temporary UUID without modifying state
-                        const TString tempUUID = CreateGuidAsString();
-                        selfAssemblyUUID.emplace(tempUUID);
+                        selfAssemblyUUID.emplace(CreateGuidAsString());
                     }
                 }
                 propositionBase.emplace(*baseConfig);
@@ -581,6 +585,9 @@ namespace NKikimr::NStorage {
                 }
                 break;
 
+            case TEvScatter::kDemandRetroTrace:
+                break;
+
             case TEvScatter::REQUEST_NOT_SET:
                 break;
         }
@@ -594,6 +601,10 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kProposeStorageConfig:
                 Perform(task.Response.MutableProposeStorageConfig(), task.Request.GetProposeStorageConfig(), task);
+                break;
+
+            case TEvScatter::kDemandRetroTrace:
+                Perform(task.Response.MutableDemandRetroTrace(), task.Request.GetDemandRetroTrace(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -693,6 +704,44 @@ namespace NKikimr::NStorage {
                     }
                 }
             }
+        }
+    }
+
+    void TDistributedConfigKeeper::HandleFlushRetroTraceBatch() {
+        RetroTraceBatchFlushScheduled = false;
+        FlushRetroTraceBatch();
+    }
+
+    void TDistributedConfigKeeper::FlushRetroTraceBatch() {
+        if (PendingRetroTraceIds.empty()) {
+            return;
+        }
+
+        TEvScatter task;
+        auto* demandRetroTrace = task.MutableDemandRetroTrace();
+        for (const NWilson::TTraceId& traceId : PendingRetroTraceIds) {
+            traceId.Serialize(demandRetroTrace->AddTraceId());
+        }
+        PendingRetroTraceIds.clear();
+
+        IssueScatterTask(TScatterTaskOriginFsm{}, std::move(task));
+    }
+
+    void TDistributedConfigKeeper::Perform(TEvGather::TDemandRetroTrace* /*response*/,
+            const TEvScatter::TDemandRetroTrace& request, TScatterTask& /*task*/) {
+        std::vector<NWilson::TTraceId> traceIds;
+        for (const auto& proto : request.GetTraceId()) {
+            NWilson::TTraceId traceId(proto);
+            if (traceId) {
+                traceIds.push_back(std::move(traceId));
+            }
+        }
+
+        std::vector<std::unique_ptr<NRetroTracing::TRetroSpan>> spans = NRetroTracing::GetSpansOfTraces(traceIds);
+        for (const std::unique_ptr<NRetroTracing::TRetroSpan>& span : spans) {
+            std::unique_ptr<NWilson::TSpan> wilson = span->MakeWilsonSpan();
+            wilson->Attribute("type", "RETRO");
+            wilson->End();
         }
     }
 

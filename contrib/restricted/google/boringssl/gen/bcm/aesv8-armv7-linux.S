@@ -4,8 +4,6 @@
 #include <contrib/restricted/google/boringssl/include/openssl/asm_base.h>
 
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_ARM) && defined(__ELF__)
-#include <contrib/restricted/google/boringssl/include/openssl/arm_arch.h>
-
 #if __ARM_MAX_ARCH__>=7
 .text
 .arch	armv7-a	@ don't confuse not-so-latest binutils with argv8 :-)
@@ -26,11 +24,6 @@
 .align	5
 aes_hw_set_encrypt_key:
 .Lenc_key:
-	mov	r3,#-1
-	cmp	r0,#0
-	beq	.Lenc_key_abort
-	cmp	r2,#0
-	beq	.Lenc_key_abort
 	mov	r3,#-2
 	cmp	r1,#128
 	blt	.Lenc_key_abort

@@ -25,6 +25,7 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
@@ -46,6 +47,7 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
@@ -68,7 +70,7 @@ jobs:
         # Run the script for each build type
         for BUILD_TYPE in $BUILD_TYPES; do
           echo "Processing muted tests for build type: $BUILD_TYPE"
-          python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH --build_type $BUILD_TYPE
+          python3 .github/scripts/tests/mute/get_muted_tests.py upload_muted_tests --branch $BRANCH --build_type $BUILD_TYPE
         done 
 
         # Restore the original muted_ya.txt file

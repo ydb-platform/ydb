@@ -1,6 +1,12 @@
 from devtools.yamaker.modules import Linkable, Switch, Words
 from devtools.yamaker.project import CMakeNinjaNixProject
 
+_FAILURE_SIGNAL_RECURSE = "absl/debugging"
+
+_SOURCE_TO_STUB = {
+    "absl/debugging/failure_signal_handler.cc": "failure_signal_handler.cc",
+}
+
 
 def post_install(self):
     with self.yamakes["."] as absl:
@@ -23,6 +29,16 @@ def post_install(self):
                 )
             ENDIF()
             """,
+        )
+
+        src_to_stub = {s: f"stubs/{st}" for s, st in _SOURCE_TO_STUB.items() if s in absl.SRCS}
+        absl.SRCS -= src_to_stub.keys()
+        absl.after(
+            "SRCS",
+            Switch(
+                OS_FREERTOS=Linkable(SRCS=list(src_to_stub.values())),
+                default=Linkable(SRCS=list(src_to_stub.keys())),
+            ),
         )
 
 
@@ -158,5 +174,8 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_vlog_config_internal",
         ],
     },
+    keep_paths=[
+        "stubs",
+    ],
     post_install=post_install,
 )

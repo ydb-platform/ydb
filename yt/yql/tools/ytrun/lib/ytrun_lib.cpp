@@ -127,6 +127,21 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmr-pool-name", "Fmr pool name")
             .Optional()
             .StoreResult(&FmrPoolName_);
+        opts.AddLongOption( "fmr-coordinator-url", "Fmr coordinator URL")
+            .Optional()
+            .StoreResult(&FmrCoordinatorUrl_);
+        opts.AddLongOption("fmr-coordinator-yson-path", "Path to YSON file with coordinator settings")
+            .Optional()
+            .StoreResult(&CoordinatorYsonPath_);
+        opts.AddLongOption("fmr-worker-yson-path", "Path to YSON file with worker settings")
+            .Optional()
+            .StoreResult(&WorkerYsonPath_);
+        opts.AddLongOption("tvm-cfg", "TVM configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            TFacadeRunOptions::ParseProtoConfig(file, &TvmConfig_);
+        });
+        opts.AddLongOption("yt-access-provider-cfg", "YT access provider configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+            TFacadeRunOptions::ParseProtoConfig(file, &AccessProviderConfig_);
+        });
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
@@ -190,8 +205,8 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     services.FileStorage = GetFileStorage();
     services.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
     services.SecretMasker = CreateSecretMasker();
-    services.TvmClient = CreateTvmClient(GetRunOptions().GatewaysConfig->GetYt());
-    services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, GetRunOptions().GatewaysConfig->GetYt());
+    services.TvmClient = CreateTvmClient(TvmConfig_);
+    services.YtAccessProvider = CreateYtAccessProvider(services.TvmClient, AccessProviderConfig_);
     auto ytGateway = CreateYtNativeGateway(services);
     if (!GetRunOptions().GatewayTypes.contains(NFmr::FastMapReduceGatewayName)) {
         return ytGateway;
@@ -200,20 +215,28 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     bool fmrConfigurationFound = false;
     NFmr::TFmrInitializationOptions fmrInitializationOpts;
 
-    if (FmrPoolName_.empty()) {
-        throw yexception() << "Pool should be specified for fmr gateway";
+    if (FmrPoolName_.empty() && FmrCoordinatorUrl_.empty()) {
+        throw yexception() << "Pool or coordinator URL should be specified for fmr gateway";
     }
 
-    for (const auto& fmrConfiguration: GetRunOptions().GatewaysConfig->GetFmr().GetFmrConfigurations()) {
-        if (fmrConfiguration.GetName() == FmrPoolName_) {
-            fmrConfigurationFound = true;
-            fmrInitializationOpts = NFmr::GetFmrInitializationInfoFromConfig(fmrConfiguration, GetRunOptions().GatewaysConfig->GetFmr().GetFileCacheConfigurations());
-            break;
+    if (!FmrPoolName_.empty() && !FmrCoordinatorUrl_.empty()) {
+        throw yexception() << "Pool and coordinator URL aren't compatible";
+    }
+
+    if (!FmrPoolName_.empty()) {
+        for (const auto& fmrConfiguration: GetRunOptions().GatewaysConfig->GetFmr().GetFmrConfigurations()) {
+            if (fmrConfiguration.GetName() == FmrPoolName_) {
+                fmrConfigurationFound = true;
+                fmrInitializationOpts = NFmr::GetFmrInitializationInfoFromConfig(fmrConfiguration, GetRunOptions().GatewaysConfig->GetFmr().GetFileCacheConfigurations());
+                break;
+            }
         }
-    }
 
-    if (!fmrConfigurationFound) {
-        throw yexception() << "Fmr configuration was not found for pool " << FmrPoolName_;
+        if (!fmrConfigurationFound) {
+            throw yexception() << "Fmr configuration was not found for pool " << FmrPoolName_;
+        }
+    } else {
+        fmrInitializationOpts.FmrCoordinatorUrl = FmrCoordinatorUrl_;
     }
 
     NFmr::TFmrServices fmrServices;
@@ -226,11 +249,13 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     fmrServices.YtJobService = NFmr::MakeYtJobSerivce();
     fmrServices.YtCoordinatorService = NFmr::MakeYtCoordinatorService();
     fmrServices.FmrOperationSpecFilePath = FmrOperationSpecFilePath_;
+    fmrServices.CoordinatorYsonPath = CoordinatorYsonPath_;
+    fmrServices.WorkerYsonPath = WorkerYsonPath_;
     fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(NFmr::TFmrUserJobLauncherOptions{
         .RunInSeparateProcess = true,
         .FmrJobBinaryPath = FmrJobBin_,
-        .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_,
-        .GatewayType = "native"
+        .GatewayType = "native",
+        .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_
     });
 
     fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;

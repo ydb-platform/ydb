@@ -18,6 +18,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/acl.h>
+#include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/security.h>
@@ -32,8 +33,6 @@
 #include <util/string/join.h>
 
 namespace NKikimr::NSQS {
-
-constexpr char const ConsumerName[] = "sqs_consumer";
 
 class TMigrationFeatureFlags
 {
@@ -783,10 +782,14 @@ private:
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (result.HasError()) {
-            RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
-            MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
-            SendReplyAndDie();
-            return;
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
+                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
+                SendReplyAndDie();
+                return;
+            }
+
+            UserToken_ = nullptr;
         } else {
             UserToken_ = ev->Get()->Token;
             Y_ABORT_UNLESS(UserToken_);
@@ -799,18 +802,20 @@ private:
         --SecurityCheckRequestsToWaitFor_;
 
         if (SecurityCheckRequestsToWaitFor_ == 0) {
-            const TString& actionName = ToString(Action_);
-            const ui32 requiredAccess = GetActionRequiredAccess(actionName);
-            UserSID_ = UserToken_->GetUserSID();
-            if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) {
-                if (Action_ == EAction::ModifyPermissions) {
-                    // do not spam for other actions
-                    RLOG_SQS_WARN("User " << UserSID_ << " tried to modify ACL for " << GetActionACLSourcePath() << ". Access denied");
+            if (UserToken_) {
+                const TString& actionName = ToString(Action_);
+                const ui32 requiredAccess = GetActionRequiredAccess(actionName);
+                UserSID_ = UserToken_->GetUserSID();
+                if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) {
+                    if (Action_ == EAction::ModifyPermissions) {
+                        // do not spam for other actions
+                        RLOG_SQS_WARN("User " << UserSID_ << " tried to modify ACL for " << GetActionACLSourcePath() << ". Access denied");
+                    }
+                    MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, Sprintf("%s on %s was denied for %s due to missing permission %s.",
+                            actionName.c_str(), SanitizeNodePath(GetActionACLSourcePath()).c_str(), UserSID_.c_str(), GetActionMatchingACE(actionName).c_str()));
+                    SendReplyAndDie();
+                    return;
                 }
-                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, Sprintf("%s on %s was denied for %s due to missing permission %s.",
-                          actionName.c_str(), SanitizeNodePath(GetActionACLSourcePath()).c_str(), UserSID_.c_str(), GetActionMatchingACE(actionName).c_str()));
-                SendReplyAndDie();
-                return;
             }
 
             DoGetQuotaAndProcess();

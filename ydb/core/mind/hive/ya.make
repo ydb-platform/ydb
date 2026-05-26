@@ -6,6 +6,7 @@ SRCS(
     boot_queue.cpp
     boot_queue.h
     bridge_pile_info.h
+    compact_actor.cpp
     data_center_info.h
     domain_info.cpp
     domain_info.h
@@ -76,6 +77,7 @@ SRCS(
     tx__seize_tablets.cpp
     tx__seize_tablets_reply.cpp
     tx__set_down.cpp
+    tx__shrink_pool.cpp
     tx__resume_tablet.cpp
     tx__start_tablet.cpp
     tx__status.cpp
@@ -116,4 +118,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_manual
 )

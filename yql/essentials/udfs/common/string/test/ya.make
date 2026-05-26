@@ -1,4 +1,4 @@
-YQL_UDF_TEST()
+YQL_UDF_MINITEST()
 
 DEPENDS(yql/essentials/udfs/common/string)
 

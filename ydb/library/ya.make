@@ -6,6 +6,7 @@ RECURSE(
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
+    aws_init
     backup
     benchmarks
     breakpad

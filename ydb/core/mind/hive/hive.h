@@ -110,6 +110,11 @@ enum class EResourceToBalance {
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
+enum class EGroupState {
+    Active,
+    Inactive,
+};
+
 struct ISubActor {
     const TInstant StartTime;
 
@@ -199,6 +204,12 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
         TCompleteActions::Run(ctx);
         TCompleteNotifications::Send(ctx);
     }
+};
+
+struct IReassignCallback {
+    virtual IEventBase* MakeEvent(ui64 tabletsDone) = 0;
+
+    virtual ~IReassignCallback() = default;
 };
 
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum);

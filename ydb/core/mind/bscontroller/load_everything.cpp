@@ -281,11 +281,47 @@ public:
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 
+        const bool selfManagementConfigEnabled = Self->SelfManagementEnabled ||
+            (Self->StorageConfig && Self->StorageConfig->GetSelfManagementConfig().GetEnabled());
+
+        // when self-management is enabled, HostRecords is sourced from distconf and may no longer contain nodes
+        // that are still referenced by stale BoxHostV2 records in BSC's local database.
+        Self->StaleBoxHostKeys.clear();
+        auto resolveBoxHost = [&](const auto& host, const auto& value) -> std::optional<ui32> {
+            if (value.EnforcedNodeId) {
+                if (Self->HostRecords->GetHostId(*value.EnforcedNodeId)) {
+                    return *value.EnforcedNodeId;
+                }
+                return std::nullopt;
+            }
+            if (const auto& resolved = Self->HostRecords->ResolveNodeId(host)) {
+                return *resolved;
+            }
+            return std::nullopt;
+        };
+
+        if (selfManagementConfigEnabled) {
+            for (auto& [boxId, box] : Self->Boxes) {
+                for (auto it = box.Hosts.begin(); it != box.Hosts.end(); ) {
+                    const auto& [host, value] = *it;
+                    if (!resolveBoxHost(host, value)) {
+                        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE06, "skipping stale Box host for unresolvable node during load",
+                            (BoxId, boxId), (Fqdn, host.Fqdn), (IcPort, host.IcPort),
+                            (EnforcedNodeId, value.EnforcedNodeId));
+                        Self->StaleBoxHostKeys.emplace_back(host.BoxId, host.Fqdn, host.IcPort);
+                        it = box.Hosts.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+        }
+
         // create revmap
         std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
             for (const auto& [host, value] : box.Hosts) {
-                const auto& nodeId = value.EnforcedNodeId ? value.EnforcedNodeId : Self->HostRecords->ResolveNodeId(host);
+                const auto nodeId = resolveBoxHost(host, value);
                 Y_VERIFY_S(nodeId, "HostKey# " << host.Fqdn << ":" << host.IcPort << " does not resolve to a node");
                 if (const auto it = Self->HostConfigs.find(value.HostConfigId); it != Self->HostConfigs.end()) {
                     for (const auto& [drive, info] : it->second.Drives) {
@@ -310,6 +346,7 @@ public:
 
         // PDisks
         Self->PDisks.clear();
+        Self->StalePDiskKeys.clear();
         {
             using T = Schema::PDisk;
             auto disks = db.Table<T>().Range().Select();
@@ -332,6 +369,13 @@ public:
 
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
+                } else if (selfManagementConfigEnabled) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE07, "skipping stale PDisk for unresolvable node during load",
+                        (NodeId, disks.GetValue<T::NodeID>()), (PDiskId, disks.GetValue<T::PDiskID>()));
+                    Self->StalePDiskKeys.emplace_back(disks.GetValue<T::NodeID>(), disks.GetValue<T::PDiskID>());
+                    if (!disks.Next())
+                        return false;
+                    continue;
                 } else {
                     Y_ABORT("unknown node NodeId# %" PRIu32, disks.GetValue<T::NodeID>());
                 }
@@ -387,6 +431,7 @@ public:
         // VSlots
         const TMonotonic mono = TActivationContext::Monotonic();
         Self->VSlots.clear();
+        Self->StaleVSlotKeys.clear();
         {
             using T = Schema::VSlot;
             auto slot = db.Table<T>().Range().Select();
@@ -395,6 +440,13 @@ public:
             while (!slot.EndOfSet()) {
                 const TVSlotId& vslotId(slot.GetKey());
                 TPDiskInfo *pdisk = Self->FindPDisk(vslotId.ComprisingPDiskId());
+                if (!pdisk && selfManagementConfigEnabled) {
+                    STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE08, "skipping stale VSlot for missing PDisk during load", (VSlotId, vslotId));
+                    Self->StaleVSlotKeys.push_back(vslotId);
+                    if (!slot.Next())
+                        return false;
+                    continue;
+                }
                 Y_ABORT_UNLESS(pdisk);
 
                 const TGroupId groupId = slot.GetValue<T::GroupID>();
@@ -710,6 +762,9 @@ public:
         if (!Self->SelfManagementEnabled) {
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE05, "TTxLoadEverything StartConsoleInteraction");
             Self->ConsoleInteraction->Start();
+        }
+        if (!Self->StaleBoxHostKeys.empty() || !Self->StalePDiskKeys.empty() || !Self->StaleVSlotKeys.empty()) {
+            Self->Execute(Self->CreateTxCleanupStaleStorageEntries());
         }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
     }

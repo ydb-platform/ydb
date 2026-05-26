@@ -17,28 +17,36 @@ TFmrCoordinatorSettings::TFmrCoordinatorSettings() {
     WorkersNum = 1;
     RandomProvider = CreateDefaultRandomProvider();
     TimeProvider = CreateDefaultTimeProvider();
+}
 
-    if (DefaultFmrOperationSpec.IsMap() && DefaultFmrOperationSpec.HasKey("coordinator")) {
-        auto& coord = DefaultFmrOperationSpec["coordinator"];
-        if (coord.HasKey("idempotency_key_store_time_sec")) {
-            IdempotencyKeyStoreTime = TDuration::Seconds(coord["idempotency_key_store_time_sec"].AsInt64());
-        }
-        if (coord.HasKey("time_to_sleep_between_clear_key_requests_sec")) {
-            TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(coord["time_to_sleep_between_clear_key_requests_sec"].AsInt64());
-        }
-        if (coord.HasKey("worker_deadline_lease_sec")) {
-            WorkerDeadlineLease = TDuration::Seconds(coord["worker_deadline_lease_sec"].AsInt64());
-        }
-        if (coord.HasKey("time_to_sleep_between_check_worker_status_requests_sec")) {
-            TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(coord["time_to_sleep_between_check_worker_status_requests_sec"].AsInt64());
-        }
-        if (coord.HasKey("session_inactivity_timeout_sec")) {
-            SessionInactivityTimeout = TDuration::Seconds(coord["session_inactivity_timeout_sec"].AsInt64());
-        }
-        if (coord.HasKey("health_check_interval_sec")) {
-            HealthCheckInterval = TDuration::Seconds(coord["health_check_interval_sec"].AsInt64());
-        }
+TFmrCoordinatorSettings GetDefaultCoordinatorSettings(const TMaybe<NYT::TNode>& configOverride, const TMaybe<NYT::TNode>& operationSpecOverride) {
+    TFmrCoordinatorSettings settings;
+    const auto configNode = configOverride.Defined()
+        ? *configOverride
+        : NYT::NodeFromYsonString(NResource::Find("default_coordinator_settings.yson"));
+    YQL_ENSURE(configNode.IsMap());
+    if (configNode.HasKey("idempotency_key_store_time_sec")) {
+        settings.IdempotencyKeyStoreTime = TDuration::Seconds(configNode["idempotency_key_store_time_sec"].AsInt64());
     }
+    if (configNode.HasKey("time_to_sleep_between_clear_key_requests_sec")) {
+        settings.TimeToSleepBetweenClearKeyRequests = TDuration::Seconds(configNode["time_to_sleep_between_clear_key_requests_sec"].AsInt64());
+    }
+    if (configNode.HasKey("worker_deadline_lease_sec")) {
+        settings.WorkerDeadlineLease = TDuration::Seconds(configNode["worker_deadline_lease_sec"].AsInt64());
+    }
+    if (configNode.HasKey("time_to_sleep_between_check_worker_status_requests_sec")) {
+        settings.TimeToSleepBetweenCheckWorkerStatusRequests = TDuration::Seconds(configNode["time_to_sleep_between_check_worker_status_requests_sec"].AsInt64());
+    }
+    if (configNode.HasKey("session_inactivity_timeout_sec")) {
+        settings.SessionInactivityTimeout = TDuration::Seconds(configNode["session_inactivity_timeout_sec"].AsInt64());
+    }
+    if (configNode.HasKey("health_check_interval_sec")) {
+        settings.HealthCheckInterval = TDuration::Seconds(configNode["health_check_interval_sec"].AsInt64());
+    }
+    if (operationSpecOverride.Defined()) {
+        settings.DefaultFmrOperationSpec = *operationSpecOverride;
+    }
+    return settings;
 }
 
 namespace {
@@ -226,7 +234,25 @@ public:
             }
             result = operationInfo.StageManager->GetOperationResult();
         }
-        return NThreading::MakeFuture(TGetOperationResponse(operationStatus, errorMessages, outputTablesStats, result));
+        TJobCounters jobCounters;
+        jobCounters.Total = operationInfo.AllTaskIds.size();
+        jobCounters.Completed = operationInfo.CompletedJobsCount;
+        jobCounters.Lost = operationInfo.LostJobsCount;
+        for (const auto& taskId : operationInfo.AllTaskIds) {
+            if (!Tasks_.contains(taskId)) {
+                continue;
+            }
+            switch (Tasks_[taskId].TaskStatus) {
+                case ETaskStatus::Accepted:   ++jobCounters.Pending; break;
+                case ETaskStatus::InProgress: ++jobCounters.Running; break;
+                case ETaskStatus::Failed:     ++jobCounters.Failed;  break;
+                default: break;
+            }
+        }
+
+        TGetOperationResponse response(operationStatus, errorMessages, outputTablesStats, result);
+        response.JobCounters = jobCounters;
+        return NThreading::MakeFuture(std::move(response));
     }
 
     NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) override {
@@ -566,6 +592,9 @@ private:
                                     // Task was already cleaned up (e.g., by session or operation cleanup)
                                     continue;
                                 }
+                                auto& taskInfo = Tasks_[taskId];
+                                YQL_ENSURE(Operations_.contains(taskInfo.OperationId));
+                                ++Operations_[taskInfo.OperationId].LostJobsCount;
                                 // resetting task, TODO - add max retry
                                 SetUnfinishedTaskStatus(taskId, ETaskStatus::Accepted);
                                 YQL_ENSURE(Tasks_.contains(taskId));
@@ -730,6 +759,9 @@ private:
         }
         YQL_CLOG(TRACE, FastMapReduce) << "Setting task status for task id" << taskId << " from " << taskInfo.TaskStatus << " to new Task status " << newTaskStatus;
         taskInfo.TaskStatus = newTaskStatus;
+        if (newTaskStatus == ETaskStatus::Completed) {
+            ++operationInfo.CompletedJobsCount;
+        }
         operationInfo.OperationStatus = GetOperationStatus(taskInfo.OperationId);
         if (taskErrorMessage) {
             auto& errorMessages = operationInfo.ErrorMessages;
@@ -942,6 +974,9 @@ private:
         std::vector<TYtResourceInfo> YtResources;
         std::vector<TFmrResourceOperationInfo> FmrResources;
         NYT::TNode FmrOperationSpec;
+
+        ui64 CompletedJobsCount = 0;  // Number of tasks that transitioned to Completed
+        ui64 LostJobsCount = 0;       // Number of tasks lost due to worker failure and re-enqueued
     };
 
     struct TSessionInfo {

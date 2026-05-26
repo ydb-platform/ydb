@@ -1,9 +1,15 @@
 #include "yql_kikimr_provider_impl.h"
+#include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <yql/essentials/core/type_ann/type_ann_impl.h>
 #include <yql/essentials/core/type_ann/type_ann_list.h>
@@ -13,11 +19,9 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+
 #include <util/generic/is_in.h>
 
 #include <functional>
@@ -592,14 +596,33 @@ namespace {
     }
 }
 
-class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer
-{
+class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer {
 public:
     TKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
         : Gateway(gateway)
         , SessionCtx(sessionCtx)
-        , Types(types) {}
+        , Types(types)
+        , DqTypeAnn(NDq::CreateDqTypeAnnotationTransformer())
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (auto* extendedTypeAnn = SessionCtx->GetInternalTypeAnnTransformer()) {
+            TIssueScopeGuard issueScope(ctx.IssueManager, [&input, &ctx] {
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << input->Content());
+            });
+
+            if (extendedTypeAnn->CanParse(*input)) {
+                return extendedTypeAnn->DoTransform(input, output, ctx);
+            }
+
+            if (DqTypeAnn->CanParse(*input)) {
+                return DqTypeAnn->DoTransform(input, output, ctx);
+            }
+        }
+
+        return TKiSinkVisitorTransformer::DoTransform(input, output, ctx);
+    }
 
 private:
     virtual TStatus HandleWriteTable(TKiWriteTable node, TExprContext& ctx) override {
@@ -1223,21 +1246,34 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
                     return TStatus::Error;
                 }
+                if (meta->StoreType == EStoreType::Column) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index is not supported on column tables"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalJson;
             } else if (type == "localBloomFilter") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                if (meta->StoreType == EStoreType::Column &&
+                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
                     return TStatus::Error;
                 }
 
                 indexType = TIndexDescription::EType::LocalBloomFilter;
             } else if (type == "localBloomNgramFilter") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                if (meta->StoreType == EStoreType::Column &&
+                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter index support is disabled"));
                     return TStatus::Error;
                 }
 
                 indexType = TIndexDescription::EType::LocalBloomNgramFilter;
+            } else if (type == "localMinMax") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                    return TStatus::Error;
+                }
+
+                indexType = TIndexDescription::EType::LocalMinMax;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1246,6 +1282,13 @@ private:
                 meta->StoreType != EStoreType::Column) {
                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                     "Local bloom ngram indexes are supported only for column tables"));
+                return TStatus::Error;
+            }
+
+            if (indexType == TIndexDescription::EType::LocalMinMax &&
+                meta->StoreType != EStoreType::Column) {
+                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                    NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                 return TStatus::Error;
             }
 
@@ -1279,7 +1322,7 @@ private:
                 indexColums.empty() ? "<none>" : indexColums.back()
             );
             for (const auto& indexSetting : index.IndexSettings()) {
-                const auto& name = indexSetting.Name();
+                const auto& nameLower = to_lower(indexSetting.Name().StringValue());
                 const auto& value = indexSetting.Value().Cast<TCoAtom>();
 
                 TString error;
@@ -1287,31 +1330,34 @@ private:
                     case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                         NKikimr::NKMeans::FillSetting(
                             *vectorIndexKmeansTreeDescription.MutableSettings(),
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::GlobalFulltextPlain:
                     case TIndexDescription::EType::GlobalFulltextRelevance: {
                         NKikimr::NFulltext::FillSetting(
                             *fulltextIndexDescription.MutableSettings(),
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomFilter: {
                         FillLocalBloomFilterSetting(
                             localBloomFilterDescription,
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
                         break;
                     }
                     case TIndexDescription::EType::LocalBloomNgramFilter: {
                         FillLocalBloomNgramFilterSetting(
                             localBloomNgramFilterDescription,
-                            name.StringValue(), value.StringValue(), error);
+                            nameLower, value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalMinMax: {
                         break;
                     }
                     default:
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder()
-                            << "Unknown index setting: " << name.StringValue()));
+                            << "Unknown index setting: " << nameLower));
                         return IGraphTransformer::TStatus::Error;
                 }
                 if (error) {
@@ -1331,7 +1377,7 @@ private:
                     break;
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     TString error;
-                    if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -1402,6 +1448,20 @@ private:
                     }
 
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
+                    break;
+                }
+                case TIndexDescription::EType::LocalMinMax: {
+                    if (!dataColums.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (indexColums.size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    
                     break;
                 }
             }
@@ -2967,6 +3027,7 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TTypeAnnotationContext& Types;
+    const THolder<TVisitorTransformerBase> DqTypeAnn;
 };
 
 } // namespace

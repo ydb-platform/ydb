@@ -1,8 +1,9 @@
 #include "auth_actors.h"
 
+#include "http_req.h"
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/security/ticket_parser_impl.h>
@@ -12,6 +13,7 @@
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
+
 #include <util/stream/file.h>
 
 namespace NKikimr::NHttpProxy {
@@ -123,10 +125,15 @@ namespace NKikimr::NHttpProxy {
         }
 
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+            NACLib::TUserToken userToken = NACLibProto::TUserToken();
             if (ev->Get()->HasError()) {
-                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+                if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                    return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
+                }
+            } else {
+                userToken = *ev->Get()->Token;
             }
-            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
+            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
             LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "Authorized successfully");
 
@@ -149,9 +156,15 @@ namespace NKikimr::NHttpProxy {
                     }
                 }
                 if (!found) {
-                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                    if (ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion().empty()) {
+                        return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
+                            TStringBuilder() << "YandexCloudServiceRegion is not configured",
+                            NYds::EErrorCodes::ERROR);
+                    } else {
+                        return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
                                           TStringBuilder() << "Wrong service region: got " << Signature->GetRegion() << " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0),
                                           NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
+                    }
                 }
 
                 if (!TInstant::TryParseIso8601(Signature->GetSigningTimestamp(), signedAt)) {

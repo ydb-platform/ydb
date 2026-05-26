@@ -43,14 +43,14 @@ public:
     }
 
     TMonitoringProxy(ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const TString& query,
-        const TMap<ui32, TActorId>&& partitions, const TActorId& cache, const TString& topicName, ui32 inflight,
+        TMap<ui32, TActorId> partitions, const TActorId& cache, const TString& topicName, ui32 inflight,
         TString&& config, std::vector<TTransactionSnapshot>&& transactions)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , Sender(sender)
     , Query(query)
     , Partitions(std::move(partitions))
     , Cache(cache)
-    , TotalRequests(partitions.size() + 1)
+    , TotalRequests(Partitions.size() + 1)
     , TopicName(topicName)
     , Inflight(inflight)
     , Config(std::move(config))

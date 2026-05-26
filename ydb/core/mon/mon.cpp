@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -74,20 +75,6 @@ TString GetDatabase(NHttp::THttpIncomingRequest* request) {
     return {};
 }
 
-IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
-    return new NActors::IEventHandle(
-        NGRpcService::CreateGRpcRequestProxyId(),
-        owner,
-        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
-            database,
-            ticket ? TMaybe<TString>(ticket) : Nothing(),
-            owner,
-            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-            std::move(peerName)),
-        IEventHandle::FlagTrackDelivery
-    );
-}
-
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
     std::queue<TIssueInfo> issuesQueue;
     ui32 minimalSeverity = std::numeric_limits<ui32>::max();
@@ -123,6 +110,20 @@ const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::Repeate
 
 } // namespace
 
+IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
+    return new NActors::IEventHandle(
+        NGRpcService::CreateGRpcRequestProxyId(),
+        owner,
+        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+            database,
+            ticket ? TMaybe<TString>(ticket) : Nothing(),
+            owner,
+            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+            std::move(peerName)),
+        IEventHandle::FlagTrackDelivery
+    );
+}
+
 NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
     NHttp::THeaders headers(request->Headers);
     NHttp::TCookies cookies(headers["Cookie"]);
@@ -134,33 +135,6 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!request->MTlsClientCertificate.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
-    } else {
-        return nullptr;
-    }
-}
-
-NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) {
-    if (NKikimr::AppData()->EnforceUserTokenRequirement && NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                Ydb::StatusIds::UNAUTHORIZED,
-                "No security credentials were provided",
-                {})
-        );
-    } else if (!NKikimr::AppData()->DefaultUserSIDs.empty()) {
-        TIntrusivePtr<NACLib::TUserToken> token = new NACLib::TUserToken(NKikimr::AppData()->DefaultUserSIDs);
-        return new NActors::IEventHandle(
-            owner,
-            owner,
-            new NKikimr::NGRpcService::TEvRequestAuthAndCheckResult(
-                {},
-                {},
-                token,
-                {}
-            )
-        );
     } else {
         return nullptr;
     }
@@ -234,7 +208,8 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
     if (eventHandle != nullptr) {
         return eventHandle;
     }
-    return GetAuthorizeTicketResult(owner);
+
+    return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
 }
 
 // compatibility layer
@@ -410,6 +385,9 @@ public:
             }
         }
         AuditCtx.LogOnReceived();
+        if (const TString forbiddenReason = GetSecureTabletDevUiForbiddenReason(); !forbiddenReason.empty()) {
+            return ReplyForbiddenAndPassAway(forbiddenReason);
+        }
         SendRequest();
     }
 
@@ -534,6 +512,19 @@ public:
         ReplyErrorAndPassAway(Ydb::StatusIds::UNAUTHORIZED, issues, true);
     }
 
+    TString GetSecureTabletDevUiForbiddenReason(
+        const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) const
+    {
+        if (NKikimr::IsTabletDevUiSecurePath(Container.GetPathInfo())) {
+            const NACLib::TUserToken* userToken = result ? result->UserToken.Get() : nullptr;
+            if (!NKikimr::IsAdministrator(AppData(), userToken)) {
+                return TStringBuilder()
+                    << "Administrator access is required for " << Container.GetPath();
+            }
+        }
+        return {};
+    }
+
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
@@ -576,19 +567,26 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (ActorMonPage->AuthMode == TMon::EAuthMode::ExtractOnly) {
-            // Extract token but don't enforce authorization - let the handler decide
-            SendRequest(&result);
-            return;
-        }
-        if (result.Status != Ydb::StatusIds::SUCCESS) {
-            return ReplyErrorAndPassAway(result);
-        }
-        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
-            SendRequest(&result);
+        TString forbiddenReason;
+        if (ActorMonPage->AuthMode == TMon::EAuthMode::Relaxed) {
+            // No AllowedSIDs or auth-RPC failure gate here.
+            forbiddenReason = GetSecureTabletDevUiForbiddenReason(&result);
         } else {
-            return ReplyForbiddenAndPassAway("SID is not allowed");
+            if (result.Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyErrorAndPassAway(result);
+            }
+            if (!IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
+                forbiddenReason = "SID is not allowed";
+            } else {
+                forbiddenReason = GetSecureTabletDevUiForbiddenReason(&result);
+            }
         }
+
+        if (!forbiddenReason.empty()) {
+            return ReplyForbiddenAndPassAway(forbiddenReason);
+        }
+
+        SendRequest(&result);
     }
 
     STATEFN(StateFunc) {
@@ -1210,19 +1208,21 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (Fields.AuthMode == TMon::EAuthMode::ExtractOnly) {
-            // Extract token but don't enforce authorization - let the handler decide
-            SendRequest(&result);
-            return;
+        TString forbiddenReason;
+        if (Fields.AuthMode == TMon::EAuthMode::Enforce) {
+            if (result.Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyErrorAndPassAway(result);
+            }
+            if (!IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
+                forbiddenReason = "SID is not allowed";
+            }
         }
-        if (result.Status != Ydb::StatusIds::SUCCESS) {
-            return ReplyErrorAndPassAway(result);
+
+        if (!forbiddenReason.empty()) {
+            return ReplyForbiddenAndPassAway(forbiddenReason);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), Fields.AllowedSIDs)) {
-            SendRequest(&result);
-        } else {
-            return ReplyForbiddenAndPassAway("SID is not allowed");
-        }
+
+        SendRequest(&result);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
@@ -1406,19 +1406,21 @@ public:
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
-        if (AuthMode == TMon::EAuthMode::ExtractOnly) {
-            // Extract token but don't enforce authorization - let the handler decide
-            ProcessRequest();
-            return;
+        TString forbiddenReason;
+        if (AuthMode == TMon::EAuthMode::Enforce) {
+            if (result.Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyErrorAndPassAway(result);
+            }
+            if (!IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
+                forbiddenReason = "SID is not allowed";
+            }
         }
-        if (result.Status != Ydb::StatusIds::SUCCESS) {
-            return ReplyErrorAndPassAway(result);
+
+        if (!forbiddenReason.empty()) {
+            return ReplyForbiddenAndPassAway(forbiddenReason);
         }
-        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
-            ProcessRequest();
-        } else {
-            return ReplyForbiddenAndPassAway("SID is not allowed");
-        }
+
+        ProcessRequest();
     }
 
     STATEFN(StateWork) {

@@ -12,6 +12,7 @@ TYtBlockIterator::TYtBlockIterator(
     TYtBlockIteratorSettings settings,
     std::vector<ESortOrder> sortOrders,
     TMaybe<bool> isFirstRowKeysInclusive,
+    TMaybe<bool> isLastRowKeysInclusive,
     TMaybe<TString> firstRowKeys,
     TMaybe<TString> lastRowKeys
 )
@@ -34,6 +35,8 @@ TYtBlockIterator::TYtBlockIterator(
     }
     if (lastRowKeys) {
         LastBoundary_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
+        Y_ENSURE(isLastRowKeysInclusive.Defined(), "isLastRowKeysInclusive must be defined for Last Boundary");
+        IsLastBoundInclusive_ = *isLastRowKeysInclusive;
     }
 }
 
@@ -63,6 +66,8 @@ bool TYtBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup
             SortOrders_
         );
         if (c > 0) { // if row > last bound
+            return false;
+        } else if (!IsLastBoundInclusive_ && c == 0) { // if row == first bound
             return false;
         }
     }

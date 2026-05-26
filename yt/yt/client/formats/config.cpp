@@ -376,6 +376,8 @@ void TBlobFormatConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("data_column_name", &TThis::DataColumnName)
         .Default();
+    registrar.Parameter("enable_part_index", &TThis::EnablePartIndex)
+        .Default(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

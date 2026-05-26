@@ -16,6 +16,7 @@
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
+#include "viewer_groups.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -653,6 +654,50 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 70, 100, false);
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 80, 100, true);
         StorageSpaceTest("space", NKikimrWhiteboard::EFlag::Green, 90, 100, true);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageWithDynamicSlotSize)
+    {
+        // In this test vdisk.AvailableSize is intentionally inconsistent with pdisk.EnforcedDynamicSlotSize
+        // The test checks that EnforcedDynamicSlotSize takes the precedence and that vdisk weight is accounted
+
+        TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 100;
+        vdisk.AvailableSize = 900;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 100;
+        pdisk.SlotSizeInUnits = 1;
+        pdisk.TotalSize = 10000;
+        pdisk.AvailableSize = 9000;
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 50.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageWithoutDynamicSlotSize)
+    {
+        TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 100;
+        vdisk.AvailableSize = 1; // intentionally inconsistent, doesn't matter
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.EnforcedDynamicSlotSize = 0;
+        pdisk.TotalSize = 10000;
+        pdisk.AvailableSize = 1; // intentionally inconsistent, doesn't matter
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 2000);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 5.0, 1e-6);
     }
 
     const TPathId SHARED_DOMAIN_KEY = {7000000000, 1};
@@ -1744,7 +1789,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NYdb::TDriverConfig driverCfg;
         TString topicPath = "/Root/topic1";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
-                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+            .SetDatabase("/Root")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
 
         TString consumerName = "consumer1";
 

@@ -74,9 +74,12 @@ public:
     inline static constexpr TDuration TEST_OPERATION_TIMEOUT = TDuration::Seconds(10);
 
 public:
+    ~TStreamingTestFixture();
+
     // Local kikimr settings
 
     NKikimrConfig::TAppConfig& SetupAppConfig();
+    void UpdateConfig(NKikimrConfig::TAppConfig& appConfig);
 
     TIntrusivePtr<NTestUtils::IMockPqGateway> SetupMockPqGateway();
 
@@ -122,7 +125,13 @@ public:
 
     void ReadTopicMessage(const std::string& topicName, const std::string& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false);
 
-    void ReadTopicMessages(const std::string& topicName, std::vector<std::string> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false, bool local = false);
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const std::string& topicName,
+        std::vector<std::string> expectedMessages,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
+        bool local = false,
+        bool checkResult = true);
 
     void TestReadTopicBasic(const std::string& testSuffix);
 
@@ -204,9 +213,11 @@ private:
 
 protected:
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
+    TVector<TString> StoragePoolTypes;
     NYdb::NQuery::TClientSettings QueryClientSettings = NYdb::NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NYdb::NTopic::TTopicClientSettings TopicClientSettings = NYdb::NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 

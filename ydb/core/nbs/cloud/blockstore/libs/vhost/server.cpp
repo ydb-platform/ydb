@@ -145,15 +145,26 @@ struct TAppContext
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// The device is served by up to VhostQueuesCount vhost queues, with the
+// actual queue count capped by the executor pool size. Each queue is
+// processed by a different executor thread, but all queues share the same
+// IDeviceHandler (and therefore the same storage-wrapper chain: aligned
+// device handler, fast-path service, overlapped-requests guard, etc.).
+// The handler is reentrant from multiple threads.
 class TEndpoint final: public std::enable_shared_from_this<TEndpoint>
 {
 private:
     TAppContext& AppCtx;
+    // Single device handler shared by all vhost queues of this endpoint.
     const IDeviceHandlerPtr DeviceHandler;
     const IPartitionDirectServicePtr PartitionDirectService;
     const TString SocketPath;
     const TStorageOptions Options;
     const ui32 SocketAccessMode;
+    // Queues assigned to this endpoint. Kept here so that the endpoint's
+    // lifetime governs the per-queue assignment counter (atomic, no locks
+    // required for inc/dec).
+    const TVector<IVhostQueuePtr> Queues;
     IVhostDevicePtr VhostDevice;
 
     TIntrusiveList<TRequest> RequestsInFlight;
@@ -168,14 +179,40 @@ public:
         IPartitionDirectServicePtr partitionDirectService,
         TString socketPath,
         const TStorageOptions& options,
-        ui32 socketAccessMode)
+        ui32 socketAccessMode,
+        TVector<IVhostQueuePtr> queues)
         : AppCtx(appCtx)
         , DeviceHandler(std::move(deviceHandler))
         , PartitionDirectService(std::move(partitionDirectService))
         , SocketPath(std::move(socketPath))
         , Options(options)
         , SocketAccessMode(socketAccessMode)
-    {}
+        , Queues(std::move(queues))
+    {
+        Y_ABORT_UNLESS(DeviceHandler);
+        Y_ABORT_UNLESS(!Queues.empty());
+        for (const auto& queue: Queues) {
+            queue->AssignedEndpointsCount.fetch_add(
+                1,
+                std::memory_order_relaxed);
+        }
+    }
+
+    ~TEndpoint()
+    {
+        for (const auto& queue: Queues) {
+            queue->AssignedEndpointsCount.fetch_sub(
+                1,
+                std::memory_order_relaxed);
+        }
+    }
+
+    // The cookie attached to every request dispatched through this
+    // endpoint's vhost device.
+    void* GetCookie()
+    {
+        return this;
+    }
 
     void SetVhostDevice(IVhostDevicePtr vhostDevice)
     {
@@ -266,6 +303,8 @@ public:
         return Options.VhostQueuesCount;
     }
 
+    // Processes a request dequeued from any vhost queue. All queues share
+    // a single device handler.
     void ProcessRequest(TVhostRequestPtr vhostRequest)
     {
         const auto requestType = vhostRequest->Type;
@@ -393,28 +432,21 @@ using TEndpointPtr = std::shared_ptr<TEndpoint>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TExecutor runs a single vhost request queue in its own thread.
 class TExecutor final: public ISimpleThread
 {
 private:
-    TAppContext& AppCtx;
     const TString Name;
     const IVhostQueuePtr VhostQueue;
-    const ui32 SocketAccessMode;
     TAffinity Affinity;
-
-    TMap<TString, TEndpointPtr> Endpoints;
 
 public:
     TExecutor(
-        TAppContext& appCtx,
         TString name,
         IVhostQueuePtr vhostQueue,
-        ui32 socketAccessMode,
         const TAffinity& affinity)
-        : AppCtx(appCtx)
-        , Name(std::move(name))
+        : Name(std::move(name))
         , VhostQueue(std::move(vhostQueue))
-        , SocketAccessMode(socketAccessMode)
         , Affinity(affinity)
     {}
 
@@ -424,85 +456,9 @@ public:
         Join();
     }
 
-    TEndpointPtr CreateEndpoint(
-        const TString& socketPath,
-        const TStorageOptions& options,
-        IPartitionDirectServicePtr partitionDirectService,
-        IStoragePtr storage)
+    const IVhostQueuePtr& GetQueue() const
     {
-        TDeviceHandlerParams params{
-            .Storage = CreateWrappers(options, std::move(storage)),
-            .DiskId = options.DiskId,
-            .ClientId = options.ClientId,
-            .BlockSize = options.BlockSize,
-            .BlockCount = options.BlocksCount,
-            .BlocksPerStripeCount = options.StripeSize / options.BlockSize,
-            .VChunkSize = options.VChunkSize,
-            .MaxZeroBlocksSubRequestSize = options.MaxZeroBlocksSubRequestSize,
-            .UnalignedRequestsDisabled = options.UnalignedRequestsDisabled,
-            .StorageMediaKind = options.StorageMediaKind};
-
-        auto deviceHandler =
-            AppCtx.DeviceHandlerFactory->CreateDeviceHandler(std::move(params));
-
-        auto endpoint = std::make_shared<TEndpoint>(
-            AppCtx,
-            std::move(deviceHandler),
-            std::move(partitionDirectService),
-            socketPath,
-            options,
-            SocketAccessMode);
-
-        auto vhostDevice = VhostQueue->CreateDevice(
-            socketPath,
-            options.DeviceName.empty() ? options.DiskId : options.DeviceName,
-            options.BlockSize,
-            options.BlocksCount,
-            options.VhostQueuesCount,
-            options.DiscardEnabled,
-            options.OptimalIoSize,
-            endpoint.get(),
-            AppCtx.Callbacks);
-        endpoint->SetVhostDevice(std::move(vhostDevice));
-
-        return endpoint;
-    }
-
-    void AddEndpoint(const TString& socketPath, TEndpointPtr endpoint)
-    {
-        auto [it, inserted] =
-            Endpoints.emplace(socketPath, std::move(endpoint));
-        Y_ABORT_UNLESS(inserted);
-    }
-
-    TEndpointPtr RemoveEndpoint(const TString& socketPath)
-    {
-        auto it = Endpoints.find(socketPath);
-        Y_ABORT_UNLESS(it != Endpoints.end());
-
-        auto endpoint = std::move(it->second);
-        Endpoints.erase(it);
-
-        return endpoint;
-    }
-
-    TEndpointPtr GetEndpoint(const TString& socketPath)
-    {
-        auto it = Endpoints.find(socketPath);
-        if (it == Endpoints.end()) {
-            return nullptr;
-        }
-
-        return it->second;
-    }
-
-    ui32 GetVhostQueuesCount() const
-    {
-        ui32 queuesCount = 0;
-        for (const auto& it: Endpoints) {
-            queuesCount += it.second->GetVhostQueuesCount();
-        }
-        return queuesCount;
+        return VhostQueue;
     }
 
 private:
@@ -537,19 +493,8 @@ private:
     void ProcessRequest(TVhostRequestPtr vhostRequest)
     {
         auto* endpoint = reinterpret_cast<TEndpoint*>(vhostRequest->Cookie);
+        Y_ABORT_UNLESS(endpoint);
         endpoint->ProcessRequest(std::move(vhostRequest));
-    }
-
-    IStoragePtr CreateWrappers(
-        const TStorageOptions& options,
-        IStoragePtr storage)
-    {
-        storage = CreateSplitRequestsStorageWrapper(std::move(storage));
-        if (options.CreateOverlappedRequestsGuard) {
-            storage =
-                CreateOverlappedRequestsGuardStorageWrapper(std::move(storage));
-        }
-        return storage;
     }
 };
 
@@ -557,6 +502,10 @@ using TExecutorPtr = std::unique_ptr<TExecutor>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Server owns the pool of executors (one per thread) and the set of active
+// endpoints. For every endpoint it picks the N least-loaded executors
+// (N = VhostQueuesCount) so that each of the endpoint's queues is served by
+// a different thread, achieving true parallelism between queues.
 class TServer final
     : public TAppContext
     , public IServer
@@ -567,8 +516,7 @@ private:
 
     TVector<TExecutorPtr> Executors;
 
-    TMap<TString, TExecutor*> EndpointMap;
-
+    TMap<TString, TEndpointPtr> Endpoints;
     TMap<TString, TEndpointPtr> StoppingEndpoints;
 
 public:
@@ -600,13 +548,27 @@ public:
 private:
     void InitExecutors();
 
-    TExecutor* PickExecutor() const;
+    // Picks `count` distinct executors with the lowest number of assigned
+    // queues. Must be called under Lock.
+    TVector<TExecutor*> PickExecutors(ui32 count);
 
     void StopAllEndpoints();
 
     void HandleStoppedEndpoint(
         const TString& socketPath,
         const NProto::TError& error);
+
+    IStoragePtr CreateWrappers(
+        const TStorageOptions& options,
+        IStoragePtr storage);
+
+    // Creates a single device handler shared by all vhost queues of the
+    // endpoint. The whole storage-wrapper chain (aligned device handler,
+    // fast-path service, overlapped-requests guard, etc.) is built once per
+    // endpoint and reused across queues.
+    IDeviceHandlerPtr CreateDeviceHandler(
+        const TStorageOptions& options,
+        IStoragePtr storage);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -671,11 +633,15 @@ TFuture<NProto::TError> TServer::StartEndpoint(
         return MakeFuture(error);
     }
 
-    TExecutor* executor;
+    const ui32 requestedQueuesCount = Max<ui32>(1, options.VhostQueuesCount);
+    const ui32 queuesCount =
+        Min<ui32>(requestedQueuesCount, static_cast<ui32>(Executors.size()));
+
+    TVector<IVhostQueuePtr> queues;
 
     with_lock (Lock) {
-        auto it = EndpointMap.find(socketPath);
-        if (it != EndpointMap.end()) {
+        auto it = Endpoints.find(socketPath);
+        if (it != Endpoints.end()) {
             NProto::TError error;
             error.SetCode(S_ALREADY);
             error.SetMessage(
@@ -684,15 +650,39 @@ TFuture<NProto::TError> TServer::StartEndpoint(
             return MakeFuture(error);
         }
 
-        executor = PickExecutor();
-        Y_ABORT_UNLESS(executor);
+        auto pickedExecutors = PickExecutors(queuesCount);
+        Y_ABORT_UNLESS(pickedExecutors.size() == queuesCount);
+
+        queues.reserve(queuesCount);
+        for (auto* executor: pickedExecutors) {
+            queues.push_back(executor->GetQueue());
+        }
     }
 
-    auto endpoint = executor->CreateEndpoint(
+    // Single device handler shared by all vhost queues of this endpoint.
+    // The whole storage-wrapper chain is built once per endpoint.
+    auto deviceHandler = CreateDeviceHandler(options, std::move(storage));
+
+    auto endpoint = std::make_shared<TEndpoint>(
+        *this,
+        std::move(deviceHandler),
+        std::move(partitionDirectService),
         socketPath,
         options,
-        std::move(partitionDirectService),
-        std::move(storage));
+        Config.SocketAccessMode,
+        queues);
+
+    auto vhostDevice = VhostQueueFactory->CreateDevice(
+        socketPath,
+        options.DeviceName.empty() ? options.DiskId : options.DeviceName,
+        options.BlockSize,
+        options.BlocksCount,
+        options.DiscardEnabled,
+        options.OptimalIoSize,
+        std::move(queues),
+        endpoint->GetCookie(),
+        Callbacks);
+    endpoint->SetVhostDevice(std::move(vhostDevice));
 
     auto error = SafeExecute<NProto::TError>([&] { return endpoint->Start(); });
     if (HasError(error)) {
@@ -700,10 +690,8 @@ TFuture<NProto::TError> TServer::StartEndpoint(
     }
 
     with_lock (Lock) {
-        executor->AddEndpoint(socketPath, std::move(endpoint));
-
         auto [it, inserted] =
-            EndpointMap.emplace(std::move(socketPath), executor);
+            Endpoints.emplace(std::move(socketPath), std::move(endpoint));
         Y_ABORT_UNLESS(inserted);
     }
 
@@ -722,8 +710,8 @@ TFuture<NProto::TError> TServer::StopEndpoint(const TString& socketPath)
     TEndpointPtr endpoint;
 
     with_lock (Lock) {
-        auto it = EndpointMap.find(socketPath);
-        if (it == EndpointMap.end()) {
+        auto it = Endpoints.find(socketPath);
+        if (it == Endpoints.end()) {
             NProto::TError error;
             error.SetCode(S_ALREADY);
             error.SetMessage(
@@ -732,10 +720,9 @@ TFuture<NProto::TError> TServer::StopEndpoint(const TString& socketPath)
             return MakeFuture(error);
         }
 
-        auto* executor = it->second;
-        EndpointMap.erase(it);
+        endpoint = std::move(it->second);
+        Endpoints.erase(it);
 
-        endpoint = executor->RemoveEndpoint(socketPath);
         StoppingEndpoints.emplace(socketPath, endpoint);
     }
 
@@ -763,8 +750,8 @@ NProto::TError TServer::UpdateEndpoint(
     TEndpointPtr endpoint;
 
     with_lock (Lock) {
-        auto it = EndpointMap.find(socketPath);
-        if (it == EndpointMap.end()) {
+        auto it = Endpoints.find(socketPath);
+        if (it == Endpoints.end()) {
             NProto::TError error;
             error.SetCode(S_FALSE);
             error.SetMessage(
@@ -773,8 +760,7 @@ NProto::TError TServer::UpdateEndpoint(
             return error;
         }
 
-        auto* executor = it->second;
-        endpoint = executor->GetEndpoint(socketPath);
+        endpoint = it->second;
     }
 
     if (endpoint) {
@@ -789,19 +775,18 @@ void TServer::StopAllEndpoints()
     TVector<TFuture<NProto::TError>> futures;
 
     with_lock (Lock) {
-        for (const auto& it: EndpointMap) {
+        for (auto& it: Endpoints) {
             const auto& socketPath = it.first;
-            auto* executor = it.second;
-
-            auto endpoint = executor->RemoveEndpoint(socketPath);
-            StoppingEndpoints.emplace(socketPath, endpoint);
+            auto& endpoint = it.second;
 
             auto future = endpoint->Stop(false);
             sockets.push_back(socketPath);
             futures.push_back(future);
+
+            StoppingEndpoints.emplace(socketPath, std::move(endpoint));
         }
 
-        EndpointMap.clear();
+        Endpoints.clear();
     }
 
     WaitAll(futures).Wait();
@@ -837,29 +822,71 @@ void TServer::InitExecutors()
         auto vhostQueue = VhostQueueFactory->CreateQueue();
 
         auto executor = std::make_unique<TExecutor>(
-            *this,
             TStringBuilder() << "VHOST" << i,
             std::move(vhostQueue),
-            Config.SocketAccessMode,
             Config.Affinity);
 
         Executors.push_back(std::move(executor));
     }
 }
 
-TExecutor* TServer::PickExecutor() const
+TVector<TExecutor*> TServer::PickExecutors(ui32 count)
 {
-    TExecutor* result = nullptr;
+    Y_ABORT_UNLESS(count > 0);
+    Y_ABORT_UNLESS(!Executors.empty());
+    Y_ABORT_UNLESS(count <= Executors.size());
 
+    // Snapshot each executor's assigned-endpoint count into a multimap so
+    // the ordering is computed against a stable set of values, even if
+    // other threads are concurrently (de)assigning endpoints. The multimap
+    // sorts by key ascending, so the first `count` entries are the least
+    // loaded executors.
+    TMultiMap<ui32, TExecutor*> byLoad;
     for (const auto& executor: Executors) {
-        if (result == nullptr ||
-            executor->GetVhostQueuesCount() < result->GetVhostQueuesCount())
-        {
-            result = executor.get();
-        }
+        const ui32 load = executor->GetQueue()->AssignedEndpointsCount.load();
+        byLoad.emplace(load, executor.get());
     }
 
-    return result;
+    TVector<TExecutor*> picked;
+    picked.reserve(count);
+    for (const auto& [load, executor]: byLoad) {
+        if (picked.size() == count) {
+            break;
+        }
+        picked.push_back(executor);
+    }
+    return picked;
+}
+
+IStoragePtr TServer::CreateWrappers(
+    const TStorageOptions& options,
+    IStoragePtr storage)
+{
+    storage = CreateSplitRequestsStorageWrapper(std::move(storage));
+    if (options.CreateOverlappedRequestsGuard) {
+        storage =
+            CreateOverlappedRequestsGuardStorageWrapper(std::move(storage));
+    }
+    return storage;
+}
+
+IDeviceHandlerPtr TServer::CreateDeviceHandler(
+    const TStorageOptions& options,
+    IStoragePtr storage)
+{
+    TDeviceHandlerParams params{
+        .Storage = CreateWrappers(options, std::move(storage)),
+        .DiskId = options.DiskId,
+        .ClientId = options.ClientId,
+        .BlockSize = options.BlockSize,
+        .BlockCount = options.BlocksCount,
+        .BlocksPerStripeCount = options.StripeSize / options.BlockSize,
+        .VChunkSize = options.VChunkSize,
+        .MaxZeroBlocksSubRequestSize = options.MaxZeroBlocksSubRequestSize,
+        .UnalignedRequestsDisabled = options.UnalignedRequestsDisabled,
+        .StorageMediaKind = options.StorageMediaKind};
+
+    return DeviceHandlerFactory->CreateDeviceHandler(std::move(params));
 }
 
 }   // namespace

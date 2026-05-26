@@ -283,10 +283,6 @@
 /* SPDX-License-Identifier: (GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause */
 
 
-===================="(GPL-2.0-only WITH Linux-syscall-note OR BSD-3-Clause)"====================
-/* SPDX-License-Identifier: (GPL-2.0 WITH Linux-syscall-note) or BSD-3-Clause */
-
-
 ===================="(GPL-2.0-only WITH Linux-syscall-note OR CDDL-1.0)"====================
 /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR CDDL-1.0) */
 
@@ -1088,11 +1084,6 @@
 
 
 ====================COPYRIGHT====================
- *		Author: Franco Venturi <fventuri@mediaone.net>
- *		Copyright 1998 Franco Venturi
-
-
-====================COPYRIGHT====================
  *	Copyright (C) 1999-2018 Tigran Aivazian <aivazian.tigran@gmail.com>
 
 
@@ -1119,6 +1110,10 @@
 ====================COPYRIGHT====================
  *   Copyright (C) 2003 Winfried Ritsch (IEM)
  *   based on hdsp.h from Thomas Charbonnel (thomas@undata.org)
+
+
+====================COPYRIGHT====================
+ *   Copyright (c) 2023 by Geoffrey D. Bennett <g at b4.vu>
 
 
 ====================COPYRIGHT====================
@@ -1424,6 +1419,11 @@
 
 ====================COPYRIGHT====================
  * Based on Virtio PCI driver by Anthony Liguori, copyright IBM Corp. 2007
+
+
+====================COPYRIGHT====================
+ * Channel numbers used by the microchip-tcb-capture driver
+ * Copyright (C) 2025 Bence Csókás
 
 
 ====================COPYRIGHT====================
@@ -1851,7 +1851,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2012-2016  Hans Verkuil <hans.verkuil@cisco.com>
+ * Copyright (C) 2012-2016  Hans Verkuil <hansverk@cisco.com>
 
 
 ====================COPYRIGHT====================
@@ -1880,10 +1880,6 @@
 
 ====================COPYRIGHT====================
  * Copyright (C) 2015 Etnaviv Project
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2015 IBM Corporation
 
 
 ====================COPYRIGHT====================
@@ -1962,6 +1958,10 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (C) 2019 - 2023 Intel Corporation
+
+
+====================COPYRIGHT====================
  * Copyright (C) 2019 Arm Ltd.
 
 
@@ -1992,7 +1992,15 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2020-2023 Intel Corporation
+ * Copyright (C) 2020-2025 Intel Corporation
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2021 - Raspberry Pi Ltd
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2021 - Raspberry Pi Ltd.
 
 
 ====================COPYRIGHT====================
@@ -2016,7 +2024,34 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (C) 2021 THine Electronics, Inc.
+ * Copyright (C) 2023 Ideas on Board Oy
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2021-2022 Elizabeth Figura <zfigura@codeweavers.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2021-2024 Advanced Micro Devices, Inc.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2022 Casey Schaufler <casey@schaufler-ca.com>
  * Copyright (C) 2022 Intel Corporation
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2022 Nuvoton Technologies
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2022-2024 OpenSynergy GmbH
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2022-2024, Advanced Micro Devices, Inc.
 
 
 ====================COPYRIGHT====================
@@ -2025,6 +2060,22 @@
 
 ====================COPYRIGHT====================
  * Copyright (C) 2023 BayLibre Incorporated - https://www.baylibre.com/
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2024 Amlogic, Inc. All rights reserved
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2024 Marvell.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2024 Rodolfo Giometti <giometti@enneenne.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2024 Unisoc Technologies Co., Ltd.
 
 
 ====================COPYRIGHT====================
@@ -2055,6 +2106,12 @@
  * Copyright (C) Shailabh Nagar, IBM Corp. 2006
  *           (C) Balbir Singh,   IBM Corp. 2006
  *           (C) Jay Lan,        SGI, 2006
+
+
+====================COPYRIGHT====================
+ * Copyright (C) The Asahi Linux Contributors
+ * Copyright (C) 2018-2023 Collabora Ltd.
+ * Copyright (C) 2014-2018 Broadcom
 
 
 ====================COPYRIGHT====================
@@ -2239,10 +2296,6 @@
 
 ====================COPYRIGHT====================
  * Copyright (c) 2010-2011 EIA Electronics
-
-
-====================COPYRIGHT====================
- * Copyright (c) 2011 Jiri Pirko <jpirko@redhat.com>
 
 
 ====================COPYRIGHT====================
@@ -2464,6 +2517,22 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2024,2025, Intel Corporation
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2024-2025 Intel Corporation
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2024-2025 by Geoffrey D. Bennett <g at b4.vu>
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
+
+
+====================COPYRIGHT====================
  * Copyright (c) David L. Mills 1993                                         *
 
 
@@ -2481,10 +2550,6 @@
 
 ====================COPYRIGHT====================
  * Copyright 1994-2001 Stephen Rothwell (sfr@canb.auug.org.au)
-
-
-====================COPYRIGHT====================
- * Copyright 1996, 1997, 1998 Hans Reiser, see reiserfs/README for licensing and copyright details
 
 
 ====================COPYRIGHT====================
@@ -2565,7 +2630,7 @@
  * Copyright 2008 Jouni Malinen <jouni.malinen@atheros.com>
  * Copyright 2008 Colin McCabe <colin@cozybit.com>
  * Copyright 2015-2017	Intel Deutschland GmbH
- * Copyright (C) 2018-2023 Intel Corporation
+ * Copyright (C) 2018-2025 Intel Corporation
 
 
 ====================COPYRIGHT====================
@@ -2602,10 +2667,6 @@
 
 
 ====================COPYRIGHT====================
- * Copyright 2014 IBM Corp.
-
-
-====================COPYRIGHT====================
  * Copyright 2016 Cisco Systems, Inc. and/or its affiliates. All rights reserved.
 
 
@@ -2615,7 +2676,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright 2016-2022 HabanaLabs, Ltd.
+ * Copyright 2016-2023 HabanaLabs, Ltd.
  * All Rights Reserved.
 
 
@@ -2628,7 +2689,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright 2018-2023 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2024 Amazon.com, Inc. or its affiliates. All rights reserved.
 
 
 ====================COPYRIGHT====================
@@ -2653,6 +2714,10 @@
 
 ====================COPYRIGHT====================
  * Copyright 2021 NXP
+
+
+====================COPYRIGHT====================
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 
 ====================COPYRIGHT====================
@@ -2707,7 +2772,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright © 2009-2022 VMware, Inc., Palo Alto, CA., USA
+ * Copyright © 2009-2023 VMware, Inc., Palo Alto, CA., USA
  * All Rights Reserved.
 
 
@@ -2727,6 +2792,11 @@
 ====================COPYRIGHT====================
  * Copyright © 2017-2020 Mickaël Salaün <mic@digikod.net>
  * Copyright © 2018-2020 ANSSI
+ * Copyright © 2021-2025 Microsoft Corporation
+
+
+====================COPYRIGHT====================
+ * Copyright © 2023 Intel Corporation
 
 
 ====================COPYRIGHT====================
@@ -2873,6 +2943,12 @@
 
 
 ====================COPYRIGHT====================
+/* Copyright (C) 2023 Collabora ltd. */
+#ifndef _PANTHOR_DRM_H_
+#define _PANTHOR_DRM_H_
+
+
+====================COPYRIGHT====================
 /* Copyright (C) B.A.T.M.A.N. contributors:
 
 
@@ -2904,6 +2980,20 @@
 
 
 ====================COPYRIGHT====================
+/* Copyright (c) 2022/23 Siemens Mobility GmbH */
+#ifndef _LINUX_GSMMUX_H
+#define _LINUX_GSMMUX_H
+
+
+====================COPYRIGHT====================
+/* Copyright (c) 2023 Imagination Technologies Ltd. */
+
+
+====================COPYRIGHT====================
+/* Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES.
+
+
+====================COPYRIGHT====================
 /* Copyright 2017-2018 Qiang Yu <yuq825@gmail.com> */
 
 
@@ -2919,6 +3009,10 @@
 /* Copyright(c) 2019 Intel Corporation. All rights rsvd. */
 #ifndef _USR_IDXD_H_
 #define _USR_IDXD_H_
+
+
+====================COPYRIGHT====================
+/* Copyright(c) Advanced Micro Devices, Inc */
 
 
 ====================COPYRIGHT====================
@@ -4495,6 +4589,10 @@ Valid-License-Identifier: GPL-2.0-only
 /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) AND MIT) */
 
 
+====================GPL-2.0-only WITH Linux-syscall-note AND MIT====================
+/* SPDX-License-Identifier: (GPL-2.0-only WITH Linux-syscall-note) OR MIT */
+
+
 ====================GPL-2.0-or-later WITH Linux-syscall-note====================
     SPDX-License-Identifier: GPL-2.0+
 
@@ -4529,22 +4627,10 @@ Valid-License-Identifier: GPL-2.0-only
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 2, or (at your option)
    any later version.
-   
-   You should have received a copy of the GNU General Public License
-   (for example /usr/src/linux/COPYING); if not, write to the Free
-   Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  
 
 
 ====================GPL-2.0-or-later WITH Linux-syscall-note====================
   For 'GNU General Public License (GPL) version 2 or any later version' use:
-
-
-====================GPL-2.0-or-later WITH Linux-syscall-note====================
- *		This program is free software; you can redistribute it
- *		and/or  modify it under  the terms of  the GNU General
- *		Public  License as  published  by  the  Free  Software
- *		Foundation;  either  version 2 of the License, or  (at
- *		your option) any later version.
 
 
 ====================GPL-2.0-or-later WITH Linux-syscall-note====================

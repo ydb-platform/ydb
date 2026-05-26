@@ -3,6 +3,8 @@ RECURSE(
     basic_example
     bulk_upsert_simple
     executor
+    metric_buffer_benchmark
+    otel_tracing
     pagination
     secondary_index
     secondary_index_builtin

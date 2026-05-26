@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/common_reader
     ydb/core/tx/columnshard/engines/reader/plain_reader
     ydb/core/tx/columnshard/engines/reader/simple_reader
+    ydb/core/tx/columnshard/engines/reader/trivial_reader
     ydb/core/tx/columnshard/engines/reader/tracing
     ydb/core/tx/columnshard/engines/reader/transaction
     ydb/core/tx/columnshard/engines/scheme
@@ -23,3 +24,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    trivial_reader
+)

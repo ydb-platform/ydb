@@ -18,6 +18,10 @@ struct TNameSet {
 
 TNameSet Pruned(TNameSet names, const TFrequencyData& frequency);
 
+std::function<bool(TStringBuf)> DefaultNameFilter();
+
+TNameSet Filtered(TNameSet names, std::function<bool(TStringBuf)> predicate);
+
 TNameSet LoadDefaultNameSet();
 
 // TODO(YQL-19747): Mirate YDB CLI to LoadDefaultNameSet

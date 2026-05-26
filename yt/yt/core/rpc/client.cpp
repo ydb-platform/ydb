@@ -307,7 +307,7 @@ EMultiplexingBand TClientRequest::GetMultiplexingBand() const
 void TClientRequest::SetMultiplexingBand(EMultiplexingBand band)
 {
     MultiplexingBand_ = band;
-    Header_.set_tos_level(TTcpDispatcher::Get()->GetTosLevelForBand(band));
+    Header_.set_tos_level(NBus::NTcp::TDispatcher::Get()->GetTosLevelForBand(band));
 }
 
 int TClientRequest::GetMultiplexingParallelism() const
@@ -425,7 +425,7 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
 
     auto control = RequestControl_.Lock();
     if (!control) {
-        RequestAttachmentsStream_->Abort(TError("Client request control is finalized")
+        ResponseAttachmentsStream_->Abort(TError("Client request control is finalized")
             << TErrorAttribute("request_id", GetRequestId()));
         return;
     }

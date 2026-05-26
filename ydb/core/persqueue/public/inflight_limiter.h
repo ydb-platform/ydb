@@ -1,6 +1,10 @@
+#pragma once
+
+#include <library/cpp/sliding_window/sliding_window.h>
+
 #include <util/datetime/base.h>
 #include <util/system/types.h>
-#include <library/cpp/sliding_window/sliding_window.h>
+
 #include <deque>
 
 namespace NKikimr::NPQ {
@@ -26,7 +30,7 @@ struct TInFlightController {
 
     TInFlightController();
     TInFlightController(ui64 MaxAllowedSize);
-    
+
     ui64 LayoutUnitSize = 0;
     std::deque<ui64> Layout;
     ui64 TotalSize = 0;

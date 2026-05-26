@@ -1,11 +1,14 @@
 package NYql;
 option java_package = "ru.yandex.yql.proto";
 
+import "yql/essentials/minikql/runtime_settings/proto/runtime_settings.proto";
+
 message TFunction {
     required string Name = 1;
     required string TypeConfig = 2;
     optional string UserType = 3;
     optional uint32 LangVer = 4;
+    optional NProto.TRuntimeSettings RuntimeSettings = 5;
 };
 
 message TArgResult {

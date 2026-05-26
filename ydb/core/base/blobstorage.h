@@ -783,6 +783,10 @@ struct TEvBlobStorage {
         EvChunkWriteRaw,
         EvStartCompactionFromDefrag,
         EvSyncerFullSyncFinished,
+        EvPhantomFlagStorageWriteItems,
+        EvPhantomFlagStorageCommitData,
+        EvPhantomFlagStorageDrop,
+        EvSyncerFullSyncDiskCancelled,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -1098,6 +1102,7 @@ struct TEvBlobStorage {
         const bool AlreadyEncrypted = false; // when set to true, no encryption is required
         const bool ReduceInterpileTraffic = false;
         const bool IsZeroEntry = false;
+        const bool FailOnSlowDown = false; // when set, fail the request with ERROR/"SlowDown" instead of retrying
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
@@ -1113,6 +1118,7 @@ struct TEvBlobStorage {
             bool AlreadyEncrypted = false;
             bool ReduceInterpileTraffic = false;
             bool IsZeroEntry = false;
+            bool FailOnSlowDown = false;
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
@@ -1127,6 +1133,7 @@ struct TEvBlobStorage {
             , AlreadyEncrypted(origin.AlreadyEncrypted)
             , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
             , IsZeroEntry(origin.IsZeroEntry)
+            , FailOnSlowDown(origin.FailOnSlowDown)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
             , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}
@@ -1142,6 +1149,7 @@ struct TEvBlobStorage {
             , AlreadyEncrypted(parameters.AlreadyEncrypted)
             , ReduceInterpileTraffic(parameters.ReduceInterpileTraffic)
             , IsZeroEntry(parameters.IsZeroEntry)
+            , FailOnSlowDown(parameters.FailOnSlowDown)
             , ExternalRelevanceWatcher(std::move(parameters.ExternalRelevanceWatcher))
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
@@ -1583,22 +1591,27 @@ struct TEvBlobStorage {
         TInstant Deadline;
         NKikimrBlobStorage::EGetHandleClass GetHandleClass;
         bool SingleLine;    // Print DataInfo in single line
+        bool OmitDataInfoUnlessError;
 
         TEvCheckIntegrity(TCloneEventPolicy, const TEvCheckIntegrity& origin)
             : Id(origin.Id)
             , Deadline(origin.Deadline)
             , GetHandleClass(origin.GetHandleClass)
+            , SingleLine(origin.SingleLine)
+            , OmitDataInfoUnlessError(origin.OmitDataInfoUnlessError)
         {}
 
         TEvCheckIntegrity(
                 const TLogoBlobID& id,
                 TInstant deadline,
                 NKikimrBlobStorage::EGetHandleClass getHandleClass,
-                bool singleLine = false)
+                bool singleLine = false,
+                bool omitDataInfoUnlessError = false)
             : Id(id)
             , Deadline(deadline)
             , GetHandleClass(getHandleClass)
             , SingleLine(singleLine)
+            , OmitDataInfoUnlessError(omitDataInfoUnlessError)
         {}
 
         TString Print(bool /*isFull*/) const {
@@ -1679,6 +1692,7 @@ struct TEvBlobStorage {
             }
         }
 
+        TBlobStorageGroupType::EErasureSpecies Erasure = TBlobStorageGroupType::ErasureNone;
         EPlacementStatus PlacementStatus = PS_OK;
         EDataStatus DataStatus = DS_OK;
         TString DataInfo; // textual info about checks in blob data
@@ -1695,6 +1709,7 @@ struct TEvBlobStorage {
                 << " Id# " << Id
                 << " Status# " << NKikimrProto::EReplyStatus_Name(Status)
                 << " ErrorReason# " << ErrorReason
+                << " Erasure# " << TBlobStorageGroupType::ErasureSpeciesName(Erasure)
                 << " PlacementStatus# " << PlacementStatusToString(PlacementStatus)
                 << " DataStatus# " << DataStatusToString(DataStatus)
                 << " DataInfo# " << DataInfo

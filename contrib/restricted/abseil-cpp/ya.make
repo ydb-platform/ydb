@@ -58,7 +58,6 @@ SRCS(
     absl/crc/internal/crc_memcpy_x86_arm_combined.cc
     absl/crc/internal/crc_non_temporal_memcpy.cc
     absl/crc/internal/crc_x86_arm_combined.cc
-    absl/debugging/failure_signal_handler.cc
     absl/debugging/internal/address_is_readable.cc
     absl/debugging/internal/borrowed_fixup_buffer.cc
     absl/debugging/internal/decode_rust_punycode.cc
@@ -193,6 +192,16 @@ SRCS(
 IF (OS_WINDOWS)
     SRCS(
         absl/time/internal/cctz/src/time_zone_name_win.cc
+    )
+ENDIF()
+
+IF (OS_FREERTOS)
+    SRCS(
+        stubs/failure_signal_handler.cc
+    )
+ELSE()
+    SRCS(
+        absl/debugging/failure_signal_handler.cc
     )
 ENDIF()
 

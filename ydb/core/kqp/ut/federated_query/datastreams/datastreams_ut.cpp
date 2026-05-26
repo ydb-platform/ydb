@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "pq_source"_a = pqSourceName
         ));
 
-        executeQuery({.PhysicalGraph = LoadPhysicalGraph(executionId)});
+        executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), TStringBuilder() << sampleResult << sampleResult);
     }
 
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "source"_a = pqSourceName
         ));
 
-        executeQuery({.PhysicalGraph = LoadPhysicalGraph(executionId)});
+        executeQuery({.SaveState = true, .PhysicalGraph = LoadPhysicalGraph(executionId)});
     }
 
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetry, TStreamingTestFixture) {
@@ -1137,24 +1137,305 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
     }
 
+    Y_UNIT_TEST_F(TableModeWithDisabledPredicatePushdown, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(false);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 2;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "{\"key\": \"data0\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "data", 1, /* local */ true);  // wrong schema
+
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            SELECT 
+                SystemMetadata('partition_id') as partition_id,
+                SystemMetadata("offset") as offset,
+                key as data
+            FROM `{topic}`
+            WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+            WHERE SystemMetadata('partition_id') = 1)",
+            "topic"_a = topic
+        ),
+        EStatus::PRECONDITION_FAILED, "Cannot parse input");
+    }
+
+    Y_UNIT_TEST_F(TableModeWithPartitionPredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 4;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "{\"key\": \"data0\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "data", 1, /* local */ true);  // wrong schema
+        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 2, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data3\"}", 3, /* local */ true);
+
+        Sleep(TDuration::Seconds(1));
+
+        auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+            TString text = fmt::format(R"(
+                SELECT 
+                    SystemMetadata('partition_id') as partition_id,
+                    SystemMetadata("offset") as offset,
+                    key as data
+                FROM `{topic}`
+                WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+                WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 3, rowCount, validator);
+        };
+
+        test("SystemMetadata('partition_id') > 42", 0, [&](TResultSetParser&) {});
+        test("SystemMetadata('partition_id') IS NOT DISTINCT FROM 2", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
+        });
+
+        test("SystemMetadata('partition_id') = 0 \
+           OR SystemMetadata('partition_id') >= 2", 3, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0"
+            || resultSet.ColumnParser(2).GetString() == "data2"
+            || resultSet.ColumnParser(2).GetString() == "data3");
+        });
+
+        test("(SystemMetadata('partition_id') = 0 AND SystemMetadata('offset') >=0) \
+           OR (SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') >=1)", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
+        });
+
+        test("SystemMetadata('partition_id') = 0 and key = 'data0'", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(2).GetString(), "data0");
+        });
+    }
+
+    Y_UNIT_TEST_F(TableModeWithOffsetPredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 1;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+        WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+
+        Sleep(TDuration::Seconds(1));
+
+        auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+            TString text = fmt::format(R"(
+                SELECT 
+                    SystemMetadata('partition_id') as partition_id,
+                    SystemMetadata("offset") as offset,
+                    key as data
+                FROM `{topic}`
+                WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+                WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 3, rowCount, validator);
+        };
+
+        test("SystemMetadata('offset') < -42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('offset') < -42 AND SystemMetadata('offset') > 42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('offset') <   0", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('offset') >  42", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
+        test("SystemMetadata('offset') IS NOT DISTINCT FROM 1", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
+        test("SystemMetadata('offset') >= 1 AND SystemMetadata('offset') < 3", 2,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+        // bug
+        // test("NOT (SystemMetadata('offset') < 1 AND NOT SystemMetadata('offset') < 3)", 2,  [&](TResultSetParser& resultSet) {
+        //         UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        //     });
+        test("1 <= SystemMetadata('offset') AND 3 > SystemMetadata('offset')", 2,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+        test("SystemMetadata('offset') IN (1, 2)", 2,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+        test("SystemMetadata('offset') BETWEEN 1 AND 2", 2,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+            });
+        test("SystemMetadata('offset') == CAST(SUBSTRING('1234567891', 9, 1) AS Uint64)", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
+    }
+
+    Y_UNIT_TEST_F(TableModeWithWriteTimePredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 1;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "data", 0, /* local */ true);                  // wrong schema
+        WriteTopicMessage(topic, "{\"key\": \"data1\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 0, /* local */ true);
+        Sleep(TDuration::Seconds(5));
+        WriteTopicMessage(topic, "data3", 0, /* local */ true);                  // wrong schema
+
+        auto received = ReadTopicMessages(topic, {"1", "2", "3", "4"}, TInstant{}, false, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(received.size(), 4);
+
+        auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+            TString text = fmt::format(R"(
+                SELECT 
+                    SystemMetadata('partition_id') as partition_id,
+                    SystemMetadata("write_time") as offset,
+                    key as data
+                FROM `{topic}`
+                WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+                WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 3, rowCount, validator);
+        };
+
+        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('write_time') < Timestamp(\"2020-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('write_time') = Timestamp(\"2020-01-01T00:00:00Z\") AND SystemMetadata('write_time') > Timestamp(\"2021-01-01T00:00:00Z\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+        test("SystemMetadata('write_time') = Timestamp(\"" + received[1].second.ToString() + "\")", 1,  [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+        });
+        test("SystemMetadata('write_time') >= Timestamp(\"" + received[1].second.ToString() + "\") \
+            AND SystemMetadata('write_time') <= Timestamp(\"" + received[2].second.ToString() + "\")", 2,  [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1" || resultSet.ColumnParser(2).GetString() == "data2");
+        });
+
+        // the implementation does not support such a test
+        // auto future = received[3].second + TDuration::Seconds(100);
+        // test("SystemMetadata('write_time') > Timestamp(\"" + future.ToString() + "\")", 0,  [&](TResultSetParser& /*resultSet*/) {});
+
+        auto test_raw = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+            TString text = fmt::format(R"(
+                SELECT SystemMetadata("write_time") as offset, Data FROM `{topic}` WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 2, rowCount, validator);
+        };
+
+        test_raw("SystemMetadata('write_time') > CurrentUtcTimestamp(1) - Interval('P1D') AND Data LIKE '%data3%'", 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT(resultSet.ColumnParser(1).GetString() == "data3");
+        });
+    }
+
+    Y_UNIT_TEST_F(TableModeWithMixedPredicate, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 3;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        WriteTopicMessage(topic, "wrong schema", 0, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data0\"}", 0, /* local */ true);
+        WriteTopicMessage(topic, "wrong schema", 0, /* local */ true);
+
+        WriteTopicMessage(topic, "wrong schema", 1, /* local */ true);
+        WriteTopicMessage(topic, "wrong schema", 1, /* local */ true);
+        WriteTopicMessage(topic, "{\"key\": \"data1\"}", 1, /* local */ true);
+
+        WriteTopicMessage(topic, "{\"key\": \"data2\"}", 2, /* local */ true);
+        WriteTopicMessage(topic, "wrong schema", 2, /* local */ true);
+        WriteTopicMessage(topic, "wrong schema", 2, /* local */ true);
+
+        Sleep(TDuration::Seconds(1));
+
+        auto test = [&](const TString& filter, ui64 rowCount, std::function<void(TResultSetParser&)> validator) {
+            TString text = fmt::format(R"(
+                SELECT 
+                    SystemMetadata('partition_id') as partition_id,
+                    SystemMetadata("offset") as offset,
+                    key as data
+                FROM `{topic}`
+                WITH (FORMAT = "json_each_row", SCHEMA = (key String NOT NULL))
+                WHERE {filter})",
+                "topic"_a = topic,
+                "filter"_a = filter
+            );
+            auto result = ExecQuery(text);
+            CheckScriptResult(result[0], 3, rowCount, validator);
+        };
+
+        test("SystemMetadata('partition_id') = 0 AND SystemMetadata('offset') = 1", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data0");
+            });
+        test("SystemMetadata('partition_id') = 1 AND SystemMetadata('offset') >= 2", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data1");
+            });
+        test("SystemMetadata('partition_id') = 2 AND SystemMetadata('offset') < 1", 1,  [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT(resultSet.ColumnParser(2).GetString() == "data2");
+            });
+    }
+
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        ++DynamicNodeCount;
+        auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
-        constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
+        constexpr char cloudId[] =  "testcloud4";
 
-        constexpr char inputTopicName[] = "createExternalDataSourceAuthMethodIam";
-        CreateTopic(inputTopicName);
-        constexpr char secretPath[] = "eds_iam_token";
-        ExecQuery(fmt::format(R"(
-            CREATE SECRET {secret} WITH (value = "{token}");
-            )",
-            "secret"_a = secretPath,
-            "token"_a = BUILTIN_ACL_METADATA // TODO root@ does not work; why?
-            ));
+        constexpr char sourceName[] = "sourceName";
+        constexpr char topicName[] = "createExternalDataSourceAuthMethodIam";
+        constexpr char serviceAccountId[] = "foobar"; // not verified
 
-        constexpr char serviceAccountId[] = "foobar"; // not validated/used on creation
-        constexpr char pqSourceName[] = "sourceNameCloud";
-        ExecQuery(fmt::format(R"(
+        // Prepare "mock cloud" database
+        auto databasePath = GetKikimrRunner()->CreateDatabase("Cloud", storagePoolType, {{"cloud_id", cloudId}});
+        auto location = GetKikimrRunner()->GetEndpoint();
+        {
+            NYdb::TDriver driver(
+                NYdb::TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase(databasePath)
+            );
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            auto result = topicClient.CreateTopic(topicName).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            driver.Stop(true);
+        }
+
+        constexpr char missingSecretPath[] = "eds_missing_iam_token";
+
+        // Check missing INITIAL_TOKEN secret
+        constexpr auto createExternalDataSourceTemplate = R"(
             CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{pq_location}",
@@ -1162,15 +1443,64 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 AUTH_METHOD = "IAM",
                 INITIAL_TOKEN_SECRET_PATH = "{secret}",
                 SERVICE_ACCOUNT_ID = "{service_account_id}"
-            );)",
-            "pq_source"_a = pqSourceName,
-            "pq_location"_a = YDB_ENDPOINT,
-            "pq_database_name"_a = YDB_DATABASE,
+            );)";
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = missingSecretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::BAD_REQUEST,
+            fmt::format(
+                R"(Error: secret `/Root/{secret}` not found)",
+                "secret"_a = missingSecretPath));
+
+        // Check bad INITIAL_TOKEN
+        constexpr char badSecretPath[] = "eds_bad_iam_token";
+        ExecQuery(fmt::format(R"(
+                CREATE SECRET `{secret}` WITH (value = "{token}");
+            )",
+            "secret"_a = badSecretPath,
+            "token"_a = "xyz@builtin"
+            ));
+
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = badSecretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::UNAUTHORIZED, "Error: Access denied");
+
+        constexpr char secretPath[] = "eds_iam_token";
+        ExecQuery(fmt::format(R"(
+                CREATE SECRET `{secret}` WITH (value = "{token}");
+            )",
             "secret"_a = secretPath,
-            "service_account_id"_a = serviceAccountId
+            "token"_a = BUILTIN_ACL_ROOT
+            ));
+
+        // Check successful EDS creation
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = sourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountId
         ));
+
+        // Verify EDS description
         {
-            const auto externalDataSourceDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/" + std::string(pqSourceName), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto externalDataSourceDesc = Navigate(
+                    GetRuntime(),
+                    GetRuntime().AllocateEdgeActor(),
+                    TStringBuilder() << "/Root/" << sourceName,
+                    NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
             UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -1185,7 +1515,39 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT(iam.HasResourceId());
             UNIT_ASSERT_VALUES_EQUAL(iam.GetResourceId(), cloudId);
         }
-        // cannot verify use without some kind of "mock IAM"
+
+        // Cannot verify successful use without some kind of "mock IAM"
+        // Check with disabled feature-flag
+        {
+            auto& runtime = GetRuntime();
+            runtime.GetAppData().FeatureFlags.SetEnableExternalDataSourceAuthMethodIam(false);
+            appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(false);
+
+            UpdateConfig(appConfig);
+            Sleep(TDuration::Seconds(1));
+        }
+
+        // a) Attempt to use existing EDS fails
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("foobar");
+                )",
+                "pq_source"_a = sourceName,
+                "topic_name"_a = topicName
+            ),
+            EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
+
+        // b) Attempt to create new EDS fails
+        constexpr char pqBadSourceName[] = "sourceNameCloudBad";
+        ExecQuery(fmt::format(
+                createExternalDataSourceTemplate,
+                "pq_source"_a = pqBadSourceName,
+                "pq_location"_a = location,
+                "pq_database_name"_a = databasePath,
+                "secret"_a = secretPath,
+                "service_account_id"_a = serviceAccountId
+            ),
+            EStatus::UNSUPPORTED,
+            "Error: AUTH_METHOD=IAM is disabled");
     }
 }
 

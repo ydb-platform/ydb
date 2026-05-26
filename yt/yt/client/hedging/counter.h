@@ -9,6 +9,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 
+#include <optional>
+
 namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,13 +18,26 @@ namespace NYT::NClient::NHedging::NRpc {
 // ! Counters which will be collected from yt-client.
 struct TCounter final
 {
-    explicit TCounter(const std::string& clusterName);
-    explicit TCounter(const NProfiling::TTagSet& tagSet);
-    explicit TCounter(const NProfiling::TRegistry& registry);
+    explicit TCounter(
+        const std::string& clusterName,
+        TDuration requestDurationHistogramMin = TDuration::MilliSeconds(1),
+        TDuration requestDurationHistogramMax = TDuration::MilliSeconds(70),
+        std::optional<TDuration> requestDurationHistogramGranularity = std::nullopt);
+    explicit TCounter(
+        const NProfiling::TTagSet& tagSet,
+        TDuration requestDurationHistogramMin = TDuration::MilliSeconds(1),
+        TDuration requestDurationHistogramMax = TDuration::MilliSeconds(70),
+        std::optional<TDuration> requestDurationHistogramGranularity = std::nullopt);
+    explicit TCounter(
+        const NProfiling::TRegistry& registry,
+        TDuration requestDurationHistogramMin = TDuration::MilliSeconds(1),
+        TDuration requestDurationHistogramMax = TDuration::MilliSeconds(70),
+        std::optional<TDuration> requestDurationHistogramGranularity = std::nullopt);
 
     NProfiling::TCounter SuccessRequestCount;
     NProfiling::TCounter CancelRequestCount;
     NProfiling::TCounter ErrorRequestCount;
+    NProfiling::TCounter TotalRequestCount;
     NProfiling::TTimeGauge EffectivePenalty;
     NProfiling::TTimeGauge ExternalPenalty;
     NProfiling::TEventTimer RequestDuration;

@@ -16,6 +16,7 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/io_dispatcher.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -517,12 +518,13 @@ private:
 class TBackupSnapshotScan : public IScan, public TActor<TBackupSnapshotScan> {
 public:
     TBackupSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns,
-                        TIntrusiveConstPtr<TBackupExclusion> exclusion)
+                        TIntrusiveConstPtr<TBackupExclusion> exclusion, ui32 workBudgetPercent)
         : TActor(&TThis::StateWork)
         , SnapshotWriter(snapshotWriter)
         , TableId(tableId)
         , Columns(columns)
         , Exclusion(exclusion)
+        , WorkBudgetPercent(workBudgetPercent)
     {}
 
     void Describe(IOutputStream& o) const override {
@@ -581,7 +583,15 @@ public:
     }
 
     void Handle(TEvWriteSnapshotAck::TPtr&) {
+        auto now = TActivationContext::Monotonic();
+        TDuration workTime = now - InFlightStartedAt;
+        TDuration sleepTime = workTime * (100 - WorkBudgetPercent) / WorkBudgetPercent;
+        Schedule(sleepTime, new TEvents::TEvWakeup);
+    }
+
+    void Handle() {
         InFlight = false;
+        InFlightStartedAt = TMonotonic::Zero();
         Driver->Touch(MaybeContinue());
     }
 
@@ -597,6 +607,7 @@ public:
 
     void SendBuffer(EScanStatus status = EScanStatus::InProgress) {
         InFlight = true;
+        InFlightStartedAt = TActivationContext::Monotonic();
         Send(SnapshotWriter, new TEvWriteSnapshot(TableId, std::move(Buffer), status));
     }
 
@@ -611,6 +622,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteSnapshotAck, Handle);
+            cFunc(TEvents::TEvWakeup::EventType, Handle);
         }
     }
 
@@ -622,9 +634,11 @@ private:
     ui32 TableId;
     THashMap<ui32, TColumn> Columns;
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
+    const ui32 WorkBudgetPercent;
 
     TBuffer Buffer;
     bool InFlight = false;
+    TMonotonic InFlightStartedAt;
 };
 
 class TChangelogSerializer {
@@ -780,24 +794,32 @@ private:
 class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IActorExceptionHandler {
     struct TEvPrivate {
         enum EEv {
-            EvFlush = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvIoComplete = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE));
 
-        struct TEvFlush : TEventLocal<TEvFlush, EvFlush> {
-            TEvFlush(ui64 cookie)
-                : Cookie(cookie)
+        struct TEvIoComplete : TEventLocal<TEvIoComplete, EvIoComplete> {
+            TEvIoComplete(TDuration latency, TDuration lag)
+                : Latency(latency)
+                , Lag(lag)
             {}
 
-            ui64 Cookie;
+            TEvIoComplete(TString&& error)
+                : Error(std::move(error))
+            {}
+
+            TDuration Latency;
+            TDuration Lag;
+            TString Error;
         };
     };
 public:
     TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
                      TIntrusiveConstPtr<TBackupExclusion> exclusion,
-                     ui64 tabletId, ui32 generation, ui32 step)
+                     ui64 tabletId, ui32 generation, ui32 step,
+                     ui64 inFlightBytesLimit)
         : Owner(owner)
         , ChangelogPath(path.Child("changelog.json"))
         , ChangelogChecksumPath(path.Child("changelog.json.sha256"))
@@ -806,6 +828,7 @@ public:
         , TabletId(tabletId)
         , Generation(generation)
         , Step(step)
+        , InFlightBytesLimit(inFlightBytesLimit)
     {}
 
     TStringBuilder LogPrefix() const {
@@ -815,28 +838,18 @@ public:
     void Bootstrap() {
         LOG_N("Starting changelog" << " Path# " << ChangelogPath);
 
-        try {
-            ChangelogPath.Parent().MkDirs();
-            ChangelogFile = TFile(ChangelogPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
-        } catch (const TIoException& e) {
-            return ReplyAndDie(TStringBuilder() << "Failed to create changelog file " << ChangelogPath << ": " << e.what());
-        }
-
-        try {
-            WriteChangelogChecksum();
-        } catch (const std::exception& e) {
-            return ReplyAndDie(TStringBuilder() << "Failed to write changelog checksum " << ChangelogChecksumPath << ": " << e.what());
-        }
+        // writing initial changelog and checksum files
+        BufferCreatedAt = TActivationContext::Monotonic();
+        StartIO(EOpenModeFlag::CreateNew);
 
         Become(&TThis::StateWork);
-        Schedule(TDuration::Seconds(5), new TEvPrivate::TEvFlush(++ExpectedFlushCookie));
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteChangelog, Handle);
-            hFunc(TEvPrivate::TEvFlush, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, FlushAndDie);
+            hFunc(TEvPrivate::TEvIoComplete, Handle);
+            hFunc(TEvStop, Handle);
             hFunc(TEvSnapshotCompleted, Handle);
         }
     }
@@ -847,8 +860,7 @@ public:
         NJson::TJsonWriter writer(&out, BackupJsonConfig());
 
         const auto* msg = ev->Get();
-        const ui64 msgSize = msg->GetTotalSize();
-        LOG_D("Writing changelog" << " Step# " << msg->Step << " Bytes# " << msgSize);
+        LOG_D("Writing changelog" << " Step# " << msg->Step);
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -946,13 +958,19 @@ public:
             if (!BufferCreatedAt) {
                 BufferCreatedAt = msg->CreatedAt;
             }
+
+            Send(Owner, new TEvWriteChangelogAck(changesSize));
         }
 
-        Send(Owner, new TEvWriteChangelogAck(msgSize));
-
-        if (Buffer.Size() >= 1_MB) {
-            Flush();
+        if (Buffer.Size() + IoInFlightBytes > InFlightBytesLimit) {
+            return ReplyAndDie(TStringBuilder()
+                << "Backup changelog in flight bytes limit exceeded: "
+                << "BufferBytes# " << Buffer.Size() << ", "
+                << "IOInFlightBytes# " << IoInFlightBytes << ", "
+                << "InFlightBytesLimit# " << InFlightBytesLimit);
         }
+
+        MaybeStartIO();
     }
 
     void Handle(TEvSnapshotCompleted::TPtr& ev) {
@@ -963,9 +981,37 @@ public:
         }
     }
 
-    void Handle(TEvPrivate::TEvFlush::TPtr& ev) {
-        if (ev->Get()->Cookie == ExpectedFlushCookie) {
-            Flush();
+    void Handle(TEvPrivate::TEvIoComplete::TPtr& ev) {
+        const auto* msg = ev->Get();
+
+        if (!msg->Error.empty()) {
+            return ReplyAndDie(msg->Error);
+        }
+
+        LOG_D("Changelog IO completed"
+            << " Bytes# " << IoInFlightBytes
+            << " Latency# " << msg->Latency
+            << " Lag# " << msg->Lag);
+
+        Send(Owner, new TEvChangelogStats(IoInFlightBytes, msg->Latency, msg->Lag));
+
+        WrittenBytes += IoInFlightBytes;
+        IoInFlightBytes = 0;
+        IoInProgress = false;
+
+        if (NeedNewBackup()) {
+            LOG_N("Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
+            Send(Owner, new TEvStartNewBackup());
+        }
+
+        MaybeStartIO();
+    }
+
+    void Handle(TEvStop::TPtr& ev) {
+        if (ev->Get()->Flush && IoInProgress && !Buffer.Empty()) {
+            DieAfterIo = true;
+        } else {
+            PassAway();
         }
     }
 
@@ -975,68 +1021,73 @@ public:
             && WrittenBytes >= NewBackupChangelogMinBytes();
     }
 
-    void Flush() {
-        if (!Buffer.Empty()) {
-            THPTimer timer;
-            try {
-                ChangelogFile.Write(Buffer.data(), Buffer.size());
-                ChangelogFile.Flush();
-                WrittenBytes += Buffer.size();
-            } catch (const TIoException& e) {
-                return ReplyAndDie(TStringBuilder() << "Failed to write changelog data " << ChangelogFile.GetName() << ": " << e.what());
-            }
-            TDuration flushLatency = TDuration::Seconds(timer.Passed());
-
-            ui64 flushedBytes = Buffer.size();
-            Buffer.Clear();
-
-            Y_ENSURE(BufferCreatedAt);
-            TDuration lag = TActivationContext::Monotonic() - *BufferCreatedAt;
-            BufferCreatedAt = std::nullopt;
-
-            LOG_D("Flushed" << " Bytes# " << flushedBytes << " TotalBytes# " << WrittenBytes << " Lag# " << lag);
-            Send(Owner, new TEvChangelogStats(flushedBytes, flushLatency, lag));
-
-            try {
-                WriteChangelogChecksum();
-            } catch (const std::exception& e) {
-                return ReplyAndDie(TStringBuilder() << "Failed to write changelog checksum " << ChangelogChecksumPath << ": " << e.what());
-            }
-
-            if (Dying) {
-                return;
-            }
-
-            if (NeedNewBackup()) {
-                LOG_N("Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
-                Send(Owner, new TEvStartNewBackup());
-            }
+    void MaybeStartIO() {
+        if (IoInProgress || Buffer.Empty()) {
+            return;
         }
-        Schedule(TDuration::Seconds(5), new TEvPrivate::TEvFlush(++ExpectedFlushCookie));
-    }
 
-    void FlushAndDie() {
-        Dying = true;
-        Flush();
-        LOG_N("Everything is flushed, shutting down");
-        PassAway();
-    }
+        StartIO();
 
-    void ReplyAndDie(const TString& error) {
-        if (!Dying) {
-            LOG_E("Changelog failed" << " Error# " << error);
-            Send(Owner, new TEvChangelogFailed(error));
+        if (DieAfterIo) {
             PassAway();
         }
     }
 
-    void WriteChangelogChecksum() {
-        TFsPath tmpPath(ChangelogChecksumPath.GetPath() + ".tmp");
+    void StartIO(EOpenMode openMode = EOpenModeFlag::OpenExisting | EOpenModeFlag::ForAppend) {
+        LOG_D("Starting Changelog IO" << " Bytes# " << Buffer.Size());
+
+        IoInFlightBytes = Buffer.Size();
+        IoInProgress = true;
+
+        Y_ENSURE(BufferCreatedAt);
+        TMonotonic lagStart = *BufferCreatedAt;
+        BufferCreatedAt = std::nullopt;
+
+        auto selfId = SelfId();
+        auto changelogPath = ChangelogPath;
+        auto checksumPath = ChangelogChecksumPath;
+        auto* actorSystem = TActivationContext::ActorSystem();
+
+        NActors::InvokeIoCallback(
+            [data = std::move(Buffer), checksum = Checksum.Intermediate(), changelogPath, checksumPath,
+             selfId, actorSystem, lagStart, openMode]() {
+                THPTimer timer;
+                try {
+                    WriteChangelog(changelogPath, data, openMode);
+                    WriteChangelogChecksum(checksumPath, checksum);
+                } catch (const std::exception& e) {
+                    actorSystem->Send(selfId, new TEvPrivate::TEvIoComplete(
+                        TStringBuilder() << "Failed to write changelog data: " << e.what()));
+                    return;
+                }
+                TDuration latency = TDuration::Seconds(timer.Passed());
+                TDuration lag = actorSystem->Monotonic() - lagStart;
+                actorSystem->Send(selfId, new TEvPrivate::TEvIoComplete(latency, lag));
+            },
+            AppData()->IOPoolId,
+            IActor::EActivityType::OTHER);
+    }
+
+    void ReplyAndDie(const TString& error) {
+        LOG_E("Changelog failed" << " Error# " << error);
+        Send(Owner, new TEvChangelogFailed(error));
+        PassAway();
+    }
+
+    static void WriteChangelog(const TFsPath& changelogPath, const TBuffer& data, EOpenMode openMode) {
+        changelogPath.Parent().MkDirs();
+        TFile file(changelogPath, openMode);
+        file.Write(data.Data(), data.Size());
+        file.Flush();
+    }
+
+    static void WriteChangelogChecksum(const TFsPath& checksumPath, const TString& checksum) {
+        TFsPath tmpPath(checksumPath.GetPath() + ".tmp");
         TFileOutput out(tmpPath);
-        out.Write(Checksum.Intermediate());
+        out.Write(checksum);
         out.Flush();
-        tmpPath.RenameTo(ChangelogChecksumPath);
-        TFile(ChangelogChecksumPath.Parent(), EOpenModeFlag::RdOnly).Flush();
+        tmpPath.RenameTo(checksumPath);
+        TFile(checksumPath.Parent(), EOpenModeFlag::RdOnly).Flush();
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
@@ -1049,7 +1100,6 @@ private:
 
     TFsPath ChangelogPath;
     TFsPath ChangelogChecksumPath;
-    TFile ChangelogFile;
 
     TScheme Schema;
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
@@ -1059,9 +1109,12 @@ private:
     const ui32 Step;
 
     TBuffer Buffer;
-    ui64 ExpectedFlushCookie = 0;
+    ui64 IoInFlightBytes = 0;
+    bool IoInProgress = false;
+    bool DieAfterIo = false;
 
-    bool Dying = false;
+    const ui64 InFlightBytesLimit;
+
     ui64 WrittenBytes = 0;
     std::optional<ui64> SnapshotWrittenBytes;
 
@@ -1084,9 +1137,9 @@ IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletB
 }
 
 IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns,
-                          TIntrusiveConstPtr<TBackupExclusion> exclusion)
+                          TIntrusiveConstPtr<TBackupExclusion> exclusion, ui32 workBudgetPercent)
 {
-    return new TBackupSnapshotScan(snapshotWriter, tableId, columns, exclusion);
+    return new TBackupSnapshotScan(snapshotWriter, tableId, columns, exclusion, workBudgetPercent);
 }
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
@@ -1096,7 +1149,8 @@ IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTablet
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
             .Child(CreateBackupPath(tabletType, tabletId, generation, step));
-        return new TChangelogWriter(owner, path, schema, exclusion, tabletId, generation, step);
+        return new TChangelogWriter(owner, path, schema, exclusion, tabletId, generation, step,
+                                    config.GetChangelogInFlightBytesLimit());
     } else {
         return nullptr;
     }

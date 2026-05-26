@@ -17,6 +17,7 @@ struct TYqlSource {
 enum class EYqlJoinKind {
     Cross,
     Inner,
+    Full,
     Left,
     Right,
 };
@@ -83,6 +84,7 @@ struct TYqlValuesArgs {
 
 struct TYqlSetItemArgs {
     TPosition Position;
+    bool Distinct = false;
     TProjection Projection;
     TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;

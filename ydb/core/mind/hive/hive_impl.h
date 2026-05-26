@@ -171,6 +171,7 @@ protected:
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
     friend class TReassignTabletsActor;
+    friend class TCompactActor;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -242,6 +243,8 @@ protected:
     friend class TTxSetDown;
     friend class TTxProcessTabletMetrics;
     friend class TTxUpdateLastReassign;
+    friend class TTxShrinkPoolReply;
+    friend class TTxShrinkPool;
 
     friend class TDeleteTabletActor;
 
@@ -253,8 +256,9 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
-    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description);
+    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     void StartReassignActor(std::vector<TReassignOperation> operations);
+    void StartCompactActor(std::vector<TTabletId> tablets, const TString& poolName);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -315,6 +319,8 @@ protected:
     ITransaction* CreateUpdatePiles();
     ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
     ITransaction* CreateProcessTabletMetrics();
+    ITransaction* CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr event);
+    ITransaction* CreateShrinkPoolReply(TEvHive::TEvShrinkStoragePoolReply::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -322,6 +328,8 @@ public:
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
+    TActorId ConsolePipeClient;
+    TActorId ShrinkPoolInitiator;
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;
@@ -351,6 +359,7 @@ protected:
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
+    std::optional<TActorId> GetPipeToTenantHive(TDomainInfo* domain);
     std::optional<TActorId> GetPipeToTenantHive(const TNodeInfo* node);
 
     struct TAggregateMetrics {
@@ -618,6 +627,11 @@ protected:
     void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
     void Handle(TEvHive::TEvSetDown::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev);
+    void Handle(TEvPrivate::TEvReassignInactiveGroupsComplete::TPtr& ev);
+    void Handle(TEvPrivate::TEvCompactComplete::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -636,6 +650,7 @@ protected:
 
     void SendToBSControllerPipe(IEventBase* payload);
     void SendToRootHivePipe(IEventBase* payload);
+    void SendToConsolePipe(IEventBase* payload);
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
 
@@ -1128,6 +1143,11 @@ protected:
     template <typename TIt>
     static ui32 CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target);
     void MakeScaleRecommendation();
+
+    void StartShrinkPool(TStoragePoolInfo& pool);
+    bool ReassignInactiveGroups(TStoragePoolInfo& pool);
+    bool CompactInactiveGroups(TStoragePoolInfo& pool);
+    void CheckRemainingHistory(TStoragePoolInfo& pool);
 };
 
 } // NHive

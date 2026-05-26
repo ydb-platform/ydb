@@ -3354,11 +3354,7 @@ bool ValidateAggregateArgs(const TAggregateDesc& d, ui32 stateType, ui32 resultT
     }
 
     auto expectedResultType = LookupProc(d.FinalFuncId ? d.FinalFuncId : d.TransFuncId).ResultType;
-    if (resultType != expectedResultType) {
-        return false;
-    }
-
-    return true;
+    return resultType == expectedResultType;
 }
 
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds) {
@@ -4337,10 +4333,10 @@ void EnumExtensions(std::function<void(ui32, const TExtensionDesc&)> f) {
     }
 }
 
-const TExtensionDesc& LookupExtension(ui32 extIndex) {
+const TExtensionDesc& LookupExtension(ui32 extensionIndex) {
     const auto& catalog = TCatalog::Instance();
-    Y_ENSURE(extIndex > 0 && extIndex <= catalog.State->Extensions.size());
-    return catalog.State->Extensions[extIndex - 1];
+    Y_ENSURE(extensionIndex > 0 && extensionIndex <= catalog.State->Extensions.size());
+    return catalog.State->Extensions[extensionIndex - 1];
 }
 
 ui32 LookupExtensionByName(const TString& name) {

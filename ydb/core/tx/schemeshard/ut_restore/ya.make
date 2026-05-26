@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
+    ydb/library/aws_init
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/core/testlib/audit_helpers

@@ -171,7 +171,7 @@ TDirectReadSessionManager::~TDirectReadSessionManager() {
 }
 
 TStringBuilder TDirectReadSessionManager::GetLogPrefix() const {
-    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " ";
+    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSessionManager ServerSessionId=" << ServerSessionId << " TraceId=" << ReadSessionSettings.TraceId_ << " ";
 }
 
 TDirectReadSessionContextPtr TDirectReadSessionManager::CreateDirectReadSession(TNodeId nodeId) {
@@ -200,7 +200,9 @@ void TDirectReadSessionManager::Close() {
 
 void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSession&& partitionSession) {
     auto nodeId = partitionSession.Location.GetNodeId();
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSession.PartitionSessionId << " nodeId=" << nodeId);
+    const TPartitionSessionId partitionSessionId = partitionSession.PartitionSessionId;
+    const TPartitionLocation location = partitionSession.Location;
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StartPartitionSession " << partitionSessionId << " nodeId=" << nodeId);
     TDirectReadSessionContextPtr& session = NodeSessions[nodeId];
     if (!session) {
         session = CreateDirectReadSession(nodeId);
@@ -209,7 +211,7 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
         s->Start();
         s->AddPartitionSession(std::move(partitionSession));
     }
-    Locations.emplace(partitionSession.PartitionSessionId, partitionSession.Location);
+    Locations.emplace(partitionSessionId, location);
 }
 
 // Delete partition session from the node (TDirectReadSession), and if there are no more
@@ -828,7 +830,7 @@ void TDirectReadSession::ReadFromProcessorImpl(TDeferredActions<false>& deferred
 }
 
 TStringBuilder TDirectReadSession::GetLogPrefix() const {
-    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSession ServerSessionId=" << ServerSessionId << " NodeId=" << NodeId << " ";
+    return TStringBuilder() << static_cast<const void*>(this) << " TDirectReadSession ServerSessionId=" << ServerSessionId << " NodeId=" << NodeId << " TraceId=" << ReadSessionSettings.TraceId_ << " ";
 }
 
 void TDirectReadSession::InitImpl(TDeferredActions<false>& deferred) {

@@ -244,11 +244,33 @@ struct TProtobufMessageBytesFieldConverter
     std::function<void(TString* bytes, const NYTree::INodePtr& node)> Deserializer;
 };
 
+struct TProtobufIntFieldConverter
+{
+    std::function<void(IYsonConsumer* consumer, i64 value)> Serializer;
+    std::function<void(i64* value, const NYTree::INodePtr& node)> Deserializer;
+};
+
+struct TProtobufUintFieldConverter
+{
+    std::function<void(IYsonConsumer* consumer, ui64 value)> Serializer;
+    std::function<void(ui64* value, const NYTree::INodePtr& node)> Deserializer;
+};
+
 //! This method is called during static initialization and not assumed to be called during runtime.
 void RegisterCustomProtobufBytesFieldConverter(
     const google::protobuf::Descriptor* descriptor,
     int fieldNumber,
     const TProtobufMessageBytesFieldConverter& converter);
+
+void RegisterCustomProtobufIntFieldConverter(
+    const google::protobuf::Descriptor* descriptor,
+    int fieldNumber,
+    const TProtobufIntFieldConverter& serializer);
+
+void RegisterCustomProtobufUIntFieldConverter(
+    const google::protobuf::Descriptor* descriptor,
+    int fieldNumber,
+    const TProtobufUintFieldConverter& serializer);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(ProtoType, FieldNumber, Type)             \
     YT_STATIC_INITIALIZER({                                                                                      \

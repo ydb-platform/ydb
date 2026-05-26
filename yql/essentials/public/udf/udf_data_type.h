@@ -15,18 +15,18 @@ using TDataTypeId = ui16;
 using TTimezoneId = ui16;
 
 enum EDataTypeFeatures: ui32 {
-    CanCompare = 1u << 0,
-    HasDeterministicCompare = 1u << 1,
-    CanEquate = 1u << 2,
-    HasDeterministicEquals = 1u << 3,
-    CanHash = 1u << 4,
-    HasDeterministicHash = 1u << 5,
-    AllowToBytes = 1u << 6,
-    HasDeterministicToBytes = 1u << 7,
-    AllowFromBytes = 1u << 8,
-    AllowToString = 1u << 9,
-    HasDeterministicToString = 1u << 10,
-    AllowFromString = 1u << 11,
+    CanCompare = 1U << 0,
+    HasDeterministicCompare = 1U << 1,
+    CanEquate = 1U << 2,
+    HasDeterministicEquals = 1U << 3,
+    CanHash = 1U << 4,
+    HasDeterministicHash = 1U << 5,
+    AllowToBytes = 1U << 6,
+    HasDeterministicToBytes = 1U << 7,
+    AllowFromBytes = 1U << 8,
+    AllowToString = 1U << 9,
+    HasDeterministicToString = 1U << 10,
+    AllowFromString = 1U << 11,
 
     PayloadType = AllowToBytes | AllowFromBytes | AllowToString | AllowFromString |
                   HasDeterministicToString | HasDeterministicToBytes,
@@ -34,17 +34,17 @@ enum EDataTypeFeatures: ui32 {
                  CanHash | HasDeterministicHash,
     UnknownType = 0,
 
-    StringType = 1u << 20,
-    NumericType = 1u << 21,
-    FloatType = 1u << 22,
-    IntegralType = 1u << 23,
-    SignedIntegralType = 1u << 24,
-    UnsignedIntegralType = 1u << 25,
-    DateType = 1u << 26,
-    TzDateType = 1u << 27,
-    DecimalType = 1u << 28,
-    TimeIntervalType = 1u << 29,
-    ExtDateType = 1u << 30,
+    StringType = 1U << 20,
+    NumericType = 1U << 21,
+    FloatType = 1U << 22,
+    IntegralType = 1U << 23,
+    SignedIntegralType = 1U << 24,
+    UnsignedIntegralType = 1U << 25,
+    DateType = 1U << 26,
+    TzDateType = 1U << 27,
+    DecimalType = 1U << 28,
+    TimeIntervalType = 1U << 29,
+    ExtDateType = 1U << 30,
 };
 
 template <typename T>
@@ -159,18 +159,18 @@ class TTzTimestamp64 {};
 class TDecimal {};
 class TDyNumber {};
 
-constexpr ui16 MAX_DATE = 49673u; // non-inclusive
-constexpr ui32 MAX_DATETIME = 86400u * 49673u;
-constexpr ui64 MAX_TIMESTAMP = 86400000000ull * 49673u;
-constexpr ui32 MIN_YEAR = 1970u;
-constexpr ui32 MAX_YEAR = 2106u; // non-inclusive
+constexpr ui16 MAX_DATE = 49673U; // non-inclusive
+constexpr ui32 MAX_DATETIME = 86400U * 49673U;
+constexpr ui64 MAX_TIMESTAMP = 86400000000ULL * 49673U;
+constexpr ui32 MIN_YEAR = 1970U;
+constexpr ui32 MAX_YEAR = 2106U; // non-inclusive
 
 constexpr i32 MIN_DATE32 = -53375809; // inclusive
-constexpr i64 MIN_DATETIME64 = -4611669897600ll;
-constexpr i64 MIN_TIMESTAMP64 = -4611669897600000000ll;
+constexpr i64 MIN_DATETIME64 = -4611669897600LL;
+constexpr i64 MIN_TIMESTAMP64 = -4611669897600000000LL;
 constexpr i32 MAX_DATE32 = 53375807; // inclusive
-constexpr i64 MAX_DATETIME64 = 4611669811199ll;
-constexpr i64 MAX_TIMESTAMP64 = 4611669811199999999ll;
+constexpr i64 MAX_DATETIME64 = 4611669811199LL;
+constexpr i64 MAX_TIMESTAMP64 = 4611669811199999999LL;
 constexpr i64 MAX_INTERVAL64 = MAX_TIMESTAMP64 - MIN_TIMESTAMP64;
 constexpr i32 MIN_YEAR32 = -144169; // inclusive
 constexpr i32 MAX_YEAR32 = 148108;  // non-inclusive

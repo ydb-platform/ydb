@@ -1476,9 +1476,9 @@ private:
     TScopedStatePtr Scoped_;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr source, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
+    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(source), scoped);
 }
 
 namespace {
@@ -1896,8 +1896,8 @@ public:
             if (Params_.Compact->Cascade) {
                 settings = L(settings, Q(Y(Q("cascade"), Params_.Compact->Cascade)));
             }
-            if (Params_.Compact->MaxShardsInFlight) {
-                settings = L(settings, Q(Y(Q("maxShardsInFlight"), Params_.Compact->MaxShardsInFlight)));
+            if (Params_.Compact->Parallel) {
+                settings = L(settings, Q(Y(Q("parallel"), Params_.Compact->Parallel)));
             }
             actions = L(actions, Q(Y(Q("compact"), Q(Y(Q(Y(Q("settings"), Q(settings))))))));
         }
@@ -1995,8 +1995,8 @@ private:
     const bool MissingOk_;
 };
 
-TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
-    return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
+TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
+    return new TDropTableNode(pos, table, missingOk, tableType, scoped);
 }
 
 namespace {
@@ -2106,6 +2106,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2233,6 +2234,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2315,8 +2317,8 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped) {
-    return new TDropTopicNode(pos, tr, params, scoped);
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, topic, params, scoped);
 }
 
 class TControlUser final: public TAstListNode {
@@ -3638,9 +3640,9 @@ public:
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
 
-                if (ctx.WindowNewPipeline) {
+                if (!ctx.WindowNewPipeline) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
+                                            BuildQuotedAtom(Pos_, "DisableWindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {
@@ -4127,8 +4129,8 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildShowCreate(TPosition pos, const TTableRef& tr, const TString& type, TScopedStatePtr scoped) {
-    return new TShowCreateNode(pos, tr, type, scoped);
+TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, const TString& type, TScopedStatePtr scoped) {
+    return new TShowCreateNode(pos, table, type, scoped);
 }
 
 class TBaseBackupCollectionNode

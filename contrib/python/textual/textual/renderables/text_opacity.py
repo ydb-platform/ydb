@@ -52,7 +52,10 @@ class TextOpacity:
 
     @classmethod
     def process_segments(
-        cls, segments: Iterable[Segment], opacity: float, ansi_theme: TerminalTheme
+        cls,
+        segments: Iterable[Segment],
+        opacity: float,
+        ansi_theme: TerminalTheme,
     ) -> Iterable[Segment]:
         """Apply opacity to segments.
 
@@ -60,6 +63,7 @@ class TextOpacity:
             segments: Incoming segments.
             opacity: Opacity to apply.
             ansi_theme: Terminal theme.
+            background: Color of background.
 
         Returns:
             Segments with applied opacity.
@@ -75,6 +79,8 @@ class TextOpacity:
             ):
                 invisible_style = _from_color(bgcolor=style.bgcolor)
                 yield _Segment(cell_len(text) * " ", invisible_style)
+        elif opacity == 1:
+            yield from segments
         else:
             filter = ANSIToTruecolor(ansi_theme)
             for segment in filter.apply(list(segments), TRANSPARENT):

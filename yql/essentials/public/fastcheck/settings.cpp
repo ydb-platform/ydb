@@ -42,6 +42,7 @@ THashSet<TString> TranslationFlags() {
         "FlexibleTypes",
         "CompactNamedExprs",
         "DistinctOverWindow",
+        "CheckBuiltinLangVer",
     };
 }
 

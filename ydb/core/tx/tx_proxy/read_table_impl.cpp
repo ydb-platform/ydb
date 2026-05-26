@@ -14,7 +14,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 

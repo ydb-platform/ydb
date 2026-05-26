@@ -60,14 +60,14 @@ public:
     TExternalDataSourceAuthFields() = default;
     TExternalDataSourceAuthFields(const THashSet<TString>& mandatoryFields, const TVector<TSecretSettingsNames>& secretsFields);
 
-    bool CheckMandatoryFields(TStringBuf authField, const std::map<TString, TDeferredAtom>& result) const;
+    [[nodiscard]] bool CheckMandatoryFields(TStringBuf authField, const std::map<TString, TDeferredAtom>& result) const;
 
     /*
      * Checks that names and paths are not mixed
      */
     bool CheckSecretsFields(const std::map<TString, TDeferredAtom>& result, TString& errMessage) const;
 
-    bool CheckAllPossibleFields(TStringBuf authField, const std::map<TString, TDeferredAtom>& result) const;
+    [[nodiscard]] bool CheckAllPossibleFields(TStringBuf authField, const std::map<TString, TDeferredAtom>& result) const;
 
 private:
     const THashSet<TString> MandatoryFields_;

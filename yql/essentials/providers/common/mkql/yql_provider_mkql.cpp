@@ -41,7 +41,7 @@ TRuntimeNode WideTopImpl(const TExprNode& node, TMkqlBuildContext& ctx,
     std::vector<std::pair<ui32, TRuntimeNode>> directions;
     directions.reserve(node.Tail().ChildrenSize());
     node.Tail().ForEachChild([&](const TExprNode& dir) {
-        directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+        directions.emplace_back(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx));
     });
 
     return (ctx.ProgramBuilder.*func)(flow, count, directions);
@@ -54,7 +54,7 @@ TRuntimeNode WideSortImpl(const TExprNode& node, TMkqlBuildContext& ctx,
     std::vector<std::pair<ui32, TRuntimeNode>> directions;
     directions.reserve(node.Tail().ChildrenSize());
     node.Tail().ForEachChild([&](const TExprNode& dir) {
-        directions.emplace_back(std::make_pair(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx)));
+        directions.emplace_back(::FromString<ui32>(dir.Head().Content()), MkqlBuildExpr(dir.Tail(), ctx));
     });
 
     return (ctx.ProgramBuilder.*func)(flow, directions);
@@ -604,6 +604,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"CurrentUtcDate", &TProgramBuilder::CurrentUtcDate},
         {"CurrentUtcDatetime", &TProgramBuilder::CurrentUtcDatetime},
         {"CurrentUtcTimestamp", &TProgramBuilder::CurrentUtcTimestamp},
+    });
+
+    AddCallable("HostRuntimeSetting", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto featureName = MkqlBuildExpr(node.Head(), ctx);
+        return ctx.ProgramBuilder.HostRuntimeSetting(featureName);
+    });
+
+    AddCallable("UdfRuntimeSetting", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto module = MkqlBuildExpr(*node.Child(0), ctx);
+        const auto featureName = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.UdfRuntimeSetting(module, featureName);
     });
 
     AddSimpleCallables({

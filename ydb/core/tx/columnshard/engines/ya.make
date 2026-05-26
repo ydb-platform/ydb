@@ -1,5 +1,7 @@
 RECURSE_FOR_TESTS(
     ut
+    reader
+    storage
 )
 
 LIBRARY()
@@ -11,6 +13,7 @@ SRCS(
     db_wrapper.cpp
     filter.cpp
     defs.cpp
+    snapshot_holders.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(column_engine_logs.h)

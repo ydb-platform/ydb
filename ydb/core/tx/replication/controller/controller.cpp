@@ -218,13 +218,13 @@ void ProcessLimiterQueue(TDeque<TActorId>& requested, THashSet<TActorId>& inflig
 }
 
 void TController::ProcessCreateStreamQueue(const TActorContext& ctx) {
-    const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
-    ProcessLimiterQueue<TEvPrivate::TEvAllowCreateStream>(RequestedCreateStream, InflightCreateStream, limits.GetInflightCreateStreamLimit(), ctx);
+    const auto limit = AppData()->ReplicationConfig.GetSchemeOperationLimits().GetInflightCreateStreamLimit();
+    ProcessLimiterQueue<TEvPrivate::TEvAllowCreateStream>(RequestedCreateStream, InflightCreateStream, limit, ctx);
 }
 
 void TController::ProcessDropStreamQueue(const TActorContext& ctx) {
-    const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
-    ProcessLimiterQueue<TEvPrivate::TEvAllowDropStream>(RequestedDropStream, InflightDropStream, limits.GetInflightDropStreamLimit(), ctx);
+    const auto limit = AppData()->ReplicationConfig.GetSchemeOperationLimits().GetInflightDropStreamLimit();
+    ProcessLimiterQueue<TEvPrivate::TEvAllowDropStream>(RequestedDropStream, InflightDropStream, limit, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx) {

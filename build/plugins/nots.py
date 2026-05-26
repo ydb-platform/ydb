@@ -336,6 +336,10 @@ def _wrap_file_path(s: str) -> str:
     return f"'{s}'" if " " in s else s
 
 
+def _escape_space(s: str) -> str:
+    return s.replace(' ', '\\ ')
+
+
 def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
     return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
 
@@ -446,16 +450,16 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
-    if major < 16:
+    if major < 20:
         raise Exception(
-            "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
+            "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major)
         )
 
-    if major < 20:
+    if major < 22:
         unit.message(
             [
                 "WARN",
-                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major),
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/LVuJXYQ47adsqL".format(major),
             ]
         )
 
@@ -479,6 +483,11 @@ def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
         elif tool == "nodejs":
             dirs.append(os.path.join("build", "platform", dir_name, str(nodejs_version)))
             _set_resource_vars(unit, erm_json, tool, nodejs_version)
+
+            if nodejs_version.major >= 25 and unit.get("OS_LINUX") == "yes":
+                dirs.append(os.path.join("build", "platform", dir_name, "libatomic"))
+                unit.set(["_LD_LIBRARY_PATH_ARGS", "--ld-library-path $LIBATOMIC_1_2_0_RESOURCE_GLOBAL"])
+
         elif erm_json.is_resource_multiplatform(tool):
             v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
             sb_resources = [
@@ -1025,15 +1034,30 @@ def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
 def on_ts_library_configure(unit: NotsUnitType) -> None:
     import lib.nots.package_manager.constants as constants
 
+    is_ts_package = unit.get("_TS_PACKAGE") == "yes"
+    ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
 
-    if not ts_outputs:
+    if not ts_build_script and not is_ts_package:
         ymake.report_configure_error(
             "\n"
-            "Module outputs are not set.\n"
-            f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
+            "Module build script is required but not set.\n"
+            f"Use macro {COLORS.cyan}TS_BUILD_SCRIPT(nots:build){COLORS.reset} to set it up."
         )
         return
+
+    if not ts_outputs:
+        if is_ts_package:
+            # it is possible for TS_PACKAGE to be without outdirs.
+            # we put fake value here in order to have a proper exclude value in _SET_TS_INPUTS_EXCLUDES
+            unit.set(["_TS_OUTPUTS_JOINED", "__ts_package_fake_output__"])
+        else:
+            ymake.report_configure_error(
+                "\n"
+                "Module outputs are required but not set.\n"
+                f"Use macro {COLORS.cyan}TS_BUILD_OUTPUTS(build){COLORS.reset} to set it up."
+            )
+            return
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -1046,8 +1070,31 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
             nm_output = _build_directives(["hide", "output"], [constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME])
             unit.set(["_NODE_MODULES_BUNDLE_ARG", f"--nm-bundle yes {nm_output}"])
 
-    pj_files = set(pj.get_files())
-    missing_outputs = set(ts_outputs) - pj_files
+    # remove "^./" and "/$"
+    # build/, ./build, ./build/ => build
+    # build/a/, ./build/a/, ./build/a => build/a
+    def _normalize_path(p):
+        if p.startswith("./"):
+            p = p[2:]
+        return p.rstrip("/")
+
+    # checks that build outputs contains in package.json#files
+    # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
+    # TS_OUTPUTS(build) -- files: ["./build", "./build/", "build/"] ✅
+    # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
+    # TS_OUTPUTS(dist) -- files: ["build"] ❌
+    # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
+    normalized_pj_files = [_normalize_path(f) for f in pj.get_files()]
+    normalized_ts_outputs = [_normalize_path(f) for f in ts_outputs]
+
+    missing_outputs = []
+    for output in normalized_ts_outputs:
+        found = any(
+            pj_file == output or pj_file.startswith(output + "/") or output.startswith(pj_file + "/")
+            for pj_file in normalized_pj_files
+        )
+        if not found:
+            missing_outputs.append(output)
 
     if missing_outputs:
         ymake.report_configure_error(
@@ -1062,12 +1109,18 @@ def on_ts_library_configure(unit: NotsUnitType) -> None:
 
 
 @_with_report_configure_error
-def on_ts_check_configure(unit: NotsUnitType) -> None:
+def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     if not _is_tests_enabled(unit):
         return
 
     ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
+        if validation_mode == "TS_TEST_FOR":
+            ymake.report_configure_error(
+                f"{COLORS.red}Missing test script{COLORS.reset} \n"
+                f"{COLORS.cyan}TS_TEST_FOR{COLORS.reset} requires to use at least one {COLORS.cyan}TS_TEST{COLORS.reset} macro \n"
+                "https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_TEST_FOR"
+            )
         return
 
     test_files = df.TestFiles.ts_check_srcs(unit, (), {})
@@ -1082,6 +1135,14 @@ def on_ts_check_configure(unit: NotsUnitType) -> None:
     if peers:
         unit.ondepends(peers)
 
+    test_env_value = None
+
+    if unit.get("_LD_LIBRARY_PATH_ARGS"):
+        tev_raw = unit.get("TEST_ENV_VALUE")
+        unit.set(["TEST_ENV_VALUE", '"LD_LIBRARY_PATH=$LIBATOMIC_1_2_0_RESOURCE_GLOBAL"'])
+        test_env_value = df.TestEnv.value(unit, [], {})
+        unit.set(["TEST_ENV_VALUE", tev_raw])
+
     for script_name, is_medium, check_type in ts_check_list:
         flat_args = ("ts_check",)
         spec_args = dict(
@@ -1095,6 +1156,9 @@ def on_ts_check_configure(unit: NotsUnitType) -> None:
 
         dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
         dart_record[df.TestFiles.KEY] = test_files
+
+        if test_env_value:
+            dart_record[df.TestEnv.KEY] = test_env_value
 
         data = ytest.dump_test(unit, dart_record)
         if data:
@@ -1312,18 +1376,6 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
 
 
 @_with_report_configure_error
-def on_ts_package_check_files(unit: NotsUnitType) -> None:
-    ts_files = unit.get("_TS_FILES_INOUTS")
-    if ts_files == "":
-        ymake.report_configure_error(
-            "\n"
-            "In the TS_PACKAGE module, you should define at least one file using the TS_FILES() macro.\n"
-            "If you use the TS_FILES_GLOB, check the expression. For example, use `src/**/*` instead of `src/*`.\n"
-            "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
-        )
-
-
-@_with_report_configure_error
 def on_depends_on_mod(unit: NotsUnitType) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")
@@ -1369,3 +1421,23 @@ def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
         unit.set([var_name, "experimental-compile"])
     else:
         raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")
+
+
+@_with_report_configure_error
+def on_escape_spaces(unit: NotsUnitType, var_name: str) -> None:
+    prefix = "${ARCADIA_ROOT}/"
+    files = __strip_prefix(prefix, unit.get(var_name)).split(f" {prefix}")
+    unit.set([var_name, ""])
+    __set_append(unit, var_name, [prefix + _escape_space(f) for f in files])
+
+
+@_with_report_configure_error
+def on_ts_conf_error(unit: NotsUnitType, *messages: str) -> None:
+    msg = " ".join(messages).replace("\\n", "\n").format(COLORS=COLORS)
+    ymake.report_configure_error(msg)
+
+
+@_with_report_configure_error
+def on_ts_check_prepare_deps_configure(unit: NotsUnitType) -> None:
+    test_mod = unit.get("TS_TEST_FOR_PATH")
+    unit.onpeerdir([test_mod])

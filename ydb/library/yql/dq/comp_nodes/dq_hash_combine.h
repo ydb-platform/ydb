@@ -1,17 +1,18 @@
 #pragma once
 
-#include <ydb/library/yql/dq/runtime/dq_compute.h>
+namespace NKikimr::NMiniKQL {
 
-namespace NKikimr {
-namespace NMiniKQL {
+class IComputationNode;
+class TCallable;
+struct TComputationNodeFactoryContext;
 
 class TDqHashCombineTestPoints {
 public:
     virtual void DisableStateDehydration(const bool disable) = 0;
+    virtual void DisableKeyPassthrough(const bool disable) = 0;
 };
 
 IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

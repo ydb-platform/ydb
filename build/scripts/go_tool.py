@@ -367,6 +367,9 @@ def do_vet(args):
 
 
 def _do_compile_go(args):
+    if not args.go_srcs:
+        raise RuntimeError("Attempt to compile go package without source files!")
+
     import_path, is_std_module = args.import_path, args.is_std
     cmd = [
         args.go_compile,
@@ -744,7 +747,11 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
         # Skip "reflect", because os.Exit called inside TestMain and reflect functions not used
         + (['    "internal/coverage/cfile"'] if cover_mode else [])
         + (['    _cover_test "{}"'.format(test_import_path)] if is_cover and test_import_path else [])  # deprecated
-        + (['    _cover_xtest "{}"'.format(xtest_import_path)] if is_cover and xtest_import_path else [])  # deprecated
+        + (
+            ['    _cover_xtest "{}"'.format(xtest_import_path)]
+            if is_cover and (xtest_import_path and not test_import_path)
+            else []
+        )  # deprecated
         + [
             '    "testing"',
             '    "testing/internal/testdeps"',

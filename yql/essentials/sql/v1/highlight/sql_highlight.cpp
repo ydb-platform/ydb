@@ -32,7 +32,7 @@ struct TSyntax {
         return concat;
     }
 
-    TString Get(const TStringBuf name, bool ansi = false) const {
+    [[nodiscard]] TString Get(const TStringBuf name, bool ansi = false) const {
         if (Grammar->PunctuationNames.contains(name)) {
             return RE2::QuoteMeta(Grammar->BlockByName.at(name));
         }
@@ -270,8 +270,8 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
 } // namespace NSQLHighlight
 
 template <>
-void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind kind) {
-    switch (kind) {
+void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind value) {
+    switch (value) {
         case NSQLHighlight::EUnitKind::Keyword:
             out << "keyword";
             break;

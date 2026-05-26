@@ -13,7 +13,7 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TSpecPtr>
-auto CreateSpec(const TString& specString)
+auto CreateSpec(const std::string& specString)
 {
     return ConvertTo<TSpecPtr>(TYsonString(specString));
 }
@@ -118,7 +118,7 @@ struct TVanillaSpec
     : public TYsonStruct
 {
 public:
-    THashMap<TString, TVanillaTaskSpecPtr> Tasks;
+    THashMap<std::string, TVanillaTaskSpecPtr> Tasks;
 
     REGISTER_YSON_STRUCT(TVanillaSpec);
 
@@ -196,38 +196,37 @@ TEST(TUpdateYsonStructTest, Inherited)
     EXPECT_EQ(updatedPool, "new_pool");
 }
 
-// TODO(YT-24860): Fix this test on clang-18
-// TEST(TUpdateYsonStructTest, Nested)
-// {
-//     auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=pool;    mapper={command=cat};}")));
-//     auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=new_pool;mapper={command=sort};}")));
+TEST(TUpdateYsonStructTest, Nested)
+{
+    auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=pool;    mapper={command=cat};}")));
+    auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=new_pool;mapper={command=sort};}")));
 
-//     std::string updatedPool;
-//     std::string updatedCommand;
+    std::string updatedPool;
+    std::string updatedCommand;
 
-//     auto configurator = TConfigurator<TSpecBase>();
-//     {
-//         TConfigurator<TSpecWithPool> parentConfigurator = configurator;
-//         parentConfigurator.Field("pool", &TSpecBase::Pool)
-//             .Updater(BIND([&] (const std::string& newPool) {
-//                 updatedPool = newPool;
-//             }));
-//     }
-//     configurator.Field("mapper", &TSpecBase::Mapper)
-//         .NestedUpdater(BIND([&] () {
-//             TConfigurator<TMapperSpec> configurator;
-//             configurator.Field("command", &TMapperSpec::Command)
-//                 .Updater(BIND([&] (const std::string& newCommand) {
-//                     updatedCommand = newCommand;
-//                 }));
-//             return TSealedConfigurator(std::move(configurator));
-//         }));
+    auto configurator = TConfigurator<TSpecBase>();
+    {
+        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+        parentConfigurator.Field("pool", &TSpecBase::Pool)
+            .Updater(BIND([&] (const std::string& newPool) {
+                updatedPool = newPool;
+            }));
+    }
+    configurator.Field("mapper", &TSpecBase::Mapper)
+        .NestedUpdater(BIND([&] () {
+            TConfigurator<TMapperSpec> configurator;
+            configurator.Field("command", &TMapperSpec::Command)
+                .Updater(BIND([&] (const std::string& newCommand) {
+                    updatedCommand = newCommand;
+                }));
+            return TSealedConfigurator(std::move(configurator));
+        }));
 
-//     std::move(configurator).Seal().Update(oldSpec, newSpec);
+    std::move(configurator).Seal().Update(oldSpec, newSpec);
 
-//     EXPECT_EQ(updatedPool, "new_pool");
-//     EXPECT_EQ(updatedCommand, "sort");
-// }
+    EXPECT_EQ(updatedPool, "new_pool");
+    EXPECT_EQ(updatedCommand, "sort");
+}
 
 TEST(TUpdateYsonStructTest, Validate)
 {
@@ -270,16 +269,16 @@ TEST(TUpdateYsonStructTest, MapField)
     {
         TConfigurator<TVanillaSpec> parentConfigurator = configurator;
         auto& mapConfigurator = parentConfigurator.MapField("tasks", &TVanillaSpec::Tasks)
-            .ValidateOnAdded(BIND([] (const TString&, const TVanillaTaskSpecPtr&) {
+            .ValidateOnAdded(BIND([] (const std::string&, const TVanillaTaskSpecPtr&) {
                 THROW_ERROR_EXCEPTION("Non-fatal create exception");
             }))
-            .ValidateOnRemoved(BIND([] (const TString&, const TVanillaTaskSpecPtr&) {
+            .ValidateOnRemoved(BIND([] (const std::string&, const TVanillaTaskSpecPtr&) {
                 THROW_ERROR_EXCEPTION("Non-fatal remove exception");
             }))
-            .OnAdded(BIND([] (const TString&, const TVanillaTaskSpecPtr&) -> TConfigurator<TVanillaTaskSpec> {
+            .OnAdded(BIND([] (const std::string&, const TVanillaTaskSpecPtr&) -> TConfigurator<TVanillaTaskSpec> {
                 THROW_ERROR_EXCEPTION("Fatal create exception");
             }))
-            .OnRemoved(BIND([] (const TString&, const TVanillaTaskSpecPtr&) {
+            .OnRemoved(BIND([] (const std::string&, const TVanillaTaskSpecPtr&) {
                 THROW_ERROR_EXCEPTION("Fatal remove exception");
             }));
 
@@ -344,17 +343,17 @@ TEST(TUpdateYsonStructTest, MapFieldCustomCreate)
 
         TConfigurator<TVanillaSpec> parentConfigurator = configurator;
         auto& mapConfigurator = parentConfigurator.MapField("tasks", &TVanillaSpec::Tasks)
-            .ValidateOnAdded(BIND([] (const TString&, const TVanillaTaskSpecPtr& taskSpec) {
+            .ValidateOnAdded(BIND([] (const std::string&, const TVanillaTaskSpecPtr& taskSpec) {
                 THROW_ERROR_EXCEPTION_IF(
                     !taskSpec->Creatable,
                     "Non-fatal create exception");
             }))
-            .ValidateOnRemoved(BIND([] (const TString&, const TVanillaTaskSpecPtr& taskSpec) {
+            .ValidateOnRemoved(BIND([] (const std::string&, const TVanillaTaskSpecPtr& taskSpec) {
                 THROW_ERROR_EXCEPTION_IF(
                     !taskSpec->Removable,
                     "Non-fatal remove exception");
             }))
-            .OnAdded(BIND([&] (const TString&, const TVanillaTaskSpecPtr& taskSpec) -> TConfigurator<TVanillaTaskSpec> {
+            .OnAdded(BIND([&] (const std::string&, const TVanillaTaskSpecPtr& taskSpec) -> TConfigurator<TVanillaTaskSpec> {
                 THROW_ERROR_EXCEPTION_IF(
                     !taskSpec->Creatable,
                     "Fatal create exception");
@@ -362,7 +361,7 @@ TEST(TUpdateYsonStructTest, MapFieldCustomCreate)
                 thirdConfigured = true;
                 return configureChild(thirdCommand);
             }))
-            .OnRemoved(BIND([] (const TString&, const TVanillaTaskSpecPtr& taskSpec) {
+            .OnRemoved(BIND([] (const std::string&, const TVanillaTaskSpecPtr& taskSpec) {
                 THROW_ERROR_EXCEPTION_IF(
                     !taskSpec->Removable,
                     "Fatal remove exception");

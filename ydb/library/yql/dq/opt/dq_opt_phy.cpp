@@ -270,6 +270,102 @@ TDqConnection BuildConnection(
     return buildShuffle();
 }
 
+TExprNode::TPtr BuildPartitionsThenSortDirections(TPositionHandle pos, const TExprNode::TPtr& sortDirectionsNode, TExprContext& ctx) {
+    TExprNode::TListType dirs;
+    dirs.push_back(ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true", TNodeFlags::Default)}));
+    if (sortDirectionsNode->IsList()) {
+        for (ui32 i = 0; i < sortDirectionsNode->ChildrenSize(); ++i) {
+            dirs.push_back(sortDirectionsNode->ChildPtr(i));
+        }
+    } else {
+        dirs.push_back(sortDirectionsNode);
+    }
+    return ctx.NewList(pos, std::move(dirs));
+}
+
+TExprNode::TPtr BuildPartitionsThenSortKeySelectorLambda(
+    TPositionHandle pos,
+    const TExprNode::TPtr& partitionKeyLambda,
+    const TExprNode::TPtr& orderKeyLambda,
+    TExprContext& ctx)
+{
+    auto itemArg = ctx.NewArgument(pos, "item");
+    TExprNode::TListType keys;
+    keys.push_back(ctx.ReplaceNode(partitionKeyLambda->TailPtr(), partitionKeyLambda->Head().Head(), itemArg));
+    auto orderWithItem = ctx.ReplaceNode(orderKeyLambda->TailPtr(), orderKeyLambda->Head().Head(), itemArg);
+    if (orderKeyLambda->Tail().IsList()) {
+        for (ui32 i = 0; i < orderWithItem->ChildrenSize(); ++i) {
+            keys.push_back(orderWithItem->ChildPtr(i));
+        }
+    } else {
+        keys.push_back(orderWithItem);
+    }
+    return ctx.NewLambda(pos, ctx.NewArguments(pos, {itemArg}), ctx.NewList(pos, std::move(keys)));
+}
+
+TExprNode::TPtr MaybeAssumeChopped(TPositionHandle pos, TExprNode::TPtr sorted,
+    const TExprNode& keyExtractorBody, const TExprNode& keyExtractorArg,
+    const TExprNode* sortKeySelectorLambda, TExprContext& ctx)
+{
+    auto keys = GetPathsToKeys(keyExtractorBody, keyExtractorArg);
+    if (keys.empty()) {
+        return sorted;
+    }
+    if (sortKeySelectorLambda && sortKeySelectorLambda->IsLambda()) {
+        auto sortKeys = GetPathsToKeys(sortKeySelectorLambda->Tail(), sortKeySelectorLambda->Head().Head());
+        std::move(sortKeys.begin(), sortKeys.end(), std::back_inserter(keys));
+        std::sort(keys.begin(), keys.end());
+    }
+    TExprNode::TListType columns;
+    columns.reserve(keys.size());
+    for (const auto& path : keys) {
+        if (1U == path.size()) {
+            columns.emplace_back(ctx.NewAtom(pos, path.front()));
+        } else {
+            TExprNode::TListType atoms(path.size());
+            std::transform(path.cbegin(), path.cend(), atoms.begin(),
+                [&](const std::string_view& name) { return ctx.NewAtom(pos, name); });
+            columns.emplace_back(ctx.NewList(pos, std::move(atoms)));
+        }
+    }
+    return ctx.Builder(pos)
+        .Callable("AssumeChopped")
+            .Add(0, std::move(sorted))
+            .List(1).Add(std::move(columns)).Seal()
+        .Seal()
+        .Build();
+}
+
+template <typename TPartition>
+TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto pos = partition.Pos();
+    const auto& keyExtractor = partition.KeySelectorLambda();
+    const bool haveSort = partition.SortKeySelectorLambda().template Maybe<TCoLambda>().IsValid();
+
+    TExprNode::TPtr sortDirections;
+    TExprNode::TPtr sortKeySelector;
+    if (haveSort) {
+        sortDirections = BuildPartitionsThenSortDirections(pos, partition.SortDirections().Ptr(), ctx);
+        sortKeySelector = BuildPartitionsThenSortKeySelectorLambda(pos,
+            partition.KeySelectorLambda().Ptr(), partition.SortKeySelectorLambda().Ptr(), ctx);
+    } else {
+        sortDirections = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "true", TNodeFlags::Default)});
+        sortKeySelector = ctx.DeepCopyLambda(keyExtractor.Ref());
+    }
+
+    auto sorted = ctx.Builder(pos)
+        .Callable("Sort")
+            .Add(0, input)
+            .Add(1, std::move(sortDirections))
+            .Add(2, std::move(sortKeySelector))
+        .Seal()
+        .Build();
+
+    return MaybeAssumeChopped(pos, std::move(sorted),
+        keyExtractor.Body().Ref(), keyExtractor.Args().Arg(0).Ref(),
+        haveSort ? &partition.SortKeySelectorLambda().Ref() : nullptr, ctx);
+}
+
 template <typename TPartition>
 TExprBase DqBuildPartitionsStageStub(
     TExprBase node,
@@ -278,7 +374,8 @@ TExprBase DqBuildPartitionsStageStub(
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
     TTypeAnnotationContext* typeCtx,
-    bool enableShuffleElimination
+    bool enableShuffleElimination,
+    bool useSortForPartitionsByKeys
 )
 {
     auto partitionsInput = node.Maybe<TPartition>().Input();
@@ -388,6 +485,35 @@ TExprBase DqBuildPartitionsStageStub(
     }
 
     auto handler = partition.ListHandlerLambda();
+
+    if constexpr(std::is_base_of<TCoPartitionsByKeys, TPartition>::value) {
+        if (useSortForPartitionsByKeys) {
+            // Sort + AssumeChopped, then apply handler via ForwardList/ToFlow
+            const auto pos = node.Pos();
+            auto sorted = BuildSortForPartitionsByKeys(partition, newPartitionsInput, ctx);
+
+            auto handlerResult = ctx.ReplaceNode(handler.Body().Ptr(), handler.Args().Arg(0).Ref(),
+                ctx.NewCallable(pos, "ForwardList", {std::move(sorted)}));
+
+            auto partitionStage = Build<TDqStage>(ctx, node.Pos())
+                .Inputs()
+                    .Add(inputConns)
+                    .Build()
+                .Program()
+                    .Args(inputArgs)
+                    .Body(TExprBase(ctx.NewCallable(pos, "ToFlow", {std::move(handlerResult)})))
+                    .Build()
+                .Settings(TDqStageSettings().SetPartitionMode(TDqStageSettings::EPartitionMode::Aggregate).BuildNode(ctx, node.Pos()))
+                .Done();
+
+            return Build<TDqCnUnionAll>(ctx, node.Pos())
+                .Output()
+                    .Stage(partitionStage)
+                    .Index().Build("0")
+                    .Build()
+                .Done();
+        }
+    }
 
     if constexpr(std::is_base_of<TCoPartitionsByKeys, TPartition>::value) {
         if (ETypeAnnotationKind::List == partition.Input().Ref().GetTypeAnn()->GetKind()) {
@@ -1365,10 +1491,11 @@ TExprBase DqBuildPartitionsStage(
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
     TTypeAnnotationContext* typeCtx,
-    bool enableShuffleElimination
+    bool enableShuffleElimination,
+    bool useSortForPartitionsByKeys
 )
 {
-    return DqBuildPartitionsStageStub<TCoPartitionsByKeys>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage, typeCtx, enableShuffleElimination);
+    return DqBuildPartitionsStageStub<TCoPartitionsByKeys>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage, typeCtx, enableShuffleElimination, useSortForPartitionsByKeys);
 }
 
 TExprBase DqBuildPartitionStage(
@@ -1381,7 +1508,7 @@ TExprBase DqBuildPartitionStage(
     bool enableShuffleElimination
 )
 {
-    return DqBuildPartitionsStageStub<TCoPartitionByKey>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage, typeCtx, enableShuffleElimination);
+    return DqBuildPartitionsStageStub<TCoPartitionByKey>(std::move(node), ctx, optCtx, parentsMap, allowStageMultiUsage, typeCtx, enableShuffleElimination, false);
 }
 
 TExprBase DqBuildShuffleStage(
@@ -2985,6 +3112,10 @@ TExprBase DqBuildJoin(
     const bool rightIsUnionAll = join.RightInput().Maybe<TDqCnUnionAll>().IsValid();
 
     auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+    if (joinAlgo == EJoinAlgoType::Undefined) {
+        shuffleElimination = false;
+        shuffleEliminationWithMap = false;
+    }
     const bool mapJoinCanBeApplied = joinType != "Full"sv && joinType != "Exclusion"sv;
     if (joinAlgo == EJoinAlgoType::MapJoin && mapJoinCanBeApplied) {
         hashJoin = EHashJoinMode::Map;
@@ -3522,6 +3653,7 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
     TExprNode::TPtr maxDelayedRows;
     TExprNode::TPtr isMultiget;
     TExprNode::TPtr isMultiMatches;
+    TExprNode::TPtr fullscanLimit;
     if (const auto maybeOptions = join.JoinAlgoOptions()) {
         for (auto&& option: maybeOptions.Cast()) {
             auto&& name = option.Name().Value();
@@ -3533,6 +3665,8 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
                 maxDelayedRows = option.Value().Cast().Ptr();
             } else if (name == "MultiGet"sv) {
                 isMultiget = option.Value().Cast().Ptr();
+            } else if (name == "FullscanLimit"sv) {
+                fullscanLimit = option.Value().Cast().Ptr();
             }
         }
     }
@@ -3557,7 +3691,6 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
             return {};
         }
         isMultiMatches = ctx.NewAtom(pos, true);
-        isMultiget = ctx.NewAtom(pos, false);
     }
 
     auto rightInput = join.RightInput().Ptr();
@@ -3580,12 +3713,24 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         .MaxCachedRows(maxCachedRows)
         .MaxDelayedRows(maxDelayedRows);
 
+    if (fullscanLimit && !isMultiMatches) { // gaps are not allowed in optional
+        isMultiMatches = ctx.NewAtom(pos, false);
+    }
+
+    if (isMultiMatches && !isMultiget) { // ditto
+        isMultiget = ctx.NewAtom(pos, false);
+    }
+
     if (isMultiget) {
         cn.IsMultiget(isMultiget);
     }
 
     if (isMultiMatches) {
         cn.IsMultiMatches(isMultiMatches);
+    }
+
+    if (fullscanLimit) {
+        cn.FullscanLimit(fullscanLimit);
     }
 
     auto lambda = Build<TCoLambda>(ctx, pos)
@@ -3606,6 +3751,47 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
             .Index().Build("0")
             .Build()
         .Done();
+}
+
+TExprBase DqPushWatermarkGeneratorToStage(
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap
+) {
+    const auto maybeWatermarkGenerator = node.Maybe<TDqPhyWatermarkGenerator>();
+    if (!maybeWatermarkGenerator) {
+        return node;
+    }
+    const auto watermarkGenerator = maybeWatermarkGenerator.Cast();
+
+    const auto maybeConnection = watermarkGenerator.Input().Maybe<TDqCnUnionAll>();
+    if (!maybeConnection) {
+        return node;
+    }
+    const auto connection = maybeConnection.Cast();
+
+    if (!IsSingleConsumerConnection(connection, parentsMap)) {
+        return node;
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, watermarkGenerator.Pos())
+            .Args({"arg"})
+            .Body<TCoToFlow>()
+                .Input<TDqPhyWatermarkGenerator>()
+                    .InitFrom(watermarkGenerator)
+                    .Input<TCoFromFlow>()
+                        .Input("arg")
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(connection, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+    return result.Cast();
 }
 
 } // namespace NYql::NDq

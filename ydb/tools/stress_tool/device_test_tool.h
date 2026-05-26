@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/tools/stress_tool/proto/device_perf_test.pb.h>
+#include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/actors/core/probes.h>
 
 #include <library/cpp/json/writer/json.h>
@@ -600,6 +601,7 @@ struct TPerfTestConfig {
     ui32 InFlightTo = 0;
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // SectorMaps[0] alias
     bool DisablePDiskDataEncryption;
+    NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
     TMap<const TString, NPDisk::EDeviceType> DeviceStrToType {
         {"ROT",  NPDisk::DEVICE_TYPE_ROT},
@@ -638,16 +640,18 @@ struct TPerfTestConfig {
     TPerfTestConfig(const TString& path, const TString name, const TString type, const TString outputFormatName,
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
-            bool disablePDiskDataEncryption = false)
+            bool disablePDiskDataEncryption = false,
+            NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : TPerfTestConfig(TVector<TString>{path}, name, type, outputFormatName,
                 monPort, doLockFile, runCountStr, inFlightFromStr, inFlightToStr,
-                disablePDiskDataEncryption)
+                disablePDiskDataEncryption, logLevel)
     {}
 
     TPerfTestConfig(const TVector<TString>& paths, const TString name, const TString type, const TString outputFormatName,
             const TString monPort, bool doLockFile, const TString runCountStr = "1",
             const TString inFlightFromStr = "0", const TString inFlightToStr = "0",
-            bool disablePDiskDataEncryption = false)
+            bool disablePDiskDataEncryption = false,
+            NActors::NLog::EPriority logLevel = NActors::NLog::PRI_WARN)
         : Paths(paths)
         , Path(paths.at(0))
         , Name(name)
@@ -657,6 +661,7 @@ struct TPerfTestConfig {
         , InFlightFrom(std::strtol(inFlightFromStr.c_str(), nullptr, 10))
         , InFlightTo(std::strtol(inFlightToStr.c_str(), nullptr, 10))
         , DisablePDiskDataEncryption(disablePDiskDataEncryption)
+        , LogLevel(logLevel)
     {
         auto it_type = DeviceStrToType.find(type);
         if (it_type != DeviceStrToType.end()) {

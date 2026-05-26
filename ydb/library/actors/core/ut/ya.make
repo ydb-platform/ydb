@@ -13,6 +13,7 @@ ENDIF()
 
 PEERDIR(
     ydb/library/actors/interconnect
+    ydb/library/actors/struct_log
     ydb/library/actors/testlib
 )
 
@@ -27,6 +28,7 @@ SRCS(
     performance_ut.cpp
     process_stats_ut.cpp
     ask_ut.cpp
+    event_flat_ut.cpp
     event_pb_payload_ut.cpp
     event_pb_ut.cpp
     executor_pool_basic_ut.cpp
@@ -36,6 +38,7 @@ SRCS(
     mon_ut.cpp
     scheduler_actor_ut.cpp
     mailbox_lockfree_ut.cpp
+    struct_log_ut.cpp
 )
 
 END()

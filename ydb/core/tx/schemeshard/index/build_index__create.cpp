@@ -10,6 +10,8 @@
 
 namespace NKikimr::NSchemeShard {
 
+static constexpr ui32 DefaultMaxShardsInFlight = 32;
+
 using namespace NTabletFlatExecutor;
 
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
@@ -148,7 +150,7 @@ public:
             }
 
             TString explain;
-            if (!Prepare(*buildInfo, settings, explain)) {
+            if (!Prepare(*buildInfo, settings, tableInfo, explain)) {
                 return makeReply(explain);
             }
 
@@ -207,8 +209,24 @@ public:
             return makeReply("missing index or column to build");
         }
 
+        if (!request.GetInternal() && settings.max_shards_in_flight() > Self->MaxBuildIndexShardsInFlight) {
+            return Reply(
+                Ydb::StatusIds::PRECONDITION_FAILED,
+                TStringBuilder()
+                    << "maximum allowed build parallelism is " << Self->MaxBuildIndexShardsInFlight
+                    << ", but requested " << settings.max_shards_in_flight());
+        }
+
         buildInfo->ScanSettings.CopyFrom(settings.GetScanSettings());
-        buildInfo->MaxInProgressShards = settings.max_shards_in_flight();
+        if (settings.max_shards_in_flight() > 0) {
+            buildInfo->MaxInProgressShards = settings.max_shards_in_flight();
+        } else if (Self->MaxBuildIndexShardsInFlight > DefaultMaxShardsInFlight) {
+            buildInfo->MaxInProgressShards = DefaultMaxShardsInFlight;
+        } else if (Self->MaxBuildIndexShardsInFlight > 0) {
+            buildInfo->MaxInProgressShards = Self->MaxBuildIndexShardsInFlight;
+        } else {
+            buildInfo->MaxInProgressShards = 1;
+        }
 
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;
@@ -232,7 +250,8 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
-    bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
+    bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
+                 TTableInfo::TPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());
         const auto& index = settings.index();
 
@@ -264,24 +283,45 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
-            const auto& settings = vectorIndexKmeansTreeDescription.GetSettings();
-            if (!NKikimr::NKMeans::ValidateSettings(settings, explain)) {
+
+            if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
                 return false;
             }
-            buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            buildInfo.KMeans.K = settings.clusters();
-            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + settings.levels();
-            buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
-            buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
-            buildInfo.KMeans.OverlapClusters = settings.overlap_clusters()
-                ? settings.overlap_clusters()
-                : NTableIndex::NKMeans::DefaultOverlapClusters;
-            buildInfo.KMeans.OverlapRatio = settings.has_overlap_ratio()
-                ? settings.overlap_ratio()
-                : NTableIndex::NKMeans::DefaultOverlapRatio;
-            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(settings.settings(), buildInfo.KMeans.Rounds, explain);
-            if (!buildInfo.Clusters) {
+
+            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+                ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
+                const bool isPrefixed = index.index_columns().size() > 1;
+                NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
+                if (isPrefixed) {
+                    vectorIndexKmeansTreeDescription.MutableSettings()->set_adaptive_clusters(true);
+                }
+            }
+
+            const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();
+            const auto& vectorSettings = kmSettings.settings();
+            const bool needVectorAutodetect = NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(vectorSettings);
+            if (!NKikimr::NKMeans::ValidateSettings(kmSettings, explain) && !needVectorAutodetect) {
                 return false;
+            }
+
+            buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
+            buildInfo.KMeans.K = kmSettings.clusters();
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + kmSettings.levels();
+            buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
+            buildInfo.KMeans.Adaptive = kmSettings.adaptive_clusters() && buildInfo.IsBuildPrefixedVectorIndex();
+            buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+            buildInfo.KMeans.OverlapClusters = kmSettings.overlap_clusters()
+                ? kmSettings.overlap_clusters()
+                : NTableIndex::NKMeans::DefaultOverlapClusters;
+            buildInfo.KMeans.OverlapRatio = kmSettings.has_overlap_ratio()
+                ? kmSettings.overlap_ratio()
+                : NTableIndex::NKMeans::DefaultOverlapRatio;
+
+            if (!needVectorAutodetect) {
+                buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorSettings, buildInfo.KMeans.Rounds, explain);
+            } else {
+                buildInfo.KMeans.NeedVectorAutodetect = true;
+                buildInfo.Clusters = nullptr;
             }
             break;
         }
@@ -327,6 +367,9 @@ private:
         case Ydb::Table::TableIndex::TypeCase::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::TypeCase::kLocalBloomNgramFilterIndex:
             explain = "Local bloom indexes are not supported by index build operation";
+            return false;
+        case Ydb::Table::TableIndex::TypeCase::kLocalMinMaxIndex:
+            explain = "Local min_max index is not supported by index build operation";
             return false;
         };
 

@@ -37,6 +37,10 @@ public:
     [[nodiscard]] TDuration GetPBufferReplyTimeout() const;
     [[nodiscard]] ui64 GetVChunkSize() const;
     [[nodiscard]] ui32 GetThreadPoolSize() const;
+    [[nodiscard]] NProto::TOracleConfig GetOracleConfig() const;
+    [[nodiscard]] TDuration GetDirtyMapDebugPrintInterval() const;
+    [[nodiscard]] ui32 GetVhostThreadsCount() const;
+    [[nodiscard]] ui32 GetVhostQueuesCount() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

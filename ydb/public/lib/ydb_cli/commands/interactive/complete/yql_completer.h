@@ -2,8 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
@@ -25,7 +24,7 @@ namespace NYdb::NConsoleClient {
 
     struct TYQLCompleterConfig {
         TColorSchema Color;
-        TDriver Driver;
+        TLazyDriver::TPtr LazyDriver;
         TString Database;
         bool IsVerbose;
     };

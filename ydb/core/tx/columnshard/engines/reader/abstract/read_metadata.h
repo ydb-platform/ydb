@@ -35,10 +35,13 @@ private:
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
     const ui64 TabletId;
+
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
+
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
     }
+
     virtual void DoOnReplyConstruction(const ui64 /*tabletId*/, NKqp::NInternalImplementation::TEvScanData& /*scanData*/) const {
     }
 
@@ -68,6 +71,10 @@ public:
         }
         RequestedLimit = value;
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("requested_limit_detected", RequestedLimit);
+    }
+
+    std::optional<ui64> GetRequestedLimitOptional() const {
+        return RequestedLimit;
     }
 
     i64 GetLimitRobust() const {
@@ -189,10 +196,12 @@ public:
         , RequestSnapshot(requestSnapshot)
         , ScanCursor(scanCursor)
         , TabletId(tabletId)
-        , ResultIndexSchema(schema) {
+        , ResultIndexSchema(schema)
+    {
         AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
                                                                 "tablet_id", TabletId);
     }
+
     virtual ~TReadMetadataBase() = default;
 
     virtual TString DebugString() const {
@@ -205,12 +214,15 @@ public:
         std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
+
     bool IsAscSorted() const {
         return Sorting == ESorting::ASC;
     }
+
     bool IsDescSorted() const {
         return Sorting == ESorting::DESC;
     }
+
     bool IsSorted() const {
         return IsAscSorted() || IsDescSorted();
     }

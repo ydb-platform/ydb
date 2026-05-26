@@ -1,6 +1,7 @@
 #include "list_directory_tool.h"
 #include "tool_base.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_path.h>
@@ -35,17 +36,16 @@ For example if called on directory "data/", which contains two tables "my_table1
 public:
     explicit TListDirectoryTool(const TListDirectoryToolSettings& settings)
         : TBase(settings.Database, CreateParametersSchema(), DESCRIPTION)
-        , Client(settings.Driver)
-    {}
+        , LazyDriver(settings.LazyDriver)
+    {
+        Y_VALIDATE(LazyDriver, "TListDirectoryTool requires a non-null LazyDriver");
+    }
 
 protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
         TJsonParser parser(parameters);
-
         Directory = CanonizePath(parser.GetKey(DIRECTORY_PROPERTY).GetString());
-    }
 
-    bool AskPermissions() final {
         TString message;
         if (Directory == Database || Directory == Database + "/") {
             message = "Listing database root directory";
@@ -54,15 +54,17 @@ protected:
         }
 
         PrintFtxuiMessage("", message, ftxui::Color::Green);
+    }
 
-        // Directory listing is always allowed
+    bool AskPermissions() final {
         return true;
     }
 
     TResponse DoExecute() final {
         Y_DEFER { ResetInterrupted(); };
 
-        auto feature = Client.ListDirectory(Directory);
+        NScheme::TSchemeClient client(LazyDriver->Get());
+        auto feature = client.ListDirectory(Directory);
         if (!WaitInterruptable(feature)) {
             return TResponse::Error(TStringBuilder() << "Listing directory \"" << Directory << "\" was interrupted by user");
         }
@@ -101,7 +103,7 @@ private:
     }
 
 private:
-    NScheme::TSchemeClient Client;
+    TLazyDriver::TPtr LazyDriver;
 
     TString Directory;
 };

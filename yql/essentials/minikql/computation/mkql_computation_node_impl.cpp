@@ -415,8 +415,9 @@ Y_NO_INLINE TString TBinaryComputationNodeBase::DebugStringImpl(const TString& t
     return typeName + "(" + Left_->DebugString() + "," + Right_->DebugString() + ")";
 }
 
-void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap& map) const {
-    map.emplace(ValueIndex_, RepresentationKind_);
+void TExternalComputationNode::CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependents) const {
+    Y_UNUSED(owner);
+    dependents.emplace(ValueIndex_, RepresentationKind_);
 }
 
 void TExternalComputationNode::CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const {
@@ -889,8 +890,8 @@ TPasstroughtMap MergePasstroughtMaps(const TPasstroughtMap& lhs, const TPasstrou
     return map;
 }
 
-void ApplyChanges(const NUdf::TUnboxedValue& list, NUdf::IApplyContext& applyCtx) {
-    TThresher<false>::DoForEachItem(list,
+void ApplyChanges(const NUdf::TUnboxedValue& value, NUdf::IApplyContext& applyCtx) {
+    TThresher<false>::DoForEachItem(value,
                                     [&applyCtx](const NUdf::TUnboxedValue& item) {
                                         if (item.IsBoxed()) {
                                             item.Apply(applyCtx);

@@ -1456,8 +1456,10 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
-    Y_UNIT_TEST(Returning) {
-        auto serverSettings = TKikimrSettings().SetWithSampleTables(false);
+    Y_UNIT_TEST_TWIN(Returning, EnableIndexStreamWrite) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        auto serverSettings = TKikimrSettings(app).SetWithSampleTables(false);
         TKikimrRunner kikimr(serverSettings);
 
         auto client = kikimr.GetTableClient();
@@ -1569,7 +1571,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            CompareYson(R"([["2";"2"];["3";"2"];["1";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+            if (EnableIndexStreamWrite) {
+                CompareYson(R"([["1";"3"];["2";"2"];["3";"2"]])", FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                CompareYson(R"([["2";"2"];["3";"2"];["1";"3"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
         }
     }
 

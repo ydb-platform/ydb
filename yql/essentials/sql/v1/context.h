@@ -4,7 +4,7 @@
 #include "sql.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
@@ -439,8 +439,8 @@ public:
         EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
-    bool StrictWarningAsError = false;
-    bool WindowNewPipeline = false;
+    bool StrictWarningAsError = true;
+    bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
@@ -511,7 +511,7 @@ public:
         return IdContent(Ctx_, Token(token));
     }
 
-    TString Identifier(const TString& str) const {
+    [[nodiscard]] TString Identifier(const TString& str) const {
         return IdContent(Ctx_, str);
     }
 
@@ -522,7 +522,7 @@ public:
     TString PushNamedNode(TPosition namePos, const TString& name, TNodePtr node);
     TString PushNamedAtom(TPosition namePos, const TString& name);
     bool PopNamedNode(const TString& name);
-    bool WarnUnusedNodes() const;
+    [[nodiscard]] bool WarnUnusedNodes() const;
 
     template <typename TNode>
     void AltNotImplemented(const TString& ruleName, const TNode& node) {

@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
@@ -646,23 +647,49 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
     auto op = GetOutputOp(input.Cast<TYtOutput>());
     TExprNode::TPtr newOp = op.Ptr();
 
-    if (builder && builder->NeedMap() && maybeOp.Maybe<TYtDqProcessWrite>()) {
+    if (maybeOp.Maybe<TYtDqProcessWrite>()) {
         TNodeOnNodeOwnedMap remaps;
-        VisitExpr(maybeOp.Cast<TYtDqProcessWrite>().Input().Ptr(), [&builder, &remaps, &ctx](const TExprNode::TPtr& n) {
-            if (TYtOutput::Match(n.Get())) {
-                // Stop traversing dependent operations
-                return false;
+        if (builder && builder->NeedMap()) {
+            VisitExpr(maybeOp.Cast<TYtDqProcessWrite>().Input().Ptr(), [&builder, &remaps, &ctx](const TExprNode::TPtr& n) {
+                if (TYtOutput::Match(n.Get())) {
+                    // Stop traversing dependent operations
+                    return false;
+                }
+                if (TYtDqWrite::Match(n.Get())) {
+                    auto newInput = Build<TExprApplier>(ctx, n->Pos())
+                        .Apply(TCoLambda(builder->MakeRemapLambda(true)))
+                        .With(0, TExprBase(n->ChildPtr(TYtDqWrite::idx_Input)))
+                        .Done();
+                    remaps[n.Get()] = ctx.ChangeChild(*n, TYtDqWrite::idx_Input, newInput.Ptr());
+                }
+                return true;
+            });
+        }
+        if (sorted) {
+            YQL_ENSURE(State_->DqHelper); // TYtDqProcessWrite cannot be created without DqHelper
+            VisitExpr(maybeOp.Cast<TYtDqProcessWrite>().Input().Ptr(), [&remaps, &ctx, this](const TExprNode::TPtr& n) {
+                if (TYtOutput::Match(n.Get())) {
+                    // Stop traversing dependent operations
+                    return false;
+                }
+                if (auto stage = TMaybeNode<NNodes::NDq::TDqStage>(n); stage && !State_->DqHelper->IsSinglePartitionMode(stage.Ref())) {
+                    if (const auto& writes = FindNodes(stage.Cast().Program().Ptr(),
+                        [] (const TExprNode::TPtr& node) { return !TYtOutputOpBase::Match(node.Get()); },
+                        [] (const TExprNode::TPtr& node) { return TYtDqWrite::Match(node.Get()); });
+                        !writes.empty()) {
+
+                        remaps[n.Get()] = State_->DqHelper->SetSinglePartitionMode(n, ctx);
+                    }
+                }
+                return true;
+            });
+        }
+        if (!remaps.empty()) {
+            auto status = RemapExpr(newOp, newOp, remaps, ctx, TOptimizeExprSettings{State_->Types});
+            if (status.Level == IGraphTransformer::TStatus::Error) {
+                return {};
             }
-            if (TYtDqWrite::Match(n.Get())) {
-                auto newInput = Build<TExprApplier>(ctx, n->Pos())
-                    .Apply(TCoLambda(builder->MakeRemapLambda(true)))
-                    .With(0, TExprBase(n->ChildPtr(TYtDqWrite::idx_Input)))
-                    .Done();
-                remaps[n.Get()] = ctx.ChangeChild(*n, TYtDqWrite::idx_Input, newInput.Ptr());
-            }
-            return true;
-        });
-        newOp = ctx.ChangeChild(*newOp, TYtDqProcessWrite::idx_Input, ctx.ReplaceNodes(newOp->ChildPtr(TYtDqProcessWrite::idx_Input), remaps));
+        }
     }
 
     if (!op.Maybe<TYtSort>() && sorted) {

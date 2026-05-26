@@ -1,5 +1,3 @@
 #include "locks_db.h"
 
-namespace NKikimr::NColumnShard {
-
-}
+namespace NKikimr::NColumnShard {}

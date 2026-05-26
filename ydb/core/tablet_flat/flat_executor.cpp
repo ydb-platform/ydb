@@ -48,6 +48,7 @@
 
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
+#include <util/random/random.h>
 
 
 #define LOG_BACKUP_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
@@ -4302,8 +4303,8 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::StartVacuum(ui64 vacuumGeneration) {
-    if (VacuumLogic->TryStartVacuum(vacuumGeneration, OwnerCtx())) {
+void TExecutor::StartVacuum(TVacuumTag tag) {
+    if (VacuumLogic->TryStartVacuum(tag, OwnerCtx())) {
         for (const auto& [tableId, _] : Scheme().Tables) {
             auto compactionId = CompactionLogic->PrepareForceCompaction(tableId);
             VacuumLogic->OnCompactionPrepared(tableId, compactionId);
@@ -4834,6 +4835,10 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     }
 
     { // Check bloom filters
+        // Note: Both ByKeyPrefixes and ByKeyFilterPrefixes are sorted by prefix length.
+        // This invariant is maintained by TPart constructor validation and by the sorted TMap
+        // intermediate used when building ByKeyFilterPrefixes in flat_dbase_apply.cpp.
+        // Positional comparison is safe as long as this ordering is preserved.
         if (partView->ByKeyPrefixes.size() != tableInfo.ByKeyFilterPrefixes.size()) {
             return true;
         }
@@ -5201,7 +5206,7 @@ void TExecutor::StartNewBackup() {
     Y_ENSURE(!BackupSnapshotInProgress);
 
     // Stop the old backup changelog
-    CommitManager->BackupLogic.Stop();
+    CommitManager->BackupLogic.Stop(true);
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
@@ -5211,30 +5216,23 @@ void TExecutor::StartNewBackup() {
     if (snapshotWriter && changelogWriter) {
         LOG_BACKUP_N("Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        const ui32 workBudgetPercent = std::clamp<ui32>(backupConfig.GetSnapshotWorkBudgetPercent(), 1, 100);
         for (const auto& [tableId, table] : tables) {
             if (exclusion && exclusion->HasTable(tableId)) {
                 continue;
             }
 
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion, workBudgetPercent), 0, opts);
         }
         BackupSnapshotInProgress = true;
         Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(1);
 
-        auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
-        CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor, backupConfig.GetChangelogInFlightBytesLimit());
+        auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->SystemPoolId);
+        CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor);
     } else {
         LOG_BACKUP_D("Backup not configured");
     }
-}
-
-void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
-    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
-        return;
-    }
-
-    CommitManager->BackupLogic.OnProcessedBytes(ev->Get()->ProcessedBytes);
 }
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
@@ -5246,6 +5244,7 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
 
         if (CommitManager->BackupLogic.IsRunning()) {
             CommitManager->BackupLogic.OnSnapshotCompleted(ev);
+            BackupRetry.reset();
         } else {
             ScheduleRetryBackup();
         }
@@ -5276,10 +5275,19 @@ void TExecutor::FailBackup(const TString& error) {
     ScheduleRetryBackup();
 }
 
-void TExecutor::ScheduleRetryBackup() const {
+void TExecutor::ScheduleRetryBackup() {
     if (!BackupSnapshotInProgress) {
-        auto retryTimeout = TDuration::Seconds(AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
-        LOG_BACKUP_N("Scheduling backup retry" << " Timeout# " << retryTimeout);
+        if (!BackupRetry) {
+            const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+            auto initialDelay = TDuration::Seconds(Max<ui64>(backupConfig.GetRetryBackupTimeoutSeconds(), 1));
+            auto maxDelay = TDuration::Seconds(Max<ui64>(backupConfig.GetRetryBackupMaxTimeoutSeconds(), 1));
+            BackupRetry.emplace(initialDelay, Max(initialDelay, maxDelay));
+        }
+
+        auto retryTimeout = BackupRetry->Next();
+        LOG_BACKUP_N("Scheduling backup retry"
+            << " Timeout# " << retryTimeout
+            << " Attempt# " << BackupRetry->GetIteration());
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
     }
 }
@@ -5292,15 +5300,45 @@ void TExecutor::Handle(NBackup::TEvStartNewBackup::TPtr& ev) {
     StartNewBackup();
 }
 
+void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
+    Counters->Simple()[TExecutorCounters::BACKUP_CHANGELOG_INFLIGHT_BYTES].Add(ev->Get()->Bytes);
+}
+
 void TExecutor::Handle(NBackup::TEvSnapshotStats::TPtr& ev) {
     Counters->Cumulative()[TExecutorCounters::BACKUP_SNAPSHOT_BYTES_WRITTEN].Increment(ev->Get()->BytesWritten);
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
     const auto* msg = ev->Get();
     Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_BYTES_WRITTEN].Increment(msg->BytesWritten);
-    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].IncrementFor(msg->FlushLatency.MicroSeconds());
+    Counters->Simple()[TExecutorCounters::BACKUP_CHANGELOG_INFLIGHT_BYTES].Sub(ev->Get()->BytesWritten);
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].IncrementFor(msg->Latency.MicroSeconds());
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
+}
+
+void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
+    if (!Stats->IsFollower()) {
+        MoveDataSubscribers.insert(ev->Sender);
+        StartVacuum(TNoTag());
+    }
+}
+
+void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) {
+    if (generation) {
+        Owner->VacuumComplete(generation, ctx);
+    }
+    for (const auto& actor : MoveDataSubscribers) {
+        ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(TabletId()));
+    }
+    MoveDataSubscribers.clear();
 }
 
 }

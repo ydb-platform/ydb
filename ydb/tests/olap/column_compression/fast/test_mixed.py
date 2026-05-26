@@ -32,6 +32,11 @@ class TestMixedCompression(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def test_create_with_mixed_value_compression(self):
         table_path = f"{self.test_dir}/create_mixed_value_table"
 

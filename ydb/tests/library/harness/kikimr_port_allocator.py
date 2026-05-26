@@ -42,6 +42,10 @@ class KikimrNodePortAllocatorInterface(object):
     def public_http_port(self):
         pass
 
+    @abc.abstractproperty
+    def kafka_api_port(self):
+        pass
+
 
 class KikimrPortAllocatorInterface(object):
     __metaclass__ = abc.ABCMeta
@@ -86,12 +90,19 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__ext_port = None
         self.__public_http_port = None
         self.__pgwire_port = None
+        self.__kafka_api_port = None
 
     @property
     def mon_port(self):
         if self.__mon_port is None:
             self.__mon_port = self.__port_manager.get_port()
         return self.__mon_port
+
+    @property
+    def kafka_api_port(self):
+        if self.__kafka_api_port is None:
+            self.__kafka_api_port = self.__port_manager.get_port()
+        return self.__kafka_api_port
 
     @property
     def grpc_port(self):
@@ -183,6 +194,7 @@ DEFAULT_SQS_PORT = 8771
 DEFAULT_PUBLIC_HTTP_PORT = 8766
 DEFAULT_PGWIRE_PORT = 5432
 DEFAULT_HTTP_PROXY_PORT = 8433
+DEFAULT_KAFKA_API_PORT = 9092
 
 #
 # Fixed port allocator
@@ -202,7 +214,8 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         grpc_ssl_port=DEFAULT_GRPC_SSL_PORT,
         public_http_port=DEFAULT_PUBLIC_HTTP_PORT,
         pgwire_port=DEFAULT_PGWIRE_PORT,
-        http_proxy_port=DEFAULT_HTTP_PROXY_PORT
+        http_proxy_port=DEFAULT_HTTP_PROXY_PORT,
+        kafka_api_port=DEFAULT_KAFKA_API_PORT
     ):
         super(KikimrFixedNodePortAllocator, self).__init__()
 
@@ -216,6 +229,7 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__public_http_port = int(os.getenv('PUBLIC_HTTP_PORT', public_http_port))
         self.__pgwire_port = int(os.getenv('YDB_PGWIRE_PORT', pgwire_port))
         self.__http_proxy_port = int(os.getenv('HTTP_PROXY_PORT', http_proxy_port))
+        self.__kafka_api_port = int(os.getenv('YDB_KAFKA_PROXY_PORT', kafka_api_port))
 
     @property
     def mon_port(self):
@@ -252,6 +266,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     @property
     def http_proxy_port(self):
         return self.__http_proxy_port + self.base_port_offset
+
+    @property
+    def kafka_api_port(self):
+        return self.__kafka_api_port + self.base_port_offset
 
 
 class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):

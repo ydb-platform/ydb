@@ -10,6 +10,89 @@
 
 namespace NKikimr::NPQ::NSchema {
 
+namespace {
+
+TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
+    if (alter.has_set_important()) {
+        consumer.set_important(alter.set_important());
+    }
+    if (alter.has_set_read_from()) {
+        consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
+    }
+    if (alter.has_set_supported_codecs()) {
+        consumer.mutable_supported_codecs()->CopyFrom(alter.set_supported_codecs());
+    }
+    for (const auto& [attrName, attrValue] : alter.alter_attributes()) {
+        (*consumer.mutable_attributes())[attrName] = attrValue;
+    }
+    if (alter.has_set_availability_period()) {
+        consumer.mutable_availability_period()->CopyFrom(alter.set_availability_period());
+    }
+    if (alter.has_reset_availability_period()) {
+        consumer.clear_availability_period();
+    }
+
+    if (alter.has_alter_streaming_consumer_type()) {
+        if (!consumer.has_streaming_consumer_type()) {
+            return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type"};
+        }
+    } else if (alter.has_alter_shared_consumer_type()) {
+        if (!consumer.has_shared_consumer_type()) {
+            return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type"};
+        }
+
+        auto* type = consumer.mutable_shared_consumer_type();
+        auto& alterType = alter.alter_shared_consumer_type();
+
+        if (alterType.has_set_default_processing_timeout()) {
+            type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
+        }
+
+        if (alterType.has_set_receive_message_delay()) {
+            type->mutable_receive_message_delay()->CopyFrom(alterType.set_receive_message_delay());
+        }
+
+        if (alterType.has_set_receive_message_wait_time()) {
+            type->mutable_receive_message_wait_time()->CopyFrom(alterType.set_receive_message_wait_time());
+        }
+
+        if (alterType.has_alter_dead_letter_policy()) {
+            auto& alterPolicy = alterType.alter_dead_letter_policy();
+            auto* policy = type->mutable_dead_letter_policy();
+            if (alterPolicy.has_set_enabled()) {
+                policy->set_enabled(alterPolicy.set_enabled());
+            }
+
+            if (alterPolicy.has_alter_condition()) {
+                policy->mutable_condition()->set_max_processing_attempts(alterPolicy.alter_condition().set_max_processing_attempts());
+            }
+
+            if (alterPolicy.has_alter_move_action()) {
+                if (!policy->has_move_action()) {
+                    return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter move action"};
+                }
+                if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
+                    if (alterPolicy.alter_move_action().set_dead_letter_queue().empty()) {
+                        return {Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty"};
+                    }
+                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
+                }
+            } else if (alterPolicy.has_set_move_action()) {
+                if (alterPolicy.set_move_action().dead_letter_queue().empty()) {
+                    return {Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty"};
+                }
+                policy->clear_action();
+                policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
+            } else if (alterPolicy.has_set_delete_action()) {
+                policy->clear_action();
+                policy->mutable_delete_action();
+            }
+        }
+    }
+
+    return TResult();
+}
+
 TResult ApplyChangesInt(
     const Ydb::Topic::AlterTopicRequest& request,
     NKikimrSchemeOp::TPersQueueGroupDescription& config,
@@ -47,7 +130,6 @@ TResult ApplyChangesInt(
     }
 
     if (request.has_set_retention_storage_mb()) {
-        CHECK_CDC;
         partConfig->ClearStorageLimitBytes();
         if (request.set_retention_storage_mb())
             partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
@@ -137,7 +219,6 @@ TResult ApplyChangesInt(
     bool local = true; //todo: check locality
     if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
         if (request.has_set_partition_write_speed_bytes_per_second()) {
-            CHECK_CDC;
             auto partSpeed = request.set_partition_write_speed_bytes_per_second();
             if (partSpeed == 0) {
                 partSpeed = DEFAULT_PARTITION_SPEED;
@@ -146,7 +227,6 @@ TResult ApplyChangesInt(
         }
 
         if (request.has_set_partition_write_burst_bytes()) {
-            CHECK_CDC;
             const auto& burstSpeed = request.set_partition_write_burst_bytes();
             if (burstSpeed == 0) {
                 partConfig->SetBurstSize(partConfig->GetWriteSpeedInBytesPerSecond());
@@ -239,7 +319,7 @@ TResult ApplyChangesInt(
     pqTabletConfig->ClearConsumers();
 
     for (const auto& rr : consumers) {
-        auto result = ProcessAddConsumer(
+        auto result = AddConsumer(
             pqTabletConfig,
             rr.second,
             supportedClientServiceTypes,
@@ -260,91 +340,32 @@ TResult ApplyChangesInt(
         pqTabletConfig->ClearMetricsLevel();
     }
 
-    return ValidateConfig(*pqTabletConfig, supportedClientServiceTypes, EOperation::Alter);
+    if (request.has_set_partition_write_speed_messages_per_second()) {
+        if (request.set_partition_write_speed_messages_per_second() == 0) {
+            partConfig->SetWriteSpeedInMessagesPerSecond(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+        } else if (request.set_partition_write_speed_messages_per_second() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_speed_messages_per_second can't be negative, provided " << request.set_partition_write_speed_messages_per_second()};
+        } else if (request.set_partition_write_speed_messages_per_second() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_speed_messages_per_second can't be greater than" << DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND << ", provided " << request.set_partition_write_speed_messages_per_second()};
+        } else {
+            partConfig->SetWriteSpeedInMessagesPerSecond(request.set_partition_write_speed_messages_per_second());
+        }
+    }
+
+    if (request.has_set_partition_write_burst_messages()) {
+        if (request.set_partition_write_burst_messages() == 0) {
+            partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
+        } else if (request.set_partition_write_burst_messages() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be negative, provided " << request.set_partition_write_burst_messages()};
+        } else if (request.set_partition_write_burst_messages() > static_cast<i64>(DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND)) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_write_burst_messages can't be greater than" << DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND << ", provided " << request.set_partition_write_burst_messages()};
+        } else {
+            partConfig->SetBurstSizeInMessages(request.set_partition_write_burst_messages());
+        }
+    }
+
+    return {};
 }
-
-TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
-    if (alter.has_set_important()) {
-        consumer.set_important(alter.set_important());
-    }
-    if (alter.has_set_read_from()) {
-        consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
-    }
-    if (alter.has_set_supported_codecs()) {
-        consumer.mutable_supported_codecs()->CopyFrom(alter.set_supported_codecs());
-    }
-    for (const auto& [attrName, attrValue] : alter.alter_attributes()) {
-        (*consumer.mutable_attributes())[attrName] = attrValue;
-    }
-    if (alter.has_set_availability_period()) {
-        consumer.mutable_availability_period()->CopyFrom(alter.set_availability_period());
-    }
-    if (alter.has_reset_availability_period()) {
-        consumer.clear_availability_period();
-    }
-
-    if (alter.has_alter_streaming_consumer_type()) {
-        if (!consumer.has_streaming_consumer_type()) {
-            return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type"};
-        }
-    } else if (alter.has_alter_shared_consumer_type()) {
-        if (!consumer.has_shared_consumer_type()) {
-            return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter consumer type"};
-        }
-
-        auto* type = consumer.mutable_shared_consumer_type();
-        auto& alterType = alter.alter_shared_consumer_type();
-
-        if (alterType.has_set_default_processing_timeout()) {
-            type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
-        }
-
-        if (alterType.has_set_receive_message_delay()) {
-            type->mutable_receive_message_delay()->CopyFrom(alterType.set_receive_message_delay());
-        }
-
-        if (alterType.has_set_receive_message_wait_time()) {
-            type->mutable_receive_message_wait_time()->CopyFrom(alterType.set_receive_message_wait_time());
-        }
-
-        if (alterType.has_alter_dead_letter_policy()) {
-            auto& alterPolicy = alterType.alter_dead_letter_policy();
-            auto* policy = type->mutable_dead_letter_policy();
-            if (alterPolicy.has_set_enabled()) {
-                policy->set_enabled(alterPolicy.set_enabled());
-            }
-
-            if (alterPolicy.has_alter_condition()) {
-                policy->mutable_condition()->set_max_processing_attempts(alterPolicy.alter_condition().set_max_processing_attempts());
-            }
-
-            if (alterPolicy.has_alter_move_action()) {
-                if (!policy->has_move_action()) {
-                    return {Ydb::StatusIds::BAD_REQUEST, "Cannot alter move action"};
-                }
-                if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
-                    if (alterPolicy.alter_move_action().set_dead_letter_queue().empty()) {
-                        return {Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty"};
-                    }
-                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
-                }
-            } else if (alterPolicy.has_set_move_action()) {
-                if (alterPolicy.set_move_action().dead_letter_queue().empty()) {
-                    return {Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty"};
-                }
-                policy->clear_action();
-                policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
-            } else if (alterPolicy.has_set_delete_action()) {
-                policy->clear_action();
-                policy->mutable_delete_action();
-            }
-        }
-    }
-
-    return TResult();
-}
-
-namespace {
 
 struct TAlterTopicStrategy: public IAlterTopicStrategy {
     TAlterTopicStrategy(Ydb::Topic::AlterTopicRequest&& request)
@@ -357,12 +378,15 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     }
 
     TResult ApplyChanges(
+        const TString& /*localCluster*/,
+        const NDescriber::TTopicInfo& topicInfo,
         NKikimrSchemeOp::TModifyScheme& /*modifyScheme*/,
         NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& /*sourceConfig*/,
-        const bool isCdcStream
+        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig
     ) override {
-        return ApplyChangesInt(Request, targetConfig, isCdcStream);
+        CopyConfig(targetConfig, sourceConfig);
+
+        return ApplyChangesInt(Request, targetConfig, topicInfo.CdcStream);
     }
 
     Ydb::Topic::AlterTopicRequest Request;
@@ -374,10 +398,11 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
     return CreateAlterTopicOperationActor(parentId, {
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),
-        .UserToken = settings.UserToken,
+        .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
         .IfExists = settings.IfExists,
-        .Cookie = settings.Cookie,
+        .PrepareOnly = settings.PrepareOnly,
+        .Cookie = settings.Cookie
     });
 }
 

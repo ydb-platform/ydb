@@ -4232,6 +4232,9 @@ PRAGMA ydb.OptShuffleElimination = "true";
 
     // General mixed case: both hash domains and transitions in one plan.
     Y_UNIT_TEST(ShuffleEliminationMixedHashFuncCompatibility) {
+        // When both final join inputs are already shuffled, DPHyp still
+        // has to shuffle one due to runtime limitations and tie breaks
+        // based on statistics - so we pin those too.
         const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "i", "d", "e", "f", "g", "h"}, R"(
             PRAGMA ydb.CostBasedOptimizationLevel = "4";
             PRAGMA ydb.OptShuffleElimination = "true";
@@ -4244,6 +4247,8 @@ PRAGMA ydb.OptShuffleElimination = "true";
                 JoinType(e f g Shuffle)
                 JoinType(e f g h Shuffle)
                 JoinType(a b c i d e f g h Shuffle)
+                Rows(a b c i d # 10000000)
+                Bytes(a b c i d # 10000000)
                 JoinOrder(((((a b) c) i) d) (((e f) g) h))
             ';
 

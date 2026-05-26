@@ -53,7 +53,7 @@ Chaos testing is typically run in conjunction with stress testing workloads from
 
 ## How Verification Works
 
-While failures are being injected, the system continuously checks two aspects:
+While failures are being injected, the system continuously checks two [properties](https://en.wikipedia.org/wiki/Safety_and_liveness_properties):
 
 - **Liveness** — the cluster remains available and continues to process requests
 - **Safety** — no signs of data correctness violations or internal system invariant breaches appear in cluster logs and metrics
@@ -76,16 +76,17 @@ nemesis install --yaml-config-location /path/to/cluster.yaml
 
 # Two-file config (separate cluster.yaml and databases.yaml)
 nemesis install \
-    --yaml-config-location /path/to/config.yaml \
+    --yaml-config-location /path/to/cluster.yaml \
     --database-config-location /path/to/databases.yaml
 ```
 
-The first host in the cluster configuration becomes the orchestrator; all other hosts become agents. Services are deployed as systemd units and started automatically.
+The first host in the cluster configuration becomes the orchestrator; all other hosts become agents. Services are deployed as systemd units and started automatically. Upon successful installation, the console output prints the URL of the Nemesis web UI (served by the orchestrator), which can be used to monitor active faults, schedules, execution history, and health check results.
 
 ### Stopping Services
 
 Stop all Nemesis services on the cluster:
 
 ```bash
-nemesis stop --yaml-config-location /path/to/config.yaml
+nemesis stop --yaml-config-location /path/to/cluster.yaml
 ```
+

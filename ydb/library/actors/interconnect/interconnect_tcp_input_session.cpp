@@ -7,7 +7,17 @@
 
 #include <variant>
 
+#if defined(__x86_64__)
 #include <contrib/restricted/abseil-cpp-tstring/y_absl/crc/internal/non_temporal_memcpy.h>
+#endif
+
+Y_FORCE_INLINE void MemcpyNoCache(void* dst, const void* src, size_t len) {
+#if defined(__x86_64__)
+    y_absl::crc_internal::non_temporal_store_memcpy_avx(dst, src, len);
+#else
+    memcpy(dst, src, len);
+#endif
+}
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -81,7 +91,7 @@ namespace NActors {
             const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
             if (NeedReallocateRdma(region)) {
                 auto newChunk = TRcBuf::Uninitialized(chunk.Size(), chunk.Headroom(), chunk.Tailroom());
-                y_absl::crc_internal::non_temporal_store_memcpy_avx(newChunk.GetContiguousSpanMut().data(), chunk.GetContiguousSpan().data(), chunk.Size());
+                MemcpyNoCache(newChunk.GetContiguousSpanMut().data(), chunk.GetContiguousSpan().data(), chunk.Size());
                 chunk = newChunk;
             }
         }

@@ -94,4 +94,3 @@ class TimeSkewNemesisPlanner(NetworkNemesisPlanner):
     def __init__(self) -> None:
         super().__init__(max_affected=2)
         self.nemesis_type = "TimeSkewNemesis"
-

@@ -1049,12 +1049,30 @@ private:
         if (dataSinkCategory == NYql::KqpTableSinkName) {
             auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
 
+            NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
+            {
+                AFL_ENSURE(stagePlanNode.StageProto);
+                bool found = false;
+                for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
+                    if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                            && protoSink.HasInternalSink()
+                            && protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                                found = true;
+                                break;
+                    }
+                }
+                AFL_ENSURE(found);
+            }
+
             TString tablePath;
             TTableWrite writeInfo;
             if (settings.Mode().StringValue() == "replace") {
                 op.Properties["Name"] = "Replace";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert" || settings.Mode().StringValue() == "update_conditional" || settings.Mode().StringValue().empty()) {
+            } else if (settings.Mode().StringValue() == "upsert"
+                    || settings.Mode().StringValue() == "update_conditional"
+                    || (settings.Mode().StringValue() == "update" && tableSinkSettings.GetSkipMissingRows())
+                    || settings.Mode().StringValue().empty()) {
                 op.Properties["Name"] = "Upsert";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsert;
             } else if (settings.Mode().StringValue() == "insert") {
@@ -1110,48 +1128,79 @@ private:
             }
 
             SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
 
-            AFL_ENSURE(stagePlanNode.StageProto);
-            for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
-                if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
-                    && protoSink.HasInternalSink()) {
-                    NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
-                    if (protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
-                        if (tableSinkSettings.GetNeedLookup()) {
-                            NJson::TJsonValue lookupColumns;
-                            lookupColumns.SetType(NJson::EJsonValueType::JSON_ARRAY);
-                            for (const auto& col : tableSinkSettings.GetLookupColumns()) {
-                                lookupColumns.AppendValue(col.GetName());
-                            }
-                            op.Properties["Lookup"] = lookupColumns;
-                            
-                        }
+            if (tableSinkSettings.GetNeedLookup()) {
+                TTableRead readInfo;
+                readInfo.Type = EPlanTableReadType::Lookup;
 
-                        NJson::TJsonValue updateIndexes;
-                        updateIndexes.SetType(NJson::EJsonValueType::JSON_ARRAY);
-                        for (const auto& index : tableSinkSettings.GetIndexes()) {
-                            NJson::TJsonValue indexInfo;
-                            indexInfo["Table"] = index.GetTable().GetPath();
-
-                            NJson::TJsonValue columns;
-                            columns.SetType(NJson::EJsonValueType::JSON_ARRAY);
-                            for (const auto& col : index.GetColumns()) {
-                                columns.AppendValue(col.GetName());
-                            }
-                            indexInfo["Columns"] = columns;
-
-                            if (index.GetIsUniq()) {
-                                indexInfo["CheckUnique"] = true;
-                            }
-
-                            updateIndexes.AppendValue(indexInfo);
-                        }
-                        op.Properties["UpdateIndexes"] = updateIndexes;
-                    }
-                    break;
+                NJson::TJsonValue lookupColumns;
+                lookupColumns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& col : tableSinkSettings.GetKeyColumns()) {
+                    readInfo.Columns.push_back(col.GetName());
                 }
+                for (const auto& col : tableSinkSettings.GetLookupColumns()) {
+                    lookupColumns.AppendValue(col.GetName());
+                    readInfo.Columns.push_back(col.GetName());
+                }
+
+                op.Properties["Lookup"] = lookupColumns;
+                SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
             }
+
+            {
+                NJson::TJsonValue updateIndexes;
+                updateIndexes.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& index : tableSinkSettings.GetIndexes()) {
+                    NJson::TJsonValue indexInfo;
+                    indexInfo["Name"] = index.GetIndexName();
+                    indexInfo["Path"] = index.GetTable().GetPath();
+
+                    TTableWrite indexWriteInfo;
+                    if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpdate;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiErase;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpsert;
+                    } else {
+                        YQL_ENSURE(false, "Unexpected operation type for index");
+                    }
+
+                    NJson::TJsonValue columns;
+                    columns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                    for (const auto& col : index.GetColumns()) {
+                        columns.AppendValue(col.GetName());
+                        indexWriteInfo.Columns.push_back(col.GetName());
+                    }
+                    indexInfo["Columns"] = columns;
+                    SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexWriteInfo);
+
+                    if (index.GetIsUniq()) {
+                        indexInfo["CheckUnique"] = true;
+
+                        TTableRead readInfo;
+                        readInfo.Type = EPlanTableReadType::Lookup;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            readInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Reads.push_back(readInfo);
+                    }
+
+                    if (index.GetNeedDeleteOldRows()) {
+                        TTableWrite indexDeleteInfo;
+                        indexDeleteInfo.Type = EPlanTableWriteType::MultiErase;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            indexDeleteInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexDeleteInfo);
+                    }
+
+                    updateIndexes.AppendValue(indexInfo);
+                }
+                op.Properties["UpdateIndexes"] = updateIndexes;
+            }
+
+            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;

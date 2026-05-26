@@ -31,7 +31,7 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        Send(ParentId, new TEvCreateTopicResponse(Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
+        Send(ParentId, new TEvAlterTopicResponse(Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
     }
 
 private:

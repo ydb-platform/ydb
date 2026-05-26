@@ -55,11 +55,11 @@ FROM (
 ) AS tmp1
 WHERE
     CASE
-        WHEN (avg_monthly_sales != 0) THEN (
+        WHEN (avg_monthly_sales != cast(0 as decimal(35,2))) THEN (
             abs(sum_sales - avg_monthly_sales) / avg_monthly_sales
         )
         ELSE NULL
-    END > 0.1
+    END > cast("0.1" as decimal(35,2))
 ORDER BY
     sum_sales - avg_monthly_sales,
     s_store_name

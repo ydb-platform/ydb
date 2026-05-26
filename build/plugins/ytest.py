@@ -53,6 +53,7 @@ YTEST_FIELDS_BASE = (
     df.TestIosDeviceType.value,
     df.TestIosRuntimeType.value,
     df.TestRecipes.value,
+    df.TestPersistentRecipes.value,
 )
 
 YTEST_FIELDS_EXTRA = (
@@ -85,6 +86,7 @@ PY_EXEC_FIELDS_BASE = (
     df.TestFiles.test_srcs,
     df.TestPartition.value,
     df.TestRecipes.value,
+    df.TestPersistentRecipes.value,
     df.TestTimeout.from_unit_with_default,
     df.UseArcadiaPython.value,
 )

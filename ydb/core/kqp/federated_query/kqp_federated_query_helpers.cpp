@@ -339,7 +339,8 @@ namespace {
             DqTaskTransformFactory,
             PqGatewayConfig,
             MakePqGatewayFactory(Driver, LocalTopicClientSettings),
-            ActorSystemPtr
+            ActorSystemPtr,
+            ScriptExecutionSettings,
         };
 
         // Init DatabaseAsyncResolver only if all requirements are met
@@ -354,6 +355,10 @@ namespace {
         }
 
         return result;
+    }
+
+    void TKqpFederatedQuerySetupFactoryDefault::SetScriptExecutionSettings(const TScriptExecutionSettings& settings) {
+        ScriptExecutionSettings = settings;
     }
 
     void TKqpFederatedQuerySetupFactoryDefault::Cleanup() {

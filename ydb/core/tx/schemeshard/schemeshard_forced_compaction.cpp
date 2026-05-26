@@ -198,26 +198,49 @@ void TSchemeShard::ProcessForcedCompactionQueues() {
     while (!ForcedCompactionTablesQueue.Empty() && tablesWithoutCandidates.size() < initialQueueSize) {
         auto tablePathId = ForcedCompactionTablesQueue.Front();
         auto& compaction = InProgressForcedCompactionsByTable.at(tablePathId);
-        auto* shards = ForcedCompactionShardsByTable.FindPtr(tablePathId);
-        if (shards && !shards->Empty() && compaction->MaxShardsInFlight > compaction->ShardsInFlight.size()) {
-            const auto& shardIdx = shards->Front();
-            shards->PopFront();
-            --ForcedCompactionTotalInQueues;
-            compaction->ShardsInFlight.insert(shardIdx);
-            EnqueueForcedCompaction(shardIdx);
-        }
-        if (!shards || shards->Empty()) {
-            tablesWithoutCandidates.insert(tablePathId);
-            ForcedCompactionShardsByTable.erase(tablePathId);
-            ForcedCompactionTablesQueue.PopFront();
-        } else {
-            if (compaction->MaxShardsInFlight <= compaction->ShardsInFlight.size()) {
-                tablesWithoutCandidates.insert(tablePathId);
-            }
-            ForcedCompactionTablesQueue.PopFrontToBack();
-        }
+        TryEnqueueOneShard(tablePathId, *compaction, &tablesWithoutCandidates);
     }
     UpdateForcedCompactionQueueMetrics();
+}
+
+void TSchemeShard::ProcessForcedCompactionQueuesForTable(const TPathId& tablePathId, TForcedCompactionInfo& compaction) {
+    // Skip the nested call of ProcessForcedCompactionQueues()
+    if (InProcessForcedCompactionQueues) {
+        return;
+    }
+    InProcessForcedCompactionQueues = true;
+    Y_DEFER { InProcessForcedCompactionQueues = false; };
+
+    TryEnqueueOneShard(tablePathId, compaction, nullptr);
+}
+
+void TSchemeShard::TryEnqueueOneShard(
+    const TPathId& tablePathId,
+    TForcedCompactionInfo& compaction,
+    THashSet<TPathId>* tablesWithoutCandidates)
+{
+    auto* shards = ForcedCompactionShardsByTable.FindPtr(tablePathId);
+    if (shards && !shards->Empty() && compaction.MaxShardsInFlight > compaction.ShardsInFlight.size()) {
+        const auto& shardIdx = shards->Front();
+        shards->PopFront();
+        --ForcedCompactionTotalInQueues;
+        compaction.ShardsInFlight.insert(shardIdx);
+        EnqueueForcedCompaction(shardIdx);
+    }
+    if (!shards || shards->Empty()) {
+        if (tablesWithoutCandidates) {
+            tablesWithoutCandidates->insert(tablePathId);
+        }
+        ForcedCompactionShardsByTable.erase(tablePathId);
+        ForcedCompactionTablesQueue.PopFront();
+    } else {
+        if (tablesWithoutCandidates) {
+            if (compaction.MaxShardsInFlight <= compaction.ShardsInFlight.size()) {
+                tablesWithoutCandidates->insert(tablePathId);
+            }
+        }
+        ForcedCompactionTablesQueue.PopFrontToBack();
+    }
 }
 
 void TSchemeShard::Handle(TEvForcedCompaction::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {
@@ -405,7 +428,8 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
             << ", new TotalShardCount# " << compaction->TotalShardCount
             << " at schemeshard " << TabletID());
 
-        ProcessForcedCompactionQueues();
+        // we need to enqueue at least one shard instead of the deleted one in order to make progress
+        ProcessForcedCompactionQueuesForTable(tablePathId, *compaction);
     }
 }
 

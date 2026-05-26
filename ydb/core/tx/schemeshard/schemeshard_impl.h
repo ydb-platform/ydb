@@ -1919,6 +1919,8 @@ public:
     bool IsForcedCompactionCompleted(const TForcedCompactionInfo& forcedCompactionInfo) const;
     void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId);
     void ProcessForcedCompactionQueues();
+    void ProcessForcedCompactionQueuesForTable(const TPathId& tablePathId, TForcedCompactionInfo& compaction);
+    void TryEnqueueOneShard(const TPathId& tablePathId, TForcedCompactionInfo& forcedCompactionInfo, THashSet<TPathId>* tablesWithoutCandidates);
     void UpdateForcedCompactionQueueMetrics();
 
     void EnqueueForcedCompaction(const TShardIdx& shardIdx);

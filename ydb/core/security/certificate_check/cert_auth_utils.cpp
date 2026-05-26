@@ -8,8 +8,8 @@ X509CertificateReader::X509Ptr ReadCertificate(const std::string& certificate, E
     switch (certFormat) {
         case ECertificateFormat::PEM: return X509CertificateReader::ReadCertAsPEM(certificate);
         case ECertificateFormat::DER: return X509CertificateReader::ReadCertAsDER(certificate);
+        default: Y_UNREACHABLE();
     }
-    Y_UNREACHABLE();
 }
 
 } // namespace

@@ -465,6 +465,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev);
 
         void Handle(NPDisk::TEvCutLog::TPtr ev);
+        void Handle(TEvDeleteTabletChunks::TPtr ev);
 
         void Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev);
         void Handle(NPDisk::TEvChunkReadRawResult::TPtr ev);
@@ -472,7 +473,8 @@ namespace NKikimr::NDDisk {
         ui64 GetFirstLsnToKeep() const;
 
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
-            ui64 *startingPointLsnPtr, std::function<void()> callback);
+            ui64 *startingPointLsnPtr, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete = {});
 
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();

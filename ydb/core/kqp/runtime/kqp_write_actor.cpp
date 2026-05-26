@@ -3159,8 +3159,6 @@ public:
 
             // Can't have CTAS here
             AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
-            // Deprecated
-            AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
 
             auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns) -> std::pair<TKqpTableWriteActor*, TActorId> {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;

@@ -623,7 +623,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     // (xenoxeno) for compatibility with KQP and maybe others...
                     result->Record.SetSchemeShardStatus(NKikimrScheme::EStatus::StatusPathDoesNotExist);
                     if (path) {
-                        result->Record.SetSchemeShardReason(TStringBuilder() << "Path '" << path << "' does not exist");
+                        result->Record.SetSchemeShardReason(TStringBuilder() << "Path `" << path << "` does not exist");
                     } else {
                         result->Record.SetSchemeShardReason("Path does not exist");
                     }

@@ -1030,7 +1030,7 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& stagePlanNode) {
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
@@ -1111,6 +1111,47 @@ private:
 
             SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
             stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+
+            AFL_ENSURE(stagePlanNode.StageProto);
+            for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
+                if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                    && protoSink.HasInternalSink()) {
+                    NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
+                    if (protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                        if (tableSinkSettings.GetNeedLookup()) {
+                            NJson::TJsonValue lookupColumns;
+                            lookupColumns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                            for (const auto& col : tableSinkSettings.GetLookupColumns()) {
+                                lookupColumns.AppendValue(col.GetName());
+                            }
+                            op.Properties["Lookup"] = lookupColumns;
+                            
+                        }
+
+                        NJson::TJsonValue updateIndexes;
+                        updateIndexes.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                        for (const auto& index : tableSinkSettings.GetIndexes()) {
+                            NJson::TJsonValue indexInfo;
+                            indexInfo["Table"] = index.GetTable().GetPath();
+
+                            NJson::TJsonValue columns;
+                            columns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                            for (const auto& col : index.GetColumns()) {
+                                columns.AppendValue(col.GetName());
+                            }
+                            indexInfo["Columns"] = columns;
+
+                            if (index.GetIsUniq()) {
+                                indexInfo["CheckUnique"] = true;
+                            }
+
+                            updateIndexes.AppendValue(indexInfo);
+                        }
+                        op.Properties["UpdateIndexes"] = updateIndexes;
+                    }
+                    break;
+                }
+            }
         } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;
@@ -1123,7 +1164,7 @@ private:
             dqIntegration->FillSinkPlanProperties(sink, op.Properties);
         }
 
-        AddOperator(stagePlanNode, "Sink", op);
+        AddOperator(planNode, "Sink", op);
     }
 
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
@@ -1196,7 +1237,7 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
                     }
                 }
             }

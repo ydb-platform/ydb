@@ -1591,6 +1591,45 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL_C(dataBefore, dataAfter,
             "EXPLAIN should not modify data, but table contents changed");
     }
+
+    Y_UNIT_TEST(UpsertWithIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto tableBuilder = db.GetTableBuilder();
+        tableBuilder
+            .AddNullableColumn("Key", EPrimitiveType::String)
+            .AddNullableColumn("IndexedCol", EPrimitiveType::String)
+            .AddNullableColumn("Value", EPrimitiveType::String);
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Idx", std::vector<std::string>{"IndexedCol"});
+        auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto explainResult = querySession.ExecuteQuery(
+            Q1_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, IndexedCol, Value) VALUES
+                ("k1", "idx1", "val1");
+            )"),
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+        UNIT_ASSERT(explainResult.GetStats().has_value());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        Cerr << WriteJson(plan, /*formatOutput*/ true, /*sortkeys*/ false, /*validateUtf8*/ true) << Endl;
+
+        
+    }
 }
 
 } // namespace NKqp

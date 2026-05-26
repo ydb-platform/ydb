@@ -2768,8 +2768,7 @@ TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& c
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    if (auto maybeForceOptional = mapElementLambda.ForceOptional();
-        maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True" && !lambdaType->IsOptionalOrNull()) {
+    if (mapElementLambda.ForceOptional().StringValue() == "True" && !lambdaType->IsOptionalOrNull()) {
         lambdaType = ctx.MakeType<TOptionalExprType>(lambdaType);
     }
 
@@ -2949,10 +2948,26 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateOpUnionAll(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
     auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
-    // TODO: Add sanity checks.
-    input->SetTypeAnn(leftInputType);
+    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+    auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto leftItems = leftStructType->GetItems();
+    auto rightItems = rightStructType->GetItems();
+    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for Union all.");
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
+        if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
+            newItemTypes.push_back(leftItems[i]);
+        } else {
+            newItemTypes.push_back(rightItems[i]);
+        }
+    }
+
+    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    input->SetTypeAnn(resultType);
+
     return TStatus::Ok;
 }
 

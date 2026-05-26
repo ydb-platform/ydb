@@ -166,7 +166,7 @@ namespace NKikimr::NDDisk {
 
         // Write first LSN as 8 raw bytes (little-endian)
         memcpy(compactLsns, &first, 8);
-        resPos +=8;
+        resPos += 8;
         ui64 prev = first;
         ++it;
         for (; it != lsns.end(); ++it) {
@@ -229,16 +229,16 @@ namespace NKikimr::NDDisk {
         auto& erase = Erases[tabletId];
         auto newLsns = erase.Lsns;
         auto barrier = GetBarrier(tabletId);
-        auto it = newLsns.lower_bound(barrier);
-        if (it != newLsns.end()) {
-            ++it;
-        }
+        auto it = newLsns.upper_bound(barrier);
         newLsns.erase(newLsns.begin(), it);
         newLsns.insert(lsns.begin(), lsns.end());
+
         TPersistentBufferHeader header;
-        if (!Compact(newLsns, &header.Erase.CompactLsns[0])) {
+        memset(&header, 0, sizeof(TPersistentBufferHeader));
+        if (!Compact(newLsns, header.Erase.CompactLsns)) {
             return std::nullopt;
         }
+        memcpy(header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
         erase.Lsns = std::move(newLsns);
         auto oldChunkIdx = erase.ChunkIdx;
         auto oldSectorIdx = erase.SectorIdx;
@@ -247,8 +247,6 @@ namespace NKikimr::NDDisk {
         erase.ChunkIdx = space[0].ChunkIdx;
         erase.SectorIdx = space[0].SectorIdx;
 
-        memset(&header, 0, sizeof(TPersistentBufferHeader));
-        memcpy(header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
         header.Flags = TPersistentBufferHeader::IS_ERASE;
         header.RecordLsn = ++erase.HeaderLsn;
         header.PersistentBufferUniqueId = PersistentBufferUniqueId;
@@ -257,6 +255,11 @@ namespace NKikimr::NDDisk {
         header.SlotId = SlotId;
         header.Erase.TabletId = tabletId;
         header.Erase.EraseIdx = 0;
+                Cerr << "TFastErase: " << header.RecordLsn << " lsns: ";
+                for (auto lsn : erase.Lsns) {
+                    Cerr << lsn << ", ";
+                }
+                Cerr << Endl;
         return std::make_optional(TFastErase{oldChunkIdx, oldSectorIdx, erase.ChunkIdx, erase.SectorIdx, header});
     }
 
@@ -267,35 +270,55 @@ namespace NKikimr::NDDisk {
         auto tabletId = header->Erase.TabletId;
         auto& erase = Erases[tabletId];
         if (erase.HeaderLsn > header->RecordLsn) {
+            Cerr << "Deprecated " << erase.HeaderLsn << " < " << header->RecordLsn << Endl;
+            for (auto lsn : Uncompact(header->Erase.CompactLsns)) {
+                Cerr << lsn << ", ";
+            }
+            Cerr << Endl;
             STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ", (TabletId, tabletId), (erase.HeaderLsn, erase.HeaderLsn), (header->RecordLsn, header->RecordLsn));
             return false;
         }
         erase.ChunkIdx = chunkIdx;
         erase.SectorIdx = sectorIdx;
         erase.HeaderLsn = header->RecordLsn;
-        erase.Lsns = Uncompact(&header->Erase.CompactLsns[0]);
+        erase.Lsns = Uncompact(header->Erase.CompactLsns);
+        Cerr << "AddErase " << erase.HeaderLsn << Endl;
+        for (auto lsn : erase.Lsns) {
+            Cerr << lsn << ", ";
+        }
+        Cerr << Endl;
         STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase", (TabletId, tabletId), (HeaderLsn, header->RecordLsn));
         return true;
     }
 
     void TPersistentBufferBarriersManager::RestoreErases(std::map<std::tuple<ui64, ui32>, TPersistentBuffer> &persistentBuffers, TPersistentBufferSpaceAllocator& allocator) {
-        for (auto& [tid, erase] : Erases) {
+        for (auto it = Erases.begin(); it != Erases.end();) {
+            auto& [tid, erase] = *it;
+
+            auto pbIt = persistentBuffers.lower_bound({tid, 0});
+            bool hasRecords = pbIt != persistentBuffers.end() && std::get<0>(pbIt->first) == tid;
+            if (!hasRecords) {
+                it = Erases.erase(it);
+                continue;
+            }
+
             allocator.MarkOccupied({{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx}});
 
-            for (auto it = persistentBuffers.lower_bound({tid, 0});
-                it != persistentBuffers.end() && std::get<0>(it->first) == tid;) {
-                TPersistentBuffer& buffer = it->second;
+            while (pbIt != persistentBuffers.end() && std::get<0>(pbIt->first) == tid) {
+                TPersistentBuffer& buffer = pbIt->second;
                 for (ui64 lsn : erase.Lsns) {
+                    Cerr << "Restored erase " << lsn << Endl;
                     STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found", (TabletId, tid), (Lsn, lsn));
                     buffer.Records.erase(lsn);
                 }
                 if (buffer.Records.empty()) {
-                    auto eraseIt = it++;
+                    auto eraseIt = pbIt++;
                     persistentBuffers.erase(eraseIt);
                 } else {
-                    ++it;
+                    ++pbIt;
                 }
             }
+            ++it;
         }
     }
 
@@ -306,5 +329,4 @@ namespace NKikimr::NDDisk {
         }
         return it->second.Lsns.size();
     }
-
 }

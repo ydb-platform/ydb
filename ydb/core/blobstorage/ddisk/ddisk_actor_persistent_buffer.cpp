@@ -265,7 +265,8 @@ namespace NKikimr::NDDisk {
                 if (PersistentBufferBarriersManager.AddBarrier(header, chunkIdx, sectorIdx)) {
                     continue;
                 }
-                if (PersistentBufferBarriersManager.AddErase(header, chunkIdx, sectorIdx)) {
+                if (header->Flags & TPersistentBufferHeader::IS_ERASE) {
+                    PersistentBufferBarriersManager.AddErase(header, chunkIdx, sectorIdx);
                     continue;
                 }
                 auto& buffer = PersistentBuffers[{header->Record.TabletId, header->Record.Generation}];
@@ -407,8 +408,12 @@ namespace NKikimr::NDDisk {
             if (ev->Get()->IsErase) {
                 Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
                     HPMilliSecondsFloat(HPNow() - inflight.StartTs));
-                ClearPersistentBufferRecords(inflight);
-                PersistentBufferSpaceAllocator.Free(inflight.Sectors);
+
+                if (!inflight.ErrorMessage) {
+                    ClearPersistentBufferRecords(inflight);
+                    PersistentBufferSpaceAllocator.Free(inflight.Sectors);
+                }
+
                 auto replyEv = std::make_unique<TEvErasePersistentBufferResult>(
                     inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
                 auto h = std::make_unique<IEventHandle>(inflight.Sender, SelfId(), replyEv.release(), 0, inflight.Cookie);
@@ -1035,7 +1040,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, TFastErase& fastErase) {
+    void TDDiskActor::FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, const TFastErase& fastErase) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(queryEv.TraceId), "DDisk.FastErasePersistentBuffer",
@@ -1202,17 +1207,18 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        if (erases.empty()) {
+        if (PersistentBufferSpaceAllocator.GetFreeSpace() < 2) {
             SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
-                NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy));
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL, "not enough free space to move barrier"));
             return;
         }
-        if (PersistentBufferSpaceAllocator.GetFreeSpace() < 2
-            || !PersistentBufferBarriersManager.CanMoveBarrier(creds.TabletId, PersistentBufferFormat.MaxBarriersLimit)) {
-            ErasePersistentBuffer(*ev, creds, erases);
-        } else {
-            BarrierErasePersistentBuffer(*ev, creds, erases, lsn);
+        if (!PersistentBufferBarriersManager.CanMoveBarrier(creds.TabletId, PersistentBufferFormat.MaxBarriersLimit)) {
+            SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL, "barrier can not be moved"));
+            return;
         }
+
+        BarrierErasePersistentBuffer(*ev, creds, erases, lsn);
     }
 
     void TDDiskActor::Handle(TEvGetPersistentBufferInfo::TPtr ev) {

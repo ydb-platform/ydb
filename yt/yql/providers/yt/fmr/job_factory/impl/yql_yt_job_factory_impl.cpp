@@ -14,6 +14,7 @@ public:
     TFmrJobFactory(const TFmrJobFactorySettings& settings)
         : NumThreads_(settings.NumThreads), MaxQueueSize_(settings.MaxQueueSize), Function_(settings.Function), RandomProvider_(settings.RandomProvider)
     {
+        YQL_ENSURE(NumThreads_ > 1);
         Start();
     }
 

@@ -10,9 +10,9 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 

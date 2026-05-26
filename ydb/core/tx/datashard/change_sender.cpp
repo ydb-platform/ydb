@@ -2,6 +2,7 @@
 #include "change_exchange_impl.h"
 #include "datashard_impl.h"
 
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/library/actors/core/actor.h>
@@ -188,12 +189,15 @@ class TChangeSender: public TActor<TChangeSender> {
             return;
         }
 
+        const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
+        const auto tabletAppPath = securePathMode ? ETabletAppPath::Secure : ETabletAppPath::Plain;
+
         TStringStream html;
 
         HTML(html) {
-            Header(html, "Main change sender", DataShard.TabletId);
+            Header(html, "Main change sender", DataShard.TabletId, tabletAppPath);
 
-            SimplePanel(html, "Senders", [this](IOutputStream& html) {
+            SimplePanel(html, "Senders", [this, tabletAppPath](IOutputStream& html) {
                 HTML(html) {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
@@ -210,10 +214,10 @@ class TChangeSender: public TActor<TChangeSender> {
                             for (const auto& [pathId, sender] : Senders) {
                                 TABLER() {
                                     TABLED() { html << ++i; }
-                                    TABLED() { PathLink(html, pathId); }
+                                    TABLED() { PathLink(html, pathId, tabletAppPath); }
                                     TABLED() { html << sender.UserTableId; }
                                     TABLED() { html << sender.Type; }
-                                    TABLED() { ActorLink(html, DataShard.TabletId, pathId); }
+                                    TABLED() { ActorLink(html, DataShard.TabletId, pathId, {}, tabletAppPath); }
                                 }
                             }
                         }
@@ -221,7 +225,7 @@ class TChangeSender: public TActor<TChangeSender> {
                 }
             });
 
-            CollapsedPanel(html, "Enqueued", "enqueued", [this](IOutputStream& html) {
+            CollapsedPanel(html, "Enqueued", "enqueued", [this, tabletAppPath](IOutputStream& html) {
                 HTML(html) {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
@@ -238,7 +242,7 @@ class TChangeSender: public TActor<TChangeSender> {
                                 TABLER() {
                                     TABLED() { html << ++i; }
                                     TABLED() { html << record.Order; }
-                                    TABLED() { PathLink(html, record.PathId); }
+                                    TABLED() { PathLink(html, record.PathId, tabletAppPath); }
                                     TABLED() { html << record.BodySize; }
                                 }
                             }

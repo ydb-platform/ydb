@@ -308,7 +308,7 @@ namespace NKikimr::NHttpProxy {
                          });
 
                 ReplyToHttpContext({
-                    .HttpCode = exception.second,
+                    .HttpCode = static_cast<ui32>(exception.second),
                     .ContentType = HttpContext.ContentType,
                     .Message = exception.first,
                     .Body = NDataStreams::Serialize(HttpContext.ContentType, {
@@ -576,7 +576,7 @@ namespace NKikimr::NHttpProxy {
         THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
             const auto exception = MapToException(Status, "", issueCode);
             return {
-                .HttpCode = exception.second,
+                .HttpCode = static_cast<ui32>(exception.second),
                 .ContentType = contentType,
                 .Message = exception.first,
                 .Body = NDataStreams::Serialize(contentType, NDataStreams::TErrorResponse{

@@ -42,6 +42,7 @@ TS_LINT_DART_FIELDS = (
     df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
     df.NodejsRootVarName.value,
     df.TsCheckType.value,
+    df.TsCheckHasCoverage.value,
 )
 
 TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
@@ -1113,6 +1114,9 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     if not _is_tests_enabled(unit):
         return
 
+    if unit.enabled('TS_COVERAGE'):
+        unit.on_peerdir_ts_resource("nyc")
+
     ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
     if not ts_check_list:
         if validation_mode == "TS_TEST_FOR":
@@ -1131,7 +1135,7 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
     unit.on_setup_install_node_modules_recipe(pm.module_path)
     unit.on_setup_extract_output_tars_recipe(pm.module_path)
 
-    peers = _create_pm(unit).get_local_peers_from_package_json()
+    peers = pm.get_local_peers_from_package_json()
     if peers:
         unit.ondepends(peers)
 
@@ -1143,11 +1147,15 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
         test_env_value = df.TestEnv.value(unit, [], {})
         unit.set(["TEST_ENV_VALUE", tev_raw])
 
+    pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
+
     for script_name, is_medium, check_type in ts_check_list:
+        cov_script_name = f"{script_name}:coverage"
         flat_args = ("ts_check",)
         spec_args = dict(
             NAME=[script_name],  # df.TestName.name_from_macro_args expects array
             TS_CHECK_TYPE=check_type,
+            TS_CHECK_HAS_COVERAGE="yes" if cov_script_name in pj_scripts else "no",
         )
         if is_medium == "yes":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE

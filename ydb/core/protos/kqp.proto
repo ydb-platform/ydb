@@ -940,6 +940,10 @@ message TKqpFullTextSourceSettings {
 
     repeated TIndexTable IndexTables = 6;
 
+    // When fulltext index uses __rowId as doc_id, this is the unique secondary index impl table
+    // (keyed by __rowId, value = main-table PK columns) used to resolve __rowId -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 19;
+
     optional uint64 SkipLimit = 7;
     optional uint64 Limit = 8;
 

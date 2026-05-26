@@ -1420,7 +1420,7 @@ private:
             } else {
                 auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
                 YQL_ENSURE(desc, "unexpected index description type");
-                fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
+                fullTextProto.MutableIndexDescription()->CopyFrom(*desc);
                 fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
                     ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
                     : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
@@ -1458,6 +1458,57 @@ private:
                     auto* columnPtr = implTableMeta->Columns.FindPtr(column.first);
                     YQL_ENSURE(columnPtr);
                     fillCol(columnPtr, indexProto->AddColumns());
+                }
+            }
+
+            if (index->Type != TIndexDescription::EType::GlobalJson) {
+                auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
+                if (desc && desc->GetUseRowIdAsDocId()) {
+                    const TIndexDescription* uniqueIdx = nullptr;
+                    TIntrusivePtr<TKikimrTableMetadata> uniqueImplMeta;
+                    TString uniqueIdxName;
+                    YQL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+                    for (size_t i = 0; i < tableMeta->Indexes.size(); ++i) {
+                        const auto& candidate = tableMeta->Indexes[i];
+                        if (candidate.Type == TIndexDescription::EType::GlobalSyncUnique
+                            && candidate.State == TIndexDescription::EIndexState::Ready
+                            && candidate.KeyColumns.size() == 1
+                            && candidate.KeyColumns[0] == NKikimr::NTableIndex::NFulltext::RowIdColumn)
+                        {
+                            uniqueIdx = &candidate;
+                            uniqueImplMeta = tableMeta->ImplTables[i];
+                            uniqueIdxName = candidate.Name;
+                            break;
+                        }
+                    }
+                    YQL_ENSURE(uniqueIdx, "fulltext index has UseRowIdAsDocId=true but no Ready unique index on " << NKikimr::NTableIndex::NFulltext::RowIdColumn << " was found");
+                    YQL_ENSURE(uniqueImplMeta);
+
+                    TVector<TString> uniquePathParts = {
+                        TString(settings.Table().Cast().Path()),
+                        uniqueIdxName,
+                        TString(NKikimr::NTableIndex::ImplTable),
+                    };
+                    TString uniqueImplPath = NKikimr::JoinPath(uniquePathParts);
+                    FillTablesMap(uniqueImplPath, tablesMap);
+
+                    auto* uniqueProto = fullTextProto.MutableUniqueIndexImplTable();
+                    uniqueProto->MutableTable()->SetOwnerId(uniqueImplMeta->PathId.OwnerId());
+                    uniqueProto->MutableTable()->SetTableId(uniqueImplMeta->PathId.TableId());
+                    uniqueProto->MutableTable()->SetPath(uniqueImplPath);
+                    uniqueProto->MutableTable()->SetSysView(uniqueImplMeta->SysView);
+                    uniqueProto->MutableTable()->SetVersion(uniqueImplMeta->SchemaVersion);
+
+                    for (auto& keyColumn : uniqueImplMeta->KeyColumnNames) {
+                        auto* columnPtr = uniqueImplMeta->Columns.FindPtr(keyColumn);
+                        YQL_ENSURE(columnPtr);
+                        fillCol(columnPtr, uniqueProto->AddKeyColumns());
+                    }
+                    for (auto& column : uniqueImplMeta->Columns) {
+                        auto* columnPtr = uniqueImplMeta->Columns.FindPtr(column.first);
+                        YQL_ENSURE(columnPtr);
+                        fillCol(columnPtr, uniqueProto->AddColumns());
+                    }
                 }
             }
 

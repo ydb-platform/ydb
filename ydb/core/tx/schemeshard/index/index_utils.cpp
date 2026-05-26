@@ -428,12 +428,20 @@ auto CalcFulltextImplTableDescImpl(
     const NKikimrSchemeOp::EIndexType indexType)
 {
     auto tableColumns = ExtractInfo(baseTable);
+    const bool useRowId = indexDesc.GetUseRowIdAsDocId();
     THashSet<TString> indexColumns;
     if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
         indexColumns = indexDataColumns;
     }
-    for (const auto & keyColumn: tableColumns.Keys) {
-        indexColumns.insert(keyColumn);
+    TVector<TString> docIdKeys;
+    if (useRowId) {
+        docIdKeys.push_back(NFulltext::RowIdColumn);
+        indexColumns.insert(NFulltext::RowIdColumn);
+    } else {
+        docIdKeys = tableColumns.Keys;
+        for (const auto & keyColumn: tableColumns.Keys) {
+            indexColumns.insert(keyColumn);
+        }
     }
 
     TColumnTypes baseColumnTypes;
@@ -459,7 +467,7 @@ auto CalcFulltextImplTableDescImpl(
         tokenColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
-    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
+    FillIndexImplTableColumns(GetColumns(baseTable), docIdKeys, indexColumns, implTableDesc);
     if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::FreqColumn);
@@ -477,18 +485,27 @@ auto CalcFulltextDocsImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
     auto tableColumns = ExtractInfo(baseTable);
+    const bool useRowId = indexDesc.GetUseRowIdAsDocId();
     THashSet<TString> indexColumns = indexDataColumns;
-    for (const auto & keyColumn: tableColumns.Keys) {
-        indexColumns.insert(keyColumn);
+    TVector<TString> docIdKeys;
+    if (useRowId) {
+        docIdKeys.push_back(NFulltext::RowIdColumn);
+        indexColumns.insert(NFulltext::RowIdColumn);
+    } else {
+        docIdKeys = tableColumns.Keys;
+        for (const auto & keyColumn: tableColumns.Keys) {
+            indexColumns.insert(keyColumn);
+        }
     }
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::NFulltext::DocsTable);
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
-    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
+    FillIndexImplTableColumns(GetColumns(baseTable), docIdKeys, indexColumns, implTableDesc);
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::DocLengthColumn);
@@ -723,18 +740,20 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextDocsImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc);
+    return CalcFulltextDocsImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextDocsImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc);
+    return CalcFulltextDocsImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
@@ -834,6 +853,79 @@ bool CheckSingleIntegerPrimaryKey(
         return false;
     }
 
+    return true;
+}
+
+bool MaybeEnableFulltextRowIdMode(
+    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TMap<TString, TPathId>& tableChildren,
+    const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
+    NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error)
+{
+    const auto indexType = GetIndexType(indexDesc);
+    if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
+        return true;
+    }
+
+    const NSchemeShard::TTableInfo::TColumn* rowIdColumn = nullptr;
+    for (const auto& [_, column] : tableInfo->Columns) {
+        if (column.IsDropped()) {
+            continue;
+        }
+        if (column.Name == NFulltext::RowIdColumn) {
+            rowIdColumn = &column;
+            break;
+        }
+    }
+    if (!rowIdColumn) {
+        return true;
+    }
+
+    if (rowIdColumn->PType.GetTypeId() != NScheme::NTypeIds::Uint64) {
+        error = TStringBuilder()
+            << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn
+            << "' to be of type 'Uint64' but got " << NScheme::TypeName(rowIdColumn->PType);
+        return false;
+    }
+    if (!rowIdColumn->NotNull) {
+        error = TStringBuilder()
+            << "Fulltext index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
+        return false;
+    }
+
+    bool hasUniqueIndexOnRowId = false;
+    for (const auto& [_, childPathId] : tableChildren) {
+        const auto it = indexes.find(childPathId);
+        if (it == indexes.end()) {
+            continue;
+        }
+        const auto& info = it->second;
+        if (info->Type != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            continue;
+        }
+        if (info->State != NKikimrSchemeOp::EIndexStateReady) {
+            continue;
+        }
+        if (info->IndexKeys.size() != 1) {
+            continue;
+        }
+        if (info->IndexKeys.front() != NFulltext::RowIdColumn) {
+            continue;
+        }
+        hasUniqueIndexOnRowId = true;
+        break;
+    }
+
+    if (!hasUniqueIndexOnRowId) {
+        error = TStringBuilder()
+            << "Fulltext index over '" << NFulltext::RowIdColumn
+            << "' requires a Ready unique secondary index on '" << NFulltext::RowIdColumn << "'";
+        return false;
+    }
+
+    indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
     return true;
 }
 

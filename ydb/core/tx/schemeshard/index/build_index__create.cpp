@@ -161,7 +161,18 @@ public:
 
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;
             buildInfo->SerializeToProto(Self, &tmpConfig);
-            const auto indexDesc = tmpConfig.GetIndex();
+            auto& indexDesc = *tmpConfig.MutableIndex();
+            if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, tablePath.Base()->GetChildren(),
+                                                          Self->Indexes, indexDesc, explain)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
+            }
+            if (indexDesc.HasFulltextIndexDescription() &&
+                indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
+                // Persist the bit back to buildInfo so downstream steps (impl table descriptors,
+                // build scan) see the same opt-in decision.
+                std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo->SpecializedIndexDescription)
+                    .SetUseRowIdAsDocId(true);
+            }
             if (!NTableIndex::CommonCheck(tableInfo, indexDesc,
                                           domainInfo->GetSchemeLimits(),
                                           explain)) {

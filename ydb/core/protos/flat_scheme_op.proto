@@ -1345,6 +1345,10 @@ message TVectorIndexKmeansTreeDescription {
 
 message TFulltextIndexDescription {
     optional Ydb.Table.FulltextIndexSettings Settings = 1;
+    // When true, the fulltext index uses the __rowId Uint64 column of the main table as doc_id
+    // instead of the main table PK. A unique secondary index on __rowId is required and is used
+    // at read time to resolve __rowId back to the main table PK.
+    optional bool UseRowIdAsDocId = 2;
 }
 
 message TIndexDescription {

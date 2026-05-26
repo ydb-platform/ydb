@@ -449,6 +449,10 @@ message TKqpFullTextSource {
     TKqpPhyValue Mode = 14;
 
     optional EKqpFullTextIndexType IndexType = 15;
+
+    // When fulltext index uses __rowId as doc_id, this is the unique secondary index impl table
+    // (keyed by __rowId, value = main-table PK columns) used to resolve __rowId -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 16;
 }
 
 message TKqpReadRangesSource {

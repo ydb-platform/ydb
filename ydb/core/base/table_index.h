@@ -120,6 +120,11 @@ namespace NFulltext {
     inline constexpr const char* FreqColumn = "__ydb_freq";
     inline constexpr const char* IdColumn = "__ydb_id";
 
+    // Optional user-managed column on the main table. When present together with a unique
+    // secondary index over [RowIdColumn], the fulltext index uses this column as doc_id
+    // instead of the main-table PK. At read time the unique index resolves __rowId -> PK.
+    inline constexpr const char* RowIdColumn = "__rowId";
+
     inline constexpr const char* DocsTable = "indexImplDocsTable";
     inline constexpr const char* DocLengthColumn = "__ydb_length";
 

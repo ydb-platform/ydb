@@ -2011,6 +2011,10 @@ message TEvBuildFulltextIndexRequest {
     optional EFulltextIndexType IndexType = 14;
 
     optional NKikimrTx.TKeyRange KeyRange = 15;
+
+    // When true, the scan uses the __rowId Uint64 column of the source table as the doc_id key
+    // (and as the key of the posting/docs impl tables) instead of the source table PK columns.
+    optional bool UseRowIdAsDocId = 16;
 }
 
 message TEvBuildFulltextIndexResponse {

@@ -158,9 +158,7 @@ struct TIndexDescription {
             }
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance: {
-                NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-                *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
-                SpecializedIndexDescription = std::move(fulltextIndexDescription);
+                SpecializedIndexDescription = index.GetFulltextIndexDescription();
                 break;
             }
             case EType::LocalBloomFilter:

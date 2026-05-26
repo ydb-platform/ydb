@@ -65,6 +65,8 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
     bool IsBinaryJson = false;
+    bool UseRowIdAsDocId = false;
+    size_t RowIdRowIndex = 0; // position of __rowId in the row returned by the scan
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -109,6 +111,7 @@ public:
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
         TextAnalyzers = Request.settings().columns().at(0).analyzers();
+        UseRowIdAsDocId = Request.GetUseRowIdAsDocId();
 
         auto tags = GetAllTags(table);
         auto types = GetAllTypes(table);
@@ -126,6 +129,11 @@ public:
                     ScanTags.push_back(tags.at(dataColumn));
                 }
             }
+
+            if (UseRowIdAsDocId) {
+                RowIdRowIndex = ScanTags.size();
+                ScanTags.push_back(tags.at(NKikimr::NTableIndex::NFulltext::RowIdColumn));
+            }
         }
 
         auto addType = [&](auto& uploadTypes, const auto& column) {
@@ -134,6 +142,18 @@ public:
                 Ydb::Type type;
                 NScheme::ProtoFromTypeInfo(it->second, type);
                 uploadTypes->emplace_back(it->first, type);
+            }
+        };
+
+        auto addDocIdTypes = [&](auto& uploadTypes) {
+            if (UseRowIdAsDocId) {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::UINT64);
+                uploadTypes->emplace_back(NKikimr::NTableIndex::NFulltext::RowIdColumn, type);
+            } else {
+                for (const auto& column : table.KeyColumnIds) {
+                    addType(uploadTypes, table.Columns.at(column).Name);
+                }
             }
         };
 
@@ -148,9 +168,7 @@ public:
                 NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
                 uploadTypes->emplace_back(TokenColumn, type);
             }
-            for (const auto& column : table.KeyColumnIds) {
-                addType(uploadTypes, table.Columns.at(column).Name);
-            }
+            addDocIdTypes(uploadTypes);
             if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
                 Ydb::Type type;
                 type.set_type_id(TokenCountType);
@@ -165,9 +183,7 @@ public:
 
         if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            for (const auto& column : table.KeyColumnIds) {
-                addType(uploadTypes, table.Columns.at(column).Name);
-            }
+            addDocIdTypes(uploadTypes);
             for (auto dataColumn : Request.GetDataColumns()) {
                 addType(uploadTypes, dataColumn);
             }
@@ -226,7 +242,15 @@ public:
 
         LastProcessedKey = TSerializedCellVec(key);
 
-        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        // Effective doc-id key cells: either the table PK or the single __rowId cell.
+        TArrayRef<const TCell> docIdKey = key;
+        TCell rowIdCell;
+        if (UseRowIdAsDocId) {
+            rowIdCell = row.Get(RowIdRowIndex);
+            docIdKey = TArrayRef<const TCell>(&rowIdCell, 1);
+        }
+
+        TVector<TCell> uploadKey(::Reserve(docIdKey.size() + 1));
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
 
         TVector<TString> tokens;
@@ -253,7 +277,7 @@ public:
             for (const auto& [token, freq] : tokenFreq) {
                 uploadKey.clear();
                 uploadKey.push_back(TCell(token));
-                uploadKey.insert(uploadKey.end(), key.begin(), key.end());
+                uploadKey.insert(uploadKey.end(), docIdKey.begin(), docIdKey.end());
 
                 uploadValue.clear();
                 uploadValue.push_back(TCell::Make(freq));
@@ -273,7 +297,7 @@ public:
             }
             // Document length column
             uploadValue.push_back(TCell::Make(totalTokens));
-            DocsBuf->AddRow(key, uploadValue);
+            DocsBuf->AddRow(docIdKey, uploadValue);
 
             DocCount++;
             TotalDocLength += totalTokens;
@@ -281,7 +305,7 @@ public:
             for (const auto& token : tokens) {
                 uploadKey.clear();
                 uploadKey.push_back(TCell(token));
-                uploadKey.insert(uploadKey.end(), key.begin(), key.end());
+                uploadKey.insert(uploadKey.end(), docIdKey.begin(), docIdKey.end());
 
                 uploadValue.clear();
                 // Include data columns in every posting row (poor, but anyway)
@@ -548,6 +572,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             if (!tags.contains(dataColumn)) {
                 badRequest(TStringBuilder() << "Unknown data column: " << dataColumn);
             }
+        }
+
+        if (request.GetUseRowIdAsDocId() && !tags.contains(NKikimr::NTableIndex::NFulltext::RowIdColumn)) {
+            badRequest(TStringBuilder() << "UseRowIdAsDocId requested but column '"
+                << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' not found in table");
         }
 
         if (trySendBadRequest()) {

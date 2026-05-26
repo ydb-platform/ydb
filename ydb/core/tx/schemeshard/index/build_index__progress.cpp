@@ -1247,6 +1247,12 @@ private:
         } else if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson) {
             ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::Json);
         }
+        if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+                &buildInfo.SpecializedIndexDescription);
+            fulltextDesc && fulltextDesc->GetUseRowIdAsDocId())
+        {
+            ev->Record.SetUseRowIdAsDocId(true);
+        }
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 

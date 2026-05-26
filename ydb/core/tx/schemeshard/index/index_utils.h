@@ -97,13 +97,15 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -153,6 +155,21 @@ bool CheckSingleIntegerPrimaryKey(
     const TTableColumns& baseTableColumns,
     const TColumnTypes& baseColumnTypes,
     TStringBuf indexKind,
+    TString& error);
+
+// For fulltext index creation: detect whether the main table is opted into using __rowId as doc_id.
+// Opt-in requires the main table to have a column named __rowId of type Uint64 NOT NULL AND a Ready
+// unique secondary index whose only key column is __rowId. When both prerequisites are satisfied,
+// sets indexDesc.MutableFulltextIndexDescription()->set_use_row_id_as_doc_id(true) and returns true.
+// If __rowId is present but invalid, or present without a matching unique index, returns false with
+// an explanatory error. If __rowId is absent the helper is a noop and returns true (the strict
+// single-integer-PK validation in CommonCheck applies as before).
+// For non-fulltext index types the helper is a noop and returns true.
+bool MaybeEnableFulltextRowIdMode(
+    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TMap<TString, TPathId>& tableChildren,
+    const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
+    NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
     TString& error);
 
 template <typename TTableDesc>
@@ -222,10 +239,15 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-            if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", error)) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                return false;
+            // __rowId opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
+            // skip the single-integer-PK requirement (the doc_id is __rowId, not the PK).
+            if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
+                if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "Fulltext", error)) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    return false;
+                }
             }
+
 
             // Here we only check that fulltext index columns matches table description
             // the rest will be checked in NFulltext::ValidateSettings (called separately outside of CommonCheck)

@@ -90,6 +90,32 @@ bool CopyToConfigRequest(const Ydb::Config::FetchConfigRequest &/*from*/, NKikim
     return true;
 }
 
+void ConvertGetConfigToFetchConfigResult(
+    const Ydb::DynamicConfig::GetConfigResult &from,
+    Ydb::Config::FetchConfigResult &to)
+{
+    const int pairs = std::min(from.identity_size(), from.config_size());
+    for (int i = 0; i < pairs; ++i) {
+        const auto& srcIdentity = from.identity(i);
+        auto entry = to.add_config();
+        auto dstIdentity = entry->mutable_identity();
+        dstIdentity->set_version(srcIdentity.version());
+        switch (srcIdentity.type_case()) {
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kCluster:
+                dstIdentity->set_cluster(srcIdentity.cluster());
+                dstIdentity->mutable_main();
+                break;
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase:
+                dstIdentity->mutable_database()->set_database(srcIdentity.database());
+                break;
+            case Ydb::DynamicConfig::ConfigIdentity::TypeCase::TYPE_NOT_SET:
+                dstIdentity->mutable_main();
+                break;
+        }
+        entry->set_config(from.config(i));
+    }
+}
+
 void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb::Config::FetchConfigResult *to) {
     auto hostConfigStatus = from.GetStatus()[0];
     auto boxStatus = from.GetStatus()[1];
@@ -412,6 +438,8 @@ public:
         self->OnBootstrap();
 
         if (self->Request_->GetDatabaseName()) {
+            // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)
+            // is requested directly from Console (like legacy API)
             SendRequestToConsole();
             return;
         }
@@ -544,7 +572,9 @@ private:
     }
 
     void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), ActorContext());
+        Ydb::Config::FetchConfigResult result;
+        ConvertGetConfigToFetchConfigResult(ev->Get()->Record.GetResponse(), result);
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
     }
 };
 

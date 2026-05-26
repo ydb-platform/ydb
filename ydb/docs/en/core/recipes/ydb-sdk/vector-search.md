@@ -5,12 +5,12 @@ This section contains code recipes in different programming languages for [vecto
 The following operations are covered in detail:
 
 - [Vector search](#vector-search)
-  - [Connecting to {{ ydb-short-name }}](#connect-ydb)
-  - [Creating a table](#create-table)
-  - [Inserting vectors](#insert-vectors)
-  - [Adding an index](#add-vector-index)
-  - [Search by vector](#search-by-vector)
-  - [Full example](#full-example)
+  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
+  - [Creating a table {#create-table}](#creating-a-table-create-table)
+  - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
+  - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
+  - [Vector search {#search-by-vector}](#vector-search-search-by-vector)
+  - [Full example {#full-example}](#full-example-full-example)
 
 This recipe creates a text store with the following structure:
 
@@ -1776,147 +1776,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
         return items
     ```
 
-    {% endcut %}
-
-    ```python
-    def search_items_vector_as_float_list(
-        pool: ydb.QuerySessionPool,
-        table_name: str,
-        embedding: list[float],
-        strategy: str = "CosineSimilarity",
-        limit: int = 1,
-        index_name: str | None = None,
-        top_clusters: int = 10,
-    ) -> list[dict]:
-        view_index = f"VIEW {index_name}" if index_name else ""
-
-    - Native SDK
-
-      ```python
-      import ydb
-
-      def search_items_vector_as_float_list(
-          pool: ydb.QuerySessionPool,
-          table_name: str,
-          embedding: list[float],
-          strategy: str = "CosineSimilarity",
-          limit: int = 1,
-          index_name: str | None = None,
-          top_clusters: int = 10,
-      ) -> list[dict]:
-          view_index = f"VIEW {index_name}" if index_name else ""
-
-          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-          query = f"""
-          PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
-          DECLARE $embedding as List<Float>;
-
-          $target_embedding = Knn::ToBinaryStringFloat($embedding);
-
-          SELECT
-              id,
-              document,
-              Knn::{strategy}(embedding, $target_embedding) as score
-          FROM {table_name} {view_index}
-          ORDER BY score
-          {sort_order}
-          LIMIT {limit};
-          """
-
-          result = pool.execute_with_retries(
-              query,
-              {
-                  "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-              },
-          )
-
-          items = []
-
-          for result_set in result:
-              for row in result_set.rows:
-                  items.append(
-                      {
-                          "id": row["id"],
-                          "document": row["document"],
-                          "score": row["score"],
-                      }
-                  )
-
-          return items
-      ```
-
-    - Native SDK (Asyncio)
-
-      ```python
-      import ydb
-
-      async def search_items_vector_as_float_list(
-          pool: ydb.aio.QuerySessionPool,
-          table_name: str,
-          embedding: list[float],
-          strategy: str = "CosineSimilarity",
-          limit: int = 1,
-          index_name: str | None = None,
-      ) -> list[dict]:
-          view_index = f"VIEW {index_name}" if index_name else ""
-
-          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-          query = f"""
-          DECLARE $embedding as List<Float>;
-
-          $target_embedding = Knn::ToBinaryStringFloat($embedding);
-
-          SELECT
-              id,
-              document,
-              Knn::{strategy}(embedding, $target_embedding) as score
-          FROM {table_name} {view_index}
-          ORDER BY score
-          {sort_order}
-          LIMIT {limit};
-          """
-
-          result = await pool.execute_with_retries(
-              query,
-              {
-                  "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-              },
-          )
-
-          items = []
-
-          for result_set in result:
-              for row in result_set.rows:
-                  items.append(
-                      {
-                          "id": row["id"],
-                          "document": row["document"],
-                          "score": row["score"],
-                      }
-                  )
-
-          return items
-      ```
-
-    {% endlist %}
-
-- JavaScript (alternative)
-
-  ```javascript
-  const limit;
-  const embedding = new Float32Array([1.5, 2.5, 3.5])
-
-  await sql`SELECT
-        id,
-        document,
-        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
-    FROM `table_name`
-    ORDER BY score DESC
-    LIMIT ${unsafe(limit)};
-  ```
-
 - C++ (alternative)
 
     ```cpp
@@ -1976,6 +1835,21 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
         return result;
     }
     ```
+
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 {% endlist %}
 

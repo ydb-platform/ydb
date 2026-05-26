@@ -11851,7 +11851,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // DROP RESOURCE POOL
         checkQuery("DROP RESOURCE POOL MyResourcePool;",
             EStatus::SCHEME_ERROR,
-            "Path `MyResourcePool` does not exist");
+            "Path `/Root/.metadata/workload_manager/pools/MyResourcePool` does not exist");
     }
 
     Y_UNIT_TEST(DisableResourcePoolsOnServerless) {

@@ -562,11 +562,11 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
-        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (ActorMonPage->AuthMode == TMon::EAuthMode::Relaxed) {
             // No AllowedSIDs or auth-RPC failure gate here.
@@ -1203,11 +1203,11 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
-        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (Fields.AuthMode == TMon::EAuthMode::Enforce) {
             if (result.Status != Ydb::StatusIds::SUCCESS) {
@@ -1401,11 +1401,11 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
-        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
         }
+        AuditCtx.LogOnReceived();
         TString forbiddenReason;
         if (AuthMode == TMon::EAuthMode::Enforce) {
             if (result.Status != Ydb::StatusIds::SUCCESS) {

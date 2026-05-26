@@ -232,7 +232,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 ### EXPLAIN и план выполнения {#explain}
 
-Нажмите **Explain** (или `Ctrl+Shift+E`), чтобы получить план выполнения запроса. Плагин отображает:
+Нажмите **Explain** (или `Ctrl+Shift+E`), чтобы получить [план выполнения запроса](../../dev/optimization/plans.md#explain-ui). Плагин отображает:
 
 - **Text plan** — дерево операций в текстовом виде.
 - **Diagram** — графическое представление в виде DAG.

@@ -3,6 +3,7 @@ items:
 - { name: SECONDARY INDEX, href: secondary_index.md }
 - { name: VECTOR INDEX,    href: vector_index.md    }
 - { name: FULLTEXT INDEX,  href: fulltext_index.md  }
+- { name: MIN_MAX INDEX,   href: min_max_index.md   }
 - { name: FAMILY,          href: family.md          }
 - { name: WITH,            href: with.md            }
 - { name: AS SELECT,       href: as_select.md }

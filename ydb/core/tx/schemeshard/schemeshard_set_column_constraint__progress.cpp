@@ -171,7 +171,7 @@ public:
             << ", status# " << NKikimrScheme::EStatus_Name(record.GetStatus()));
 
         NIceDb::TNiceDb db(txc.DB);
-        
+
         auto replyOnCreation = [&] {
             auto statusCode = TranslateStatusCode(record.GetStatus());
 
@@ -184,12 +184,12 @@ public:
             ReplyOnCreation(operationInfo, statusCode);
             return true;
         };
-        
+
         if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
             Y_ENSURE(txId == operationInfo.LockTxId);
             operationInfo.LockTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
-            
+
             if (!replyOnCreation()) {
                 return false;
             }
@@ -337,46 +337,46 @@ public:
 
         if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::DONE) {
             shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::DONE;
-            
+
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
-                
+
                 for (const auto& issue : record.GetIssues()) {
                     NIceDb::TNiceDb db(txc.DB);
                     // todo: persist issue
                     LOG_N("TTxReplyValidateRowCondition: issue: " << issue.message());
                 }
             }
-            
+
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.emplace_back(shardIdx);
-            
+
             // todo: persist shard status
-            
+
             Progress(BuildId);
-            
+
         } else if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR ||
                    record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
             LOG_E("TTxReplyValidateRowCondition: error on shard# " << shardIdx
                 << ", status# " << record.GetStatus());
-            
+
             shardStatus.Status = record.GetStatus();
             operationInfo.ValidationFailed = true;
-            
+
             for (const auto& issue : record.GetIssues()) {
                 NIceDb::TNiceDb db(txc.DB);
                 // todo: persist issue
                 LOG_E("TTxReplyValidateRowCondition: error issue: " << issue.message());
             }
-            
+
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.emplace_back(shardIdx);
-            
+
             // todo: persist shard status
-            
+
             Progress(BuildId);
-            
+
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
                 << " still in progress, status# " << record.GetStatus());
@@ -432,16 +432,16 @@ private:
 
         for (const auto* partition : table->GetPartitions()) {
             Y_ENSURE(Self->ShardInfos.contains(partition->ShardIdx));
-            
+
             // For validation, we scan the entire shard, so use empty range and lastKeyAck
             TIndexBuildShardStatus shardStatus(TSerializedTableRange{}, "");
             shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
-            
+
             auto [it, emplaced] = operationInfo.ValidationShards.emplace(partition->ShardIdx, std::move(shardStatus));
             Y_ENSURE(emplaced);
-            
+
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
-            
+
             // todo: persist shard status
             LOG_D("InitiateValidationShards: added shard " << partition->ShardIdx);
         }
@@ -454,7 +454,7 @@ private:
         auto& record = ev->Record;
 
         record.SetId(ui64(BuildId));
-        
+
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
         record.SetTabletId(ui64(shardId));
 

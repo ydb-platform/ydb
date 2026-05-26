@@ -902,22 +902,22 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     bool UnlockNullWritesTxDone = false;
 
     THashMap<TShardIdx, TIndexBuildShardStatus> ValidationShards;
-    
+
     TDeque<TShardIdx> ToValidateShards;
     THashSet<TShardIdx> InProgressValidationShards;
     TVector<TShardIdx> DoneValidationShards;
-    
+
     TTxId ValidationSnapshotTxId = TTxId();
     TStepId ValidationSnapshotStep = TStepId();
-    
+
     ui32 MaxInProgressValidationShards = 10;
-    
+
     bool ValidationFailed = false;  // true if any shard found NULL values
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
     }
-    
+
     bool IsSetColumnConstraint() const override {
         return true;
     }

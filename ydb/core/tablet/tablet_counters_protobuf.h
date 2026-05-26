@@ -143,7 +143,7 @@ public:
      *
      * @warning This function can be called only if ParseSourceCounters is set.
      *
-     * @param index The enum index for which to retrieve the source counters
+     * @param[in] index The enum index for which to retrieve the source counters
      *
      * @return The corresponding source counters
      */

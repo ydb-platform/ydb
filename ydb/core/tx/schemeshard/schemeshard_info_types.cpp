@@ -676,7 +676,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
     }
 
-    if (op.HasDetailedMetricsSettings()) {
+    if (featureFlags.EnableDetailedMetrics && op.HasDetailedMetricsSettings()) {
         switch (op.GetDetailedMetricsSettings().GetStatusCase()) {
         case NKikimrSchemeOp::TTableDetailedMetricsSettings::kConfigured:
             if (op.GetDetailedMetricsSettings().HasConfigured()) {

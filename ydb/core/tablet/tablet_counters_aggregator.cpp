@@ -2,6 +2,7 @@
 #include "tablet_counters_app.h"
 #include "labeled_counters_merger.h"
 #include "labeled_db_counters.h"
+#include "detailed_metrics/node_database_metrics_aggregator.h"
 #include "detailed_metrics/ydb_metrics_mapper.h"
 #include "private/aggregated_counters.h"
 #include "private/labeled_db_counters.h"
@@ -92,40 +93,83 @@ public:
         if (!IsFollower) {
             YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"), Counters);
         }
-    }
 
-    void Apply(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId,
-        const TTabletCountersBase* executorCounters, const TTabletCountersBase* appCounters,
-        const TActorContext& ctx)
-    {
-        AllTypes->Apply(tabletId, executorCounters, nullptr, tabletType);
-        //
-        auto typeCounters = GetOrAddCountersByTabletType(tabletType, CountersByTabletType, Counters);
-        if (typeCounters) {
-            typeCounters->Apply(tabletId, executorCounters, appCounters, tabletType);
-        }
-        //
-        if (!IsFollower && DbWatcherActorId && tenantPathId) {
-            auto dbCounters = GetDbCounters(tenantPathId, ctx);
-            if (dbCounters) {
-                auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
-                dbCounters->Apply(tabletId, executorCounters, appCounters, tabletType, limitedAppCounters);
+        // NOTE: The detailed metrics are processed only by the instance of the Tablet
+        //       Counters Aggregator, which handles counters from leaders.
+        //       Followers also send their counters to this instance, but follower counters
+        //       are counted only in the detailed metrics, not the main set of metrics.
+        if (!IsFollower) {
+            // NOTE: The generic GetSubgroup() API does not allow specifying the visibility
+            //       for the new group. Thus, this subgroup must be created explicitly,
+            //       then attached to the global metrics storage. This is, obviously,
+            //       not thread safe, but there is no other way to do this. This works
+            //       only if there is only one actor, which does this and does this once
+            //       for the lifetime of the process.
+            DetailedMetricsRoot = counters->FindSubgroup("counters", "ydb_detailed_raw");
+
+            if (DetailedMetricsRoot == nullptr) {
+                // NOTE: The root counter group for all detailed metrics in the given node
+                //       should be created as "private". This way it will be not visible
+                //       through the generic HTTP URL, which is used by Monitoring to collect
+                //       metrics from the node. If necessary, these metrics can be retrieved
+                //       from the node by specifying the @private parameter in the HTTP URL.
+                DetailedMetricsRoot = MakeIntrusive<NMonitoring::TDynamicCounters>(
+                    NMonitoring::TCountableBase::EVisibility::Private
+                );
+
+                counters->RegisterSubgroup("counters", "ydb_detailed_raw", DetailedMetricsRoot);
+
+                LOG_INFO_S(
+                    *TlsActivationContext,
+                    NKikimrServices::TABLET_AGGREGATOR,
+                    "Successfully created the 'ydb_detailed_raw' counter group"
+                );
+            } else {
+                LOG_INFO_S(
+                    *TlsActivationContext,
+                    NKikimrServices::TABLET_AGGREGATOR,
+                    "The 'ydb_detailed_raw' counter group already exists, reusing it"
+                );
             }
         }
+    }
 
-        //
-        auto& quietStats = QuietTabletCounters[tabletId];
+    void Apply(TEvTabletCounters::TEvTabletAddCounters* message, const TActorContext& ctx)
+    {
+        AllTypes->Apply(
+            message->TabletID,
+            message->ExecutorCounters.Get(),
+            nullptr,
+            message->TabletType
+        );
 
-        if (executorCounters) {
-            if (quietStats.first == nullptr)
-                quietStats.first = new TTabletCountersBase();
-            quietStats.first->Populate(*executorCounters);
+        auto typeCounters = GetOrAddCountersByTabletType(message->TabletType, CountersByTabletType, Counters);
+        if (typeCounters) {
+            typeCounters->Apply(
+                message->TabletID,
+                message->ExecutorCounters.Get(),
+                message->AppCounters.Get(),
+                message->TabletType
+            );
         }
 
-        if (appCounters) {
+        if (DbWatcherActorId && message->TenantPathId) {
+            auto dbCounters = GetDbCounters(message->TenantPathId, ctx);
+            dbCounters->Apply(message, GetOrAddLimitedAppCounters(message->TabletType));
+        }
+
+        auto& quietStats = QuietTabletCounters[message->TabletID];
+
+        if (message->ExecutorCounters.Get()) {
+            if (quietStats.first == nullptr)
+                quietStats.first = new TTabletCountersBase();
+            quietStats.first->Populate(*message->ExecutorCounters.Get());
+        }
+
+        if (message->AppCounters.Get()) {
             if (quietStats.second == nullptr)
                 quietStats.second = new TTabletCountersBase();
-            quietStats.second->Populate(*appCounters);
+            quietStats.second->Populate(*message->AppCounters.Get());
         }
     }
 
@@ -176,7 +220,7 @@ public:
         iterDbLabeled->Apply(tabletId, labeledCounters);
     }
 
-    void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId) {
+    void ForgetTablet(ui64 tabletId, ui32 followerId, TTabletTypes::EType tabletType, TPathId tenantPathId) {
         AllTypes->Forget(tabletId);
         // and now erase from every other path
         auto iterTabletType = CountersByTabletType.find(tabletType);
@@ -185,7 +229,7 @@ public:
         }
         // from db counters
         if (auto itPath = CountersByPathId.find(tenantPathId); itPath != CountersByPathId.end()) {
-            itPath->second->Forget(tabletId, tabletType);
+            itPath->second->Forget(tabletId, followerId, tabletType);
         }
 
         for (auto iter = LabeledDbCounters.begin(); iter != LabeledDbCounters.end(); ++iter) {
@@ -205,9 +249,6 @@ public:
         }
 
         QuietTabletCounters.erase(tabletId);
-
-        TString tabletIdStr = Sprintf("%" PRIu64, tabletId);
-        Counters->RemoveSubgroup("tabletid", tabletIdStr.data());
     }
 
     void Query(const NKikimrTabletCountersAggregator::TEvTabletCountersRequest& request, NKikimrTabletCountersAggregator::TEvTabletCountersResponse& response) {
@@ -327,7 +368,12 @@ public:
     }
 
     void RemoveTabletsByPathId(TPathId pathId) {
-        CountersByPathId.erase(pathId);
+        auto dbCountersIt = CountersByPathId.find(pathId);
+
+        if (dbCountersIt != CountersByPathId.end()) {
+            dbCountersIt->second->DeleteAllDatabaseCounters();
+            CountersByPathId.erase(dbCountersIt);
+        }
     }
 
     void RemoveTabletsByDbPath(const TString& dbPath) {
@@ -344,9 +390,9 @@ public:
         return {};
     }
 
-private:
+public:
     // subgroups
-    class TTabletCountersForTabletType : public TThrRefBase {
+    class TTabletCountersForTabletType : public ITabletCountersProcessor {
     public:
         //
         TTabletCountersForTabletType(::NMonitoring::TDynamicCounters* owner, const char* category, const char* name)
@@ -354,8 +400,25 @@ private:
             , TabletExecutorCountersSection(TabletCountersSection->GetSubgroup("category", "executor"))
             , TabletAppCountersSection(TabletCountersSection->GetSubgroup("category", "app"))
             , TabletExecutorCounters(TabletExecutorCountersSection)
-            , TabletAppCounters(TabletAppCountersSection)
-        {}
+            , TabletAppCounters(TabletAppCountersSection) {
+        }
+
+        virtual void ProcessTabletCounters(
+            ui64 tabletId,
+            const TTabletCountersBase* executorCounters,
+            const TTabletCountersBase* applicationCounters,
+            TTabletTypes::EType tabletType
+        ) override {
+            Apply(tabletId, executorCounters, applicationCounters, tabletType);
+        }
+
+        virtual void RecalculateAggregatedValues() override {
+            RecalcAll();
+        }
+
+        virtual void ForgetTablet(ui64 tabletId) override {
+            Forget(tabletId);
+        }
 
         void Apply(ui64 tabletId,
             const TTabletCountersBase* executorCounters,
@@ -740,6 +803,7 @@ private:
         TSolomonCounters TabletAppCounters;
     };
 
+private:
     using TTabletCountersForTabletTypePtr = TIntrusivePtr<TTabletCountersForTabletType>;
     typedef TMap<TTabletTypes::EType, TTabletCountersForTabletTypePtr> TCountersByTabletType;
 
@@ -995,9 +1059,24 @@ private:
 public:
     class TTabletCountersForDb : public NSysView::IDbCounters {
     public:
-        TTabletCountersForDb()
-            : SolomonCounters(new ::NMonitoring::TDynamicCounters)
-        {}
+        /**
+         * The constructor, which is used to track database metrics for the Tablet Counters Aggregator.
+         *
+         * @param[in] detailedMetricsRoot The root counter group for all detailed metrics on this node
+         * @param[in] tenantPathId The tenant path ID for the given database
+         */
+        TTabletCountersForDb(
+            NMonitoring::TDynamicCounterPtr detailedMetricsRoot,
+            const TPathId& tenantPathId
+        ) : SolomonCounters(new ::NMonitoring::TDynamicCounters)
+        {
+            if (AppData()->FeatureFlags.GetEnableDetailedMetrics()) {
+                NodeDatabaseMetricsAggregator = MakeIntrusive<TNodeDatabaseMetricsAggregator>(
+                    tenantPathId,
+                    detailedMetricsRoot
+                );
+            }
+        }
 
         TTabletCountersForDb(::NMonitoring::TDynamicCounterPtr externalGroup,
             ::NMonitoring::TDynamicCounterPtr internalGroup,
@@ -1039,23 +1118,47 @@ public:
             }
         }
 
-        void Apply(ui64 tabletId, const TTabletCountersBase* executorCounters,
-            const TTabletCountersBase* appCounters, TTabletTypes::EType type,
-            const TTabletCountersBase* limitedAppCounters)
-        {
+        void Apply(
+            TEvTabletCounters::TEvTabletAddCounters* message,
+            const TTabletCountersBase* limitedAppCounters
+        ) {
+            // Aggregate all detailed metrics (both for leaders and followers)
+            if (NodeDatabaseMetricsAggregator) {
+                NodeDatabaseMetricsAggregator->ProcessTabletCounters(message);
+            }
+
+            /**
+             * @todo Do not process counters from followers - only from leaders.
+             *       See the TODO note in the GetDbCounters() function for more details
+             */
+            if (message->FollowerId) {
+                return;
+            }
+
             auto allTypes = GetOrAddCounters(TTabletTypes::Unknown);
             {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(TTabletTypes::Unknown).GetLock());
-                allTypes->Apply(tabletId, executorCounters, nullptr, type);
+                allTypes->Apply(
+                    message->TabletID,
+                    message->ExecutorCounters.Get(),
+                    nullptr,
+                    message->TabletType
+                );
             }
-            auto typeCounters = GetOrAddCounters(type);
+            auto typeCounters = GetOrAddCounters(message->TabletType);
             {
-                TWriteGuard guard(CountersByTabletType.GetBucketForKey(type).GetLock());
-                typeCounters->Apply(tabletId, executorCounters, appCounters, type, limitedAppCounters);
+                TWriteGuard guard(CountersByTabletType.GetBucketForKey(message->TabletType).GetLock());
+                typeCounters->Apply(
+                    message->TabletID,
+                    message->ExecutorCounters.Get(),
+                    message->AppCounters.Get(),
+                    message->TabletType,
+                    limitedAppCounters
+                );
             }
         }
 
-        void Forget(ui64 tabletId, TTabletTypes::EType type) {
+        void Forget(ui64 tabletId, ui32 followerId, TTabletTypes::EType type) {
             auto allTypes = GetCounters(TTabletTypes::Unknown);
             if (allTypes) {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(TTabletTypes::Unknown).GetLock());
@@ -1066,6 +1169,11 @@ public:
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(type).GetLock());
                 typeCounters->Forget(tabletId);
             }
+
+            // Also remove this tablet from the detailed metrics
+            if (NodeDatabaseMetricsAggregator) {
+                NodeDatabaseMetricsAggregator->ForgetTablet(tabletId, followerId);
+            }
         }
 
         void RecalcAll() {
@@ -1074,6 +1182,15 @@ public:
                 for (auto& [_, tabletCounters] : bucket.GetMap()) {
                     tabletCounters->RecalcAll();
                 }
+            }
+        }
+
+        /**
+         * Delete all counters for the given database.
+         */
+        void DeleteAllDatabaseCounters() {
+            if (NodeDatabaseMetricsAggregator) {
+                NodeDatabaseMetricsAggregator->DeleteAllDatabaseCounters();
             }
         }
 
@@ -1105,6 +1222,11 @@ public:
         TConcurrentRWHashMap<TTabletTypes::EType, TTabletCountersForTabletTypePtr, 16> CountersByTabletType;
 
         TYdbTabletCountersPtr YdbCounters;
+
+        /**
+         * The aggregator for all detailed metrics for the given database on this node.
+         */
+        TNodeDatabaseMetricsAggregatorPtr NodeDatabaseMetricsAggregator;
     };
 
     class TTabletsDbWatcherCallback : public NKikimr::NSysView::TDbWatcherCallback {
@@ -1129,12 +1251,20 @@ private:
             return it->second;
         }
 
-        auto dbCounters = MakeIntrusive<TTabletMon::TTabletCountersForDb>();
+        auto dbCounters = MakeIntrusive<TTabletMon::TTabletCountersForDb>(DetailedMetricsRoot, pathId);
         CountersByPathId[pathId] = dbCounters;
 
-        auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
-            NKikimrSysView::TABLETS, pathId, dbCounters);
-        ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()), evRegister.Release());
+        /**
+         * @todo The SysView service (and the processor) are not yet ready to handle
+         *       counters from followers. For now they can handle only counters from leaders.
+         *       For now, the TTabletCountersForDb instance is created here both for leaders
+         *       and followers, but only the one for leaders is sent to the SysView service.
+         */
+        if (!IsFollower) {
+            auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
+                NKikimrSysView::TABLETS, pathId, dbCounters);
+            ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()), evRegister.Release());
+        }
 
         if (DbWatcherActorId) {
             auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(pathId);
@@ -1184,6 +1314,13 @@ private:
     TLabeledCountersByDbPath LabeledDbCounters;
     TLabeledCountersByTabletTypeAndGroup LabeledCountersByTabletTypeAndGroup;
     TQuietTabletCounters QuietTabletCounters;
+
+    /**
+     * The counter group, where all detailed metrics for the given node are stored.
+     *
+     * @note This counter group corresponds to the "counters" = "ydb_detailed_raw" label.
+     */
+    NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
 };
 
 
@@ -1194,6 +1331,17 @@ TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
 {
     return MakeIntrusive<TTabletMon::TTabletCountersForDb>(
         externalGroup, internalGroup, std::move(executorCounters));
+}
+
+ITabletCountersProcessorPtr CreateTabletCountersProcessor(
+    NMonitoring::TDynamicCounterPtr parentCounterGroup,
+    TTabletTypes::EType tabletType
+) {
+    return MakeIntrusive<TTabletMon::TTabletCountersForTabletType>(
+        parentCounterGroup.Get(),
+        "type",
+        TTabletTypes::TypeToStr(tabletType)
+    );
 }
 
 ////////////////////////////////////////////
@@ -1282,9 +1430,7 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
 ////////////////////////////////////////////
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounters::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ctx);
-    TEvTabletCounters::TEvTabletAddCounters* msg = ev->Get();
-    TabletMon->Apply(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
+    TabletMon->Apply(ev->Get(), ctx);
 }
 
 ////////////////////////////////////////////
@@ -1320,7 +1466,7 @@ void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletCountersForgetTablet::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletCountersForgetTablet* msg = ev->Get();
-    TabletMon->ForgetTablet(msg->TabletID, msg->TabletType, msg->TenantPathId);
+    TabletMon->ForgetTablet(msg->TabletID, msg->FollowerId, msg->TabletType, msg->TenantPathId);
 }
 
 ////////////////////////////////////////////
@@ -1600,9 +1746,9 @@ CreateTabletCountersAggregator(bool follower) {
     return new TTabletCountersAggregatorActor(follower);
 }
 
-void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity) {
+void TabletCountersForgetTablet(ui64 tabletId, ui32 followerId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity) {
     const TActorId countersAggregator = MakeTabletCountersAggregatorID(identity.NodeId(), follower);
-    identity.Send(countersAggregator, new TEvTabletCounters::TEvTabletCountersForgetTablet(tabletId, tabletType, tenantPathId));
+    identity.Send(countersAggregator, new TEvTabletCounters::TEvTabletCountersForgetTablet(tabletId, followerId, tabletType, tenantPathId));
 }
 
 ///////////////////////////////////////////

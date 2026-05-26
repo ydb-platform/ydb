@@ -251,7 +251,7 @@ void TExecutor::Broken(EBrokenReason reason) {
 
     if (Owner) {
         ForceSendCounters();
-        TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
+        TabletCountersForgetTablet(Owner->TabletID(), FollowerId, Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
         Owner->Detach(OwnerCtx());
     }
@@ -866,7 +866,7 @@ TExecutorCaches TExecutor::CleanupState() {
 void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
         ForceSendCounters();
-        TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
+        TabletCountersForgetTablet(Owner->TabletID(), FollowerId, Owner->TabletType(),
             Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     }
 
@@ -957,7 +957,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 
 void TExecutor::DetachTablet() {
     ForceSendCounters();
-    TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
+    TabletCountersForgetTablet(Owner->TabletID(), FollowerId, Owner->TabletType(),
         Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     return PassAway();
 }
@@ -4065,7 +4065,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, FollowerId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4094,7 +4094,7 @@ void TExecutor::ForceSendCounters() {
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, FollowerId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
     }
 }
 

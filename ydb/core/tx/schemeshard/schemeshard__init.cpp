@@ -5876,6 +5876,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TLocalShardIdx localShardIdx(ui64(shardDesc.GetShardIdx()));
                         TShardIdx shardIdx(Self->TabletID(), localShardIdx);
                         TTabletId tabletId(ui64(shardDesc.GetTabletId()));
+                        if (auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
+                            tabletId = shardInfo->TabletID;
+                        }
                         testShardSetInfo->TestShards[shardIdx] = tabletId;
                     }
                 }

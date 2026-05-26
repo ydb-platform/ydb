@@ -7236,6 +7236,26 @@
             "TotalNodes": "3"
         }
     },
+    "test.TestViewer.test_viewer_nodes_deleted_tablets": {
+        "created_tablets": [
+            {
+                "Overall": "Green",
+                "State": "Active",
+                "Type": "DataShard"
+            }
+        ],
+        "deleted_tablets": [
+            {
+                "Overall": "Grey",
+                "State": "Deleted",
+                "Type": "DataShard"
+            }
+        ],
+        "nodes": {
+            "datashards_delta": 0,
+            "non_green_datashards": []
+        }
+    },
     "test.TestViewer.test_viewer_nodes_group": [
         {
             "FieldsAvailable": "1111010000000110100110111111100010111",

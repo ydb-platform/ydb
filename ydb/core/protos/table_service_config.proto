@@ -513,7 +513,7 @@ message TTableServiceConfig {
 
     optional bool EnableWatermarksAdvanced = 130 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableCompileCacheWarmup = 131 [default = false, (InvalidateCompileCache) = false];
+    optional bool EnableCompileCacheWarmup = 131 [default = true, (InvalidateCompileCache) = false];
 
     optional bool EnableChannelMemoryTracking = 132 [default = true];
 

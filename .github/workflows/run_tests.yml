@@ -17,7 +17,7 @@ on:
         description: 'Test size (small,medium,large)'
         required: false
         type: string
-        default: small,medium,large
+        default: small,medium
       additional_ya_make_args:
         description: 'additional args for ya make'
         required: false

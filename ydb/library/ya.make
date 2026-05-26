@@ -19,6 +19,7 @@ RECURSE(
     grpc
     http_proxy
     intersection_tree
+    json_index
     keys
     kll_median
     lockfree_bucket

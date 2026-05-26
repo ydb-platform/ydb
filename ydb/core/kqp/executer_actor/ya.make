@@ -23,6 +23,7 @@ PEERDIR(
     library/cpp/containers/absl_flat_hash
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/library/json_index
     ydb/core/client/minikql_compile
     ydb/core/formats
     ydb/core/fq/libs/checkpointing

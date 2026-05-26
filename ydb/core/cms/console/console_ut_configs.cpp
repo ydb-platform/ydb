@@ -874,6 +874,72 @@ config:
     some_removed_feature_flag_example: true
 )";
 
+const TString VERSIONED_MAIN_CONFIG_V0_STALE = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: clusterA
+)";
+
+const TString VERSIONED_MAIN_CONFIG_V1 = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
+config:
+  log_config:
+    cluster_name: clusterA
+)";
+
+const TString VERSIONED_MAIN_CONFIG_V2 = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 2
+config:
+  log_config:
+    cluster_name: clusterB
+)";
+
+const TString VERSIONED_DATABASE_CONFIG_V0_STALE = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+config:
+  feature_flags:
+    some_removed_feature_flag_example: true
+)";
+
+const TString VERSIONED_DATABASE_CONFIG_V1 = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 1
+config:
+  feature_flags:
+    some_removed_feature_flag_example: true
+)";
+
+const TString VERSIONED_DATABASE_CONFIG_V2 = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 2
+config:
+  feature_flags:
+    some_removed_feature_flag_example: false
+)";
+
 
 void InitializeTestConfigItems()
 {
@@ -1116,6 +1182,42 @@ TVector<ui64> CheckConfigureLogAffected(TTenantTestRuntime &runtime,
     return {reply->Record.GetAddedItemIds().begin(), reply->Record.GetAddedItemIds().end()};
 }
 
+void DoReplaceYamlConfig(TTenantTestRuntime &runtime,
+                         const TString &yaml,
+                         Ydb::StatusIds::StatusCode expectedCode,
+                         const TString &errorSubstring = {},
+                         bool allowAbsentDatabase = false)
+{
+    auto *event = new TEvConsole::TEvReplaceYamlConfigRequest;
+    event->Record.MutableRequest()->set_config(yaml);
+    if (allowAbsentDatabase) {
+        event->Record.MutableRequest()->set_allow_absent_database(true);
+    }
+    runtime.SendToConsole(event);
+
+    TAutoPtr<IEventHandle> handle;
+    auto [success, error] = runtime.GrabEdgeEvents<
+        TEvConsole::TEvReplaceYamlConfigResponse,
+        TEvConsole::TEvGenericError>(handle);
+
+    if (expectedCode == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT_C(success != nullptr,
+            "expected success but got error: " <<
+            (error ? error->Record.ShortDebugString() : TString("no event")));
+    } else {
+        UNIT_ASSERT_C(error != nullptr,
+            "expected error " << static_cast<int>(expectedCode) << " but got success");
+        UNIT_ASSERT_VALUES_EQUAL(error->Record.GetYdbStatus(), expectedCode);
+        if (!errorSubstring.empty()) {
+            TString allMessages;
+            for (const auto& issue : error->Record.GetIssues()) {
+                allMessages += issue.message();
+                allMessages += ";";
+            }
+            UNIT_ASSERT_STRING_CONTAINS(allMessages, errorSubstring);
+        }
+    }
+}
 
 
 } // anonymous namespace
@@ -4519,6 +4621,108 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[0].GetNotChanged());
         UNIT_ASSERT(notification->Get()->Record.GetVolatileConfigs()[1].GetNotChanged());
+    }
+
+    Y_UNIT_TEST(TestReplaceMainYamlConfigVersionCheck) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+
+        // Fresh runtime: YamlVersion = 0. Per documentation, the client must send
+        // the *current* stored version. A version ahead of stored is rejected.
+        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V1,
+            Ydb::StatusIds::BAD_REQUEST, "Version mismatch");
+
+        // version: 0 matches stored YamlVersion = 0 — accepted; YamlVersion becomes 1.
+        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V0_STALE,
+            Ydb::StatusIds::SUCCESS);
+
+        // version: 2 with stored = 1 — rejected.
+        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V2,
+            Ydb::StatusIds::BAD_REQUEST, "Version mismatch");
+
+        // Re-applying the same body with the stale version: 0 is silently
+        // accepted (documented idempotent behaviour: wire == stored - 1 with
+        // identical content). YamlVersion stays at 1.
+        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V0_STALE,
+            Ydb::StatusIds::SUCCESS);
+
+        // version: 1 matches stored YamlVersion = 1 — accepted; YamlVersion becomes 2.
+        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V1,
+            Ydb::StatusIds::SUCCESS);
+
+        // version: 2 with a differing body now matches stored — accepted; YamlVersion = 3.
+        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V2,
+            Ydb::StatusIds::SUCCESS);
+
+        // Verify the stored version is one above the last accepted wire version.
+        // Confirms the Console invariant: stored version == sent version + 1.
+        runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
+        TAutoPtr<IEventHandle> handle;
+        auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity(0).version(), 3);
+    }
+
+    Y_UNIT_TEST(TestReplaceDatabaseYamlConfigVersionCheck) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        TTenantTestRuntime runtime(MultipleTenantsConsoleTestConfig(), appcfg);
+
+        // ValidateDatabaseConfig appends the database config into the main config
+        // and re-validates the result, which requires a non-empty MainYamlConfig.
+        // Seed a minimal main config first (fresh YamlVersion = 0, so wire = 0).
+        DoReplaceYamlConfig(runtime, VERSIONED_MAIN_CONFIG_V0_STALE,
+            Ydb::StatusIds::SUCCESS);
+
+        // Fresh runtime: no per-database config stored, so currentVersion = 0.
+        // Per documentation, the wire version must equal the stored version.
+        // Sending version: 1 must be rejected.
+        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V1,
+            Ydb::StatusIds::BAD_REQUEST, "Version mismatch",
+            /* allowAbsentDatabase = */ true);
+
+        // version: 0 matches stored currentVersion = 0 — accepted; stored version becomes 1.
+        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V0_STALE,
+            Ydb::StatusIds::SUCCESS, {},
+            /* allowAbsentDatabase = */ true);
+
+        // version: 2 with stored = 1 — rejected.
+        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V2,
+            Ydb::StatusIds::BAD_REQUEST, "Version mismatch",
+            /* allowAbsentDatabase = */ true);
+
+        // Re-applying the same body with the stale version: 0 is silently
+        // accepted (documented idempotent behaviour: wire == stored - 1 with
+        // identical content). Stored version stays at 1.
+        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V0_STALE,
+            Ydb::StatusIds::SUCCESS, {},
+            /* allowAbsentDatabase = */ true);
+
+        // version: 1 matches stored = 1 — accepted; stored version becomes 2.
+        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V1,
+            Ydb::StatusIds::SUCCESS, {},
+            /* allowAbsentDatabase = */ true);
+
+        // version: 2 with a differing body now matches stored = 2 — accepted; version = 3.
+        DoReplaceYamlConfig(runtime, VERSIONED_DATABASE_CONFIG_V2,
+            Ydb::StatusIds::SUCCESS, {},
+            /* allowAbsentDatabase = */ true);
+
+        // Verify the stored database version is one above the last accepted wire version.
+        // Confirms the Console invariant: stored version == sent version + 1.
+        runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
+        TAutoPtr<IEventHandle> handle;
+        auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        const auto& resp = configs->Record.GetResponse();
+        int dbIdx = -1;
+        for (int i = 0; i < resp.identity_size(); ++i) {
+            if (resp.identity(i).has_database() &&
+                resp.identity(i).database() == "/dc-1/users/tenant-1") {
+                dbIdx = i;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(dbIdx >= 0, "database identity for /dc-1/users/tenant-1 not found");
+        UNIT_ASSERT_VALUES_EQUAL(resp.identity(dbIdx).version(), 3);
     }
 }
 

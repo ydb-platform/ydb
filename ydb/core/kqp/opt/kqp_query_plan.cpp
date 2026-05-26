@@ -1066,28 +1066,25 @@ private:
 
             TString tablePath;
             TTableWrite writeInfo;
-            if (settings.Mode().StringValue() == "replace") {
+            if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE) {
                 op.Properties["Name"] = "Replace";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert"
-                    || settings.Mode().StringValue() == "update_conditional"
-                    || (settings.Mode().StringValue() == "update" && tableSinkSettings.GetSkipMissingRows())
-                    || settings.Mode().StringValue().empty()) {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
                 op.Properties["Name"] = "Upsert";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsert;
-            } else if (settings.Mode().StringValue() == "insert") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                 op.Properties["Name"] = "Insert";
                 writeInfo.Type = EPlanTableWriteType::MultiInsert;
-            } else if (settings.Mode().StringValue() == "delete") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
                 op.Properties["Name"] = "Delete";
                 writeInfo.Type = EPlanTableWriteType::MultiErase;
-            } else if (settings.Mode().StringValue() == "update") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
                 op.Properties["Name"] = "Update";
                 writeInfo.Type = EPlanTableWriteType::MultiUpdate;
-            } else if (settings.Mode().StringValue() == "fill_table") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                 op.Properties["Name"] = "FillTable";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert_increment") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT) {
                 op.Properties["Name"] = "UpsertIncrement";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsertIncrement;
             } else {

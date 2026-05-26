@@ -1624,6 +1624,8 @@ public:
         std::vector<ui32> OldKeyIndexes; // Old secondary key
 
         IKqpBufferTableLookup* Lookup = nullptr;
+
+        bool SkipMissingRows = false;
     };
 
     class IKqpReturningConsumer {
@@ -1703,6 +1705,7 @@ public:
                 AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
                 AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
+                AFL_ENSURE(!lookup.SkipMissingRows);
             }
         }
 
@@ -1996,8 +1999,9 @@ private:
 
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
-            } else if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
-                    || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+            } else if (lookupInfo.SkipMissingRows) {
+                AFL_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                    || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
                 // Skip updates and deletes for non-existing rows.
                 Memory -= EstimateSize(processCells);
             } else {
@@ -3494,6 +3498,7 @@ public:
                                         indexSettings.KeyPrefixSize},
                                     /* preferAdditionalInputColumns */ true),
                             .Lookup = lookupActor,
+                            .SkipMissingRows = false,
                         });
 
                         lookupActor->SetLookupSettings(
@@ -3527,6 +3532,7 @@ public:
                     .PrimaryInFullKeyIndexes = {},
                     .OldKeyIndexes = {},
                     .Lookup = lookupActor,
+                    .SkipMissingRows = settings.SkipMissingRows,
                 });
 
                 lookupActor->SetLookupSettings(
@@ -3536,11 +3542,13 @@ public:
                     settings.LookupColumns);
             }
 
+            AFL_ENSURE(!settings.SkipMissingRows
+                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
                 token.Cookie,
-                (settings.SkipMissingRows && settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE)
-                    ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT // Don't need reads at shard if we know that row exists.
-                    : GetOperation(settings.OperationType),
+                GetOperation(settings.OperationType),
                 settings.KeyColumns,
                 settings.Columns,
                 CountLocalDefaults(

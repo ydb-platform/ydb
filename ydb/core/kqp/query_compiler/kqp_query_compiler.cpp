@@ -1736,7 +1736,7 @@ private:
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
             } else if (settings.Mode().StringValue() == "delete") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
-            } else if (settings.Mode().StringValue() == "update" || settings.Mode().StringValue() == "update_conditional") {
+            } else if (settings.Mode().StringValue() == "update") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
             } else if (settings.Mode().StringValue() == "upsert_increment") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT);
@@ -1980,7 +1980,13 @@ private:
                     fillColumnProto(columnName, columnMeta, columnProto);
                 }
 
-                setOperationType();
+                if (settingsProto.GetSkipMissingRows()
+                        && (settings.Mode().StringValue() == "update_conditional"
+                            || settings.Mode().StringValue() == "update")) {
+                    settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
+                } else {
+                    setOperationType();
+                }
             } else {
                 AFL_ENSURE(localDefaultColumns.empty());
                 AFL_ENSURE(defaultColumnsIds.empty());

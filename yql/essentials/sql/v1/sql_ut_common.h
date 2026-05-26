@@ -8055,6 +8055,12 @@ Y_UNIT_TEST(ScalarContextUsage4) {
     ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
                                "<main>:4:25: Error: Source is used here\n");
 }
+Y_UNIT_TEST(TablesFunctionDisallowedByDefault) {
+    auto res = SqlToYql("USE plato; SELECT * FROM TABLES()");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TABLES is not allowed in this context");
+}
+
 } // Y_UNIT_TEST_SUITE(SqlToYQLErrors)
 
 inline void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

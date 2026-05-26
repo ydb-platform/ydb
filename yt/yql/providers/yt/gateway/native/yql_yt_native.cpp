@@ -6227,6 +6227,61 @@ private:
         });
     }
 
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+            const auto cluster = options.Cluster();
+            const auto files = options.Files();
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
+            auto dstPath = NYql::TransformPath(tmpFolder, "tmp/", true, session->UserName_);
+
+            auto ytServer = Clusters_->TryGetServer(cluster);
+            YQL_ENSURE(ytServer);
+            auto execCtx = MakeExecCtx(std::move(options), session, options.Cluster(), nullptr, nullptr);
+            auto entry = execCtx->GetOrCreateEntry();
+
+            return session->Async([entry, cluster, dstPath, files, logCtx]() {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    TUploadFilesToCacheResult res;
+                    auto client = entry->Client;
+                    for (auto file : files) {
+                        TString remotePath = NYT::AddPathPrefix(TFsPath(dstPath) / file.Md5, NYT::TConfig::Get()->Prefix);
+                        CreateParents({remotePath}, client);
+                        if (!client->Exists(remotePath)) {
+                            YQL_CLOG(INFO, ProviderYt) << "Start uploading " << file.Path << " to " << remotePath;
+                            auto uploadTx = client->StartTransaction({});
+                            try {
+                                auto out = uploadTx->CreateFileWriter(NYT::TRichYPath(remotePath), NYT::TFileWriterOptions().CreateTransaction(false));
+                                TIFStream in(file.Path);
+                                TransferData(&in, out.Get());
+                                out->Finish();
+                                uploadTx->Commit();
+                                YQL_CLOG(INFO, ProviderYt) << "Complete uploading " << file.Path << " to " << remotePath;
+                            } catch (...) {
+                                uploadTx->Abort();
+                                throw;
+                            }
+                        }
+
+                        file.RemotePath = remotePath;
+                        res.Files.push_back(std::move(file));
+                    }
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return ResultFromCurrentException<TUploadFilesToCacheResult>();
+                }
+            });
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeFuture(ResultFromCurrentException<TUploadFilesToCacheResult>());
+        }
+    }
+
     IYtTokenResolver::TPtr GetYtTokenResolver() const override {
         return Services_.YtTokenResolver;
     }

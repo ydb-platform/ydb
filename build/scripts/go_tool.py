@@ -192,6 +192,17 @@ def call(cmd, cwd, env=None):
     return subprocess.check_output(cmd, stdin=None, stderr=subprocess.STDOUT, cwd=cwd, env=env, text=True)
 
 
+# Mirror cmd/internal/objabi.EncodeArg from the Go stdlib: the response file
+# read by `go link @file` parses `\` as the start of an escape, so only `\\`
+# and `\n` are legal. Windows paths in build_root (e.g. `C:\...\main.a`)
+# otherwise trip cmd/link with `panic: badly formatted input`.
+_GO_LINK_ARG_ESCAPES = str.maketrans({'\\': r'\\', '\n': r'\n'})
+
+
+def _encode_go_link_arg(arg):
+    return arg.translate(_GO_LINK_ARG_ESCAPES)
+
+
 def classify_srcs(srcs, args):
     args.go_srcs = [x for x in srcs if x.endswith('.go')]
     args.asm_srcs = [x for x in srcs if x.endswith('.s')]
@@ -569,9 +580,11 @@ def do_link_exe(args):
                 extldflags = json.loads(res)[1:]
         cmd.append('-extldflags={}'.format(' '.join(extldflags)))
     cmd.append(compile_args.output)
-    with tempfile.NamedTemporaryFile(mode='w', delete_on_close=False) as response_file:
+    # newline='\n' keeps text mode from emitting CRLF on Windows hosts.
+    with tempfile.NamedTemporaryFile(mode='w', newline='\n', delete_on_close=False) as response_file:
         for arg in cmd[1:]:
-            print(arg, file=response_file)
+            response_file.write(_encode_go_link_arg(arg))
+            response_file.write('\n')
         response_file.close()
         cmd = [cmd[0], '@' + response_file.name]
         call(cmd, args.build_root)

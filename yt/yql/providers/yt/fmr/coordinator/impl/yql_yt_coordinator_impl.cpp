@@ -75,6 +75,7 @@ public:
         SessionInactivityTimeout_(settings.SessionInactivityTimeout),
         HealthCheckInterval_(settings.HealthCheckInterval),
         DefaultFmrOperationSpec_(settings.DefaultFmrOperationSpec),
+        RequireFmrJob_(settings.RequireFmrJob),
         YtCoordinatorService_(ytCoordinatorService),
         GcService_(gcService)
     {
@@ -107,6 +108,10 @@ public:
         }
         auto operationId = GenerateId();
         YQL_ENSURE(Sessions_.contains(request.SessionId), "Session " << request.SessionId << " must be opened before starting operations");
+        if (RequireFmrJob_ && !request.FmrJob) {
+            auto error = TFmrError{.Component = EFmrComponent::Coordinator, .Reason = EFmrErrorReason::Unknown, .ErrorMessage = "FmrJob must be set in StartOperation request"};
+            return MakeFailedResponse(TStartOperationResponse(EOperationStatus::Failed, ""), error, "StartOperation validation failed: ");
+        }
         auto& sessionInfo = Sessions_[request.SessionId];
         sessionInfo.OperationIds.emplace_back(operationId);
         if (IdempotencyKey) {
@@ -128,6 +133,7 @@ public:
             .YtResources = request.YtResources,
             .FmrResources = request.FmrResources,
             .FmrOperationSpec = fmrOperationSpec,
+            .FmrJob = request.FmrJob,
         };
 
         auto stageError = ExecuteCurrentStage(operationId);
@@ -198,7 +204,13 @@ public:
         for (auto& generatedTask: generateResult.Tasks) {
             TString taskId = GenerateId();
 
-            TTask::TPtr createdTask = MakeTask(generatedTask.TaskType, taskId, generatedTask.TaskParams, operationInfo.SessionId, clusterConnections, operationInfo.Files, operationInfo.YtResources, generateResult.FmrResourceTasks, fmrOperationSpec);
+            std::vector<TYtResourceInfo> taskYtResources = operationInfo.YtResources;
+            if (operationInfo.FmrJob) {
+                TYtResourceInfo fmrJobResource = *operationInfo.FmrJob;
+                fmrJobResource.RichPath.FileName(TString("fmrjob"));
+                taskYtResources.insert(taskYtResources.begin(), std::move(fmrJobResource));
+            }
+            TTask::TPtr createdTask = MakeTask(generatedTask.TaskType, taskId, generatedTask.TaskParams, operationInfo.SessionId, clusterConnections, operationInfo.Files, taskYtResources, generateResult.FmrResourceTasks, fmrOperationSpec);
             Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId, .NumRetries = 0};
             TasksToRun_.emplace(createdTask, taskId);
             operationInfo.TaskIds.emplace(taskId);
@@ -365,7 +377,7 @@ public:
                     SetUnfinishedTaskStatus(taskId, taskStatus, requestTaskState->TaskErrorMessage);
                     isTaskToDelete = (TaskToDeleteIds_.contains(taskId) && Tasks_[taskId].TaskStatus != ETaskStatus::InProgress);
                     auto statistics = requestTaskState->Stats;
-                    YQL_CLOG(TRACE, FastMapReduce) << " Task with id " << taskId << " has current status " << taskStatus << Endl;
+                    YQL_CLOG(TRACE, FastMapReduce) << "Worker " << workerId << " task " << taskId << " status " << taskStatus;
                     bool isOperationCompleted = (GetOperationStatus(operationId) == EOperationStatus::Completed);
                     for (auto& [fmrTableId, tableStats]: statistics.OutputTables) {
                         Operations_[operationId].OutputTableIds.emplace(fmrTableId.TableId);
@@ -429,6 +441,7 @@ public:
                 }
             }
             if (canRunTask) {
+                YQL_CLOG(DEBUG, FastMapReduce) << "Dispatching task " << taskId << " to worker " << workerId;
                 currentTasksToRun.emplace_back(task);
                 ++filledSlots;
             }
@@ -974,6 +987,7 @@ private:
         std::vector<TYtResourceInfo> YtResources;
         std::vector<TFmrResourceOperationInfo> FmrResources;
         NYT::TNode FmrOperationSpec;
+        TMaybe<TYtResourceInfo> FmrJob;
 
         ui64 CompletedJobsCount = 0;  // Number of tasks that transitioned to Completed
         ui64 LostJobsCount = 0;       // Number of tasks lost due to worker failure and re-enqueued
@@ -1025,6 +1039,7 @@ private:
     std::unordered_map<TString, TTableStats> OperationTableStats_; // TableId -> Statistic for fmr table, filled when operation completes
 
     NYT::TNode DefaultFmrOperationSpec_;
+    const bool RequireFmrJob_;
     IYtCoordinatorService::TPtr YtCoordinatorService_; // Needed for partitioning of yt tables
     IFmrGcService::TPtr GcService_;
 

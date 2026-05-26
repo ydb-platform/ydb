@@ -209,6 +209,10 @@ struct TKiExploreTxResults {
                 YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 dataTable = indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalSyncVectorIvfPq) {
+                YQL_ENSURE(indexTables.size() >= 3, "IVF-PQ index should have at least 3 tables");
+                dataTable = indexTable = indexTables[2];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NIvfPq::PostingTable));
             } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain) {
                 YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
                 dataTable = indexTable = indexTables[0];

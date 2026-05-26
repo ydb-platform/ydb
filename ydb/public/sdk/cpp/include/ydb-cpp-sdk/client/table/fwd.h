@@ -23,6 +23,7 @@ struct TRenameIndex;
 struct TGlobalIndexSettings;
 struct TVectorIndexSettings;
 struct TKMeansTreeSettings;
+struct TIvfPqSettings;
 struct TCreateSessionSettings;
 struct TSessionPoolSettings;
 struct TClientSettings;

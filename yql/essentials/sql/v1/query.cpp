@@ -155,6 +155,8 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("syncGlobalUnique");
         case TIndexDescription::EType::GlobalVectorKmeansTree:
             return node.Q("globalVectorKmeansTree");
+        case TIndexDescription::EType::GlobalVectorIvfPq:
+            return node.Q("globalVectorIvfPq");
         case TIndexDescription::EType::GlobalFulltextPlain:
             return node.Q("globalFulltextPlain");
         case TIndexDescription::EType::GlobalFulltextRelevance:

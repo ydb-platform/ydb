@@ -519,6 +519,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     Stream << "\tINDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
+    std::optional<IvfPqSettings> ivfPqSettings;
     std::optional<FulltextIndexSettings> fulltextIndexSettings;
     bool isLocalBloomFilter = false;
     bool isLocalBloomNgramFilter = false;
@@ -538,6 +539,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         case TableIndex::kGlobalVectorKmeansTreeIndex: {
             Stream << " GLOBAL USING vector_kmeans_tree ON ";
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+        }
+        case TableIndex::kGlobalVectorIvfPqIndex: {
+            Stream << " GLOBAL USING vector_ivf_pq ON ";
+            ivfPqSettings = index.global_vector_ivf_pq_index().vector_settings();
             break;
         }
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
@@ -662,6 +668,103 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         if (kMeansTreeSettings->overlap_ratio() != 0) {
             Stream << del << "overlap_ratio=\"" << kMeansTreeSettings->overlap_ratio() << "\"";
+            del = ", ";
+        }
+
+        Stream << ")";
+    }
+
+    if (ivfPqSettings) {
+        Stream << " WITH (";
+
+        switch (ivfPqSettings->settings().metric()) {
+            case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+                Stream << "similarity=product";
+                break;
+            case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+                Stream << "similarity=cosine";
+                break;
+            case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+                Stream << "distance=cosine";
+                break;
+            case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+                Stream << "distance=manhattan";
+                break;
+            case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+                Stream << "distance=euclidean";
+                break;
+            default:
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::VectorIndexSettings");
+        }
+
+        TString del = "";
+        if (ivfPqSettings->settings().metric() != Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
+            del = ", ";
+        }
+
+        switch (ivfPqSettings->settings().vector_type()) {
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
+                Stream << del << "vector_type=\"bit\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
+                Stream << del << "vector_type=\"int8\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
+                Stream << del << "vector_type=\"uint8\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
+                Stream << del << "vector_type=\"float\"";
+                break;
+            default:
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::VectorIndexSettings");
+        }
+
+        if (ivfPqSettings->settings().vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
+            del = ", ";
+        }
+
+        if (ivfPqSettings->settings().vector_dimension() != 0) {
+            Stream << del << "vector_dimension=" << ivfPqSettings->settings().vector_dimension();
+            del = ", ";
+        }
+
+        switch (ivfPqSettings->ivf_type_case()) {
+            case Ydb::Table::IvfPqSettings::IvfTypeCase::kKmeansTreeSettings: {
+                const auto& kMeansTreeSettings = ivfPqSettings->kmeans_tree_settings();
+
+                if (kMeansTreeSettings.clusters() != 0) {
+                    Stream << del << "kmeans_tree_clusters=" << kMeansTreeSettings.clusters();
+                    del = ", ";
+                }
+
+                if (kMeansTreeSettings.levels() != 0) {
+                    Stream << del << "kmeans_tree_levels=" << kMeansTreeSettings.levels();
+                    del = ", ";
+                }
+
+                if (kMeansTreeSettings.overlap_clusters() != 0) {
+                    Stream << del << "kmeans_tree_overlap_clusters=" << kMeansTreeSettings.overlap_clusters();
+                    del = ", ";
+                }
+
+                if (kMeansTreeSettings.overlap_ratio() != 0) {
+                    Stream << del << "kmeans_tree_overlap_ratio=\"" << kMeansTreeSettings.overlap_ratio() << "\"";
+                    del = ", ";
+                }
+
+                break;
+            }
+            case Ydb::Table::IvfPqSettings::IvfTypeCase::IVF_TYPE_NOT_SET:
+                Y_ENSURE(false);
+        }
+
+        if (ivfPqSettings->subspaces() != 0) {
+            Stream << del << "subspaces=" << ivfPqSettings->subspaces();
+            del = ", ";
+        }
+
+        if (ivfPqSettings->subspace_bits() != 0) {
+            Stream << del << "subspace_bits=" << ivfPqSettings->subspace_bits();
             del = ", ";
         }
 

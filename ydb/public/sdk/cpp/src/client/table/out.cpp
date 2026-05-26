@@ -86,6 +86,20 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TKMeansTreeSettings, stream, value) {
         " }";
 }
 
+Y_DECLARE_OUT_SPEC(, NYdb::NTable::TIvfPqSettings, stream, value) {
+    stream <<
+        "{ settings: " << value.Settings <<
+        ", subspace_bits: " << value.SubspaceBits <<
+        ", subspaces: " << value.Subspaces;
+
+    if (const auto* settings = std::get_if<NYdb::NTable::TKMeansTreeSettings>(&value.IvfSettings)) {
+        stream <<
+            ", kmeans_tree_settings: " << *settings;
+    }
+
+    stream << " }";
+}
+
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ETokenizer, stream, value) {
     switch (value) {
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Whitespace:

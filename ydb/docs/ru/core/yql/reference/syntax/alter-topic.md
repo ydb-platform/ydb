@@ -120,14 +120,7 @@ ALTER TOPIC topic_path ADD CONSUMER consumer_name [WITH (option = value[, ...])]
 
 * `option` и `value` — параметр читателя и его значение.
 
-Параметры читателя:
-
-* `important` — определяет важного читателя. Никакие данные из топика не будут удалены, пока все важные читатели их не обработали. Тип значения — `boolean`, значение по умолчанию: `false`.
-* `availability_period` — определяет время доступности сообщений для читателя. Опция позволяет продлить время хранения сообщений в топике с [retention_period](#topic-parameters) вплоть до `availability_period`, если читатель не подтверждает их обработку. Тип значения — `Interval`. Не совместим с параметром `important`. Значение по умолчанию отсутствует.
-* `read_from` — определяет момент времени записи сообщений, начиная с которого читатель будет получать данные. Данные, записанные ранее этого момента, прочитаны не будут. Тип значения: `Datetime` ИЛИ `Timestamp` или `integer` (unix-timestamp в виде числа). Значение по умолчанию — `0` (чтение с самого раннего доступного в топике времени).
-{% if feature_topic_codecs %}
-* `supported_codecs` — список [кодеков](../../../../concepts/datamodel/topic#message-codec), поддерживаемых читателем.
-{% endif %}
+{% include [x](_includes/topic_consumer_parameters.md) %}
 
 Следующая команда добавит к топику читателя с настройками по умолчанию:
 
@@ -139,6 +132,20 @@ ALTER TOPIC `my_topic` ADD CONSUMER my_consumer;
 
 ```yql
 ALTER TOPIC `my_topic` ADD CONSUMER my_consumer2 WITH (important = true);
+```
+
+Следующая команда добавит к топику shared-читателя:
+
+```yql
+ALTER TOPIC `my_topic`
+    ADD CONSUMER my_consumer2 WITH (
+        type = 'shared',
+        keep_messages_order = false,
+        default_processing_timeout = Interval('PT30S'),
+        max_processing_attempts = 3,
+        dead_letter_policy = 'move',
+        dead_letter_queue = 'my_dlq_topic'
+    )
 ```
 
 ### Задать параметры читателя {#alter-consumer}

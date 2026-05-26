@@ -1,17 +1,20 @@
 #include "kqp_expression.h"
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <util/stream/str.h>
+
 #include <optional>
 
-using namespace NYql::NNodes;
+namespace NKikimr::NKqp {
 
 namespace {
 
+using namespace NYql::NNodes;
 using namespace NKikimr;
-using namespace NKikimr::NKqp;
 
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
     if (input->IsCallable("Member")) {
@@ -351,10 +354,7 @@ TString FormatExpressionDependencies(const TExpression& expr) {
     return TStringBuilder() << "<expr depends on: " << FormatInfoUnits(deps) << ">";
 }
 
-}
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props) : Ctx(ctx), PlanProps(props) {
     Y_ENSURE(ctx, "Creating an expression with null context");
@@ -787,5 +787,4 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanPro
     }
 }
 
-}
-}
+} // namespace NKikimr::NKqp

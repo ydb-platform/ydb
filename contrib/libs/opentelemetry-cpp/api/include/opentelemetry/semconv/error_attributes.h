@@ -27,6 +27,12 @@ namespace error
   When @code error.type @endcode is set to a type (e.g., an exception type), its
   canonical class name identifying the type within the artifact SHOULD be used.
   <p>
+  If the recorded error type is a wrapper that is not meaningful for
+  failure classification, instrumentation MAY use the type of the inner
+  error instead. For example, in Go, errors created with @code fmt.Errorf @endcode
+  using @code %w @endcode MAY be unwrapped when the wrapper type does not help
+  classify the failure.
+  <p>
   Instrumentations SHOULD document the list of errors they report.
   <p>
   The cardinality of @code error.type @endcode within one instrumentation library SHOULD be low.

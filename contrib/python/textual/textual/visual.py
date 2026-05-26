@@ -57,7 +57,7 @@ class SupportsVisual(Protocol):
 
         Args:
             widget: The widget that generated the render.
-            obj: The result of the the render.
+            obj: The result of the render.
 
         Returns:
             A Visual instance, or `None` if it wasn't possible.
@@ -218,8 +218,8 @@ class Visual(ABC):
 
         selection = widget.text_selection
         if selection is not None:
-            selection_style: Style | None = Style.from_rich_style(
-                widget.screen.get_component_rich_style("screen--selection")
+            selection_style = Style.from_styles(
+                widget.screen.get_component_styles("screen--selection")
             )
         else:
             selection_style = None
@@ -235,7 +235,10 @@ class Visual(ABC):
                 selection_style,
             ),
         )
-        strips = [strip._apply_link_style(widget.link_style) for strip in strips]
+        if widget.auto_links and not widget.is_container:
+            # TODO: This is suprisingly expensive (why?)
+            link_style = widget.link_style
+            strips = [strip._apply_link_style(link_style) for strip in strips]
 
         if height is None:
             height = len(strips)
@@ -255,7 +258,6 @@ class Visual(ABC):
                     align_vertical,
                 )
             )
-
         return strips
 
 

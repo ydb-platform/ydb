@@ -4,6 +4,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
@@ -22,6 +23,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
@@ -224,11 +226,15 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
+        VectorIndexLevelsCache = MakeIntrusive<TVectorIndexLevelsCache>(
+            GetServiceCounters(AppData()->Counters, "kqp"));
+        ctx.Register(CreateVectorIndexLevelsCacheMaintainer(
+            VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
         WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
-        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory);
+        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
@@ -302,6 +308,12 @@ public:
             }
         }
 
+        // Create finalize script service
+        const auto& finalizeScriptService = Register(CreateKqpFinalizeScriptService(
+            QueryServiceConfig, FederatedQuerySetup, S3ActorsFactory
+        ));
+        TActivationContext::ActorSystem()->RegisterLocalService(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), finalizeScriptService);
+
         // Create compile service
         CompileService = TActivationContext::Register(CreateKqpCompileService(
             QueryCache,
@@ -318,12 +330,23 @@ public:
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
 
-        NYql::NDq::TDqChannelLimits limits = {
-            .LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes(),
-            .RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
-            .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes(),
-            .ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount(),
-        };
+        NYql::NDq::TDqChannelLimits limits;
+
+        if (TableServiceConfig.HasDqChannelConfig()) {
+            auto& config = TableServiceConfig.GetDqChannelConfig();
+            limits.LocalChannelInflightBytes  = config.GetLocalChannelInflightBytes();
+            limits.RemoteChannelInflightBytes = config.GetRemoteChannelInflightBytes();
+            limits.RemoteSessionInflightBytes = config.GetRemoteSessionInflightBytes();
+            limits.ReconciliationCount = config.GetReconciliationCount();
+            limits.CleanupPeriod = TDuration::MilliSeconds(std::max<ui64>(config.GetCleanupPeriodMs(), 200));
+            limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
+            limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
+        } else { // deprecated
+            limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();
+            limits.RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes();
+            limits.RemoteSessionInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes();
+            limits.ReconciliationCount = TableServiceConfig.GetDqChannelReconciliationCount();
+        }
 
         ui32 channelPoolId = AppData()->UserPoolId;
         // {
@@ -337,8 +360,15 @@ public:
             NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(),
             Counters->GetChannelCounters(), limits, channelPoolId, ChannelService),
             TActorId{}, TMailboxType::HTSwap, channelPoolId);
+        ChannelService->SetServiceActorId(channelServiceActorId);
         TActivationContext::ActorSystem()->RegisterLocalService(
             NYql::NDq::MakeChannelServiceActorID(SelfId().NodeId()), channelServiceActorId);
+
+        if (NActors::TMon* mon = AppData()->Mon) {
+            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actorsMonPage, "kqp_channels", "KQP Channels", false,
+                TActivationContext::ActorSystem(), channelServiceActorId);
+        }
 
         ResourceManager_ = GetKqpResourceManager();
         CaFactory_ = NComputeActor::MakeKqpCaFactory(
@@ -2004,6 +2034,7 @@ private:
     TIntrusivePtr<TExecuterMutableConfig> ExecuterConfig;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
     std::unique_ptr<TLocalSessionsRegistry> LocalSessions;
     std::shared_ptr<TKqpProxySharedResources> KqpProxySharedResources;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;

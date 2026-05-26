@@ -89,6 +89,8 @@ namespace NYdb::NConsoleClient {
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
+        TMaybe<ui64> PartitionWriteSpeedMessagesPerSecond_;
+        TMaybe<ui64> PartitionWriteBurstMessages_;
         TMaybe<ui32> PartitionsPerTablet_;
         TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
@@ -111,6 +113,8 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+        TMaybe<ui64> PartitionWriteSpeedMessagesPerSecond_;
+        TMaybe<ui64> PartitionWriteBurstMessages_;
         TMaybe<bool> KeepMessagesOrder_;
         TMaybe<TDuration> DefaultProcessingTimeout_;
         TMaybe<ui32> DlqMaxProcessingAttempts_;

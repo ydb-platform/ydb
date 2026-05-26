@@ -1,6 +1,7 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -29,8 +30,7 @@
 
 #include <util/generic/bitmap.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
 using namespace NYql;
@@ -2684,7 +2684,7 @@ private:
     TSet<TString> SecretNames;
 };
 
-} // namespace
+} // anonymous namespace
 
 TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster, const TString& database,
     const IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx,
@@ -2693,5 +2693,4 @@ TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster, 
     return MakeIntrusive<TKqpQueryCompiler>(cluster, database, funcRegistry, typesCtx, optimizeCtx, config);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

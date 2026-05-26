@@ -111,6 +111,12 @@ public:
         LruCompiledPatternList_.Clear();
     }
 
+    void UpdateMaxSizes(size_t maxPatternsSizeBytes, size_t maxCompiledPatternsSizeBytes) {
+        MaxPatternsSizeBytes_ = maxPatternsSizeBytes;
+        MaxCompiledPatternsSizeBytes_ = maxCompiledPatternsSizeBytes;
+        ClearIfNeeded();
+    }
+
 private:
     struct TPatternLRUListTag {};
     struct TCompiledPatternLRUListTag {};
@@ -202,9 +208,9 @@ private:
     }
 
     const size_t MaxPatternsSize_;
-    const size_t MaxPatternsSizeBytes_;
+    size_t MaxPatternsSizeBytes_;
     const size_t MaxCompiledPatternsSize_;
-    const size_t MaxCompiledPatternsSizeBytes_;
+    size_t MaxCompiledPatternsSizeBytes_;
 
     size_t CurrentPatternsSizeBytes_ = 0;
     size_t CurrentCompiledPatternsSize_ = 0;
@@ -298,15 +304,19 @@ void TComputationPatternLRUCache::EmplacePattern(const TString& serializedProgra
             Notify_.erase(notifyIt);
         }
 
-        *SizeItems_ = Cache_->PatternsSize();
-        *SizeBytes_ = Cache_->PatternsSizeInBytes();
-        *SizeCompiledItems_ = Cache_->CompiledPatternsSize();
-        *SizeCompiledBytes_ = Cache_->PatternsCompiledCodeSizeInBytes();
+        UpdatePatternCurrentUsageInfo();
     }
 
     for (auto& subscriber : subscribers) {
         subscriber.SetValue(patternWithEnv);
     }
+}
+
+void TComputationPatternLRUCache::UpdatePatternCurrentUsageInfo() {
+    *SizeItems_ = Cache_->PatternsSize();
+    *SizeBytes_ = Cache_->PatternsSizeInBytes();
+    *SizeCompiledItems_ = Cache_->CompiledPatternsSize();
+    *SizeCompiledBytes_ = Cache_->PatternsCompiledCodeSizeInBytes();
 }
 
 void TComputationPatternLRUCache::NotifyPatternCompiled(const TString& serializedProgram) {
@@ -338,12 +348,30 @@ size_t TComputationPatternLRUCache::GetSize() const {
 }
 
 void TComputationPatternLRUCache::CleanCache() {
-    *SizeItems_ = 0;
-    *SizeBytes_ = 0;
-    *MaxSizeBytesCounter_ = 0;
     std::lock_guard lock(Mutex_);
     PatternsToCompile_.clear();
     Cache_->Clear();
+    UpdatePatternCurrentUsageInfo();
+    Y_DEBUG_ABORT_UNLESS(*SizeItems_ == 0, "Cache is expected to be empty after the CleanCache call");
+    Y_DEBUG_ABORT_UNLESS(*SizeBytes_ == 0, "Cache is expected to be empty after the CleanCache call");
+    Y_DEBUG_ABORT_UNLESS(*SizeCompiledItems_ == 0, "Cache is expected to be empty after the CleanCache call");
+    Y_DEBUG_ABORT_UNLESS(*SizeCompiledBytes_ == 0, "Cache is expected to be empty after the CleanCache call");
+}
+
+void TComputationPatternLRUCache::UpdateConfiguration(const TConfig& configuration) {
+    std::lock_guard lock(Mutex_);
+    Y_ABORT_UNLESS(Configuration_.PatternAccessTimesBeforeTryToCompile ==
+                       configuration.PatternAccessTimesBeforeTryToCompile,
+                   "PatternAccessTimesBeforeTryToCompile cannot be changed in-place");
+
+    Configuration_.MaxSizeBytes = configuration.MaxSizeBytes;
+    Configuration_.MaxCompiledSizeBytes = configuration.MaxCompiledSizeBytes;
+
+    Cache_->UpdateMaxSizes(configuration.MaxSizeBytes, configuration.MaxCompiledSizeBytes);
+
+    *MaxSizeBytesCounter_ = configuration.MaxSizeBytes;
+    *MaxCompiledSizeBytesCounter_ = configuration.MaxCompiledSizeBytes;
+    UpdatePatternCurrentUsageInfo();
 }
 
 void TComputationPatternLRUCache::AccessPattern(const TString& serializedProgram, TPatternCacheEntryPtr entry) {

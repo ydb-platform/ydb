@@ -42,7 +42,101 @@ N/A
 
 ## [Build scripts]
 
-N/A
+### CMake WITH_OTLP_RETRY_PREVIEW
+
+#### Announcement (WITH_OTLP_RETRY_PREVIEW)
+
+The CMake compile flag WITH_OTLP_RETRY_PREVIEW is deprecated by:
+
+* Enable WITH_OTLP_RETRY_PREVIEW by default
+  [#3953](https://github.com/open-telemetry/opentelemetry-cpp/pull/3953)
+
+#### Motivation (WITH_OTLP_RETRY_PREVIEW)
+
+Flags like `WITH_OTLP_RETRY_PREVIEW` are used to conditionally compile
+new features, when they are introduced in the code base.
+
+Now that this feature is stable, conditional compilation is no longer
+necessary.
+
+#### Scope (WITH_OTLP_RETRY_PREVIEW)
+
+Remove compilation flag WITH_OTLP_RETRY_PREVIEW in CMake.
+
+Remove ifdef ENABLE_OTLP_RETRY_PREVIEW in C++ .
+
+#### Mitigation (WITH_OTLP_RETRY_PREVIEW)
+
+Applications built with `WITH_OTLP_RETRY_PREVIEW=ON` need to:
+
+* remove the WITH_OTLP_RETRY_PREVIEW flag from CMake scripts
+
+Applications built with `WITH_OTLP_RETRY_PREVIEW=OFF` need to:
+
+* remove the WITH_OTLP_RETRY_PREVIEW flag from CMake scripts
+* use `retry_policy_max_attempts` = 0 in the OTLP exporter options.
+
+For Bazel, no compilation option exists,
+the bazel build enables unconditionally ENABLE_OTLP_RETRY_PREVIEW.
+
+Make sure to properly initialize `retry_policy_max_attempts`
+to enable or disable the retry feature.
+
+#### Planned removal (WITH_OTLP_RETRY_PREVIEW)
+
+This compilation flag will be removed after October 1st, 2026.
+
+### CMake WITH_OTLP_GRPC_SSL_MTLS_PREVIEW
+
+#### Announcement (WITH_OTLP_GRPC_SSL_MTLS_PREVIEW)
+
+The CMake compile flag WITH_OTLP_GRPC_SSL_MTLS_PREVIEW is deprecated by:
+
+* Enable WITH_OTLP_GRPC_SSL_MTLS_PREVIEW by default
+  [#3970](https://github.com/open-telemetry/opentelemetry-cpp/pull/3970)
+
+#### Motivation (WITH_OTLP_GRPC_SSL_MTLS_PREVIEW)
+
+Flags like `WITH_OTLP_GRPC_SSL_MTLS_PREVIEW` are used to conditionally compile
+new features, when they are introduced in the code base.
+
+Now that this feature is stable, conditional compilation is no longer
+necessary.
+
+#### Scope (WITH_OTLP_GRPC_SSL_MTLS_PREVIEW)
+
+Remove compilation flag WITH_OTLP_GRPC_SSL_MTLS_PREVIEW in CMake.
+
+Remove ifdef ENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW in C++ .
+
+#### Mitigation (WITH_OTLP_GRPC_SSL_MTLS_PREVIEW)
+
+Applications built with `WITH_OTLP_GRPC_SSL_MTLS_PREVIEW=ON` need to:
+
+* remove the WITH_OTLP_GRPC_SSL_MTLS_PREVIEW flag from CMake scripts
+
+Applications built with `WITH_OTLP_GRPC_SSL_MTLS_PREVIEW=OFF` need to:
+
+* remove the WITH_OTLP_GRPC_SSL_MTLS_PREVIEW flag from CMake scripts
+* initialize ssl client properties in the OTLP GRPC exporter options,
+  either with real KEY and CERT data, or with empty strings.
+
+See:
+
+* struct `OtlpGrpcClientOptions`
+* struct `OtlpGrpcLogRecordExporterOptions`
+* struct `OtlpGrpcMetricExporterOptions`
+* struct `OtlpGrpcExporterOptions`
+
+For Bazel, no compilation flag exists, the code is always built using
+ENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW.
+
+Make sure to properly initialize ssl client properties
+to enable or disable the feature.
+
+#### Planned removal (WITH_OTLP_GRPC_SSL_MTLS_PREVIEW)
+
+This compilation flag will be removed after October 1st, 2026.
 
 ## [opentelemetry-cpp API]
 
@@ -127,6 +221,52 @@ term, after ABI version 2 is declared stable.
 
 By the time only ABI version 2 is available and supported,
 any code still using the deprecated `EventLogger` will break.
+
+### Deprecation of plugin
+
+#### Announcement (plugin)
+
+The `plugin` API was deprecated by:
+
+* [API] Deprecate plugin
+  [#4021](https://github.com/open-telemetry/opentelemetry-cpp/pull/4021)
+
+on Apr 21, 2026.
+
+#### Motivation (plugin)
+
+All the code in namespace `opentelemetry::plugin` is a framework designed
+to help loading code from shared libraries.
+
+This framework was never used.
+
+Keeping the code in the repository has a maintenance cost
+(include-what-you-use, cpp-check, clang-tidy, CI),
+and also increases confusion.
+
+This unused code is to be removed.
+
+#### Scope (plugin)
+
+The following files are to be removed from the API:
+
+* `opentelemetry/plugin/*.h`
+* `opentelemetry/plugin/detail/*.h`
+
+The following files are to be removed from examples:
+
+* `examples/plugin/*`
+
+#### Mitigation (plugin)
+
+None.
+
+This code is unused, there is no replacement.
+
+#### Planned removal (plugin)
+
+API header files under the `opentelemetry::plugin` namespace
+will be removed after October 1st, 2026.
 
 ## [opentelemetry-cpp SDK]
 

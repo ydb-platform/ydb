@@ -22,15 +22,15 @@ public:
         }
     }
 
-    T GetStart() const {
+    [[nodiscard]] T GetStart() const {
         return Start_;
     }
 
-    T GetFinish() const {
+    [[nodiscard]] T GetFinish() const {
         return Finish_;
     }
 
-    T GetRangeSize() const {
+    [[nodiscard]] T GetRangeSize() const {
         return Finish_ - Start_ + 1;
     }
 

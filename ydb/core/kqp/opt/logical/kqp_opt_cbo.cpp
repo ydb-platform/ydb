@@ -1,9 +1,11 @@
 #include "kqp_opt_cbo.h"
 #include "kqp_opt_log_impl.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
-
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -37,7 +39,6 @@ TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
  * KQP specific rule to check if a LookupJoin is applicable
 */
 bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, const TKqpProviderContext& ctx) {
-
     auto rel = std::static_pointer_cast<TKqpRelOptimizerNode>(node);
     auto expr = TExprBase(rel->Node);
 
@@ -69,8 +70,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
         if (!prefixSize) {
             return true;
         }
-    }
-    else {
+    } else {
         readMatch = MatchRead<TKqlReadTableRangesBase>(expr);
         if (readMatch) {
             if (readMatch->FlatMap && !IsPassthroughFlatMap(readMatch->FlatMap.Cast(), nullptr)){
@@ -137,7 +137,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, ctx);
 }
 
-}
+} // anonymous namespace
 
 bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
@@ -179,7 +179,7 @@ double TKqpProviderContext::ComputeJoinCost(
     const double outputRows,
     const double outputByteSize,
     EJoinAlgoType joinAlgo
-) const  {
+) const {
     Y_UNUSED(outputByteSize);
 
     switch(joinAlgo) {
@@ -206,5 +206,4 @@ double TKqpProviderContext::ComputeJoinCost(
     }
 }
 
-
-}
+} // namespace NKikimr::NKqp::NOpt

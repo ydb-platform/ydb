@@ -46,15 +46,16 @@ public:
 
   using Logger::EmitLogRecord;
 
-  void EmitLogRecord(nostd::unique_ptr<LogRecord> &&) noexcept override {}
+  void EmitLogRecord(nostd::unique_ptr<LogRecord> &&log_record) noexcept override
+  {
+    auto local = std::move(log_record);
+    local.reset();
+  }
 
 private:
   class NoopLogRecord : public LogRecord
   {
   public:
-    NoopLogRecord()           = default;
-    ~NoopLogRecord() override = default;
-
     void SetTimestamp(common::SystemTimestamp /* timestamp */) noexcept override {}
     void SetObservedTimestamp(common::SystemTimestamp /* timestamp */) noexcept override {}
     void SetSeverity(logs::Severity /* severity */) noexcept override {}
@@ -99,13 +100,16 @@ class NoopEventLogger final : public EventLogger
 {
 public:
   NoopEventLogger() : logger_{nostd::shared_ptr<NoopLogger>(new NoopLogger())} {}
-  ~NoopEventLogger() override = default;
 
   const nostd::string_view GetName() noexcept override { return "noop event logger"; }
 
   nostd::shared_ptr<Logger> GetDelegateLogger() noexcept override { return logger_; }
 
-  void EmitEvent(nostd::string_view, nostd::unique_ptr<LogRecord> &&) noexcept override {}
+  void EmitEvent(nostd::string_view, nostd::unique_ptr<LogRecord> &&log_record) noexcept override
+  {
+    auto local = std::move(log_record);
+    local.reset();
+  }
 
 private:
   nostd::shared_ptr<Logger> logger_;
@@ -120,7 +124,6 @@ class NoopEventLoggerProvider final : public EventLoggerProvider
 public:
   NoopEventLoggerProvider() : event_logger_{nostd::shared_ptr<EventLogger>(new NoopEventLogger())}
   {}
-  ~NoopEventLoggerProvider() override = default;
 
   nostd::shared_ptr<EventLogger> CreateEventLogger(
       nostd::shared_ptr<Logger> /*delegate_logger*/,

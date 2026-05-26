@@ -34,6 +34,8 @@ private:
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
     void SwitchStage(const EStage from, const EStage to);
 
+    void AbortExport(const TString& errorMessage);
+
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
 
@@ -71,6 +73,18 @@ public:
             }
         } catch (...) {
             AFL_VERIFY(false);
+        }
+    }
+
+    STATEFN(StateError) {
+        const NActors::TLogContextGuard gLogging =
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NBackground::TEvLocalTransactionCompleted, Handle);
+            hFunc(NBackground::TEvSessionControl, Handle);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
+            default:
+                break;
         }
     }
 };

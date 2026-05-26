@@ -9,6 +9,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/explain_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/docs_search_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
@@ -284,8 +285,13 @@ void TModelHandler::SetupTools(const TSettings& settings) {
         {"explain_query", CreateExplainQueryTool({.LazyDriver = settings.LazyDriver})},
         {"describe", CreateDescribeTool({.Database = settings.Database, .LazyDriver = settings.LazyDriver})},
         {"ydb_help", CreateYdbHelpTool({.UsageInfoGetter = settings.UsageInfoGetter})},
+        {"docs_search", CreateDocsSearchTool()},
         {"exec_shell", CreateExecShellTool({.Prompt = settings.Prompt})},
     }) {
+        if (!tool) {
+            continue;
+        }
+
         const auto autoAction = settings.ConfigurationManager->GetToolAutoAction(name);
         if (autoAction == TInteractiveConfigurationManager::EToolAutoAction::Hide) {
             YDB_CLI_LOG(Warning, "Skipping tool " << name << " because it is hidden by configuration");

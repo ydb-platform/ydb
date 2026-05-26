@@ -91,7 +91,7 @@ using TBaseWriteRequestExecutorPtr = std::shared_ptr<TBaseWriteRequestExecutor>;
 
 TBaseWriteRequestExecutorPtr CreateWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
-    TChildLogTitle logTitle,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,

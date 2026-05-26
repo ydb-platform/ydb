@@ -1,9 +1,11 @@
 #include "kqp_rbo_transformer.h"
-#include "kqp_operator.h"
-#include "kqp_plan_conversion_utils.h"
 
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -203,10 +205,10 @@ TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
             .Variable()
                 .Value(colName.GetFullName())
             .Build()
+            .Lambda(expr)
             .ForceOptional()
                 .Value(forceOptional ? "True" : "False")
             .Build()
-            .Lambda(expr)
         .Done().Ptr());
         // clang-format on
     }
@@ -220,6 +222,7 @@ TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
                 .Value(colName.GetFullName())
             .Build()
             .Lambda(expr)
+            .ForceOptional().Value("False").Build()
         .Done().Ptr());
         // clang-format on
     }
@@ -943,7 +946,7 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultC
                 Y_ENSURE(aggFuncResultType, "Cannot find type for aggregation result.");
 
                 auto toPg = ctx.NewCallable(pos, "ToPg", {member});
-                auto pgType = ctx.NewCallable(pos, "PgType", {ctx.NewAtom(pos, ::NPg::LookupType(aggFuncResultType->Cast<TPgExprType>()->GetId()).Name)});
+                auto pgType = ctx.NewCallable(pos, "PgType", {ctx.NewAtom(pos, NYql::NPg::LookupType(aggFuncResultType->Cast<TPgExprType>()->GetId()).Name)});
                 member = ctx.NewCallable(pos, "PgCast", {toPg, pgType});
             }
 
@@ -1101,10 +1104,7 @@ TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprNo
     return limitBuilder.Done().Ptr();
 }
 
-} // namespace
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, bool pgSyntax) {
@@ -1545,7 +1545,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
             } else if (needPgCast || needPgCastForAgg) {
 
                 auto pgType =
-                    ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), ::NPg::LookupType(expectedPgType->GetId()).Name)});
+                    ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NYql::NPg::LookupType(expectedPgType->GetId()).Name)});
                 TExprNode::TPtr lambdaBody = lambda.Body().Ptr();
                 lambdaBody = ReplacePgOps(lambdaBody, ctx);
                 auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {lambdaBody, pgType});
@@ -1579,6 +1579,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                         .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
                     .Build()
                 .Build()
+                .ForceOptional().Value("False").Build()
             .Done().Ptr());
             // clang-format on
             
@@ -1774,5 +1775,5 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
 
     return NormalizeMemberNames(opRoot, ctx, node->Pos());
 }
-}
-}
+
+} // namespace NKikimr::NKqp

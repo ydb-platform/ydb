@@ -23,6 +23,7 @@ IF (NOT OS_WINDOWS)
         ydb/core/tx/schemeshard/ut_helpers
         ydb/core/util
         ydb/core/wrappers/ut_helpers
+        ydb/library/aws_init
         yql/essentials/public/udf/service/exception_policy
     )
     SRCS(

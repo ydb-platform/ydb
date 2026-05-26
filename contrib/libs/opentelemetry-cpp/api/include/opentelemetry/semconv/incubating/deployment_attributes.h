@@ -58,6 +58,30 @@ static constexpr const char *kDeploymentName = "deployment.name";
  */
 static constexpr const char *kDeploymentStatus = "deployment.status";
 
+namespace DeploymentEnvironmentNameValues
+{
+/**
+  Production environment
+ */
+static constexpr const char *kProduction = "production";
+
+/**
+  Staging environment
+ */
+static constexpr const char *kStaging = "staging";
+
+/**
+  Testing environment
+ */
+static constexpr const char *kTest = "test";
+
+/**
+  Development environment
+ */
+static constexpr const char *kDevelopment = "development";
+
+}  // namespace DeploymentEnvironmentNameValues
+
 namespace DeploymentStatusValues
 {
 /**

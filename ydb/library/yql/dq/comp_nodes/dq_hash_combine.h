@@ -9,6 +9,7 @@ struct TComputationNodeFactoryContext;
 class TDqHashCombineTestPoints {
 public:
     virtual void DisableStateDehydration(const bool disable) = 0;
+    virtual void DisableKeyPassthrough(const bool disable) = 0;
 };
 
 IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx);

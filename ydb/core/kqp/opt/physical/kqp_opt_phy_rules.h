@@ -1,15 +1,26 @@
 #pragma once
 
-#include <ydb/core/kqp/opt/kqp_opt.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-
-#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 
 /*
  * This file contains declaration of all rule functions for physical optimizer
  */
 
-namespace NKikimr::NKqp::NOpt {
+namespace NYql {
+
+struct TTypeAnnotationContext;
+class IOptimizationContext;
+class TKikimrTableDescription;
+
+} // namespace NYql
+
+namespace NKikimr::NKqp {
+
+class TKqpStatsStore;
+
+namespace NOpt {
+
+struct TKqpOptimizeContext;
 
 NYql::NNodes::TExprBase KqpRewriteReadTableSysView(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
@@ -81,7 +92,7 @@ NYql::NNodes::TExprBase KqpApplyVectorTopKToStageWithSource(NYql::NNodes::TExprB
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TExprBase KqpPushOlapFilter(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx, NYql::IGraphTransformer &typeAnnTransformer);
+    const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx);
 
 NYql::NNodes::TExprBase KqpPushOlapProjections(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx);
@@ -126,4 +137,6 @@ bool AllowFuseJoinInputs(NYql::NNodes::TExprBase node);
 
 bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescription& tableDesc);
 
-} // NKikimr::NKqp::NOpt
+} // NOpt
+
+} // NKikimr::NKqp

@@ -1,17 +1,12 @@
 #pragma once
 
-#include "yql_kikimr_provider.h"
+#include "yql_kikimr_expr_nodes.h"
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-
+#include <yql/essentials/core/yql_graph_transformer.h>
 
 namespace NYql {
 
-class TKiSourceVisitorTransformer: public TSyncTransformerBase {
+class TKiSourceVisitorTransformer : public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
@@ -26,7 +21,7 @@ private:
 
 class TKiSinkVisitorTransformer : public TSyncTransformerBase {
 public:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
     void Rewind() override {
     }

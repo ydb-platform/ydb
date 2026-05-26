@@ -98,6 +98,18 @@ namespace {
         }
         return result;
     }
+
+    bool ParseBool(const TString& name, const TString& value, TString& error) {
+        const TString lower = to_lower(value);
+        if (lower == "true" || lower == "1") {
+            return true;
+        }
+        if (lower == "false" || lower == "0") {
+            return false;
+        }
+        error = TStringBuilder() << "Invalid bool value for " << name << ": " << value;
+        return false;
+    }
 }
 
 // TODO(mbkkt) maybe compute floating sum in double? Needs benchmark
@@ -1034,6 +1046,21 @@ void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 row
     }
 }
 
+ui32 ComputeAdaptiveK(ui64 prefixRowCount, ui32 levels, ui32 overlapClusters, ui32 maxClusters) {
+    if (prefixRowCount < 100) {
+        return MinClusters;
+    }
+    double searchWidth = 10;
+    double avgClustersPerVector = 1;
+    if (overlapClusters > 1) {
+        searchWidth = 4;
+        avgClustersPerVector = overlapClusters - 0.5;
+    }
+    ui64 clusters = ComputeOptimalClusters(levels, searchWidth, prefixRowCount, avgClustersPerVector);
+    clusters = std::min(clusters, static_cast<ui64>(maxClusters));
+    return static_cast<ui32>(clusters < MinClusters ? MinClusters : clusters);
+}
+
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, false, error);
 }
@@ -1065,6 +1092,8 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_overlap_clusters(ParseUInt32(nameLower, value, MinClusters, MaxClusters, error));
     } else if (nameLower == "overlap_ratio") {
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
+    } else if (nameLower == "adaptive_clusters") {
+        settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

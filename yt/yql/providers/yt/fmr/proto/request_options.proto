@@ -29,6 +29,7 @@ enum EOperationType {
     OPERATION_TYPE_DISTRIBUTED_UPLOAD = 5;
     OPERATION_TYPE_SORTED_MERGE = 6;
     OPERATION_TYPE_SORT = 7;
+    OPERATION_TYPE_PULL = 9;
 }
 
 enum ETaskType {
@@ -40,6 +41,7 @@ enum ETaskType {
     TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
     TASK_TYPE_SORTED_MERGE = 6;
     TASK_TYPE_LOCAL_SORT = 7;
+    TASK_TYPE_PULL = 9;
 }
 
 enum EFmrComponent {
@@ -184,7 +186,7 @@ message TSortedUploadOperationParams {
     TFmrTableRef Input = 1;
     TYtTableRef Output = 2;
     string SessionId = 3;
-    repeated string Cookies = 4;
+    repeated bytes Cookies = 4;
     uint32 SessionType = 5;
     string PartitionId = 6;
     bool IsOrdered = 7;
@@ -193,7 +195,7 @@ message TSortedUploadOperationParams {
 message TSortedUploadTaskParams {
     TFmrTableInputRef Input = 1;
     TYtTableRef Output = 2;
-    string CookieYson = 3;
+    bytes CookieYson = 3;
     uint32 SessionType = 4;
     uint64 Order = 5;
     optional TSortingColumns SortingColumns = 6;
@@ -284,6 +286,14 @@ message TSortOperationParams {
     TFmrTableRef Output = 2;
 }
 
+message TPullOperationParams {
+    repeated TOperationTableRef Input = 1;
+}
+
+message TPullTaskParams {
+    TTaskTableInputRef Input = 1;
+}
+
 message TLocalSortTaskParams {
     TTaskTableInputRef Input = 1;
     TFmrTableOutputRef Output = 2;
@@ -299,6 +309,7 @@ message TOperationParams {
         TSortedMergeOperationParams SortedMergeOperationParams = 6;
         TSortOperationParams SortOperationParams = 7;
         TReduceOperationParams ReduceOperationParams = 8;
+        TPullOperationParams PullOperationParams = 9;
     }
 }
 
@@ -312,6 +323,7 @@ message TTaskParams {
         TSortedMergeTaskParams SortedMergeTaskParams = 6;
         TLocalSortTaskParams LocalSortTaskParams = 7;
         TReduceTaskParams ReduceTaskParams = 8;
+        TPullTaskParams PullTaskParams = 9;
     }
 }
 
@@ -352,7 +364,7 @@ message TTask {
     string SessionId = 4;
     optional uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
-    optional string JobSettings = 7;
+    optional bytes JobSettings = 7;
     repeated TFileInfo Files = 8;
     repeated TYtResourceInfo YtResources = 9;
     repeated TFmrResourceTaskInfo FmrResources = 10;
@@ -372,8 +384,12 @@ message TTaskMapResult {
 }
 
 message TTaskSortedUploadResult {
-    string FragmentResult = 1;
+    bytes FragmentResult = 1;
     uint64 FragmentOrder = 2;
+}
+
+message TTaskPullResult {
+    bytes Data = 1;
 }
 
 message TTaskResult {
@@ -383,6 +399,7 @@ message TTaskResult {
         TTaskMergeResult TaskMergeResult = 3;
         TTaskMapResult TaskMapResult = 4;
         TTaskSortedUploadResult TaskSortedUploadResult = 5;
+        TTaskPullResult TaskPullResult = 6;
     }
 }
 

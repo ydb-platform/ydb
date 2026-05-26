@@ -1,10 +1,5 @@
 from yt.common import YtError
 
-try:
-    from yt.packages.six import int2byte, indexbytes
-except ImportError:
-    from six import int2byte, indexbytes
-
 
 class YsonError(YtError):
     pass
@@ -34,7 +29,7 @@ class StreamWrap(object):
             if self.pos == len(self.header):
                 self.state += 1
             else:
-                res = int2byte(indexbytes(self.header, self.pos))
+                res = bytes([self.header[self.pos]])
                 self.pos += 1
                 return res
 
@@ -50,7 +45,7 @@ class StreamWrap(object):
             if self.pos == len(self.footer):
                 self.state += 1
             else:
-                res = int2byte(indexbytes(self.footer, self.pos))
+                res = bytes([self.footer[self.pos]])
                 self.pos += 1
                 return res
 
@@ -61,9 +56,9 @@ class StreamWrap(object):
 _ENCODING_SENTINEL = object()
 
 # Binary literals markers
-STRING_MARKER = int2byte(1)
-INT64_MARKER = int2byte(2)
-DOUBLE_MARKER = int2byte(3)
-FALSE_MARKER = int2byte(4)
-TRUE_MARKER = int2byte(5)
-UINT64_MARKER = int2byte(6)
+STRING_MARKER = bytes([1])
+INT64_MARKER = bytes([2])
+DOUBLE_MARKER = bytes([3])
+FALSE_MARKER = bytes([4])
+TRUE_MARKER = bytes([5])
+UINT64_MARKER = bytes([6])

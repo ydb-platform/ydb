@@ -32,9 +32,7 @@ public:
     void OnException(const std::exception& exc) override {
         LOG_E("OnException: " << exc.what());
 
-        TEvCreateTopicResponse response;
-        response.Status = Ydb::StatusIds::INTERNAL_ERROR;
-        response.ErrorMessage = exc.what();
+        TEvCreateTopicResponse response(Path, Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 
         Promise.SetValue(std::move(response));
     }
@@ -48,6 +46,7 @@ private:
         LOG_D("Handle TEvCreateTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
+            .Path = Path,
             .Status = ev->Get()->Status,
             .ErrorMessage = std::move(ev->Get()->ErrorMessage),
             .ModifyScheme = std::move(ev->Get()->ModifyScheme)

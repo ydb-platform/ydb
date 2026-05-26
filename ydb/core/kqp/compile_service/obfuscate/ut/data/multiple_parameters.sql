@@ -1,0 +1,1 @@
+DECLARE $from_date AS Datetime; DECLARE $to_date AS Datetime; DECLARE $min_amount AS Double; SELECT id, customer_id, amount, created_at FROM orders WHERE created_at >= $from_date AND created_at < $to_date AND amount >= $min_amount

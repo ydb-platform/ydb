@@ -35,6 +35,8 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
             newStrategy = TJoinLinkSettings::EStrategy::ForceMap;
         } else if (canonizedName == "grace") {
             newStrategy = TJoinLinkSettings::EStrategy::ForceGrace;
+        } else if (canonizedName == "star") {
+            newStrategy = TJoinLinkSettings::EStrategy::ForceStar;
         } else if (canonizedName == "compact") {
             linkSettings.Compact = true;
             continue;

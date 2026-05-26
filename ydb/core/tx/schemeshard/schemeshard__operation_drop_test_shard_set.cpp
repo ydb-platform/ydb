@@ -39,28 +39,50 @@ class TDropTestShardSet : public TSubOperation {
         const TOperationId OperationId;
 
     public:
-        TPropose(TOperationId id)
+        explicit TPropose(TOperationId id)
             : OperationId(id)
-        {}
+        {
+            IgnoreMessages(DebugHint(), {});
+        }
 
         bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
-            TStepId step = TStepId(ev->Get()->StepId);
+            const TStepId step = TStepId(ev->Get()->StepId);
+            const TTabletId ssId = context.SS->SelfTabletId();
+
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       DebugHint() << " HandleReply TEvOperationPlan"
+                                   << ", step: " << step
+                                   << ", at schemeshard: " << ssId);
+
             TTxState* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
             Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTestShardSet);
 
-            TPathId pathId = txState->TargetPathId;
+            const TPathId pathId = txState->TargetPathId;
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+            Y_ABORT_UNLESS(!path->Dropped());
 
             NIceDb::TNiceDb db(context.GetDB());
+
+            for (auto shard : txState->Shards) {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
 
             path->SetDropped(step, OperationId.GetTxId());
             context.SS->PersistDropStep(db, pathId, step, OperationId);
             context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Sub(1);
+
+            context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
+            context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
+
             auto domainInfo = context.SS->ResolveDomainInfo(pathId);
             domainInfo->DecPathsInside(context.SS);
             auto parentDir = context.SS->PathsById.at(path->ParentPathId);
             DecAliveChildrenDirect(OperationId, parentDir, context);
-            context.SS->PersistRemoveTestShardSet(db, pathId);
+
+            if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
+                context.SS->PersistRemoveTestShardSet(db, pathId);
+            }
 
             ++parentDir->DirAlterVersion;
             context.SS->PersistPathDirAlterVersion(db, parentDir);
@@ -77,6 +99,12 @@ class TDropTestShardSet : public TSubOperation {
         }
 
         bool ProgressState(TOperationContext& context) override {
+            const TTabletId ssId = context.SS->SelfTabletId();
+
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       DebugHint() << " ProgressState"
+                                   << ", at schemeshard: " << ssId);
+
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
             Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTestShardSet);

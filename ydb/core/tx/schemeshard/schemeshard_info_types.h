@@ -35,6 +35,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/test_shard_control.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -4426,24 +4427,13 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {
     using TPtr = TIntrusivePtr<TTestShardSetInfo>;
 
+    NKikimrClient::TTestShardControlRequest::TCmdInitialize CmdInitialize;
     THashMap<TShardIdx, TTabletId> TestShards; // ShardIdx -> TabletId
     ui64 AlterVersion = 0;
-    TTestShardSetInfo::TPtr AlterData;
 
-    TTestShardSetInfo(ui64 alterVersion)
+    explicit TTestShardSetInfo(ui64 alterVersion)
         : AlterVersion(alterVersion)
     {}
-
-    TTestShardSetInfo::TPtr CreateAlter() const {
-        return CreateAlter(AlterVersion + 1);
-    }
-
-    TTestShardSetInfo::TPtr CreateAlter(ui64 version) const {
-        Y_ENSURE(AlterVersion < version);
-        TTestShardSetInfo::TPtr alter = new TTestShardSetInfo(*this);
-        alter->AlterVersion = version;
-        return alter;
-    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

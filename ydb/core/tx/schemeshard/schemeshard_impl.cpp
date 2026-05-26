@@ -1674,6 +1674,9 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TS
                         case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery:
                             actualVersion = pathVersion.GetStreamingQueryVersion();
                             break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeTestShardSet:
+                            actualVersion = pathVersion.GetTestShardSetVersion();
+                            break;
                         default:
                             actualVersion = pathVersion.GetGeneralVersion();
                             break;
@@ -4006,11 +4009,14 @@ void TSchemeShard::PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {
     TString serializedTestShards;
     Y_ABORT_UNLESS(description.SerializeToString(&serializedTestShards));
 
+    TString serializedCmdInitialize;
+    Y_ABORT_UNLESS(testShardSet->CmdInitialize.SerializeToString(&serializedCmdInitialize));
+
     db.Table<Schema::TestShardSet>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::TestShardSet::AlterVersion>(testShardSet->AlterVersion),
-        NIceDb::TUpdate<Schema::TestShardSet::TestShards>(serializedTestShards)
+        NIceDb::TUpdate<Schema::TestShardSet::TestShards>(serializedTestShards),
+        NIceDb::TUpdate<Schema::TestShardSet::CmdInitialize>(serializedCmdInitialize)
     );
-
 }
 
 void TSchemeShard::PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {

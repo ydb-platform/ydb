@@ -113,8 +113,18 @@ namespace NKikimr::NHttpProxy {
                               "' database: '" << HttpContext.DatabasePath <<
                               "' iam token size: " << HttpContext.IamToken.size());
 
-                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabasePath,
-                                                            HttpContext.SerializedUserToken, ctx.ActorSystem());
+                TMap<TString, TString> peerMetadata {
+                    {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
+                    {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
+                };
+            
+                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
+                    std::move(Request),
+                    HttpContext.DatabasePath,
+                    HttpContext.SerializedUserToken,
+                    ctx.ActorSystem(),
+                    peerMetadata
+                );
                 RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                                     (const NThreading::TFuture<TProtoResponse>& future) {
                     auto& response = future.GetValueSync();

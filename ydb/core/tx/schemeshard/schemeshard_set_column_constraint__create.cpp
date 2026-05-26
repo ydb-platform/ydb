@@ -22,7 +22,7 @@ public:
 
         Response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(request.GetTxId());
 
-        if (!Self->EnableSetColumnConstraint) {
+        if (!AppData()->FeatureFlags.GetEnableSetColumnConstraint()) {
             return Reply(Ydb::StatusIds::UNSUPPORTED, "SetColumnConstraint feature is disabled");
         }
 

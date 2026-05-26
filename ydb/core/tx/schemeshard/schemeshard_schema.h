@@ -2402,13 +2402,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OriginalOpId, ItemSeq, ItemKind, TablePathId, WaitTxId, SrcTablePathId>;
     }
 
-    struct SetColumnConstraintOperation : Table<134> {
-        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
-
-        using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id>;
-    };
-
     // Alternative to TablePartitions/MigratedTablePartitions: keyed by path+shard identity so
     // that split/merge writes only O(k) rows (src+dst shards) instead of O(N) positional rows.
     // Guarded by EnableTablePartitionsFormatShardIdx feature flag.
@@ -2583,8 +2576,6 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-=======
->>>>>>> 31b6e235c67 (fix self issues)
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2716,6 +2707,7 @@ struct Schema : NIceDb::Schema {
         ForcedCompactions,
         WaitingForcedCompactionShards,
         SharedShards,
+<<<<<<< HEAD
         IncrementalRestoreItem,
 <<<<<<< HEAD
         TablePartitionsByShardIdx,
@@ -2726,6 +2718,9 @@ struct Schema : NIceDb::Schema {
         SharedShards,
 >>>>>>> 0bf47704816 (fix self issues)
         SetColumnConstraintOperation
+=======
+        IncrementalRestoreItem
+>>>>>>> 30b632dc51c (remove bad feature flag variable)
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

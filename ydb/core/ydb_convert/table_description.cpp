@@ -1750,6 +1750,31 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         }
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorIvfPq: {
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_ivf_pq_index()->mutable_codebook_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::CodebookTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_ivf_pq_index()->mutable_level_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::LevelTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_ivf_pq_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::PostingTablePosition)
+            );
+            const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
+            if (prefixVectorIndex) {
+                FillGlobalIndexSettings(
+                    *index->mutable_global_vector_ivf_pq_index()->mutable_prefix_table_settings(),
+                    tableIndex.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::PrefixTablePosition)
+                );
+            }
+
+            *index->mutable_global_vector_ivf_pq_index()->mutable_vector_settings() = tableIndex.GetVectorIndexIvfPqDescription().GetSettings();
+
+            break;
+        }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_plain_index()->mutable_settings(),
@@ -1890,6 +1915,11 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+        
+        case Ydb::Table::TableIndex::kGlobalVectorIvfPqIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorIvfPq);
+            *indexDesc->MutableVectorIndexIvfPqDescription()->MutableSettings() = index.global_vector_ivf_pq_index().vector_settings();
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:

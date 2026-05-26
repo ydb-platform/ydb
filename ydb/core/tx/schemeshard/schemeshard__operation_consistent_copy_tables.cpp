@@ -84,6 +84,10 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
             *operation->MutableVectorIndexKmeansTreeDescription() =
                 std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq:
+            *operation->MutableVectorIndexIvfPqDescription() =
+                std::get<NKikimrSchemeOp::TVectorIndexIvfPqDescription>(indexInfo->SpecializedIndexDescription);
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             *operation->MutableFulltextIndexDescription() =

@@ -3,6 +3,7 @@
 #include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/ivf_pq.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
@@ -1229,6 +1230,8 @@ private:
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            } else if (type == "globalVectorIvfPq") {
+                indexType = TIndexDescription::EType::GlobalSyncVectorIvfPq;
             } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
@@ -1314,6 +1317,7 @@ private:
             }
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
+            NKikimrKqp::TVectorIndexIvfPqDescription vectorIndexIvfPqDescription;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;
             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
@@ -1333,6 +1337,11 @@ private:
                             nameLower, value.StringValue(), error);
                         break;
                     }
+                    case TIndexDescription::EType::GlobalSyncVectorIvfPq:
+                        NKikimr::NIvfPq::FillSetting(
+                            *vectorIndexIvfPqDescription.MutableSettings(),
+                            nameLower, value.StringValue(), error);
+                        break;
                     case TIndexDescription::EType::GlobalFulltextPlain:
                     case TIndexDescription::EType::GlobalFulltextRelevance: {
                         NKikimr::NFulltext::FillSetting(
@@ -1382,6 +1391,15 @@ private:
                         return IGraphTransformer::TStatus::Error;
                     }
                     specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalSyncVectorIvfPq: {
+                    TString error;
+                    if (!NKikimr::NIvfPq::ValidateSettings(vectorIndexIvfPqDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(vectorIndexIvfPqDescription);
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltextPlain: {

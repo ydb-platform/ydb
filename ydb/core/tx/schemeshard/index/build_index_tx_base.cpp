@@ -303,6 +303,9 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorIvfPq:
+            *index.mutable_global_vector_ivf_pq_index() = Ydb::Table::GlobalVectorIvfPqIndex();
+            break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
             *index.mutable_global_fulltext_plain_index() = Ydb::Table::GlobalFulltextPlainIndex();
             break;

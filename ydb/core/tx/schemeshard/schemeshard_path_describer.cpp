@@ -217,6 +217,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq:
+                return TPathElement::EPathSubType::EPathSubTypeVectorIvfPqIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable;
@@ -1502,6 +1504,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq:
+            *entry.MutableVectorIndexIvfPqDescription() = std::get<NKikimrSchemeOp::TVectorIndexIvfPqDescription>(indexInfo->SpecializedIndexDescription);
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:

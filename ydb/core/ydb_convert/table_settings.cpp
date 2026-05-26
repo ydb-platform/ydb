@@ -532,6 +532,25 @@ bool FillIndexTablePartitioning(
         }
         break;
     }
+    case Ydb::Table::TableIndex::kGlobalVectorIvfPqIndex: {
+        const bool prefixVectorIndex = index.index_columns().size() > 1;
+        indexImplTableDescriptions.resize(prefixVectorIndex ? 4 : 3);
+        if (!fillIndexPartitioning(index.global_vector_ivf_pq_index().codebook_table_settings(), indexImplTableDescriptions[NTableIndex::NIvfPq::CodebookTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_vector_ivf_pq_index().level_table_settings(), indexImplTableDescriptions[NTableIndex::NIvfPq::LevelTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_vector_ivf_pq_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NIvfPq::PostingTablePosition])) {
+            return false;
+        }
+        if (prefixVectorIndex) {
+            if (!fillIndexPartitioning(index.global_vector_ivf_pq_index().prefix_table_settings(), indexImplTableDescriptions[NTableIndex::NIvfPq::PrefixTablePosition])) {
+                return false;
+            }
+        }
+        break;
+    }
     case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         indexImplTableDescriptions.resize(1);
         if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions[0])) {

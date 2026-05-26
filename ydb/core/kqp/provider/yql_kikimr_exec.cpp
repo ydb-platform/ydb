@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/ivf_pq.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -2353,6 +2354,8 @@ public:
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
                                 add_index->mutable_global_vector_kmeans_tree_index();
+                            } else if (type == "globalVectorIvfPq") {
+                                add_index->mutable_global_vector_ivf_pq_index();
                             } else if (type == "globalFulltextPlain") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2473,6 +2476,12 @@ public:
                                                 name, value.StringValue(), error);
                                             break;
                                         }
+                                        case Ydb::Table::TableIndex::kGlobalVectorIvfPqIndex: {
+                                            NKikimr::NIvfPq::FillSetting(
+                                                *add_index->mutable_global_vector_ivf_pq_index()->mutable_vector_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
                                         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                             NKikimr::NFulltext::FillSetting(
                                                 *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
@@ -2550,6 +2559,14 @@ public:
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
                             if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalVectorIvfPqIndex: {
+                            TString error;
+                            if (!NKikimr::NIvfPq::ValidateSettings(add_index->global_vector_ivf_pq_index().vector_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }

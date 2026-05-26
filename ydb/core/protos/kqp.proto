@@ -180,6 +180,10 @@ message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
+message TVectorIndexIvfPqDescription {
+    optional Ydb.Table.IvfPqSettings Settings = 1;
+}
+
 
 message TIndexDescriptionProto {
     optional string Name = 1;
@@ -193,6 +197,7 @@ message TIndexDescriptionProto {
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
         NKikimrSchemeOp.TFulltextIndexDescription FulltextIndexDescription = 10;
+        TVectorIndexIvfPqDescription VectorIndexIvfPqDescription = 11;
     }
 };
 

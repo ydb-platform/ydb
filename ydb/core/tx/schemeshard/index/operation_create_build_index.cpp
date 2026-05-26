@@ -68,7 +68,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq: {
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
@@ -224,6 +225,27 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 outTx.MutableSequence()->SetName(NTableIndex::NKMeans::IdColumnSequence);
                 outTx.SetInternal(tx.GetInternal());
                 result.push_back(CreateNewSequence(NextPartId(opId, result), outTx));
+            }
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorIvfPq: {
+            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+            NKikimrSchemeOp::TTableDescription indexCodebookTableDesc, indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
+            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+            if (indexDesc.IndexImplTableDescriptionsSize() == 3 + prefixVectorIndex) {
+                indexCodebookTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::CodebookTablePosition);
+                indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::LevelTablePosition);
+                indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::PostingTablePosition);
+                if (prefixVectorIndex) {
+                    indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NIvfPq::PrefixTablePosition);
+                }
+            }
+            const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            result.push_back(createImplTable(CalcVectorIvfPqCodebookImplTableDesc(tableInfo->PartitionConfig(), indexCodebookTableDesc)));
+            result.push_back(createImplTable(CalcVectorIvfPqLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
+            result.push_back(createImplTable(CalcVectorIvfPqPostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
+            if (prefixVectorIndex) {
+                Y_ENSURE(false, "Not implemented");
             }
             break;
         }

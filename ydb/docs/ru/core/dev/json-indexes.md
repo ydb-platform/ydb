@@ -211,7 +211,7 @@ WHERE JSON_VALUE(JSON_VALUE(doc, '$.a' RETURNING Utf8), '$.b' RETURNING Utf8) = 
 
 Без `RETURNING` тип результата по умолчанию — `Utf8`, и сравнение с литералами других типов может вести себя неожиданно:
 
-```sql
+```yql
 $doc = Json('["1", 1]');
 SELECT JSON_VALUE($doc, '$[0]') == "1";  -- true: строка и строка
 SELECT JSON_VALUE($doc, '$[1]') == "1";  -- true: число приводится к строке — ошибка логики

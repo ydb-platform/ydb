@@ -77,28 +77,7 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
         queries = []
 
         queries.append([
-            True,
-            f"SELECT COUNT(*) AS cnt FROM `{table_name}` WHERE level >= 5 AND level <= 15;",
-        ])
-
-        queries.append([
-            True,
-            f"SELECT COUNT(*) AS cnt FROM `{table_name}` WHERE level > 17;",
-        ])
-
-        queries.append([
-            True,
-            f'SELECT COUNT(*) AS cnt FROM `{table_name}` WHERE resource_id >= "res_2" AND resource_id <= "res_4";',
-        ])
-
-        queries.append([
-            True,
-            f'SELECT COUNT(*) AS cnt FROM `{table_name}` '
-            f'WHERE timestamp BETWEEN Timestamp("2024-01-01T00:00:05.000000Z") AND Timestamp("2024-01-01T00:00:10.000000Z");',
-        ])
-
-        queries.append([
-            False,
+            None,
             """
             UPSERT INTO `{table}` (timestamp, resource_id, level, uid)
             VALUES (Timestamp("2024-06-01T12:00:00.000000Z"), "res_new", 100, "uid_new");
@@ -106,7 +85,7 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
         ])
 
         queries.append([
-            False,
+            None,
             """
             UPDATE `{table}` SET level = 200
             WHERE timestamp = Timestamp("2024-06-01T12:00:00.000000Z") AND uid = "uid_new";
@@ -114,7 +93,7 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
         ])
 
         queries.append([
-            False,
+            None,
             """
             UPSERT INTO `{table}` (timestamp, resource_id, level, uid)
             VALUES (Timestamp("2024-06-01T12:00:01.000000Z"), "res_upsert", 300, "uid_upsert");
@@ -122,8 +101,29 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
         ])
 
         queries.append([
-            False,
+            None,
             'DELETE FROM `{table}` WHERE timestamp = Timestamp("2024-06-01T12:00:01.000000Z") AND uid = "uid_upsert";'.format(table=table_name),
+        ])
+
+        queries.append([
+            11,
+            f"SELECT COUNT(*) AS cnt FROM `{table_name}` WHERE level >= 5 AND level <= 15;",
+        ])
+
+        queries.append([
+            3,
+            f"SELECT COUNT(*) AS cnt FROM `{table_name}` WHERE level > 17;",
+        ])
+
+        queries.append([
+            12,
+            f'SELECT COUNT(*) AS cnt FROM `{table_name}` WHERE resource_id >= "res_2" AND resource_id <= "res_4";',
+        ])
+
+        queries.append([
+            6,
+            f'SELECT COUNT(*) AS cnt FROM `{table_name}` '
+            f'WHERE timestamp BETWEEN Timestamp("2024-01-01T00:00:05.000000Z") AND Timestamp("2024-01-01T00:00:10.000000Z");',
         ])
 
         return queries
@@ -136,19 +136,22 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
             with ydb.SessionPool(self.driver, size=1) as pool:
                 with pool.checkout() as session:
                     session.execute_scheme(stmt)
-        except Exception:
-            pass
-
+        except Exception as exc:
+            pytest.fail(
+                f"Failed to request scheme actualization/compaction for table `{table_name}` "
+                f"with statement `{stmt}`: {exc}"
+            )
         time.sleep(wait_seconds)
 
     def _do_queries(self, queries):
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for is_select, query in queries:
+            for select_result_or_none, query in queries:
+                result_sets = session_pool.execute_with_retries("SELECT level FROM `olap_min_max_numeric`;")
+                print(result_sets[0].rows, flush=True)
                 result_sets = session_pool.execute_with_retries(query)
-                if is_select:
-                    assert len(result_sets[0].rows) > 0, "Query returned no rows"
-                    for row in result_sets[0].rows:
-                        assert row["cnt"] is not None
+                if select_result_or_none is not None:
+                    assert len(result_sets[0].rows) == 1, f"Query '{query}' returned {len(result_sets[0].rows)} rows instead of 1"
+                    assert result_sets[0].rows[0]["cnt"] == select_result_or_none, f"query text: '{query}'"
 
     def test_min_max_index(self):
         table_numeric = "olap_min_max_numeric"

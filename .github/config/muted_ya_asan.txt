@@ -342,6 +342,7 @@ ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
 ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadMessages_CsvFormat_Unlimited
+ydb/public/lib/ydb_cli/topic/ut TTopicReaderTests.TestRun_ReadMessages_TsvFormat
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.CloseWriteSessionImmediately
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PreferredDatabaseNoFallback
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.SimpleHandlers

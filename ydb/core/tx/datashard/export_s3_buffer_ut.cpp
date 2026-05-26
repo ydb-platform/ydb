@@ -39,7 +39,7 @@ public:
     NExportScan::IBuffer* CreateBuffer(EDataFormat dataFormat) {
         TS3ExportBufferSettings settings = S3ExportBufferSettings;
         settings.WithColumns(Columns);
-        settings.WithRowGroupSize(1000);
+        settings.WithParquetRowGroupSize(1000);
         
         NExportScan::IBuffer* buffer = nullptr;
         switch (dataFormat) {

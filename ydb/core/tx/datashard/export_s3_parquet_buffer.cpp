@@ -71,7 +71,7 @@ private:
 
 private:
     const TTagToColumn Columns;
-    const ui64 RowGroupSize;
+    const ui64 ParquetRowGroupSize;
     const ui64 RowsLimit;
     const ui64 MaxBytes;
     const ui64 MinBytes;
@@ -94,7 +94,7 @@ private:
 TS3ParquetExportBuffer::TS3ParquetExportBuffer(
     TS3ExportBufferSettings &&settings)
     : Columns(std::move(settings.Columns))
-    , RowGroupSize(settings.RowGroupSize)
+    , ParquetRowGroupSize(settings.ParquetRowGroupSize)
     , RowsLimit(settings.MaxRows)
     , MaxBytes(settings.MaxBytes)
     , MinBytes(settings.MinBytes)
@@ -169,7 +169,7 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow &row) {
     BytesRead += BatchBuilder.Bytes() - bytesBefore;
     Rows++;
 
-    if (BatchBuilder.Rows() >= RowGroupSize) {
+    if (BatchBuilder.Rows() >= ParquetRowGroupSize) {
         return Flush(false);
     }
 

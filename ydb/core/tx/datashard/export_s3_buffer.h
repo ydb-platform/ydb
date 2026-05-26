@@ -102,8 +102,8 @@ struct TS3ExportBufferSettings {
         return *this;
     }
 
-    TS3ExportBufferSettings& WithRowGroupSize(ui64 rowGroupSize) {
-        RowGroupSize = rowGroupSize;
+    TS3ExportBufferSettings& WithParquetRowGroupSize(ui64 rowGroupSize) {
+        ParquetRowGroupSize = rowGroupSize;
         return *this;
     }
 
@@ -127,7 +127,7 @@ struct TS3ExportBufferSettings {
     ui64 MaxRows = 0;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
-    ui64 RowGroupSize = 0;
+    ui64 ParquetRowGroupSize = 0;
 
     // Data processing
     TMaybe<TChecksumSettings> ChecksumSettings;

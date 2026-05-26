@@ -52,7 +52,7 @@ message TS3Settings {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
         optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
         reserved 3; // ReadBufferSizeLimit
-        optional uint32 RowGroupSize = 4 [default = 1000]; // RowGroup size for Parquet
+        optional uint32 ParquetRowGroupSize = 4 [default = 1000]; // RowGroup size for Parquet
     };
 
     optional TLimits Limits = 100;

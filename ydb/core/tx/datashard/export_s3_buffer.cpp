@@ -509,7 +509,7 @@ IExport::IBuffer* TS3Export::CreateBuffer() const {
     }
 
     if (Task.HasS3Settings()) {
-        bufferSettings.WithRowGroupSize(Task.GetS3Settings().GetLimits().GetRowGroupSize());
+        bufferSettings.WithParquetRowGroupSize(Task.GetS3Settings().GetLimits().GetParquetRowGroupSize());
         
         switch (Task.GetS3Settings().GetDataFormat()) {
         case NKikimrSchemeOp::TS3Settings::CSV:

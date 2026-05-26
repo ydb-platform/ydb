@@ -718,6 +718,20 @@ void TKqpTasksGraph::FillStages() {
                         meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
                         meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
                         meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                        if (indexSettings.GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDocsTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetDocsTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetDictTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetDictTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetStatsTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetStatsTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                        }
                     }
                 }
             };

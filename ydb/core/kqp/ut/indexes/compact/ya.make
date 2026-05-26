@@ -1,15 +1,14 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(30)
 
 REQUIREMENTS(cpu:2)
 SIZE(MEDIUM)
 
 SRCS(
-    kqp_indexes_multishard_ut.cpp
-    kqp_indexes_ut.cpp
-    kqp_stream_indexes_ut.cpp
+    kqp_fulltext_compact_ut.cpp
+    ../fulltext/kqp_fulltext_ut_common.cpp
 )
 
 PEERDIR(
@@ -25,11 +24,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE_FOR_TESTS(
-    compact
-    fulltext
-    json
-    prefixed_vector
-    vector
-)

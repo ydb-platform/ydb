@@ -1366,6 +1366,74 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         driver.Stop(true);
     }
 
+    Y_UNIT_TEST_F(TestEnableContentBasedDeduplicationMessageRateLimit, TFixture) {
+        const TString queueName = "CreateQueueDefaultRateLimit.fifo";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "false"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"ContentBasedDeduplication", "true"}}}
+        });
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        auto desc = client.DescribeTopic(queueName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        auto description = desc.GetTopicDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+        );
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestDisableContentBasedDeduplicationMessageRateLimit, TFixture) {
+        const TString queueName = "CreateQueueDefaultRateLimit.fifo";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"ContentBasedDeduplication", "false"}}}
+        });
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        auto desc = client.DescribeTopic(queueName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        auto description = desc.GetTopicDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+
+        driver.Stop(true);
+    }
+
     Y_UNIT_TEST_F(TestCreateQueueWithCustomConsumer, TFixture) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName@custom-consumer"}});
         UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());

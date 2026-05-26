@@ -17,6 +17,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockThenUncommittedReadUpgradeRetryAndRestart
 ydb/core/tx/datashard/ut_read_iterator DataShardReadIteratorConsistency.WriteLockUncommittedConflictFailure
+ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
@@ -33,6 +34,7 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[T
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[True-True-kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_restart_query[True-True-partition_balancing]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_restart_query_by_rescaling[False-False]
 ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_restart_nodes[kikimr0]
 ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_rolling_restart[kikimr0]

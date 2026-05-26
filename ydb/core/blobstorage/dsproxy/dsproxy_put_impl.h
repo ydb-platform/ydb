@@ -339,8 +339,14 @@ public:
     }
 
     ui32 GetOrderNumber(const TVDiskID& vdiskId) const {
-        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdiskId), "incorrect VDiskId# %s", vdiskId.ToString().data());
-        return Info->GetOrderNumber(vdiskId);
+        Y_ABORT_UNLESS(vdiskId.GroupID == Info->GroupID, "incorrect VDiskId# %s expected GroupId# %u",
+            vdiskId.ToString().data(), static_cast<unsigned>(Info->GroupID.GetRawId()));
+
+        // Old-generation replies may legitimately reach this path during a generation race; only
+        // the group identity and topology coordinates must match before mapping to an order number.
+        const TVDiskIdShort shortId(vdiskId);
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(shortId), "incorrect VDiskId# %s", vdiskId.ToString().data());
+        return Info->GetOrderNumber(shortId);
     }
 
 protected:

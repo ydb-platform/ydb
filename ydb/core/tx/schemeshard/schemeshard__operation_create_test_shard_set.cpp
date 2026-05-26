@@ -16,10 +16,17 @@ using namespace NSchemeShard;
 
 static constexpr ui32 DefaultChannelCount = 3;
 
+static constexpr ui32 MaxShardsPerRequest = 1000;
+
 bool ValidateConfig(const NKikimrSchemeOp::TCreateTestShardSet& op, TString& errStr)
 {
     if (op.GetCount() == 0) {
         errStr = "count must be greater than zero";
+        return false;
+    }
+
+    if (op.GetCount() > MaxShardsPerRequest) {
+        errStr = TStringBuilder() << "count must be less than or equal to " << MaxShardsPerRequest;
         return false;
     }
 
@@ -297,6 +304,8 @@ public:
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
+                    .ShardsLimit(op.GetCount())
+                    .PathShardsLimit(op.GetCount())
                     .IsValidACL(acl);
             }
 

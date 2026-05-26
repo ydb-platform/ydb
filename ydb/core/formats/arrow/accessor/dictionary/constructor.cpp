@@ -23,7 +23,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         if (!plainArray) {
             return plainArray;
         }
-        return DoConstruct(plainArray.DetachResult(), externalInfo);
+        return Construct(plainArray.DetachResult(), externalInfo);
     }
     const TDictionaryAccessorData* dictData = dynamic_cast<const TDictionaryAccessorData*>(externalInfo.GetAdditionalAccessorData().get());
     if (!dictData) {

@@ -255,6 +255,11 @@ double TKqpProviderContext::ComputeJoinCost(
                 + CONSTS_GRACEJOIN_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_GRACEJOIN_RIGHT_SIDE_POW)
                 + CONSTS_GRACEJOIN_OUTPUT_MULT * std::pow(estimatedOutputByteSize, CONSTS_GRACEJOIN_OUTPUT_POW));
         }
+        case EJoinAlgoType::ReverseBlockJoin: {
+            return 1.5 * (CONSTS_GRACEJOIN_LEFT_SIDE_MULT * std::pow(leftSideByteSize, CONSTS_GRACEJOIN_LEFT_SIDE_POW)
+                + CONSTS_GRACEJOIN_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_GRACEJOIN_RIGHT_SIDE_POW)
+                + CONSTS_GRACEJOIN_OUTPUT_MULT * std::pow(estimatedOutputByteSize, CONSTS_GRACEJOIN_OUTPUT_POW));
+        }
         default:
             return leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputByteSize;
             // return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);

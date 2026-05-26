@@ -263,7 +263,8 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const 
                                         }
                                         TABLED() {
                                             if (!predicate.HasPredicate() && ShouldShowSendReadSetAction(*tx)) {
-                                                str << RenderSendReadSetHtmlForms(*tx, MakeArrayRef(&tabletID, 1));
+                                                str << RenderSendReadSetHtmlForms(
+                                                    *tx, MakeArrayRef(&tabletID, 1), ev->Get()->PathInfo());
                                             }
                                         }
                                     }
@@ -280,7 +281,7 @@ bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const 
                         }
                         if (readSetPending > 0 && ShouldShowSendReadSetAction(*tx)) {
                              str << "Send ReadSet for all " << readSetPending << " waiting tablets";
-                             str << RenderSendReadSetHtmlForms(*tx, Nothing());
+                             str << RenderSendReadSetHtmlForms(*tx, Nothing(), ev->Get()->PathInfo());
                         }
                     }
                 }

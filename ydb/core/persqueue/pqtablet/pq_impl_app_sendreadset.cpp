@@ -1,10 +1,28 @@
 #include "pq_impl.h"
 
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/persqueue/common/common_app.h>
 #include <ydb/library/actors/core/log.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <fmt/format.h>
 
 namespace NKikimr::NPQ {
+
+namespace {
+
+TString BuildSendReadSetFormAction(TStringBuf pathInfo, ui64 tabletId) {
+    if (IsTabletDevUiSecurePath(pathInfo)) {
+        return "?";
+    }
+    return TStringBuilder() << TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH << "?TabletID=" << tabletId;
+}
+
+bool IsSendReadSetDevUiAllowed(const TAppData* appData, TStringBuf pathInfo, const TString& userToken) {
+    return IsTabletDevUiSecurePath(pathInfo) && IsAdministrator(appData, userToken);
+}
+
+} // namespace
 
 static TString MakeReadSetData(bool commit)
 {
@@ -38,8 +56,12 @@ static TVector<T> GetParameters(const TCgiParameters& cgi, const TStringBuf name
 }
 
 
-TString TPersQueue::RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const
+TString TPersQueue::RenderSendReadSetHtmlForms(
+    const TDistributedTransaction& tx,
+    const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
+    TStringBuf pathInfo) const
 {
+    const TString formAction = BuildSendReadSetFormAction(pathInfo, TabletID());
     struct TOption {
         const char* Decision;
         const char* Text;
@@ -55,7 +77,8 @@ TString TPersQueue::RenderSendReadSetHtmlForms(const TDistributedTransaction& tx
         LAYOUT_ROW() {
             for (const TOption& option : options) {
                 LAYOUT_COLUMN() {
-                    FORM_CLASS("form-horizontal") {
+                    str << "<form class=\"form-horizontal\" action=\"" << formAction << "\" method=\"get\">";
+                    {
                         DIV_CLASS("control-group") {
                             DIV_CLASS("controls") {
                                 if (tabletSourcesFilter.Defined()) {
@@ -73,6 +96,7 @@ TString TPersQueue::RenderSendReadSetHtmlForms(const TDistributedTransaction& tx
                             }
                         }
                     }
+                    str << "</form>";
                 }
             }
         }
@@ -98,6 +122,11 @@ static TVector<ui64> GetSenderTablets(const TCgiParameters& cgi, const TDistribu
 
 bool TPersQueue::OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx)
 {
+    if (!IsSendReadSetDevUiAllowed(AppData(ctx), ev->Get()->PathInfo(), ev->Get()->GetUserToken())) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
+    }
+
     const TCgiParameters& cgi = ev->Get()->Cgi();
     const auto step = GetParameter<ui64>(cgi, "step");
     const auto txId = GetParameter<ui64>(cgi, "txId");

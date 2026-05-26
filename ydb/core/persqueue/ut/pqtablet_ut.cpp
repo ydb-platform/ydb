@@ -13,8 +13,10 @@
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/protos/actors.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/json/json_reader.h>
 
@@ -1396,19 +1398,26 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
 
 void TPQTabletFixture::SendAppSendRsRequest(const TAppSendReadSetParams& params) {
     auto makeEv = [this, &params]() {
-        TCgiParameters cgi{
-            {"TabletID", ToString(Ctx->TabletId)},
-            {"SendReadSet", "1"},
-            {"decision", params.Predicate ? "commit" : "abort"},
-            {"step", ToString(params.Step)},
-            {"txId", ToString(params.TxId)},
+        NActorsProto::TRemoteHttpInfo pb;
+        pb.SetMethod(HTTP_METHOD_GET);
+        pb.SetPath("/app/secure");
+        auto addParam = [&](const TString& key, const TString& value) {
+            auto* kv = pb.AddQueryParams();
+            kv->SetKey(key);
+            kv->SetValue(value);
         };
+        addParam("TabletID", ToString(Ctx->TabletId));
+        addParam("SendReadSet", "1");
+        addParam("decision", params.Predicate ? "commit" : "abort");
+        addParam("step", ToString(params.Step));
+        addParam("txId", ToString(params.TxId));
         if (params.SenderId.Defined()) {
-            cgi.InsertUnescaped("senderTablet", ToString(*params.SenderId));
+            addParam("senderTablet", ToString(*params.SenderId));
         } else {
-            cgi.InsertUnescaped("allSenderTablets", "1");
+            addParam("allSenderTablets", "1");
         }
-        return std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(TStringBuilder() << "/app?" << cgi.Print());
+        pb.SetUserToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString());
+        return std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(std::move(pb));
     };
     Ctx->Runtime->SendToPipe(Ctx->TabletId, Ctx->Edge, makeEv().release(), 0, GetPipeConfigWithRetries());
 }

@@ -65,7 +65,7 @@ On each server where {{ ydb-short-name }} will be running, execute:
 
 ```bash
 sudo groupadd ydb
-sudo useradd ydb -g ydb
+sudo useradd -m -g ydb ydb
 ```
 
 To allow the {{ ydb-short-name }} service to access block disks, add the user under which the {{ ydb-short-name }} processes will run to the `disk` group:
@@ -117,6 +117,8 @@ For more information about spilling configuration and its relationship with file
   
 {% endlist %}
 
+In the commands above: `-xz` is for `.tar.gz` archives (OSS), `-xJ` is for `.tar.xz` (Enterprise).
+
 where `binaries_url` is a link to the archive of the version you need from the [downloads page](../../../../downloads/index.md).
 
 ### Create a directory on the server
@@ -155,6 +157,8 @@ vdb    252:16   0   186G  0 disk
 └─vdb1 252:17   0   186G  0 part
 ```
 
+In the `lsblk` output above, the system disk is `vda`, and the {{ ydb-short-name }} data disk is `vdb`. The commands below use `/dev/vdb`; on your server, substitute the path to the whole disk without a partition number (for example, `/dev/sda` or `/dev/nvme0n1`).
+
 The names of block devices depend on the operating system settings, either set by the base image or configured manually. Typically, device names consist of three parts:
 
 * A fixed prefix or a prefix indicating the device type
@@ -170,7 +174,7 @@ The names of block devices depend on the operating system settings, either set b
     {% endnote %}
 
     ```bash
-    DISK=/dev/nvme0n1
+    DISK=/dev/vdb
     sudo parted ${DISK} mklabel gpt -s
     sudo parted -a optimal ${DISK} mkpart primary 0% 100%
     sudo parted ${DISK} name 1 ydb_disk_ssd_01

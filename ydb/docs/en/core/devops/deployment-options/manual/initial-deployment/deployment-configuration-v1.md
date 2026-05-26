@@ -6,7 +6,7 @@ Before deploying the system, be sure to complete the preparatory steps. Refer to
 
 ## Prepare configuration files {#config}
 
-Prepare the {{ ydb-short-name }} configuration file based on the topology you have chosen (see [selecting a topology](../../../deployment-options/ansible/initial-deployment/deployment-preparation.md#topology-select)). Examples for each supported topology are provided below in the tabs — select and use the one that fits your case.
+[{#T}][(][(](deployment-preparation.md)#requirements)#tls-certificates)#topology-select)). Examples for each supported topology are provided below in the tabs — select and use the one that fits your case.
 
 Also, if you need to enable Kafka API with topics, add the kafka_proxy_config section to the configuration file (see [configuring Kafka API](../../../reference/configuration/kafka_proxy_config)).
 
@@ -17,157 +17,179 @@ Also, if you need to enable Kafka API with topics, add the kafka_proxy_config se
   ```yaml
   static_erasure: mirror-3-dc
   host_configs:
-    - drive:
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-          type: SSD
-      host_config_id: 1
-    hosts:
-    - host: static-node-1.ydb-cluster.com
-      host_config_id: 1
-      walle_location:
-        body: 1
-        data_center: "zone-a"
-        rack: "1"
-    - host: static-node-2.ydb-cluster.com
-      host_config_id: 1
-      walle_location:
-        body: 2
-        data_center: "zone-b"
-        rack: "2"
-    - host: static-node-3.ydb-cluster.com
-      host_config_id: 1
-      walle_location:
-        body: 3
-        data_center: "zone-d"
-        rack: "3"
-    domains_config:
+  - drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      type: SSD
+    host_config_id: 1
+  hosts:
+  - host: static-node-1.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
+  - host: static-node-2.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 2
+      data_center: 'zone-b'
+      rack: '2'
+  - host: static-node-3.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 3
+      data_center: 'zone-c'
+      rack: '3'
+  domains_config:
     security_config:
-    enforce_user_token_requirement: true
-    default_users:
-      - name: "root"
-        password: ""
-    default_access:
-      - "+(F):root"
+      enforce_user_token_requirement: true
+      monitoring_allowed_sids:
+      - "root"
+      - ADMINS
+      - DATABASE-ADMINS
+      administration_allowed_sids:
+      - "root"
+      - ADMINS
+      - DATABASE-ADMINS
+      viewer_allowed_sids:
+      - "root"
+      - ADMINS
+      - DATABASE-ADMINS
+      register_dynamic_node_allowed_sids:
+      - databaseNodes@cert
+      - root@builtin
+      bootstrap_allowed_sids:
+      - "root"
+      - ADMINS
+      - DATABASE-ADMINS
     domain:
     - name: Root
-    storage_pool_types:
-    - kind: ssd
-    pool_config:
-    box_id: 1
-    erasure_species: mirror-3-dc
-    kind: ssd
-    geometry:
-      realm_level_begin: 10
-      realm_level_end: 20
-      domain_level_begin: 10
-      domain_level_end: 256
-    pdisk_filter:
-      - property:
-          - type: SSD
-    vdisk_kind: Default
-   state_storage:
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: mirror-3-dc
+          kind: ssd
+          geometry:
+            realm_level_begin: 10
+            realm_level_end: 20
+            domain_level_begin: 10
+            domain_level_end: 256
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
     - ring:
         node: [1, 2, 3]
         nto_select: 3
-        ssid: 1
-    table_service_config:
+      ssid: 1
+  table_service_config:
     sql_version: 1
-    actor_system_config:
+  actor_system_config:
     executor:
-      - name: System
-        threads: 2
-        type: BASIC
-      - name: User
-        threads: 3
-        type: BASIC
-      - name: Batch
-        threads: 2
-        type: BASIC
-      - name: IO
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: IO
-      - name: IC
-        spin_threshold: 10
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: BASIC
+    - name: System
+      threads: 2
+      type: BASIC
+    - name: User
+      threads: 3
+      type: BASIC
+    - name: Batch
+      threads: 2
+      type: BASIC
+    - name: IO
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: IO
+    - name: IC
+      spin_threshold: 10
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: BASIC
     scheduler:
       progress_threshold: 10000
       resolution: 256
       spin_threshold: 0
-   blob_storage_config:
+  blob_storage_config:
     service_set:
       groups:
-        - erasure_species: mirror-3-dc
-          rings:
-            - fail_domains:
-                - vdisk_locations:
-                    - node_id: static-node-1.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                    - node_id: static-node-1.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-                    - node_id: static-node-1.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-                - vdisk_locations:
-                    - node_id: static-node-2.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                    - node_id: static-node-2.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-                    - node_id: static-node-2.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-                - vdisk_locations:
-                    - node_id: static-node-3.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                    - node_id: static-node-3.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-                    - node_id: static-node-3.ydb-cluster.com
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-    channel_profile_config:
+      - erasure_species: mirror-3-dc
+        rings:
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+  channel_profile_config:
     profile:
-      - channel:
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-        profile_id: 0
-    interconnect_config:
-    start_tcp: true
-    encryption_mode: OPTIONAL
-    path_to_certificate_file: "/opt/ydb/certs/node.crt"
-    path_to_private_key_file: "/opt/ydb/certs/node.key"
-    path_to_ca_file: "/opt/ydb/certs/ca.crt"
-   grpc_config:
-    cert: "/opt/ydb/certs/node.crt"
-    key: "/opt/ydb/certs/node.key"
-    ca: "/opt/ydb/certs/ca.crt"
-    services_enabled:
+    - channel:
+      - erasure_species: mirror-3-dc
+        pdisk_category: 0
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 0
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 0
+        storage_pool_kind: ssd
+      profile_id: 0
+  interconnect_config:
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+  grpc_config:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
       - legacy
-    client_certificate_authorization:
-      request_client_certificate: true
-      client_certificate_definitions:
-        - member_groups: ["registerNode@cert"]
-          subject_terms:
-            - short_name: "O"
-              values: ["YDB"]
+  client_certificate_authorization:
+    request_client_certificate: true
+    client_certificate_definitions:
+      - member_groups: ["registerNode@cert"]
+        subject_terms:
+        - short_name: "O"
+          values: ["YDB"]
   ```
 
 - mirror-3-dc-9nodes
@@ -175,114 +197,117 @@ Also, if you need to enable Kafka API with topics, add the kafka_proxy_config se
   ```yaml
   static_erasure: mirror-3-dc
   host_configs:
-    - drive:
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-          type: SSD
-      host_config_id: 1
+  - drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+      type: SSD
+    host_config_id: 1
   hosts:
-    - host: ydb-node-zone-a-1.local
-      host_config_id: 1
-      walle_location:
-        body: 1
-        data_center: 'zone-a'
-        rack: '1'
-    - host: ydb-node-zone-a-2.local
-      host_config_id: 1
-      walle_location:
-        body: 2
-        data_center: 'zone-a'
-        rack: '2'
-    - host: ydb-node-zone-a-3.local
-      host_config_id: 1
-      walle_location:
-        body: 3
-        data_center: 'zone-a'
-        rack: '3'
-    - host: ydb-node-zone-b-1.local
-      host_config_id: 1
-      walle_location:
-        body: 4
-        data_center: 'zone-b'
-        rack: '4'
-    - host: ydb-node-zone-b-2.local
-      host_config_id: 1
-      walle_location:
-        body: 5
-        data_center: 'zone-b'
-        rack: '5'
-    - host: ydb-node-zone-b-3.local
-      host_config_id: 1
-      walle_location:
-        body: 6
-        data_center: 'zone-b'
-        rack: '6'
-    - host: ydb-node-zone-d-1.local
-      host_config_id: 1
-      walle_location:
-        body: 7
-        data_center: 'zone-d'
-        rack: '7'
-    - host: ydb-node-zone-d-2.local
-      host_config_id: 1
-      walle_location:
-        body: 8
-        data_center: 'zone-d'
-        rack: '8'
-    - host: ydb-node-zone-d-3.local
-      host_config_id: 1
-      walle_location:
-        body: 9
-        data_center: 'zone-d'
-        rack: '9'
+  - host: static-node-1.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
+  - host: static-node-2.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 2
+      data_center: 'zone-a'
+      rack: '2'
+  - host: static-node-3.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 3
+      data_center: 'zone-a'
+      rack: '3'
+  - host: static-node-4.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 4
+      data_center: 'zone-b'
+      rack: '4'
+  - host: static-node-5.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 5
+      data_center: 'zone-b'
+      rack: '5'
+  - host: static-node-6.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 6
+      data_center: 'zone-b'
+      rack: '6'
+  - host: static-node-7.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 7
+      data_center: 'zone-c'
+      rack: '7'
+  - host: static-node-8.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 8
+      data_center: 'zone-c'
+      rack: '8'
+  - host: static-node-9.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 9
+      data_center: 'zone-c'
+      rack: '9'
   domains_config:
     security_config:
-    enforce_user_token_requirement: true
-    default_users:
-      - name: "root"
-        password: ""
-    default_access:
-      - "+(F):root"
-  domain:
+      enforce_user_token_requirement: true
+      default_users:
+        - name: "root"
+          password: ""
+      default_access:
+        - "+(F):root"
+    domain:
     - name: Root
-  storage_pool_types:
-    - kind: ssd
-  pool_config:
-    box_id: 1
-    erasure_species: mirror-3-dc
-    kind: ssd
-    pdisk_filter:
-      - property:
-          - type: SSD
-    vdisk_kind: Default
-  state_storage:
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: mirror-3-dc
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
     - ring:
         node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
         nto_select: 9
-        ssid: 1
+      ssid: 1
   table_service_config:
     sql_version: 1
   actor_system_config:
     executor:
-      - name: System
-        threads: 2
-        type: BASIC
-      - name: User
-        threads: 3
-        type: BASIC
-      - name: Batch
-        threads: 2
-        type: BASIC
-      - name: IO
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: IO
-      - name: IC
-        spin_threshold: 10
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: BASIC
+    - name: System
+      spin_threshold: 0
+      threads: 2
+      type: BASIC
+    - name: User
+      spin_threshold: 0
+      threads: 3
+      type: BASIC
+    - name: Batch
+      spin_threshold: 0
+      threads: 2
+      type: BASIC
+    - name: IO
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: IO
+    - name: IC
+      spin_threshold: 10
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: BASIC
     scheduler:
       progress_threshold: 10000
       resolution: 256
@@ -290,77 +315,72 @@ Also, if you need to enable Kafka API with topics, add the kafka_proxy_config se
   blob_storage_config:
     service_set:
       groups:
-        - erasure_species: mirror-3-dc
-          rings:
-            - fail_domains:
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-1.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-2.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-3.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-b-1.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-b-2.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-b-3.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-d-1.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-d-2.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-d-3.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      - erasure_species: mirror-3-dc
+        rings:
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-4.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-5.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-6.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-7.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-8.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+          - vdisk_locations:
+            - node_id: static-node-9.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
   channel_profile_config:
     profile:
-      - channel:
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: mirror-3-dc
-            pdisk_category: 1
-            storage_pool_kind: ssd
-        profile_id: 0
+    - channel:
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      profile_id: 0
   interconnect_config:
-    start_tcp: true
-    encryption_mode: OPTIONAL
-    path_to_certificate_file: "/opt/ydb/certs/node.crt"
-    path_to_private_key_file: "/opt/ydb/certs/node.key"
-    path_to_ca_file: "/opt/ydb/certs/ca.crt"
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
   grpc_config:
-    cert: "/opt/ydb/certs/node.crt"
-    key: "/opt/ydb/certs/node.key"
-    ca: "/opt/ydb/certs/ca.crt"
-    services_enabled:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
       - legacy
-    client_certificate_authorization:
-      request_client_certificate: true
-      client_certificate_definitions:
-        - member_groups: ["registerNode@cert"]
-          subject_terms:
-            - short_name: "O"
-              values: ["YDB"]
   ```
 
 - block-4-2
@@ -368,108 +388,108 @@ Also, if you need to enable Kafka API with topics, add the kafka_proxy_config se
   ```yaml
   static_erasure: block-4-2
   host_configs:
-    - drive:
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-          type: SSD
-        - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
-          type: SSD
-      host_config_id: 1
+  - drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+      type: SSD
+    host_config_id: 1
   hosts:
-    - host: ydb-node-zone-a-1.local
-      host_config_id: 1
-      walle_location:
-        body: 1
-        data_center: 'zone-a'
-        rack: '1'
-    - host: ydb-node-zone-a-2.local
-      host_config_id: 1
-      walle_location:
-        body: 2
-        data_center: 'zone-a'
-        rack: '2'
-    - host: ydb-node-zone-a-3.local
-      host_config_id: 1
-      walle_location:
-        body: 3
-        data_center: 'zone-a'
-        rack: '3'
-    - host: ydb-node-zone-a-4.local
-      host_config_id: 1
-      walle_location:
-        body: 4
-        data_center: 'zone-a'
-        rack: '4'
-    - host: ydb-node-zone-a-5.local
-      host_config_id: 1
-      walle_location:
-        body: 5
-        data_center: 'zone-a'
-        rack: '5'
-    - host: ydb-node-zone-a-6.local
-      host_config_id: 1
-      walle_location:
-        body: 6
-        data_center: 'zone-a'
-        rack: '6'
-    - host: ydb-node-zone-a-7.local
-      host_config_id: 1
-      walle_location:
-        body: 7
-        data_center: 'zone-a'
-        rack: '7'
-    - host: ydb-node-zone-a-8.local
-      host_config_id: 1
-      walle_location:
-        body: 8
-        data_center: 'zone-a'
-        rack: '8'
+  - host: ydb-node-zone-a-1.local
+    host_config_id: 1
+    walle_location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
+  - host: ydb-node-zone-a-2.local
+    host_config_id: 1
+    walle_location:
+      body: 2
+      data_center: 'zone-a'
+      rack: '2'
+  - host: ydb-node-zone-a-3.local
+    host_config_id: 1
+    walle_location:
+      body: 3
+      data_center: 'zone-a'
+      rack: '3'
+  - host: ydb-node-zone-a-4.local
+    host_config_id: 1
+    walle_location:
+      body: 4
+      data_center: 'zone-a'
+      rack: '4'
+  - host: ydb-node-zone-a-5.local
+    host_config_id: 1
+    walle_location:
+      body: 5
+      data_center: 'zone-a'
+      rack: '5'
+  - host: ydb-node-zone-a-6.local
+    host_config_id: 1
+    walle_location:
+      body: 6
+      data_center: 'zone-a'
+      rack: '6'
+  - host: ydb-node-zone-a-7.local
+    host_config_id: 1
+    walle_location:
+      body: 7
+      data_center: 'zone-a'
+      rack: '7'
+  - host: ydb-node-zone-a-8.local
+    host_config_id: 1
+    walle_location:
+      body: 8
+      data_center: 'zone-a'
+      rack: '8'
   domains_config:
     security_config:
-    enforce_user_token_requirement: true
-    default_users:
-      - name: "root"
-        password: ""
-    default_access:
-      - "+(F):root"
-  domain:
+      enforce_user_token_requirement: true
+      default_users:
+        - name: "root"
+          password: ""
+      default_access:
+        - "+(F):root"
+    domain:
     - name: Root
-  storage_pool_types:
-    - kind: ssd
-  pool_config:
-    box_id: 1
-    erasure_species: block-4-2
-    kind: ssd
-    pdisk_filter:
-      - property:
-          - type: SSD
-    vdisk_kind: Default
-  state_storage:
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: block-4-2
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
     - ring:
         node: [1, 2, 3, 4, 5, 6, 7, 8]
         nto_select: 5
-        ssid: 1
+      ssid: 1
   table_service_config:
     sql_version: 1
   actor_system_config:
     executor:
-      - name: System
-        threads: 2
-        type: BASIC
-      - name: User
-        threads: 3
-        type: BASIC
-      - name: Batch
-        threads: 2
-        type: BASIC
-      - name: IO
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: IO
-      - name: IC
-        spin_threshold: 10
-        threads: 1
-        time_per_mailbox_micro_secs: 100
-        type: BASIC
+    - name: System
+      threads: 2
+      type: BASIC
+    - name: User
+      threads: 3
+      type: BASIC
+    - name: Batch
+      threads: 2
+      type: BASIC
+    - name: IO
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: IO
+    - name: IC
+      spin_threshold: 10
+      threads: 1
+      time_per_mailbox_micro_secs: 100
+      type: BASIC
     scheduler:
       progress_threshold: 10000
       resolution: 256
@@ -477,73 +497,80 @@ Also, if you need to enable Kafka API with topics, add the kafka_proxy_config se
   blob_storage_config:
     service_set:
       groups:
-        - erasure_species: block-4-2
-          rings:
-            - fail_domains:
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-1.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-2.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-3.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-4.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-5.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-6.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-7.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-                - vdisk_locations:
-                    - node_id: "ydb-node-zone-a-8.local"
-                      pdisk_category: SSD
-                      path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      - erasure_species: block-4-2
+        rings:
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-1.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-2.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-3.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-4.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-5.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-6.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-7.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: "ydb-node-zone-a-8.local"
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_ssd_01
   channel_profile_config:
     profile:
-      - channel:
-          - erasure_species: block-4-2
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: block-4-2
-            pdisk_category: 1
-            storage_pool_kind: ssd
-          - erasure_species: block-4-2
-            pdisk_category: 1
-            storage_pool_kind: ssd
-        profile_id: 0
+    - channel:
+      - erasure_species: block-4-2
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      - erasure_species: block-4-2
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      - erasure_species: block-4-2
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      profile_id: 0
   interconnect_config:
-    start_tcp: true
-    encryption_mode: OPTIONAL
-    path_to_certificate_file: "/opt/ydb/certs/node.crt"
-    path_to_private_key_file: "/opt/ydb/certs/node.key"
-    path_to_ca_file: "/opt/ydb/certs/ca.crt"
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
   grpc_config:
-    cert: "/opt/ydb/certs/node.crt"
-    key: "/opt/ydb/certs/node.key"
-    ca: "/opt/ydb/certs/ca.crt"
-    services_enabled:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
       - legacy
-    client_certificate_authorization:
-      request_client_certificate: true
-      client_certificate_definitions:
-        - member_groups: ["registerNode@cert"]
-          subject_terms:
-            - short_name: "O"
-              values: ["YDB"]
+  client_certificate_authorization:
+    request_client_certificate: true
+    client_certificate_definitions:
+      - member_groups: ["registerNode@cert"]
+        subject_terms:
+        - short_name: "O"
+          values: ["YDB"]
   ```
 
 {% endlist %}

@@ -139,7 +139,15 @@ For more detailed information on creating a configuration file, see the section 
 
 ## Copy TLS keys and certificates to each server {#tls-copy-cert}
 
-The prepared TLS keys and certificates must be copied to a secure directory on each {{ ydb-short-name }} cluster node. Below are example commands for creating a secure directory and copying the key and certificate files.
+The prepared TLS keys and certificates must be copied to a secure directory on each {{ ydb-short-name }} cluster node.
+
+Details on preparation are in the section [{#T}](deployment-preparation.md#tls-certificates). If the certificates were generated using the `tls_cert_gen` script, take `ca.crt` from the `CA/certs/YYYY-MM-DD_hh-mi-ss` directory (substitute the timestamp from the script output or choose the required directory in `CA/certs/`), and `node.crt`, `node.key`, and `web.pem` from the subdirectory named after this server's FQDN in `ydb-ca-nodes.txt`. Transfer these four files to the corresponding cluster server (for example, via `scp`) into a single local directory.
+
+On each server, in the directory where `ca.crt`, `node.crt`, `node.key`, and `web.pem` for this node are already located, run the commands below.
+
+Below is an example of creating a secure directory and copying:
+
+
 
 ```bash
 sudo mkdir -p /opt/ydb/certs
@@ -174,14 +182,38 @@ The original `/tmp/config.yaml` file is no longer used after this command is exe
 
 * Manually
 
-  Run the {{ ydb-short-name }} data storage service on each static cluster node:
-  ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --kafka-port 9092 --mon-cert /opt/ydb/certs/web.pem --node static
-  ```
+  Run the {{ ydb-short-name }} data storage service on each static cluster node. Execute the commands below sequentially. Do not paste all lines together with `sudo su - ydb` — otherwise, subsequent commands might not run as the `ydb` user.
+  
+After step 1, wait for the `ydb@...$` prompt.
+  
+At step 4, wait for `ydbd` output in the same terminal.
+
+1. Switch to the `ydb` user:
+
+   ```bash
+   sudo su - ydb
+   ```
+
+2. Navigate to the installation directory:
+
+   ```bash
+   cd /opt/ydb
+   ```
+
+3. Specify the library path:
+
+   ```bash
+   export LD_LIBRARY_PATH=/opt/ydb/lib
+   ```
+
+4. Start the static node:
+
+   ```bash
+   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
+   ```
+
+   If the start is successful, the output will include, among other things, `Determined node ID: ...`. If the [`web.pem` check](#tls-copy-cert) was not passed, there will be a `Permission denied` error for `/opt/ydb/certs/web.pem`.
+
 * Using systemd
 
 Create a systemd configuration file `/etc/systemd/system/ydbd-storage.service` on each server where a static cluster node will be located, using the example below. You can also [download the file from the repository](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-storage.service).
@@ -224,8 +256,9 @@ Launch the service on each static {{ ydb-short-name }} node:
 After starting the static nodes, check their functionality via the {{ ydb-short-name }} built-in web interface (Embedded UI):
 
 1. Open the address `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static node;
-2. Go to the **Nodes** tab;
-3. Make sure that all 3 static nodes are displayed in the list.
+2. If the browser asks for a login and password, log in with the `root` account and an empty password — at this deployment stage, the password for `root` has not been set yet;
+3. Go to the **Nodes** tab;
+4. Make sure that all 3 static nodes are displayed in the list.
 
 ![Manual installation, running static nodes](../../_assets/manual_installation_1.png)
 
@@ -233,17 +266,17 @@ After starting the static nodes, check their functionality via the {{ ydb-short-
 
 The cluster initialization operation configures the set of static nodes listed in the cluster configuration file to store {{ ydb-short-name }} data.
 
-To initialize the cluster, you need a registration authority certificate file `ca.crt`, the path to which must be specified when executing the corresponding commands. Before running the commands, copy the `ca.crt` file to the server where these commands will be executed.
+To initialize the cluster, you need the `ca.crt`, `node.crt`, and `node.key` files. Paths to them are specified in the commands below (for bootstrap — all three, for obtaining a token — `ca.crt`). Before executing, make sure these files are on the server where you run the commands (see [copying TLS](#tls-copy-cert)).
 
 On one of the storage servers in the cluster, run the commands:
 
-Initialize the cluster using the obtained token
+Initialize the cluster:
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydb --ca-file ca.crt \
-    --client-cert-file node.crt \
-    --client-cert-key-file node.key \
+/opt/ydb/bin/ydb --ca-file /opt/ydb/certs/ca.crt \
+    --client-cert-file /opt/ydb/certs/node.crt \
+    --client-cert-key-file /opt/ydb/certs/node.key \
     -e grpcs://`hostname -f`:2135 \
     admin cluster bootstrap --uuid <string>
 echo $?
@@ -252,8 +285,8 @@ echo $?
 After initializing the cluster, you need to obtain an authentication token before executing further administrative commands.
 
 ```bash
-/opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file ca.crt \
---user root --no-password auth get-token --force > token-file
+/opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file /opt/ydb/certs/ca.crt \
+--user root --no-password auth get-token --force > auth_token
 ```
 
 If the cluster initialization is successful, the command completion code displayed on the screen should be zero.
@@ -285,28 +318,45 @@ The commands in the example above use the following parameters:
 
 ## Start dynamic nodes {#start-dynnode}
 
+Start the first dynamic node on one of the cluster servers where the `/opt/ydb/certs` and `/opt/ydb/cfg` directories are already prepared and a static node is running. Combining a static and dynamic node on the same server is allowed (see [{#T}](deployment-preparation.md#requirements)).
+
 {% list tabs group=manual-systemd %}
 
 * Manually
 
-  Start a dynamic node of {{ ydb-short-name }} for the `/Root/testdb` database:
-  ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
-      --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
-      --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --kafka-port 9093 \
-      --yaml-config  /opt/ydb/cfg/config.yaml \
-      --tenant /Root/testdb \
-      --grpc-cert /opt/ydb/certs/node.crt \
-      --grpc-key /opt/ydb/certs/node.key \
-      --node-broker grpcs://<ydb-static-node1>:2135 \
-      --node-broker grpcs://<ydb-static-node2>:2135 \
-      --node-broker grpcs://<ydb-static-node3>:2135
-  ```
-In the example command above, `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` are the FQDNs of any three servers running static cluster nodes.
+  Start a dynamic {{ ydb-short-name }} node for the `/Root/testdb` database. Execute the commands below sequentially. Do not paste all lines together with `sudo su - ydb` — otherwise, subsequent commands might not run as the `ydb` user.
+
+  After step 1, wait for the `ydb@...$` prompt.
+
+  At step 4, wait for `ydbd` output in the same terminal. In the command below, replace `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` with the FQDNs of any three servers with static nodes.
+
+  1. Switch to the `ydb` user:
+
+     ```bash
+     sudo su - ydb
+     ```
+
+  2. Navigate to the installation directory:
+
+     ```bash
+     cd /opt/ydb
+     ```
+
+  3. Specify the library path:
+
+     ```bash
+     export LD_LIBRARY_PATH=/opt/ydb/lib
+     ```
+
+  4. Start the dynamic node:
+
+     ```bash
+     /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt --ic-port 19002 --ca /opt/ydb/certs/ca.crt --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem --yaml-config /opt/ydb/cfg/config.yaml --tenant /Root/testdb --grpc-cert /opt/ydb/certs/node.crt --grpc-key /opt/ydb/certs/node.key --node-broker grpcs://<ydb-static-node1>:2135 --node-broker grpcs://<ydb-static-node2>:2135 --node-broker grpcs://<ydb-static-node3>:2135
+     ```
+
+     If the [`web.pem` check](#tls-copy-cert) was not passed, there will be a `Permission denied` error for `/opt/ydb/certs/web.pem`.
+
+* Using systemd
 
 * Using systemd
 

@@ -293,9 +293,27 @@ public:
 
         auto oldAggrStats = tableInfo->GetStats().Aggregated;
 
+<<<<<<< HEAD
         // Delete the whole old partitioning and persist the whole new partitioning as the indexes have changed
         context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo);
         context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
+=======
+        // srcFirstIdx: position of the first src shard in Partitions (O(k) via Position field).
+        ui64 srcFirstIdx = Max<ui64>(); // sentinel — will be overwritten
+        for (const TShardIdx& s : allSrcShardIdxs) {
+            const auto* p = tableInfo->GetPartitionStore().FindPtr(s);
+            Y_ABORT_UNLESS(p);
+            srcFirstIdx = Min(srcFirstIdx, p->Position);
+        }
+        Y_ABORT_UNLESS(srcFirstIdx != Max<ui64>());
+        const ui64 splitStartIdx = AppData()->FeatureFlags.GetEnableSplitMergePartialPersistence()
+            ? srcFirstIdx
+            : 0;
+
+        context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo, splitStartIdx);
+        context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+        context.SS->ProcessForcedCompactionOnSplitMerge(db, tableId, allSrcShardIdxs, newShardsIdx);
+>>>>>>> 35b7f3e1aa0 (SchemeShard: process split/merge for forced compactions (#36945))
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }

@@ -79,6 +79,7 @@ private:
     ui64 Rows = 0;
     ui64 BytesRead = 0;
 
+    TMaybe<TS3ExportBufferSettings::TChecksumSettings> ChecksumSettings;
     NBackup::IChecksum::TPtr Checksum;
     std::shared_ptr<parquet::WriterProperties> WriteProperties;
 
@@ -88,8 +89,6 @@ private:
     std::shared_ptr<ICheckpointOutputStream> OutStream;
     std::unique_ptr<parquet::arrow::FileWriter> ArrowWriter;
     NArrow::TArrowBatchBuilder BatchBuilder;
-
-    static constexpr TStringBuf LogPrefix() { return "parquet"sv; }
 }; // TS3ParquetExportBuffer
 
 TS3ParquetExportBuffer::TS3ParquetExportBuffer(
@@ -99,6 +98,7 @@ TS3ParquetExportBuffer::TS3ParquetExportBuffer(
     , RowsLimit(settings.MaxRows)
     , MaxBytes(settings.MaxBytes)
     , MinBytes(settings.MinBytes)
+    , ChecksumSettings(settings.ChecksumSettings)
     , Checksum(CreateChecksum(settings.ChecksumSettings))
     , OutStream(ICheckpointOutputStream::Create())
 {
@@ -132,7 +132,7 @@ void TS3ParquetExportBuffer::ColumnsOrder(const TVector<ui32> &tags) {
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> ydbColumns;
     std::set<std::string> notNullColumns;
-    for (const auto& tag : tags) {
+    for (const auto &tag : tags) {
         auto it = Columns.find(tag);
         Y_ENSURE(it != Columns.end());
         auto column = it->second;
@@ -164,8 +164,6 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow &row) {
         return false;
     }
 
-    arrow::Status status;
-
     auto bytesBefore = BatchBuilder.Bytes();
     BatchBuilder.AddRow(*row);
     BytesRead += BatchBuilder.Bytes() - bytesBefore;
@@ -178,7 +176,7 @@ bool TS3ParquetExportBuffer::Collect(const NTable::IScan::TRow &row) {
     return true;
 }
 
-IEventBase* TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats &stats) {
+IEventBase *TS3ParquetExportBuffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats &stats) {
     stats.Rows = Rows;
     stats.BytesRead = BytesRead;
 
@@ -262,6 +260,11 @@ bool TS3ParquetExportBuffer::Flush(bool last) {
 void TS3ParquetExportBuffer::Clear() {
     Rows = 0;
     BytesRead = 0;
+    BatchBuilder.FlushBatch(true, false);
+    ArrowWriter.reset();
+    auto newOutStream = ICheckpointOutputStream::Create();
+    OutStream.swap(newOutStream);
+    Checksum.reset(CreateChecksum(ChecksumSettings));
 }
 
 bool TS3ParquetExportBuffer::IsFilled() const {
@@ -269,7 +272,9 @@ bool TS3ParquetExportBuffer::IsFilled() const {
            (Rows >= GetRowsLimit() || BytesRead >= GetBytesLimit());
 }
 
-TString TS3ParquetExportBuffer::GetError() const { return ErrorString; }
+TString TS3ParquetExportBuffer::GetError() const {
+    return ErrorString;
+}
 
 class CheckpointOutputStream : public ICheckpointOutputStream {
 public:
@@ -313,7 +318,7 @@ std::shared_ptr<ICheckpointOutputStream> ICheckpointOutputStream::Create() {
 
 } // anonymous namespace
 
-NExportScan::IBuffer * CreateS3ParquetExportBuffer(TS3ExportBufferSettings &&settings) {
+NExportScan::IBuffer *CreateS3ParquetExportBuffer(TS3ExportBufferSettings &&settings) {
     return new TS3ParquetExportBuffer(std::move(settings));
 }
 

@@ -340,15 +340,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             }
 
             switch(exportSettings.data_format()) {
-                case Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED:
-                case Ydb::Export::ExportToS3Settings::CSV:
-                    backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::CSV);
-                    break;
-                case Ydb::Export::ExportToS3Settings::PARQUET:
-                    backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::PARQUET);
-                    break;
-                default:
-                    Y_ABORT("Unknown data format");
+            case Ydb::Export::ExportToS3Settings::DATA_FORMAT_UNSPECIFIED:
+            case Ydb::Export::ExportToS3Settings::CSV:
+                backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::CSV);
+                break;
+            case Ydb::Export::ExportToS3Settings::PARQUET:
+                backupSettings.SetDataFormat(NKikimrSchemeOp::TS3Settings::PARQUET);
+                break;
+            default:
+                Y_ABORT("Unknown data format");
             }
 
             if (const auto region = exportSettings.region()) {

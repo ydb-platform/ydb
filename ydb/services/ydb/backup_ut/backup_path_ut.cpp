@@ -446,8 +446,6 @@ void ExportWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
-    Y_UNUSED(isOlap);
-
     {
         auto res = f.YdbQueryClient()
                     .ExecuteQuery(R"sql(
@@ -463,11 +461,6 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
 
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
-    f.Server()
-        .GetRuntime()
-        ->GetAppData()
-        .FeatureFlags.SetEnableParquetForS3Export(true);
-
     auto exportSettings = traits.MakeExportParquetSettings(f, "");
 
     {
@@ -534,7 +527,7 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
         UNIT_ASSERT_EQUAL(3, table->num_rows());
 
         auto schema = arrow::schema({
-            // TODO(#41099): "nullable" should not depend on "isOlap", it should be true here.
+            // TODO(#41099): "nullable" should not depend on "isOlap", it should be `false` here.
             arrow::field("key", arrow::int64(), isOlap),
             arrow::field("value", arrow::binary()),
         });
@@ -553,9 +546,6 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
         auto expectedTable =
             arrow::Table::Make(schema, {kBuilder.Finish().ValueOrDie(),
                                         vBuilder.Finish().ValueOrDie()});
-
-        std::cerr << "table:\n" << table->ToString() << std::endl;
-        std::cerr << "expected table:\n" << expectedTable->ToString() << std::endl;
 
         UNIT_ASSERT(expectedTable->Equals(*table));
     }

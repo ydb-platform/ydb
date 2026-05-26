@@ -7,4 +7,4 @@ namespace NKikimr::NDataShard {
         PARQUET,
     };
 
-}; // namespace NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

@@ -43,6 +43,4 @@ IF (OS_LINUX)
     LDFLAGS(-Wl,--wrap=statfs)
 ENDIF()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
-
 END()

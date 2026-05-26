@@ -18,10 +18,14 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         Columns[0] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
         Columns[1] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
-        for (ui32 tag=2; tag<20; ++tag) {
+        TVector<ui32> tags{0, 1};
+
+        for (ui32 tag = 2; tag < 20; ++tag) {
             auto name = "key" + ToString(tag);
             Columns[tag] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", name, false);
+            tags.push_back(tag);
         }
+        Tags.swap(tags);
     }
 
     TS3ExportBufferSettings& Settings() {
@@ -49,11 +53,7 @@ public:
             return nullptr;
         }
         
-        TVector<ui32> tags;
-        for (ui32 tag = 0; tag < Columns.size(); ++tag) {
-            tags.push_back(tag);
-        }
-        buffer->ColumnsOrder(tags);
+        buffer->ColumnsOrder(Tags);
 
         return buffer;
     }
@@ -108,6 +108,7 @@ public:
     }
 
 public:
+    TVector<ui32> Tags;
     IExport::TTableColumns Columns;
     TS3ExportBufferSettings S3ExportBufferSettings;
     THolder<NExportScan::IBuffer> S3ExportBuffer;

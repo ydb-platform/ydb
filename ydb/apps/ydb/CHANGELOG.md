@@ -1,3 +1,4 @@
+* Fixed `ydb` CLI to ignore `ca-file` from profile when connecting without TLS (`grpc://`).
 * Added `--partition-max-inflight-bytes` option to `ydb topic workload`
 * Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
 * Added CPU Time statistics to benchmarks run commands.

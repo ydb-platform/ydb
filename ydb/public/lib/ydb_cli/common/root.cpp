@@ -110,8 +110,8 @@ bool TClientCommandRootBase::ParseProtocol(TConfig& config, TString& message) {
 
 void TClientCommandRootBase::ParseCaCerts(TConfig& config) {
     if (!config.EnableSsl && config.CaCerts) {
-        throw TMisuseException()
-            << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
+        config.CaCerts.clear();
+        config.CaCertsFile.clear();
     }
 }
 

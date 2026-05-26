@@ -740,7 +740,8 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
 
 void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
     if (!config.EnableSsl && config.CaCerts) {
-        MisuseErrors.push_back("\"ca-file\" option is provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.");
+        config.CaCerts.clear();
+        config.CaCertsFile.clear();
     }
 }
 

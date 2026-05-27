@@ -21,16 +21,12 @@ struct TInFlightController {
 
     TInFlightController();
     TInFlightController(ui64 MaxAllowedSize);
-<<<<<<< HEAD
-    
-=======
 
     struct TUnit {
         ui64 Offset;
         ui64 Size;
     };
 
->>>>>>> 3637b6478ff (LOGBROKER-9686 Inflight limiter better accuracy)
     ui64 LayoutUnitSize = 0;
     std::deque<TUnit> Layout;
     ui64 TotalSize = 0;

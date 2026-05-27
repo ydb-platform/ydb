@@ -13,8 +13,8 @@ class TSession::TImpl : public TKqpSessionCommon {
 public:
     struct TAttachSessionArgs {
         TAttachSessionArgs(NThreading::TPromise<TCreateSessionResult> promise,
-            std::string sessionId,
-            std::string endpoint,
+            std::string_view sessionId,
+            std::string_view endpoint,
             std::shared_ptr<TQueryClient::TImpl> client,
             std::weak_ptr<ISessionClient> sessionClient)
             : Promise(promise)

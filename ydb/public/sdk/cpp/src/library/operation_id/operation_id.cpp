@@ -198,16 +198,16 @@ public:
     }
 
     std::string GetSubKind() const {
-        auto it = Index.find("kind");
-        if (it == Index.end()) {
-            return std::string();
+        for (const auto& [key, values] : Index) {
+            if (key != "kind") {
+                continue;
+            }
+            if (values.size() != 1) {
+                ythrow yexception() << "Unable to retreive sub-kind";
+            }
+            return *values.at(0);
         }
-
-        if (it->second.size() != 1) {
-            ythrow yexception() << "Unable to retreive sub-kind";
-        }
-
-        return *it->second.at(0);
+        return std::string();
     }
 
 private:

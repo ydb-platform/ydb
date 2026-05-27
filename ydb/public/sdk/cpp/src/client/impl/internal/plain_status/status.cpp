@@ -73,9 +73,12 @@ TPlainStatus TPlainStatus::Internal(const std::string& message) {
 }
 
 void TPlainStatus::InitCostInfo() {
-    if (auto metaIt = Metadata.find(YDB_CONSUMED_UNITS_HEADER); metaIt != Metadata.end()) {
+    for (const auto& [key, value] : Metadata) {
+        if (key != YDB_CONSUMED_UNITS_HEADER) {
+            continue;
+        }
         try {
-            CostInfo.set_consumed_units(std::stod(metaIt->second));
+            CostInfo.set_consumed_units(std::stod(value));
         } catch (std::exception& e) {
             if (Ok()) {
                 Status = EStatus::CLIENT_INTERNAL_ERROR;
@@ -83,6 +86,7 @@ void TPlainStatus::InitCostInfo() {
 
             Issues.AddIssue(NIssue::TIssue{"Failed to parse CostInfo from Metadata: " + std::string{e.what()}});
         }
+        break;
     }
 }
 

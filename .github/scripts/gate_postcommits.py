@@ -29,8 +29,9 @@ YC_RUNNER_DASHBOARD = "runner-summary"
 GATE_WORKFLOW_ID = "gate_postcommits.yml"
 HOSTED_COLUMN = "GitHub-hosted"
 GENERIC_RUNNER_LABELS = frozenset(
-    {"self-hosted", "Linux", "Windows", "macOS", "X64", "ARM", "ARM64", "auto-provisioned","ghrun"}
+    {"self-hosted", "Linux", "Windows", "macOS", "X64", "ARM", "ARM64", "auto-provisioned", "ghrun"}
 )
+MATRIX_LABEL_PRIORITY = { "postcommit": 1, "tiny-worker": 2, HOSTED_COLUMN: 1000}
 
 
 def is_matrix_label(label: str) -> bool:
@@ -277,7 +278,7 @@ def build_runner_label_view(
     runner_jobs: dict[str, dict],
     hosted_jobs: list[dict] | None = None,
 ) -> dict[str, list[dict]]:
-    label_priority = {"ghrun": 0, "postcommit": 1, HOSTED_COLUMN: 1000}
+    label_priority = MATRIX_LABEL_PRIORITY
     parsed = []
     for runner in raw_runners:
         labels = [lb["name"] for lb in runner.get("labels", []) if is_matrix_label(lb["name"])]

@@ -27,6 +27,7 @@ YC_ACTIVE_RUNNERS_URL = (
 YC_MONITORING_FOLDER = "b1grf3mpoatgflnlavjd"
 YC_RUNNER_DASHBOARD = "runner-summary"
 GATE_WORKFLOW_ID = "gate_postcommits.yml"
+MANUAL_GATE_WORKFLOW_ID = "gate_postcommits_manual_control.yml"
 HOSTED_COLUMN = "GitHub-hosted"
 GENERIC_RUNNER_LABELS = frozenset(
     {"self-hosted", "Linux", "Windows", "macOS", "X64", "ARM", "ARM64", "auto-provisioned", "ghrun"}
@@ -105,21 +106,46 @@ def normalize_app_domain(app_domain: str) -> str:
 
 
 def gate_refresh_trigger_url(app_domain: str, repository: str, return_url: str) -> str | None:
+    return gate_workflow_trigger_url(
+        app_domain,
+        repository,
+        GATE_WORKFLOW_ID,
+        return_url,
+    )
+
+
+def gate_manual_open_trigger_url(app_domain: str, repository: str, return_url: str) -> str | None:
+    return gate_workflow_trigger_url(
+        app_domain,
+        repository,
+        MANUAL_GATE_WORKFLOW_ID,
+        return_url,
+        {"action": "open"},
+    )
+
+
+def gate_workflow_trigger_url(
+    app_domain: str,
+    repository: str,
+    workflow_id: str,
+    return_url: str,
+    inputs: dict[str, str] | None = None,
+) -> str | None:
     if not app_domain.strip() or not return_url.strip():
         return None
     if "/" not in repository:
         return None
     owner, repo = repository.split("/", 1)
-    params = urllib.parse.urlencode(
-        {
-            "owner": owner,
-            "repo": repo,
-            "workflow_id": GATE_WORKFLOW_ID,
-            "ref": "main",
-            "return_url": return_url,
-        }
-    )
-    return f"https://{normalize_app_domain(app_domain)}/workflow/trigger?{params}"
+    params = {
+        "owner": owner,
+        "repo": repo,
+        "workflow_id": workflow_id,
+        "ref": "main",
+        "return_url": return_url,
+    }
+    if inputs:
+        params.update(inputs)
+    return f"https://{normalize_app_domain(app_domain)}/workflow/trigger?{urllib.parse.urlencode(params)}"
 
 
 def runner_monitoring_url(runner_name: str, now_ts: float) -> str:
@@ -639,6 +665,17 @@ def build_html(
         meta["repository"],
         report_url,
     )
+    open_gate_url = gate_manual_open_trigger_url(
+        os.environ.get("APP_DOMAIN", ""),
+        meta["repository"],
+        report_url,
+    )
+    open_gate_btn = (
+        f'<a class="open-gate-btn" href="{esc(open_gate_url)}" target="_blank" rel="noopener">'
+        f"Открыть gate</a>"
+        if open_gate_url
+        else ""
+    )
     refresh_btn = (
         f'<a class="refresh-btn" href="{esc(refresh_url)}" target="_blank" rel="noopener">'
         f"▶ Обновить</a>"
@@ -698,6 +735,11 @@ def build_html(
       background: #4caf50; color: #fff; text-decoration: none; white-space: nowrap;
     }}
     .refresh-btn:hover {{ background: #43a047; color: #fff; }}
+    .open-gate-btn {{
+      font-size: .85rem; font-weight: 600; padding: 8px 16px; border-radius: 999px;
+      background: var(--accent); color: #fff; text-decoration: none; white-space: nowrap;
+    }}
+    .open-gate-btn:hover {{ background: #0550ae; color: #fff; }}
     .hero-lead {{ font-size: 1.05rem; margin: 0 0 8px; }}
     .hero-effect {{ color: var(--muted); margin: 0; }}
     .meta-line {{ margin-top: 16px; font-size: .85rem; color: var(--muted); }}
@@ -828,7 +870,7 @@ def build_html(
     .tabs {{
       display: flex; gap: 4px; margin: 0; border-bottom: none; padding-bottom: 0; flex: 1;
     }}
-    .topbar-actions {{ padding-bottom: 10px; flex-shrink: 0; }}
+    .topbar-actions {{ padding-bottom: 10px; flex-shrink: 0; display: flex; gap: 8px; flex-wrap: wrap; }}
     .tab {{
       padding: 10px 18px; border: none; background: none; cursor: pointer;
       font-size: .92rem; font-weight: 600; color: var(--muted);
@@ -854,7 +896,7 @@ def build_html(
         <button type="button" class="tab active" data-tab="gate">Gate</button>
         <button type="button" class="tab" data-tab="runners">Runner labels</button>
       </div>
-      <div class="topbar-actions">{refresh_btn}</div>
+      <div class="topbar-actions">{open_gate_btn}{refresh_btn}</div>
     </div>
 
     <div id="hero-gate" class="hero tab-hero active">
@@ -1065,6 +1107,11 @@ def run(args: argparse.Namespace) -> int:
         repo,
         os.environ.get("GATE_REPORT_URL", ""),
     )
+    open_gate_url = gate_manual_open_trigger_url(
+        os.environ.get("APP_DOMAIN", ""),
+        repo,
+        os.environ.get("GATE_REPORT_URL", ""),
+    )
 
     meta = {
         "gate_mode": gate_mode,
@@ -1084,6 +1131,7 @@ def run(args: argparse.Namespace) -> int:
         "repository": repo,
         "report_ts": now_ts,
         "refresh_trigger_url": refresh_url or "",
+        "open_gate_trigger_url": open_gate_url or "",
     }
 
     (report_dir / "queue.json").write_text(json.dumps(queue, indent=2), encoding="utf-8")

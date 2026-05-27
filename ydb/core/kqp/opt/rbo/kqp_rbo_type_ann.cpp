@@ -298,10 +298,12 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
         aggTraitsMap.emplace(itemName, itemType->GetItemType());
     }
 
-    for (const auto& keyColumn : aggregate->KeyColumns) {
-        auto it = aggTraitsMap.find(keyColumn.GetFullName());
-        Y_ENSURE(it != aggTraitsMap.end());
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+    if (!aggregate->IsDistinctAll()) {
+        for (const auto& keyColumn : aggregate->KeyColumns) {
+            auto it = aggTraitsMap.find(keyColumn.GetFullName());
+            Y_ENSURE(it != aggTraitsMap.end());
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->first, it->second));
+        }
     }
 
     for (const auto& traits : aggregate->AggregationTraitsList) {
@@ -309,7 +311,8 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
         const auto& aggFunction = traits.AggFunction;
         const auto resultColName = traits.ResultColName.GetFullName();
         auto it = aggTraitsMap.find(originalColName);
-        Y_ENSURE(it != aggTraitsMap.end());
+        Y_ENSURE(it != aggTraitsMap.end(), "Cannot find aggregation input " << originalColName
+            << " for " << aggregate->ToString(ctx.ExprCtx) << " in input type " << *inputType);
         const auto* aggFieldType = it->second;
         TPositionHandle dummyPos;
 

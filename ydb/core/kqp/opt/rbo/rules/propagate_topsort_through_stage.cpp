@@ -58,14 +58,14 @@ bool IsSuitableToPropagateTopSortThroughStage(const TIntrusivePtr<IOperator>& in
         return false;
     }
 
-    const auto type = input->GetTypeAnn();
-    Y_ENSURE(type);
-    const auto items = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
-    if (!(items.size() && items.front()->GetItemType()->GetKind() != ETypeAnnotationKind::Pg)) {
-        return false;
+    const auto sort = CastOperator<TOpSort>(input);
+    for (const auto& sortElement : sort->GetSortElements()) {
+        const auto* sortColumnType = sort->GetIUType(sortElement.SortColumn);
+        if (!sortColumnType || RemoveOptionalType(sortColumnType)->GetKind() == ETypeAnnotationKind::Pg) {
+            return false;
+        }
     }
 
-    const auto sort = CastOperator<TOpSort>(input);
     return sort->GetSortPhase() != EOpPhase::Final;
 }
 
@@ -98,7 +98,7 @@ TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSo
     }
 
     // Merge connection always has a single consumer (i.e. outputIndex = 0)
-    const auto mergeConnection = MakeIntrusive<TMergeConnection>(sort->GetSortElements(), /*outputIndex=*/0);
+    const auto mergeConnection = MakeIntrusive<TMergeConnection>(sort->GetSortElements(), /*outputIndex=*/0u);
     // Update conection type.
     planProps.StageGraph.UpdateConnection(prevStageId, currentStageId, mergeConnection);
     // Push to stage.

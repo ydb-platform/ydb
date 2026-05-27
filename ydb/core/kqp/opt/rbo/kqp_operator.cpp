@@ -1189,8 +1189,12 @@ TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
         return *outputIUs;
     }
 
-    // We assume that aggregation returns column is order [keys, states]
-    TVector<TInfoUnit> outputIU = KeyColumns;
+    // We assume that aggregation returns column is order [keys, states].
+    // DistinctAll uses keys only as physical aggregation state and returns distinct states.
+    TVector<TInfoUnit> outputIU;
+    if (!DistinctAll) {
+        outputIU = KeyColumns;
+    }
     for (const auto& aggTraits : AggregationTraitsList) {
         outputIU.push_back(aggTraits.ResultColName);
     }
@@ -1207,13 +1211,10 @@ TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
 }
 
 void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
-    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
     TInfoUnitSet inputLive;
     AddInfoUnits(inputLive, KeyColumns);
     for (const auto& traits : AggregationTraitsList) {
-        if (liveOut.contains(traits.ResultColName)) {
-            AddInfoUnit(inputLive, traits.OriginalColName);
-        }
+        AddInfoUnit(inputLive, traits.OriginalColName);
     }
     ctx.AddLiveColumns(GetInput(), inputLive);
 }

@@ -142,6 +142,75 @@ void AddReadColumnByName(const TOpRead& read, const TString& columnName, TInfoUn
     }
 }
 
+void AddOlapFilterConditionDeps(const TOpRead& read, const TExprNode::TPtr& node, TInfoUnitSet& requiredColumns) {
+    if (!node) {
+        return;
+    }
+
+    if (const auto maybeFilter = TMaybeNode<TKqpOlapFilter>(node)) {
+        const auto filter = maybeFilter.Cast();
+        AddOlapFilterConditionDeps(read, filter.Input().Ptr(), requiredColumns);
+        AddOlapFilterConditionDeps(read, filter.Condition().Ptr(), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeColumnArg = TMaybeNode<TKqpOlapApplyColumnArg>(node)) {
+        AddReadColumnByName(read, TString(maybeColumnArg.Cast().ColumnName().StringValue()), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeJsonValue = TMaybeNode<TKqpOlapJsonValue>(node)) {
+        AddReadColumnByName(read, TString(maybeJsonValue.Cast().Column().StringValue()), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeJsonExists = TMaybeNode<TKqpOlapJsonExists>(node)) {
+        AddReadColumnByName(read, TString(maybeJsonExists.Cast().Column().StringValue()), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeExists = TMaybeNode<TKqpOlapFilterExists>(node)) {
+        AddReadColumnByName(read, TString(maybeExists.Cast().Column().StringValue()), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeUnaryOp = TMaybeNode<TKqpOlapFilterUnaryOp>(node)) {
+        AddOlapFilterConditionDeps(read, maybeUnaryOp.Cast().Arg().Ptr(), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeBinaryOp = TMaybeNode<TKqpOlapFilterBinaryOp>(node)) {
+        const auto binaryOp = maybeBinaryOp.Cast();
+        AddOlapFilterConditionDeps(read, binaryOp.Left().Ptr(), requiredColumns);
+        AddOlapFilterConditionDeps(read, binaryOp.Right().Ptr(), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeTernaryOp = TMaybeNode<TKqpOlapFilterTernaryOp>(node)) {
+        const auto ternaryOp = maybeTernaryOp.Cast();
+        AddOlapFilterConditionDeps(read, ternaryOp.First().Ptr(), requiredColumns);
+        AddOlapFilterConditionDeps(read, ternaryOp.Second().Ptr(), requiredColumns);
+        AddOlapFilterConditionDeps(read, ternaryOp.Third().Ptr(), requiredColumns);
+        return;
+    }
+
+    if (const auto maybeNot = TMaybeNode<TKqpOlapNot>(node)) {
+        AddOlapFilterConditionDeps(read, maybeNot.Cast().Value().Ptr(), requiredColumns);
+        return;
+    }
+
+    if (TKqpOlapAnd::Match(node.Get()) || TKqpOlapOr::Match(node.Get()) || TKqpOlapXor::Match(node.Get())) {
+        for (const auto& child : node->ChildrenList()) {
+            AddOlapFilterConditionDeps(read, child, requiredColumns);
+        }
+        return;
+    }
+
+    if (const auto maybeAtom = TMaybeNode<TCoAtom>(node)) {
+        AddReadColumnByName(read, TString(maybeAtom.Cast().StringValue()), requiredColumns);
+    }
+}
+
 void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfoUnitSet& requiredColumns) {
     if (!lambda) {
         return;
@@ -161,6 +230,20 @@ void AddReadLambdaDeps(const TOpRead& read, const TExprNode::TPtr& lambda, TInfo
     for (const auto& member : members) {
         AddReadColumnByName(read, TString(TCoMember(member).Name().StringValue()), requiredColumns);
     }
+
+    const auto filters = FindNodes(lambda, [](const TExprNode::TPtr& node) {
+        return !!TMaybeNode<TKqpOlapFilter>(node);
+    });
+    for (const auto& filter : filters) {
+        AddOlapFilterConditionDeps(read, filter, requiredColumns);
+    }
+
+    const auto applyArgs = FindNodes(lambda, [](const TExprNode::TPtr& node) {
+        return !!TMaybeNode<TKqpOlapApplyColumnArg>(node);
+    });
+    for (const auto& applyArg : applyArgs) {
+        AddOlapFilterConditionDeps(read, applyArg, requiredColumns);
+    }
 }
 
 bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
@@ -179,6 +262,11 @@ bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUn
             newColumns.push_back(read->Columns[i]);
             newOutputIUs.push_back(read->OutputIUs[i]);
         }
+    }
+
+    if (newOutputIUs.empty() && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && !read->OutputIUs.empty()) {
+        newColumns.push_back(read->Columns.front());
+        newOutputIUs.push_back(read->OutputIUs.front());
     }
 
     if (newOutputIUs == read->OutputIUs) {

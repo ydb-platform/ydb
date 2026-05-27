@@ -447,6 +447,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     cleanUpCBOStageRules.emplace_back(std::make_unique<TInlineCBOTreeRule>());
     cleanUpCBOStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Clean up after CBO", std::move(cleanUpCBOStageRules)));
+    RBO.AddStage(std::make_unique<TLogicalLivenessStage>());
 
     // Assign physical stages.
     TVector<std::unique_ptr<IRule>> assignPhysicalStageRules;

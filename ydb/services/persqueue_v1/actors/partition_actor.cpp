@@ -82,7 +82,7 @@ TPartitionActor::TPartitionActor(
 
 
 void TPartitionActor::MakeCommit(const TActorContext& ctx) {
-    if (!CommitProcessingIsEnabled) {
+    if (!CommitProcessingIsEnabled()) {
         return;
     }
 
@@ -319,7 +319,6 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                                                                   << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason << ", current pipe: " << PipeClient.ToString());
     PipeClient = TActorId{};
-    CommitProcessingIsEnabled = false;
     if (errorCode != NPersQueue::NErrorCode::OVERLOAD)
         ++PipeGeneration;
 
@@ -427,13 +426,16 @@ void TPartitionActor::ResendRecentRequests() {
             if (c.second.Offset != Max<ui64>())
                 SendCommit(c.first, c.second.Offset, ctx);
         }
-        CommitProcessingIsEnabled = true;
         MakeCommit(ctx);
         if (WaitForData) { //resend wait-for-data requests
             WaitDataInfly.clear();
             WaitDataInPartition(ctx);
         }
     }
+}
+
+bool TPartitionActor::CommitProcessingIsEnabled() const {
+    return PipeClient && InitDone;
 }
 
 i64 GetBatchWriteTimestampMS(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
@@ -641,7 +643,6 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
         WTime = resp.GetWriteTimestampMS();
 
     InitDone = true;
-    CommitProcessingIsEnabled = !!PipeClient;
     PipeGeneration = 0; //reset tries counter - all ok
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INIT DONE " << Partition
                         << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset);
@@ -1213,7 +1214,6 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
             .DoFirstRetryInstantly = true
         };
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
-        CommitProcessingIsEnabled = InitDone;
         auto request = MakeCreateSessionRequest(true, ++InitCookie);
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);

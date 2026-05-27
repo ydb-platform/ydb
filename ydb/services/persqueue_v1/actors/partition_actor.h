@@ -174,6 +174,8 @@ private:
     void Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPublishDirectReadResult& response, const TActorContext& ctx);
     void Handle(const NKikimrClient::TCmdReadResult& response, const TActorContext& ctx);
 
+    bool CommitProcessingIsEnabled() const;
+
 private:
     const TActorId ParentId;
     const TString ClientId;
@@ -212,7 +214,6 @@ private:
     bool StartReading;
     bool AllPrepareInited;
     bool FirstInit;
-    bool CommitProcessingIsEnabled = false;
     TActorId PipeClient;
     ui32 PipeGeneration;
     ui64 TabletGeneration;

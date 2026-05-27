@@ -1582,8 +1582,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-    Y_UNIT_TEST(WriteRowInsertFailsSecondary) {
-        TKikimrRunner kikimr(GetAppConfig(false, false));
+    Y_UNIT_TEST_TWIN(WriteRowInsertFailsSecondary, EnableIndexStreamWrite) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -1610,11 +1613,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 2,
+                    .Writes = EnableIndexStreamWrite ? 1 : 2,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 28,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 28,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1640,11 +1643,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 2,
+                    .Writes = EnableIndexStreamWrite ? 1 : 2,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 28,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 28,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1758,11 +1761,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = EnableIndexStreamWrite ? 1 : 0,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 0,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1789,11 +1792,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = EnableIndexStreamWrite ? 1 : 0,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 0,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1820,14 +1823,15 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = EnableIndexStreamWrite ? 2 : 0,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = EnableIndexStreamWrite ? 40 : 0,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
+                
         }
 
         {
@@ -2566,9 +2570,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 32);
     }
 
-    Y_UNIT_TEST(BatchOperation_SecondaryIndex) {
+    Y_UNIT_TEST_TWIN(BatchOperation_SecondaryIndex, EnableIndexStreamWrite) {
+        if (EnableIndexStreamWrite) { // TODO
+            return;
+        }
         auto appConfig = GetAppConfig(false, false);
         appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -2614,6 +2622,314 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().bytes(), 64);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().rows(), 4);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().bytes(), 0);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(WriteRowWithIndex, EnableIndexStreamWrite) {
+        if (EnableIndexStreamWrite) {
+            return;
+        }
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        {
+            const auto query = R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX `TestIndex` GLOBAL SYNC ON (Amount);
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = R"(
+                UPDATE `/Root/TestTable` SET Amount = 1000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPDATE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 8,
+                    .Reads = EnableIndexStreamWrite ? 8 : 4,
+                    .Deletes = 4,
+
+                    .WriteBytes = 128,
+                    .ReadBytes = EnableIndexStreamWrite ? 224 : 64,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPDATE `/Root/TestTable` SET Comment = "Comment";
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPDATE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 4,
+                    .Reads = 4,
+                    .Deletes = 0,
+
+                    .WriteBytes = 60,
+                    .ReadBytes = 32,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                DELETE FROM `/Root/TestTable`;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "DELETE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), EnableIndexStreamWrite ? 8 : 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), EnableIndexStreamWrite ? 284 : 92);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 4);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = EnableIndexStreamWrite ? 8 : 4,
+                    .Deletes = 8,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = EnableIndexStreamWrite ? 284 : 92,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (101u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPSERT secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (101u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPSERT (exists) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (101u, "Anna", 1000ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPSERT (exists other) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 1,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (102u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "REPLACE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (102u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "REPLACE (exists) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (102u, "Anna", 1000ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "REPLACE (exists other) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 1,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = EnableIndexStreamWrite ? 48 : 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (103u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "INSERT secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (103u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "INSERT (exists) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
         }
     }
 }

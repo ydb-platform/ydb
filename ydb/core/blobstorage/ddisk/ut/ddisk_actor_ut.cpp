@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(2, 2);
 
-        NDDisk::TQueryCredentials seq1 = NDDisk::TQueryCredentials::FromTablet(12, 4, 1);
+        NDDisk::TQueryCredentials seq1 = NDDisk::TQueryCredentials::FromTablet(12, 4, 1, std::nullopt);
         auto seq1Connect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
             ctx, disk.ServiceId, new NDDisk::TEvConnect(seq1));
         AssertStatus(seq1Connect, TReplyStatus::OK);

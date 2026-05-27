@@ -108,7 +108,8 @@ TDirectBlockGroup::TDirectBlockGroup(
                     .Credentials = NDDisk::TQueryCredentials::FromTablet(
                         TabletId,
                         generation,
-                        InitialDDiskSessionSeqNo)}});
+                        InitialDDiskSessionSeqNo,
+                        std::nullopt)}});
 
             if (type == EConnectionType::PBuffer) {
                 NKikimrBlobStorage::NDDisk::TDDiskId pbufferId;

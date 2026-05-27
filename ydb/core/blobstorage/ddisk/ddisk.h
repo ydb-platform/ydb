@@ -68,25 +68,20 @@ namespace NKikimr::NDDisk {
             , DDiskSessionSeqNo(ddiskSessionSeqNo)
         {}
 
-        static TQueryCredentials FromTablet(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
-            return TQueryCredentials(tabletId, generation, ddiskSessionSeqNo, std::nullopt, false);
-        }
-
-        static TQueryCredentials FromPersistentBuffer(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
-            return TQueryCredentials(tabletId, generation, ddiskSessionSeqNo, std::nullopt, true);
+        static TQueryCredentials FromTablet(
+                ui64 tabletId,
+                ui32 generation,
+                ui64 ddiskSessionSeqNo,
+                std::optional<ui64> ddiskInstanceGuid) {
+            return TQueryCredentials(tabletId, generation, ddiskSessionSeqNo, ddiskInstanceGuid, false);
         }
 
         static TQueryCredentials FromPersistentBuffer(
                 ui64 tabletId,
                 ui32 generation,
                 ui64 ddiskSessionSeqNo,
-                ui64 ddiskInstanceGuid) {
-            return TQueryCredentials(
-                tabletId,
-                generation,
-                ddiskSessionSeqNo,
-                std::make_optional(ddiskInstanceGuid),
-                true);
+                std::optional<ui64> ddiskInstanceGuid) {
+            return TQueryCredentials(tabletId, generation, ddiskSessionSeqNo, ddiskInstanceGuid, true);
         }
 
         TQueryCredentials(const NKikimrBlobStorage::NDDisk::TQueryCredentials& pb)

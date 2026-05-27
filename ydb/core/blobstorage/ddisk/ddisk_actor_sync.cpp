@@ -138,7 +138,7 @@ namespace NKikimr::NDDisk {
             creds.TabletId,
             creds.Generation,
             creds.DDiskSessionSeqNo,
-            record.GetDDiskInstanceGuid());
+            std::make_optional(record.GetDDiskInstanceGuid()));
         const TActorId sourceDDiskId = TPolicy::MakeSourceActorId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
         std::optional<ui64> vChunkIndex;
 

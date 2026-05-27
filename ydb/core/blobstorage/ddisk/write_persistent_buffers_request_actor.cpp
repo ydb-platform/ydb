@@ -141,7 +141,8 @@ namespace NKikimr::NDDisk {
         NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromPersistentBuffer(
             inflight.TabletId,
             inflight.TabletGeneration,
-            inflight.DDiskSessionSeqNo);
+            inflight.DDiskSessionSeqNo,
+            std::nullopt);
         const NDDisk::TBlockSelector selector{record.GetVChunkIndex(), record.GetOffsetInBytes(), record.GetSizeInBytes()};
 
         auto msg = std::make_unique<TEvWritePersistentBuffers>(creds, selector, inflight.Lsn, NDDisk::TWriteInstruction(0),
@@ -160,7 +161,8 @@ namespace NKikimr::NDDisk {
         TQueryCredentials creds = TQueryCredentials::FromPersistentBuffer(
             recordCreds.GetTabletId(),
             recordCreds.GetGeneration(),
-            recordCreds.GetDDiskSessionSeqNo());
+            recordCreds.GetDDiskSessionSeqNo(),
+            std::nullopt);
         auto requestGeneration = record.GetGeneration();
         auto lsn = record.GetLsn();
         auto timeout = record.GetReplyTimeoutMicroseconds();
@@ -207,7 +209,8 @@ namespace NKikimr::NDDisk {
         TQueryCredentials creds = TQueryCredentials::FromPersistentBuffer(
             recordCreds.GetTabletId(),
             recordCreds.GetGeneration(),
-            recordCreds.GetDDiskSessionSeqNo());
+            recordCreds.GetDDiskSessionSeqNo(),
+            std::nullopt);
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         const TWriteInstruction instr(record.GetInstruction());

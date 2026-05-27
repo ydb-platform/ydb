@@ -26,6 +26,14 @@ YC_ACTIVE_RUNNERS_URL = (
 )
 YC_MONITORING_FOLDER = "b1grf3mpoatgflnlavjd"
 YC_RUNNER_DASHBOARD = "runner-summary"
+GATE_WORKFLOW_ID = "gate_postcommits.yml"
+GENERIC_RUNNER_LABELS = frozenset(
+    {"self-hosted", "Linux", "Windows", "macOS", "X64", "ARM", "ARM64", "auto-provisioned"}
+)
+
+
+def is_matrix_label(label: str) -> bool:
+    return not label.startswith("instance:") and label not in GENERIC_RUNNER_LABELS
 
 
 def api_request(method: str, url: str, token: str, data: dict | None = None) -> Any:
@@ -56,6 +64,33 @@ def fmt_wait(seconds: float) -> str:
 
 def esc(value: Any) -> str:
     return html.escape(str(value))
+
+
+def normalize_app_domain(app_domain: str) -> str:
+    domain = app_domain.strip()
+    if domain.startswith("https://"):
+        domain = domain[8:]
+    if domain.startswith("http://"):
+        domain = domain[7:]
+    return domain.rstrip("/")
+
+
+def gate_refresh_trigger_url(app_domain: str, repository: str, return_url: str) -> str | None:
+    if not app_domain.strip() or not return_url.strip():
+        return None
+    if "/" not in repository:
+        return None
+    owner, repo = repository.split("/", 1)
+    params = urllib.parse.urlencode(
+        {
+            "owner": owner,
+            "repo": repo,
+            "workflow_id": GATE_WORKFLOW_ID,
+            "ref": "main",
+            "return_url": return_url,
+        }
+    )
+    return f"https://{normalize_app_domain(app_domain)}/workflow/trigger?{params}"
 
 
 def runner_monitoring_url(runner_name: str, now_ts: float) -> str:
@@ -227,11 +262,7 @@ def build_runner_label_view(raw_runners: list[dict], runner_jobs: dict[str, dict
     label_priority = {"ghrun": 0, "postcommit": 1}
     parsed = []
     for runner in raw_runners:
-        labels = [
-            lb["name"]
-            for lb in runner.get("labels", [])
-            if not lb["name"].startswith("instance:")
-        ]
+        labels = [lb["name"] for lb in runner.get("labels", []) if is_matrix_label(lb["name"])]
         if not labels:
             continue
         parsed.append(
@@ -423,7 +454,8 @@ def _runner_label_matrix_table(by_label: dict[str, list[dict]], empty_text: str,
                 cells.append(
                     f'<td class="busy">'
                     f'<div class="cell-runner">{runner_link}</div>'
-                    f'<div class="cell-wf"><strong>{esc(job["workflow"])}</strong></div>'
+                    f'<div class="cell-wf" title="{esc(job["workflow"])}">'
+                    f'<strong>{esc(job["workflow"])}</strong></div>'
                     f'<div class="cell-wait">{esc(job["elapsed_human"])}</div>'
                     f'<div class="cell-run"><a href="{esc(job["run_url"])}">{esc(job["run_id"])}</a></div>'
                     f"</td>"
@@ -446,11 +478,23 @@ def _runner_label_matrix_table(by_label: dict[str, list[dict]], empty_text: str,
 
     return (
         '<div class="matrix-scroll">'
-        '<table class="queue-matrix">'
+        '<table class="queue-matrix runner-matrix">'
         f"<thead><tr>{header}</tr></thead>"
         f"<tbody>{''.join(body_rows)}</tbody></table>"
         "</div>"
     )
+
+
+def _runner_label_stats(by_label: dict[str, list[dict]]) -> tuple[int, int, int]:
+    label_count = len(by_label)
+    runner_names = {entry["runner_name"] for entries in by_label.values() for entry in entries}
+    busy = {
+        entry["runner_name"]
+        for entries in by_label.values()
+        for entry in entries
+        if entry.get("job")
+    }
+    return label_count, len(busy), len(runner_names)
 
 
 def _runner_changes_table(actions: list[dict]) -> str:
@@ -517,6 +561,19 @@ def build_html(
         else f"Только {reserved} runner'ов с label postcommit."
     )
     runners_empty_text = "Нет данных по runner'ам."
+    report_url = os.environ.get("GATE_REPORT_URL", "").strip()
+    refresh_url = gate_refresh_trigger_url(
+        os.environ.get("APP_DOMAIN", ""),
+        meta["repository"],
+        report_url,
+    )
+    refresh_btn = (
+        f'<a class="refresh-btn" href="{esc(refresh_url)}" target="_blank" rel="noopener">'
+        f"▶ Обновить</a>"
+        if refresh_url
+        else ""
+    )
+    label_count, busy_runners, matrix_runners = _runner_label_stats(runner_label_view)
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -559,6 +616,16 @@ def build_html(
     }}
     .tag {{ font-size: .75rem; padding: 4px 8px; border-radius: 6px; background: #eaeef2; color: var(--muted); }}
     .tag-dry {{ background: #ddf4ff; color: #0550ae; }}
+    .hero-action {{
+      margin-left: auto; font-size: .85rem; font-weight: 600; padding: 8px 16px; border-radius: 999px;
+      background: #4caf50; color: #fff; text-decoration: none; white-space: nowrap;
+    }}
+    .hero-action:hover {{ background: #43a047; color: #fff; }}
+    .refresh-btn {{
+      font-size: .85rem; font-weight: 600; padding: 8px 16px; border-radius: 999px;
+      background: #4caf50; color: #fff; text-decoration: none; white-space: nowrap;
+    }}
+    .refresh-btn:hover {{ background: #43a047; color: #fff; }}
     .hero-lead {{ font-size: 1.05rem; margin: 0 0 8px; }}
     .hero-effect {{ color: var(--muted); margin: 0; }}
     .meta-line {{ margin-top: 16px; font-size: .85rem; color: var(--muted); }}
@@ -619,7 +686,13 @@ def build_html(
     .queue-table tr.remove {{ background: #fef2f2; }}
     .queue-matrix {{
       width: 100%; border-collapse: separate; border-spacing: 0; font-size: .85rem;
-      table-layout: fixed;
+    }}
+    .queue-matrix.runner-matrix {{
+      width: max-content; min-width: 100%; table-layout: auto;
+    }}
+    .queue-matrix.runner-matrix th,
+    .queue-matrix.runner-matrix td {{
+      min-width: 168px; max-width: 200px;
     }}
     .queue-matrix th {{
       text-align: left; padding: 12px 14px; background: #f8fafc;
@@ -648,13 +721,16 @@ def build_html(
     .cell-runner {{ font-size: .78rem; color: var(--muted); margin-bottom: 4px; word-break: break-all; }}
     .cell-runner a {{ color: var(--accent); text-decoration: none; }}
     .cell-runner a:hover {{ text-decoration: underline; }}
-    .cell-wf {{ margin-bottom: 4px; }}
+    .cell-wf {{ margin-bottom: 4px; overflow: hidden; }}
+    .cell-wf strong {{
+      display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem;
+    }}
     .cell-idle {{ font-size: .85rem; color: var(--muted); font-style: italic; }}
-    .matrix-scroll {{ overflow-x: auto; margin: 0 -4px; padding: 0 4px; }}
+    .matrix-scroll {{ overflow-x: auto; margin: 0 -4px; padding: 0 4px 4px; }}
     .cell-wait {{
       font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 4px;
     }}
-    .cell-run {{ margin-bottom: 6px; }}
+    .cell-run {{ margin-bottom: 6px; font-size: .75rem; line-height: 1.25; }}
     .cell-run a {{ color: var(--accent); text-decoration: none; }}
     .cell-run a:hover {{ text-decoration: underline; }}
     .cell-gate {{ margin-top: 2px; }}
@@ -672,10 +748,14 @@ def build_html(
     .pill.remove {{ background: #fee2e2; color: var(--remove); }}
     .empty {{ color: var(--muted); font-size: .9rem; margin: 0; }}
     code {{ background: #eef2f7; padding: 2px 6px; border-radius: 4px; font-size: .85em; }}
-    .tabs {{
-      display: flex; gap: 4px; margin: 20px 0 16px;
-      border-bottom: 1px solid var(--border); padding-bottom: 0;
+    .topbar {{
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+      margin-bottom: 16px; border-bottom: 1px solid var(--border);
     }}
+    .tabs {{
+      display: flex; gap: 4px; margin: 0; border-bottom: none; padding-bottom: 0; flex: 1;
+    }}
+    .topbar-actions {{ padding-bottom: 10px; flex-shrink: 0; }}
     .tab {{
       padding: 10px 18px; border: none; background: none; cursor: pointer;
       font-size: .92rem; font-weight: 600; color: var(--muted);
@@ -683,13 +763,28 @@ def build_html(
     }}
     .tab:hover {{ color: var(--text); }}
     .tab.active {{ color: var(--accent); border-bottom-color: var(--accent); }}
+    .tab-hero {{ display: none; margin-bottom: 20px; }}
+    .tab-hero.active {{ display: block; }}
     .tab-panel {{ display: none; }}
     .tab-panel.active {{ display: block; }}
+    .hero-runners {{ border-left-color: var(--accent); }}
+    .status-muted {{
+      font-size: .85rem; font-weight: 600; padding: 6px 12px; border-radius: 999px;
+      background: #eef2f7; color: var(--muted);
+    }}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="hero">
+    <div class="topbar">
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="gate">Gate</button>
+        <button type="button" class="tab" data-tab="runners">Runner labels</button>
+      </div>
+      <div class="topbar-actions">{refresh_btn}</div>
+    </div>
+
+    <div id="hero-gate" class="hero tab-hero active">
       <div class="hero-top">
         <h1>Postcommits gate</h1>
         <span class="status">{esc(mode.upper())}</span>
@@ -700,12 +795,17 @@ def build_html(
       <div class="meta-line">{esc(meta['check_time'])} · <a href="{esc(workflow_url)}">workflow run</a></div>
     </div>
 
-    {warn}
-
-    <div class="tabs">
-      <button type="button" class="tab active" data-tab="gate">Gate</button>
-      <button type="button" class="tab" data-tab="runners">Runner labels</button>
+    <div id="hero-runners" class="hero hero-runners tab-hero">
+      <div class="hero-top">
+        <h1>Runner labels</h1>
+        <span class="status-muted">{busy_runners} busy · {matrix_runners} runners · {label_count} labels</span>
+      </div>
+      <p class="hero-lead">Постоянные runner'ы по labels: что сейчас выполняется или idle. Generic labels (Linux, self-hosted, …) скрыты.</p>
+      <p class="hero-effect"><strong>YC:</strong> <a href="{esc(YC_ACTIVE_RUNNERS_URL)}" target="_blank" rel="noopener">Active runners</a> · имя runner'а → мониторинг 24h · run ID → GitHub</p>
+      <div class="meta-line">{esc(meta['check_time'])} · всего в репо: {meta['total_runners']} runner'ов</div>
     </div>
+
+    {warn}
 
     <div id="tab-gate" class="tab-panel active">
     <div class="grid">
@@ -782,8 +882,6 @@ def build_html(
 
     <div id="tab-runners" class="tab-panel">
       <div class="section">
-        <h2>Runners по labels<span class="section-head-links">· <a href="{esc(YC_ACTIVE_RUNNERS_URL)}" target="_blank" rel="noopener">Active runners</a></span></h2>
-        <p class="empty" style="margin-bottom:12px">Каждый label — отдельный столбец. Имя runner'а → мониторинг за 24h. WF run ID → GitHub. Сортировка: busy ↑ по runtime, затем idle.</p>
         {_runner_label_matrix_table(runner_label_view, runners_empty_text, meta["report_ts"])}
       </div>
     </div>
@@ -791,9 +889,11 @@ def build_html(
   <script>
     document.querySelectorAll('.tab').forEach((btn) => {{
       btn.addEventListener('click', () => {{
-        document.querySelectorAll('.tab, .tab-panel').forEach((el) => el.classList.remove('active'));
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.tab, .tab-panel, .tab-hero').forEach((el) => el.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+        document.getElementById('hero-' + tab).classList.add('active');
       }});
     }});
   </script>
@@ -886,6 +986,12 @@ def run(args: argparse.Namespace) -> int:
         else:
             raise
 
+    refresh_url = gate_refresh_trigger_url(
+        os.environ.get("APP_DOMAIN", ""),
+        repo,
+        os.environ.get("GATE_REPORT_URL", ""),
+    )
+
     meta = {
         "gate_mode": gate_mode,
         "decision": decision,
@@ -903,6 +1009,7 @@ def run(args: argparse.Namespace) -> int:
         "workflow_run": os.environ.get("GITHUB_RUN_ID", "local-dry-run"),
         "repository": repo,
         "report_ts": now_ts,
+        "refresh_trigger_url": refresh_url or "",
     }
 
     (report_dir / "queue.json").write_text(json.dumps(queue, indent=2), encoding="utf-8")

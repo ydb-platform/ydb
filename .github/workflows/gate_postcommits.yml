@@ -26,6 +26,7 @@ jobs:
           POSTCOMMIT_QUEUE_THRESHOLD: ${{ vars.POSTCOMMIT_QUEUE_THRESHOLD }}
           GATE_REPORT_DIR: ${{ runner.temp }}/gate-report
           GATE_REPORT_URL: ${{ vars.AWS_ENDPOINT }}/tmp-ydb-bucket/postcommits-gate/index.html
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
         run: python3 .github/scripts/gate_postcommits.py --report-dir "$GATE_REPORT_DIR"
 
       - name: Set up s3cmd

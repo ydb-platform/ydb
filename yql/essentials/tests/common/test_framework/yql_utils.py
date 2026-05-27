@@ -48,6 +48,14 @@ def get_param(name, default=None):
     return yatest.common.get_param(name, os.environ.get(name) or default)
 
 
+def get_secure_params(cfg):
+    return {
+        item[1]: item[2]
+        for item in cfg
+        if len(item) == 3 and item[0] == 'secure_param'
+    }
+
+
 def do_custom_query_check(res, sql_query):
     custom_check = re.search(r"/\* custom check:(.*)\*/", sql_query)
     if not custom_check:

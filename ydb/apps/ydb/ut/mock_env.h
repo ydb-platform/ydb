@@ -301,6 +301,16 @@ public:
         return TStringBuilder() << ConnectSchema << "://" << Address << ":" << Port;
     }
 
+    TString GetGrpcEndpoint() const {
+        UNIT_ASSERT_STRINGS_EQUAL(ConnectSchema, "grpc");
+        return GetEndpoint();
+    }
+
+    TString GetGrpcsEndpoint() const {
+        UNIT_ASSERT_STRINGS_EQUAL(ConnectSchema, "grpcs");
+        return GetEndpoint();
+    }
+
     TString GetAddress() const {
         return TStringBuilder() << Address << ":" << Port;
     }

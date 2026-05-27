@@ -895,7 +895,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectToken("token");
         RunCli({
             "-v",
-            "-e", GetEndpoint(),
+            "-e", GetGrpcsEndpoint(),
             "-d", GetDatabase(),
             "--ca-file", GetRootCAFile(),
             "scheme", "ls",
@@ -908,7 +908,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectFail();
         RunCli({
             "-v",
-            "-e", GetEndpoint(),
+            "-e", GetGrpcsEndpoint(),
             "-d", GetDatabase(),
             "--ca-file", GetWrongRootCAFile(),
             "scheme", "ls",
@@ -921,7 +921,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectFail();
         RunCli({
             "-v",
-            "-e", GetEndpoint(),
+            "-e", GetGrpcsEndpoint(),
             "-d", GetDatabase(),
             "scheme", "ls",
         },
@@ -934,7 +934,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectToken("token");
         RunCli({
             "-v",
-            "-e", GetEndpoint(),
+            "-e", GetGrpcsEndpoint(),
             "-d", GetDatabase(),
             "scheme", "ls",
         },
@@ -947,7 +947,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectFail();
         RunCli({
             "-v",
-            "-e", GetEndpoint(),
+            "-e", GetGrpcsEndpoint(),
             "-d", GetDatabase(),
             "scheme", "ls",
         },
@@ -966,7 +966,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                 ca-file: {ca_file}
         active_profile: active_test_profile
         )yaml",
-        "endpoint"_a = GetEndpoint(),
+        "endpoint"_a = GetGrpcsEndpoint(),
         "database"_a = GetDatabase(),
         "ca_file"_a = GetRootCAFile()
         );
@@ -1001,7 +1001,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         ExpectToken("token");
         RunCli({
             "-v",
-            "-e", GetEndpoint(),
+            "-e", GetGrpcEndpoint(),
             "-d", GetDatabase(),
             "--ca-file", GetRootCAFile(),
             "scheme", "ls",
@@ -1020,7 +1020,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                 ca-file: {ca_file}
         active_profile: active_test_profile
         )yaml",
-        "endpoint"_a = GetEndpoint(),
+        "endpoint"_a = GetGrpcEndpoint(),
         "database"_a = GetDatabase(),
         "ca_file"_a = GetRootCAFile()
         );

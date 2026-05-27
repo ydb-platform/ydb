@@ -48,6 +48,14 @@ The following describes the settings necessary to enable database node authentic
 
 ## Enabling Database Node Authentication and Authorization
 
+{% note info %}
+
+Starting from [version 25.2](../../../changelog-server.md#25-2), properly configured database node authentication is mandatory.
+
+Node registration in the cluster is impossible without successful authentication.
+
+{% endnote %}
+
 To enable mandatory database node authorization, the following configuration blocks must be added to the [cluster configuration file](../../../reference/configuration/index.md):
 
 1. At the root level of the configuration, add a `client_certificate_authorization` block specifying requirements for filling the "Subject" field of trusted certificates of connecting nodes, for example:

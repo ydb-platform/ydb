@@ -1,4 +1,4 @@
-# Обзор конфигурации V2
+﻿# Обзор конфигурации V2
 
 Для развёртывания кластера {{ ydb-short-name }}, добавления в кластер новых узлов и изменения параметров требуется конфигурация.
 
@@ -71,7 +71,7 @@ $ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.ya
 
 - [{#T}](../../deployment-options/ansible/initial-deployment.md);
 - [{#T}](../../deployment-options/kubernetes/initial-deployment.md);
-- [{#T}](../../deployment-options/manual/initial-deployment.md).
+- [{#T}](../../deployment-options/manual/initial-deployment/index.md).
 
 ### Обновление конфигурации {#update-config}
 

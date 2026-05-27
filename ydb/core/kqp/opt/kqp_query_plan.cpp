@@ -3430,10 +3430,14 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if (!(*stat)->GetInput().empty()) {
                     auto& inputStats = stats.InsertValue("Input", NJson::JSON_ARRAY);
                     for (auto input : (*stat)->GetInput()) {
-                        auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
                         auto stageGuid = stageIdToGuid.at(input.first);
-                        AFL_ENSURE(guidToPlaneId.contains(stageGuid));
-                        auto planNodeId = guidToPlaneId.at(stageGuid);
+                        auto planNodeIdIt = guidToPlaneId.find(stageGuid);
+                        if (planNodeIdIt == guidToPlaneId.end()) {
+                            AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                            continue;
+                        }
+                        auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
+                        auto planNodeId = planNodeIdIt->second;
                         inputInfo["Name"] = ToString(planNodeId);
                         if (input.second.HasPush()) {
                             FillAsyncAggrStat(inputInfo.InsertValue("Push", NJson::JSON_MAP), input.second.GetPush());
@@ -3449,15 +3453,21 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if (!(*stat)->GetOutput().empty()) {
                     auto& outputStats = stats.InsertValue("Output", NJson::JSON_ARRAY);
                     for (auto output : (*stat)->GetOutput()) {
-                        auto& outputInfo = outputStats.AppendValue(NJson::JSON_MAP);
+                        TString outputName;
                         if (output.first == 0) {
-                            outputInfo["Name"] = "RESULT";
+                            outputName = "RESULT";
                         } else {
                             auto stageGuid = stageIdToGuid.at(output.first);
-                            AFL_ENSURE(guidToPlaneId.contains(stageGuid));
-                            auto planNodeId = guidToPlaneId.at(stageGuid);
-                            outputInfo["Name"] = ToString(planNodeId);
+                            auto planNodeIdIt = guidToPlaneId.find(stageGuid);
+                            if (planNodeIdIt == guidToPlaneId.end()) {
+                                AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                                continue;
+                            }
+                            auto planNodeId = planNodeIdIt->second;
+                            outputName = ToString(planNodeId);
                         }
+                        auto& outputInfo = outputStats.AppendValue(NJson::JSON_MAP);
+                        outputInfo["Name"] = outputName;
                         if (output.second.HasPush()) {
                             FillAsyncAggrStat(outputInfo.InsertValue("Push", NJson::JSON_MAP), output.second.GetPush());
                         }

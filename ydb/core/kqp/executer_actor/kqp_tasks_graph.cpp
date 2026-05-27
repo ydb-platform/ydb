@@ -611,19 +611,26 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
     }
 
     auto [type, value] = *paramPtr;
-    if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::List) {
-        return {ResolveFullTextQueryToken(token, stageInfo)};
-    }
-
     TVector<TString> result;
 
-    NUdf::TUnboxedValue item;
-    auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
-    auto iter = value.GetListIterator();
-    while (iter.Next(item)) {
-        TString currentToken = baseToken;
-        AppendMKQLValueToToken(currentToken, itemType, std::move(item));
-        result.emplace_back(std::move(currentToken));
+    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
+        NUdf::TUnboxedValue item;
+        auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
+        auto iter = value.GetListIterator();
+        while (iter.Next(item)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, itemType, std::move(item));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple) {
+        auto* tupleType = static_cast<NKikimr::NMiniKQL::TTupleType*>(type);
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, tupleType->GetElementType(i), value.GetElement(i));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else {
+        return {ResolveFullTextQueryToken(token, stageInfo)};
     }
 
     return result.empty() ? TVector<TString>{baseToken} : result;

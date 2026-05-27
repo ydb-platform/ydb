@@ -558,13 +558,25 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         const auto& param = collection.Cast<TCoParameter>();
         const TTypeAnnotationNode* paramTypeAnn = param.Ref().GetTypeAnn();
 
-        if (!paramTypeAnn || paramTypeAnn->GetKind() != ETypeAnnotationKind::List) {
+        if (!paramTypeAnn) {
             return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
         }
 
-        const auto* listItemType = paramTypeAnn->Cast<TListExprType>()->GetItemType();
-        if (!IsSupportedJsonParamType(listItemType)) {
-            return MakeCollectError(ctx, param.Pos(), "List parameter item type is not supported for JSON index");
+        if (paramTypeAnn->GetKind() == ETypeAnnotationKind::List) {
+            const auto* listItemType = paramTypeAnn->Cast<TListExprType>()->GetItemType();
+            if (!IsSupportedJsonParamType(listItemType)) {
+                return MakeCollectError(ctx, param.Pos(), "List parameter item type is not supported for JSON index");
+            }
+        } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Tuple) {
+            const auto* tupleType = paramTypeAnn->Cast<TTupleExprType>();
+            for (const auto* itemType : tupleType->GetItems()) {
+                if (!IsSupportedJsonParamType(itemType)) {
+                    return MakeCollectError(ctx, param.Pos(),
+                        "Tuple parameter item type is not supported for JSON index");
+                }
+            }
+        } else {
+            return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
         }
 
         auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue,

@@ -362,7 +362,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
     Y_ABORT_UNLESS(record.HasVDiskID());
     TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
     TVDiskIdShort shortId(vdisk);
-    ui32 orderNumber = Info->GetOrderNumber(shortId);
+    ui32 orderNumber = GetOrderNumber(shortId);
     const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
 
     const NKikimrProto::EReplyStatus status = record.GetStatus();

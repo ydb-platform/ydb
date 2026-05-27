@@ -114,14 +114,20 @@ def gate_refresh_trigger_url(app_domain: str, repository: str, return_url: str) 
     )
 
 
-def gate_manual_open_trigger_url(app_domain: str, repository: str, return_url: str) -> str | None:
+def gate_manual_trigger_url(
+    app_domain: str, repository: str, return_url: str, action: str
+) -> str | None:
     return gate_workflow_trigger_url(
         app_domain,
         repository,
         MANUAL_GATE_WORKFLOW_ID,
         return_url,
-        {"action": "open"},
+        {"action": action},
     )
+
+
+def gate_manual_open_trigger_url(app_domain: str, repository: str, return_url: str) -> str | None:
+    return gate_manual_trigger_url(app_domain, repository, return_url, "open")
 
 
 def gate_workflow_trigger_url(
@@ -665,15 +671,28 @@ def build_html(
         meta["repository"],
         report_url,
     )
-    open_gate_url = gate_manual_open_trigger_url(
+    open_gate_url = gate_manual_trigger_url(
         os.environ.get("APP_DOMAIN", ""),
         meta["repository"],
         report_url,
+        "open",
+    )
+    close_gate_url = gate_manual_trigger_url(
+        os.environ.get("APP_DOMAIN", ""),
+        meta["repository"],
+        report_url,
+        "close",
     )
     open_gate_btn = (
         f'<a class="open-gate-btn" href="{esc(open_gate_url)}" target="_blank" rel="noopener">'
         f"Открыть gate</a>"
         if open_gate_url
+        else ""
+    )
+    close_gate_btn = (
+        f'<a class="close-gate-btn" href="{esc(close_gate_url)}" target="_blank" rel="noopener">'
+        f"Закрыть gate</a>"
+        if close_gate_url
         else ""
     )
     refresh_btn = (
@@ -741,6 +760,11 @@ def build_html(
       background: var(--accent); color: #fff; text-decoration: none; white-space: nowrap;
     }}
     .open-gate-btn:hover {{ background: #0550ae; color: #fff; }}
+    .close-gate-btn {{
+      font-size: .85rem; font-weight: 600; padding: 8px 16px; border-radius: 999px;
+      background: #cf222e; color: #fff; text-decoration: none; white-space: nowrap;
+    }}
+    .close-gate-btn:hover {{ background: #a40e26; color: #fff; }}
     .hero-lead {{ font-size: .95rem; margin: 0 0 6px; }}
     .hero-effect {{ color: var(--muted); margin: 0; font-size: .92rem; }}
     .meta-line {{ margin-top: 11px; font-size: .82rem; color: var(--muted); }}
@@ -898,7 +922,7 @@ def build_html(
         <button type="button" class="tab active" data-tab="gate">Gate</button>
         <button type="button" class="tab" data-tab="runners">Runner labels</button>
       </div>
-      <div class="topbar-actions">{open_gate_btn}{refresh_btn}</div>
+      <div class="topbar-actions">{open_gate_btn}{close_gate_btn}{refresh_btn}</div>
     </div>
 
     <div id="hero-gate" class="hero tab-hero active">
@@ -1109,10 +1133,17 @@ def run(args: argparse.Namespace) -> int:
         repo,
         os.environ.get("GATE_REPORT_URL", ""),
     )
-    open_gate_url = gate_manual_open_trigger_url(
+    open_gate_url = gate_manual_trigger_url(
         os.environ.get("APP_DOMAIN", ""),
         repo,
         os.environ.get("GATE_REPORT_URL", ""),
+        "open",
+    )
+    close_gate_url = gate_manual_trigger_url(
+        os.environ.get("APP_DOMAIN", ""),
+        repo,
+        os.environ.get("GATE_REPORT_URL", ""),
+        "close",
     )
 
     meta = {
@@ -1134,6 +1165,7 @@ def run(args: argparse.Namespace) -> int:
         "report_ts": now_ts,
         "refresh_trigger_url": refresh_url or "",
         "open_gate_trigger_url": open_gate_url or "",
+        "close_gate_trigger_url": close_gate_url or "",
     }
 
     (report_dir / "queue.json").write_text(json.dumps(queue, indent=2), encoding="utf-8")

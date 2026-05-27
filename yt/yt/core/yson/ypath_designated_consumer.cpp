@@ -15,6 +15,7 @@ namespace NYT::NYson {
 
 class TYPathDesignatedYsonConsumer
     : public TForwardingYsonConsumer
+    , public IFlushableYsonConsumer
 {
 public:
     TYPathDesignatedYsonConsumer(
@@ -26,38 +27,57 @@ public:
         , Tokenizer_(Path_)
         , UnderlyingConsumer_(underlyingConsumer)
     {
-        Tokenizer_.Skip(NYPath::ETokenType::StartOfStream);
+        InitTokenizer();
+        ForwardIfPathIsExhausted();
+    }
+
+    void Flush() override
+    {
+        // Emit a single fallback entity if the path missed and the underlying
+        // consumer hasn't received anything from this document yet.
+        if (State_ != EConsumerState::ValueForwarded &&
+            MissingPathMode_ == EMissingPathMode::EmitEntity)
+        {
+            UnderlyingConsumer_->OnEntity();
+        }
+        // Drop any pending forwarding state from the base class and reset our
+        // own state so the consumer can be reused for the next YSON document.
+        SetState({});
+        State_ = EConsumerState::FollowingPath;
+        CurrentListItemIndex_ = -1;
+        Tokenizer_.Reset(Path_);
+        InitTokenizer();
         ForwardIfPathIsExhausted();
     }
 
     void OnMyStringScalar(TStringBuf /*value*/) override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyInt64Scalar(i64 /*value*/) override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyUint64Scalar(ui64 /*value*/) override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyDoubleScalar(double /*value*/) override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyBooleanScalar(bool /*value*/) override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyEntity() override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyBeginList() override
@@ -70,16 +90,17 @@ public:
 
     void OnMyListItem() override
     {
-        if (State_ == EConsumerState::ConsumptionCompleted) {
+        if (State_ != EConsumerState::FollowingPath) {
             return;
         }
 
         ++CurrentListItemIndex_;
         switch (Tokenizer_.GetType()) {
-            case NYPath::ETokenType::Literal:
+            case NYPath::ETokenType::Literal: {
                 int indexInPath;
                 if (!TryFromString(Tokenizer_.GetToken(), indexInPath)) {
-                    CheckAndThrowResolveError();
+                    HandleMissingPath();
+                    return;
                 }
                 if (indexInPath == CurrentListItemIndex_) {
                     Tokenizer_.Advance();
@@ -88,6 +109,7 @@ public:
                     SkipSubTree();
                 }
                 break;
+            }
 
             default:
                 Tokenizer_.ThrowUnexpected();
@@ -96,7 +118,7 @@ public:
 
     void OnMyEndList() override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyBeginMap() override
@@ -108,7 +130,7 @@ public:
 
     void OnMyKeyedItem(TStringBuf key) override
     {
-        if (State_ == EConsumerState::ConsumptionCompleted) {
+        if (State_ != EConsumerState::FollowingPath) {
             return;
         }
 
@@ -125,7 +147,7 @@ public:
                 if (MissingPathMode_ == EMissingPathMode::ThrowError) {
                     ThrowNoAttributes();
                 }
-                State_ = EConsumerState::ConsumptionCompleted;
+                State_ = EConsumerState::PathMissed;
                 break;
             default:
                 Tokenizer_.ThrowUnexpected();
@@ -134,12 +156,12 @@ public:
 
     void OnMyEndMap() override
     {
-        CheckAndThrowResolveError();
+        HandleMissingPath();
     }
 
     void OnMyBeginAttributes() override
     {
-        if (State_ == EConsumerState::ConsumptionCompleted) {
+        if (State_ != EConsumerState::FollowingPath) {
             return;
         }
 
@@ -152,7 +174,7 @@ public:
                     UnderlyingConsumer_,
                     [&] {
                         UnderlyingConsumer_->OnEndMap();
-                        State_= EConsumerState::ConsumptionCompleted;
+                        State_ = EConsumerState::ValueForwarded;
                     },
                     EYsonType::MapFragment);
             }
@@ -167,18 +189,27 @@ public:
 private:
     enum class EConsumerState
     {
+        //! Still navigating along the path.
         FollowingPath,
-        ConsumptionCompleted,
+        //! Path matched; the value has been (partially) forwarded.
+        ValueForwarded,
+        //! Path missed; no value will be emitted from the input itself.
+        PathMissed,
     };
 
     const NYPath::TYPath Path_;
     const EMissingPathMode MissingPathMode_;
 
     NYPath::TTokenizer Tokenizer_;
-    IYsonConsumer* UnderlyingConsumer_;
+    IYsonConsumer* const UnderlyingConsumer_;
     TNullYsonConsumer NullConsumer_;
     EConsumerState State_ = EConsumerState::FollowingPath;
     int CurrentListItemIndex_ = -1;
+
+    void InitTokenizer()
+    {
+        Tokenizer_.Skip(NYPath::ETokenType::StartOfStream);
+    }
 
     void ThrowResolveError()
     {
@@ -192,20 +223,21 @@ private:
         THROW_ERROR_EXCEPTION("Path %Qv has no attributes", Tokenizer_.GetPrefix());
     }
 
-    void CheckAndThrowResolveError()
+    void HandleMissingPath()
     {
-        if (State_ == EConsumerState::FollowingPath) {
-            if (MissingPathMode_ == EMissingPathMode::ThrowError) {
-                ThrowResolveError();
-            }
-            State_ = EConsumerState::ConsumptionCompleted;
+        if (State_ != EConsumerState::FollowingPath) {
+            return;
         }
+        if (MissingPathMode_ == EMissingPathMode::ThrowError) {
+            ThrowResolveError();
+        }
+        State_ = EConsumerState::PathMissed;
     }
 
     void ForwardIfPathIsExhausted()
     {
         if (Tokenizer_.GetType() == NYPath::ETokenType::EndOfStream) {
-            Forward(UnderlyingConsumer_, [&] { State_ = EConsumerState::ConsumptionCompleted; });
+            Forward(UnderlyingConsumer_, [&] { State_ = EConsumerState::ValueForwarded; });
         }
     }
 
@@ -217,7 +249,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<IYsonConsumer> CreateYPathDesignatedConsumer(
+std::unique_ptr<IFlushableYsonConsumer> CreateYPathDesignatedConsumer(
     NYPath::TYPath path,
     EMissingPathMode missingPathMode,
     IYsonConsumer* underlyingConsumer)

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: mdit-py-plugins
-Version: 0.5.0
+Version: 0.6.0
 Summary: Collection of plugins for markdown-it-py
 Keywords: markdown,markdown-it,lexer,parser,development
 Author-email: Chris Sewell <chrisj_sewell@hotmail.com>
@@ -28,6 +28,7 @@ Requires-Dist: coverage ; extra == "testing"
 Requires-Dist: pytest ; extra == "testing"
 Requires-Dist: pytest-cov ; extra == "testing"
 Requires-Dist: pytest-regressions ; extra == "testing"
+Requires-Dist: pytest-timeout ; extra == "testing"
 Project-URL: Documentation, https://mdit-py-plugins.readthedocs.io
 Project-URL: Homepage, https://github.com/executablebooks/mdit-py-plugins
 Provides-Extra: code-style

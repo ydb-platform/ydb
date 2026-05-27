@@ -153,7 +153,7 @@ message TFeatureFlags {
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
-    optional bool EnableColumnStatistics = 130 [default = false];
+    optional bool EnableColumnStatistics = 130 [default = true];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = true];
@@ -298,10 +298,13 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryDisposition = 260 [default = true];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
-    optional bool EnableLocalMinMaxIndex = 262 [default = false];
+    optional bool EnableLocalMinMaxIndex = 262 [default = true];
     optional bool DisableOnlineRO = 263 [default = false];
     optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
+    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
+    optional bool EnableTabletDevUiSecurePath = 269 [default = false];
+    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = false];
 }

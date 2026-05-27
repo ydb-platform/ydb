@@ -194,6 +194,7 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+            CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
@@ -254,6 +255,7 @@ namespace {
             hFunc(TEvRead, handleQuery)
             hFunc(TEvSyncWithPersistentBuffer, handleQuery)
             hFunc(TEvSyncWithDDisk, handleQuery)
+            hFunc(TEvDeleteTabletChunks, handleQuery)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)

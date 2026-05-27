@@ -297,6 +297,7 @@ public:
 
         context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo, splitStartIdx);
         context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+        context.SS->ProcessForcedCompactionOnSplitMerge(db, tableId, allSrcShardIdxs, newShardsIdx);
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }

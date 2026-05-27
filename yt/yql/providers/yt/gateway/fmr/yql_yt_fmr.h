@@ -32,12 +32,17 @@ struct TFmrServices: public TYtBaseServices {
     IVanillaExternalPeerTrackerPtr PeerTracker;
     TMaybe<TString> VanillaRemoteId; // "cluster/operationId" for progress RemoteId, set when using vanilla peer tracker
     TVanillaFmrCoordinatorClientSettings VanillaCoordinatorClientSettings;
+    TMaybe<TString> YtServerForUpload;
+    TString FmrJobBinaryPath;
+    TString FmrJobBinaryMd5;
     TString TableDataServiceDiscoveryFilePath;
     IYtJobService::TPtr YtJobService;
     IYtCoordinatorService::TPtr YtCoordinatorService;
     TFmrUserJobLauncher::TPtr JobLauncher;
     bool DisableLocalFmrWorker = false;
     TString FmrOperationSpecFilePath;
+    TString CoordinatorYsonPath;
+    TString WorkerYsonPath;
     IFileMetadataService::TPtr FileMetadataService;
     IFileUploadService::TPtr FileUploadService;
     IFmrJobPreparer::TPtr JobPreparer;

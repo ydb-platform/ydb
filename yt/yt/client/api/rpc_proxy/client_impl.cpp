@@ -2233,6 +2233,30 @@ TFuture<void> TClient::MasterExitReadOnly(const TMasterExitReadOnlyOptions& opti
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::FreezeHydraPeer(
+    NHydra::TCellId /*cellId*/,
+    const std::string& /*address*/,
+    const TFreezeHydraPeerOptions& /*options*/)
+{
+    ThrowUnimplemented("FreezeHydraPeer");
+}
+
+TFuture<void> TClient::TruncateChangelog(
+    NHydra::TCellId /*cellId*/,
+    const std::string& /*address*/,
+    const TTruncateChangelogOptions& /*options*/)
+{
+    ThrowUnimplemented("TruncateChangelog");
+}
+
+TFuture<void> TClient::ScheduleRestart(
+    NHydra::TCellId /*cellId*/,
+    const std::string& /*address*/,
+    const TScheduleRestartOptions& /*options*/)
+{
+    ThrowUnimplemented("ScheduleRestart");
+}
+
 TFuture<void> TClient::ResetDynamicallyPropagatedMasterCells(
     const TResetDynamicallyPropagatedMasterCellsOptions& options)
 {

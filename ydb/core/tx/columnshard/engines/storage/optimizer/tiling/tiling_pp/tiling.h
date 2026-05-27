@@ -43,20 +43,20 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
     };
 
     THashMap<ui64, TPortionPlacementForDebug> InternalLevel;
-    THashMap<ui64, typename TPortion::TConstPtr> PortionRegistry;
+    THashMap<ui64, typename TPortion::TPtr> PortionRegistry;
     THashMap<ui64, TInstant> InsertTimeByPortionId;
     TSet<std::pair<TInstant, ui64>> PortionsByTime;
     bool FirstLoad = true;
 
-    void InitialAddPortions(const std::vector<typename TPortion::TConstPtr>& add) {
+    void InitialAddPortions(const std::vector<typename TPortion::TPtr>& add) {
         auto comparator = TPortionByIndexKeyEndComparator<TKey, TPortion>();
 
         auto sortedPortions = add;
         Sort(sortedPortions, comparator);
 
-        std::vector<typename TPortion::TConstPtr> toLastLevel;
-        std::vector<typename TPortion::TConstPtr> toAccumulator;
-        std::vector<typename TPortion::TConstPtr> toMiddleLevels;
+        std::vector<typename TPortion::TPtr> toLastLevel;
+        std::vector<typename TPortion::TPtr> toAccumulator;
+        std::vector<typename TPortion::TPtr> toMiddleLevels;
         std::optional<TKey> lastKey;
 
         for (auto portion : sortedPortions) {
@@ -85,7 +85,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
     }
 
-    void ModifyPortions(const std::vector<typename TPortion::TConstPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
+    void ModifyPortions(const std::vector<typename TPortion::TPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
         for (const auto& p : remove) {
             this->RemovePortion(p);
         }
@@ -110,7 +110,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
     }
 
-    void DoAddPortion(typename TPortion::TConstPtr p) override {
+    void DoAddPortion(typename TPortion::TPtr p) override {
         switch (p->GetProduced()) {
             case NPortion::EVICTED:
                 // Evicted portions (e.g. tier deletion) are not tracked by the optimizer.
@@ -133,7 +133,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         Place(p, TInstant::Now());
     }
 
-    void Place(typename TPortion::TConstPtr p, TInstant now, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt) {
+    void Place(typename TPortion::TPtr p, TInstant now, bool accumulatorAllowed = true, std::optional<ui8> forcedLevel = std::nullopt) {
         const ui64 portionId = p->GetPortionId();
         PortionRegistry[portionId] = p;
         ui8 level = 0;
@@ -231,7 +231,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         const TDuration wait = Settings.AgingSettings.PromoteTime;
         const ui64 maxCount = Settings.AgingSettings.MaxPortionPromotion;
 
-        std::vector<typename TPortion::TConstPtr> expired;
+        std::vector<typename TPortion::TPtr> expired;
         expired.reserve(std::min<size_t>(maxCount, PortionsByTime.size()));
         for (auto it = PortionsByTime.begin(); expired.size() < maxCount && it != PortionsByTime.end() && it->first + wait <= currentInstant;
              ++it) {
@@ -266,25 +266,19 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         }
     }
 
-    std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         const auto accumulatorPriority = Accumulator.DoGetUsefulMetric();
         const auto lastLevelPriority = LastLevel.DoGetUsefulMetric();
         const auto [middleLevelsPriority, maxMiddleLevel] = GetMiddleUsefulMetric();
 
-        TOptimizationPriority chosenPriority = TOptimizationPriority::Zero();
-        std::vector<CompactionTask<TKey, TPortion>> tasks;
         if (lastLevelPriority < accumulatorPriority && middleLevelsPriority < accumulatorPriority) {
-            chosenPriority = accumulatorPriority;
-            tasks = Accumulator.GetOptimizationTasks(isLocked);
-        } else if (lastLevelPriority < middleLevelsPriority) {
-            chosenPriority = middleLevelsPriority;
-            tasks = MiddleLevels.at(maxMiddleLevel).GetOptimizationTasks(isLocked);
-        } else {
-            chosenPriority = lastLevelPriority;
-            tasks = LastLevel.GetOptimizationTasks(isLocked);
+            return Accumulator.GetNextOptimizationTask(isLocked);
         }
-        return tasks;
+        if (lastLevelPriority < middleLevelsPriority) {
+            return MiddleLevels.at(maxMiddleLevel).GetNextOptimizationTask(isLocked);
+        }
+        return LastLevel.GetNextOptimizationTask(isLocked);
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

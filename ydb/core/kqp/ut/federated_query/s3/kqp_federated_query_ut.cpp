@@ -3541,15 +3541,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryWithReplicatedS3Write) {
+    Y_UNIT_TEST_TWIN(ExecuteQueryWithReplicatedS3Write, EnableIndexStreamWrite) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
-        const TString bucket = "test_bucket_s3_replicate";
+        const TString bucket = TStringBuilder() << "test_bucket_s3_replicate" << EnableIndexStreamWrite;
         const TString object = "object/test_object";
 
         CreateBucketWithObject(bucket, object, "test-data");
 
-        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto appConfig = NKikimrConfig::TAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
         auto db = kikimr->GetQueryClient();
 
         {

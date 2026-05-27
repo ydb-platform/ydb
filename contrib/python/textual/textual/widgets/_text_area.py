@@ -118,6 +118,7 @@ TextArea {
     padding: 0 1;
     color: $foreground;
     background: $surface;
+    pointer: text;
     &.-textual-compact {
         border: none !important;
     }
@@ -140,6 +141,7 @@ TextArea {
 
     & .text-area--selection {
         background: $input-selection-background;
+        color: $input-selection-foreground;
     }
 
     & .text-area--matching-bracket {
@@ -159,6 +161,11 @@ TextArea {
     }
 
     &:ansi {
+        .text-area--cursor {
+            color: $input-cursor-foreground;
+            background: $input-cursor-background;
+            text-style: reverse;
+        }
         & .text-area--selection {
             background: transparent;
             text-style: reverse;
@@ -266,7 +273,7 @@ TextArea {
             "ctrl+f", "delete_word_right", "Delete right to start of word", show=False
         ),
         Binding("ctrl+x", "cut", "Cut", show=False),
-        Binding("ctrl+c", "copy", "Copy", show=False),
+        Binding("ctrl+c,super+c", "copy", "Copy", show=False),
         Binding("ctrl+v", "paste", "Paste", show=False),
         Binding(
             "ctrl+u", "delete_to_start_of_line", "Delete to line start", show=False

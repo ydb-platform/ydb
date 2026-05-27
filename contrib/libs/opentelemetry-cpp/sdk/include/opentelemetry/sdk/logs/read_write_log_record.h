@@ -187,18 +187,17 @@ public:
                                    &instrumentation_scope) noexcept override;
 
 private:
-  // Default values are set by the respective data structures' constructors for all fields,
-  // except the severity field, which must be set manually (an enum with no default value).
-  opentelemetry::logs::Severity severity_;
-  const opentelemetry::sdk::resource::Resource *resource_;
-  const opentelemetry::sdk::instrumentationscope::InstrumentationScope *instrumentation_scope_;
+  opentelemetry::logs::Severity severity_{opentelemetry::logs::Severity::kInvalid};
+  const opentelemetry::sdk::resource::Resource *resource_{nullptr};
+  const opentelemetry::sdk::instrumentationscope::InstrumentationScope *instrumentation_scope_{
+      nullptr};
 
   std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> attributes_map_;
   opentelemetry::sdk::common::OwnedAttributeValue body_;
   opentelemetry::common::SystemTimestamp timestamp_;
   opentelemetry::common::SystemTimestamp observed_timestamp_;
 
-  int64_t event_id_;
+  int64_t event_id_{0};
   std::string event_name_;
 
   // We do not pay for trace state when not necessary

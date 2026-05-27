@@ -980,7 +980,7 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    YQL_ENSURE(false, "Can't tranlsate ISource, maybe it is used in a scalar context");
+    YQL_ENSURE(false, "Can't translate ISource, maybe it is used in a scalar context");
     Y_UNUSED(ctx);
     return nullptr;
 }

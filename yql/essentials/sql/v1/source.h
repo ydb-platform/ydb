@@ -170,7 +170,8 @@ struct TJoinLinkSettings {
         SortedMerge,
         StreamLookup,
         ForceMap,
-        ForceGrace
+        ForceGrace,
+        ForceStar
     };
     EStrategy Strategy = EStrategy::Default;
     TVector<TString> Values;

@@ -524,6 +524,11 @@ TString TTabletInfo::GetLogPrefix() const {
     return Hive.GetLogPrefix();
 }
 
+void TTabletInfo::AddRestartTimestamp(TInstant now) {
+    Statistics.AddRestartTimestamp(now.MilliSeconds());
+    ActualizeTabletStatistics(now);
+}
+
 void TTabletInfo::ActualizeTabletStatistics(TInstant now) {
     TInstant barierTime = now - Hive.GetTabletRestartWatchPeriod();
     Hive.ActualizeRestartStatistics(*Statistics.MutableRestartTimestamp(), barierTime.MilliSeconds());

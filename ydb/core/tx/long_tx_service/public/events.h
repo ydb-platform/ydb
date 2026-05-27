@@ -40,14 +40,14 @@ namespace NLongTxService {
             EvCollectSnapshotsResult,
             EvPropagateSnapshots,
             EvPropagateSnapshotsResult,
+            EvRemoteSnapshotsPrefill,
+            EvRemoteSnapshotsPrefillResult,
             EvWaitingLockAdd,
             EvWaitingLockRemove,
             EvWaitingLockDeadlock,
             EvUpdateLockWaitEdges,
             EvGetLockWaitGraph,
             EvGetLockWaitGraphResult,
-            EvRemoteSnapshotsPrefill,
-            EvRemoteSnapshotsPrefillResult,
             EvEnd,
         };
 

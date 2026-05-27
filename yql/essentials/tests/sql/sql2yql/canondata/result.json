@@ -5788,6 +5788,13 @@
             "uri": "https://{canondata_backend}/1942173/c3b3585ee1af3d335e3ea82d5dc3829d99a10687/resource.tar.gz#test_sql2yql.test_linear-dyn_linear_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-fail_changed_scope]": [
+        {
+            "checksum": "b003e3808b18971a49cbb071fd796190",
+            "size": 1488,
+            "uri": "https://{canondata_backend}/1600758/8f6b29b445ef64bbc76f367c8a5539b5ee202872/resource.tar.gz#test_sql2yql.test_linear-fail_changed_scope_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-fail_dyn_linear]": [
         {
             "checksum": "2fec0db4b26fc1418b515244b2e242e0",
@@ -5940,6 +5947,13 @@
             "checksum": "a21c2749fcd9fc712341db241cecefb3",
             "size": 1304,
             "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_remove_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_scope]": [
+        {
+            "checksum": "eccb8509ae906f24eb29109e08bf6cb5",
+            "size": 1248,
+            "uri": "https://{canondata_backend}/1600758/8f6b29b445ef64bbc76f367c8a5539b5ee202872/resource.tar.gz#test_sql2yql.test_linear-mutdict_scope_/sql.yql"
         }
     ],
     "test_sql2yql.test[linear-mutdict_update]": [
@@ -10100,11 +10114,18 @@
             "uri": "https://{canondata_backend}/1942525/e20b628f919c38aabdbb37b6f67f0541495a8fc5/resource.tar.gz#test_sql2yql.test_select_yql-window_fn_rownumber_0_desc_/sql.yql"
         }
     ],
-    "test_sql2yql.test[select_yql-window_frame]": [
+    "test_sql2yql.test[select_yql-window_order_by_range_frame]": [
         {
-            "checksum": "da3b99ec74b8c7db99cb5f71d1be5ae2",
-            "size": 8150,
-            "uri": "https://{canondata_backend}/1881367/3620f00662dba64d30bf3c93837b76b97c3a5f1f/resource.tar.gz#test_sql2yql.test_select_yql-window_frame_/sql.yql"
+            "checksum": "8bb7b70177da928537c33577641da90e",
+            "size": 13099,
+            "uri": "https://{canondata_backend}/1773845/e7a7cc669a6454b75022f11843967126ae2e0bca/resource.tar.gz#test_sql2yql.test_select_yql-window_order_by_range_frame_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-window_order_by_rows_frame]": [
+        {
+            "checksum": "47838b00d58d248462e6c2555d022560",
+            "size": 13589,
+            "uri": "https://{canondata_backend}/1773845/e7a7cc669a6454b75022f11843967126ae2e0bca/resource.tar.gz#test_sql2yql.test_select_yql-window_order_by_rows_frame_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-window_pg_tutorial_1]": [
@@ -16139,6 +16160,11 @@
             "uri": "file://test_sql_format.test_linear-dyn_linear_/formatted.sql"
         }
     ],
+    "test_sql_format.test[linear-fail_changed_scope]": [
+        {
+            "uri": "file://test_sql_format.test_linear-fail_changed_scope_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[linear-fail_dyn_linear]": [
         {
             "uri": "file://test_sql_format.test_linear-fail_dyn_linear_/formatted.sql"
@@ -16247,6 +16273,11 @@
     "test_sql_format.test[linear-mutdict_remove]": [
         {
             "uri": "file://test_sql_format.test_linear-mutdict_remove_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_scope]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_scope_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-mutdict_update]": [
@@ -17719,9 +17750,14 @@
             "uri": "file://test_sql_format.test_select_yql-window_fn_rownumber_0_desc_/formatted.sql"
         }
     ],
-    "test_sql_format.test[select_yql-window_frame]": [
+    "test_sql_format.test[select_yql-window_order_by_range_frame]": [
         {
-            "uri": "file://test_sql_format.test_select_yql-window_frame_/formatted.sql"
+            "uri": "file://test_sql_format.test_select_yql-window_order_by_range_frame_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-window_order_by_rows_frame]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-window_order_by_rows_frame_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-window_pg_tutorial_1]": [

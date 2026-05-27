@@ -681,7 +681,9 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        default_configs_path = spec_args.get('DEFAULT_CONFIGS')[0]
+        if not (default_configs_path := spec_args.get('DEFAULT_CONFIGS')):
+            return
+        default_configs_path = default_configs_path[0]
         assert_file_exists(unit, default_configs_path)
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
@@ -1210,6 +1212,14 @@ class TsCheckType:
         return spec_args.get("TS_CHECK_TYPE", None)
 
 
+class TsCheckHasCoverage:
+    KEY = 'TS-CHECK-HAS-COVERAGE'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return spec_args.get("TS_CHECK_HAS_COVERAGE", "no")
+
+
 class TestedProjectFilename:
     KEY = 'TESTED-PROJECT-FILENAME'
 
@@ -1516,6 +1526,23 @@ class TestRecipes:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return prepare_recipes(unit.get_subst("TEST_RECIPES_VALUE"))
+
+
+class TestPersistentRecipes:
+    KEY = 'TEST-PERSISTENT-RECIPES'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        data = unit.get_subst("TEST_PERSISTENT_RECIPES_VALUE")
+        if not data or not data.strip():
+            return None
+        # Replace delimiter token with newline — same pattern as USE_RECIPE/format_recipes.
+        # Each USE_PERSISTENT_RECIPE call becomes one line; paths within a call are
+        # space-separated on that line.
+        formatted = data.replace('"USE_PERSISTENT_RECIPE_DELIM"', "\n")
+        if not formatted.strip():
+            return None
+        return base64.b64encode(formatted.encode('utf-8'))
 
 
 class TestRunnerBin:

@@ -1,13 +1,17 @@
+#include "kqp_opt.h"
+
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
-#include "yql/essentials/core/type_ann/type_ann_impl.h"
+#include <yql/essentials/core/type_ann/type_ann_impl.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
@@ -2764,8 +2768,7 @@ TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& c
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    if (auto maybeForceOptional = mapElementLambda.ForceOptional();
-        maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True" && !lambdaType->IsOptionalOrNull()) {
+    if (mapElementLambda.ForceOptional().StringValue() == "True" && !lambdaType->IsOptionalOrNull()) {
         lambdaType = ctx.MakeType<TOptionalExprType>(lambdaType);
     }
 
@@ -2945,10 +2948,26 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateOpUnionAll(const TExprNode::TPtr& input, TExprContext& ctx) {
-    Y_UNUSED(ctx);
     auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
-    // TODO: Add sanity checks.
-    input->SetTypeAnn(leftInputType);
+    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+    auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto leftItems = leftStructType->GetItems();
+    auto rightItems = rightStructType->GetItems();
+    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for Union all.");
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
+        if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
+            newItemTypes.push_back(leftItems[i]);
+        } else {
+            newItemTypes.push_back(rightItems[i]);
+        }
+    }
+
+    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    input->SetTypeAnn(resultType);
+
     return TStatus::Ok;
 }
 

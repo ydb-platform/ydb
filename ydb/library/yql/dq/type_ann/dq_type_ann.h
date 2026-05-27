@@ -3,10 +3,12 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/providers/common/transform/yql_visit.h>
 
-namespace NYql::NDq {
+namespace NYql {
+
+class TVisitorTransformerBase;
+
+namespace NDq {
 
 IGraphTransformer::TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx);
@@ -88,4 +90,6 @@ const TTypeAnnotationNode* GetDqConnectionType(const NYql::NNodes::TDqConnection
 
 TString PrintDqStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
 
-} // namespace NYql::NDq
+} // namespace NDq
+
+} // namespace NYql

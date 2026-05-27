@@ -128,6 +128,8 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
     using TBase = ICompactionUnit<TKey, TPortion>;
     using TLevelCounters = typename TBase::TLevelCounters;
     TAccumulatorSettings Settings;
+    TInstant LastAdd;
+    TDuration BoredTime = TDuration::Seconds(2);
 
     Accumulator(TAccumulatorSettings settings, const TCounters& counters)
         : TBase(counters.GetAccumulatorCounters(0))
@@ -139,7 +141,13 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         return;
     }
 
+<<<<<<< HEAD
     void DoAddPortion(typename TPortion::TConstPtr p) override {
+=======
+    void DoAddPortion(typename TPortion::TPtr p) override {
+        AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
+        LastAdd = TInstant::Now();
+>>>>>>> 3762dac960c (tiling++ by default (#40146))
         Portions.insert(p);
         TotalBlobBytes += p->GetTotalBlobBytes();
         this->Counters.Portions->SetHeight(Portions.size());
@@ -153,10 +161,16 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
     std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+<<<<<<< HEAD
         if (TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
             return {};
+=======
+        if (TInstant::Now() - LastAdd < BoredTime && TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
+            return std::nullopt;
+>>>>>>> 3762dac960c (tiling++ by default (#40146))
         }
         CompactionTask<TKey, TPortion> result;
+        result.TargetLevel = 0;
         ui64 currentBlobBytes = 0;
         for (auto it : Portions) {
             if (isLocked(it)) {
@@ -169,6 +183,13 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
                 return { result };
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (result.Portions.size() > 1) {
+            return { result };
+        }
+>>>>>>> 3762dac960c (tiling++ by default (#40146))
         return {};
     }
 

@@ -105,15 +105,10 @@ TDirectBlockGroup::TDirectBlockGroup(
                 .HostConnection = NTransport::THostConnection{
                     .ConnectionType = type,
                     .DDiskId = ddiskId,
-                    .Credentials = type == EConnectionType::PBuffer
-                        ? NDDisk::TQueryCredentials::FromPersistentBuffer(
-                            TabletId,
-                            generation,
-                            InitialDDiskSessionSeqNo)
-                        : NDDisk::TQueryCredentials::FromTablet(
-                            TabletId,
-                            generation,
-                            InitialDDiskSessionSeqNo)}});
+                    .Credentials = NDDisk::TQueryCredentials::FromTablet(
+                        TabletId,
+                        generation,
+                        InitialDDiskSessionSeqNo)}});
 
             if (type == EConnectionType::PBuffer) {
                 NKikimrBlobStorage::NDDisk::TDDiskId pbufferId;

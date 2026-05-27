@@ -225,7 +225,9 @@ TRope MakeMisalignedRope(const TString& data) {
 }
 
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(tabletId, generation, 1);
+    NDDisk::TQueryCredentials creds;
+    creds.TabletId = tabletId;
+    creds.Generation = generation;
 
     auto connectResult = SendToDDiskAndWait<NDDisk::TEvConnectResult>(ctx, serviceId, new NDDisk::TEvConnect(creds));
     AssertStatus(connectResult, TReplyStatus::OK);
@@ -302,7 +304,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(1, 1);
 
-        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(1, 1, 1);
+        NDDisk::TQueryCredentials creds;
+        creds.TabletId = 1;
+        creds.Generation = 1;
 
         auto noSessionRead = SendToDDiskAndWait<NDDisk::TEvReadResult>(
             ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
@@ -334,7 +338,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(2, 1);
 
-        NDDisk::TQueryCredentials gen2 = NDDisk::TQueryCredentials::FromTablet(11, 2, 1);
+        NDDisk::TQueryCredentials gen2;
+        gen2.TabletId = 11;
+        gen2.Generation = 2;
         auto gen2Connect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
             ctx, disk.ServiceId, new NDDisk::TEvConnect(gen2));
         AssertStatus(gen2Connect, TReplyStatus::OK);

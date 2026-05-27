@@ -331,7 +331,9 @@ TString MakeDataWithTabletAndBlock(ui32 tabletId, ui32 blockIdx, ui32 size) {
 }
 
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generation) {
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(tabletId, generation, 1);
+    NDDisk::TQueryCredentials creds;
+    creds.TabletId = tabletId;
+    creds.Generation = generation;
 
     auto connectResult = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
@@ -341,7 +343,9 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
 }
 
 NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tabletId, ui32 generation) {
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(tabletId, generation, 1);
+    NDDisk::TQueryCredentials creds;
+    creds.TabletId = tabletId;
+    creds.Generation = generation;
 
     auto connectResult = ctx.SendToAndGrab<NDDisk::TEvConnectResult>(diskIdx, new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
@@ -602,10 +606,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     TTestContext ctx(std::move(ddiskConfig), ddiskLogPriority);
 
-    TVector<NDDisk::TQueryCredentials> creds;
-    creds.reserve(numTablets);
+    TVector<NDDisk::TQueryCredentials> creds(numTablets);
     for (ui32 t = 0; t < numTablets; ++t) {
-        creds.push_back(Connect(ctx, baseTabletId + t, 1));
+        creds[t] = Connect(ctx, baseTabletId + t, 1);
     }
 
     struct WriteOp {
@@ -757,10 +760,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
-    TVector<NDDisk::TQueryCredentials> creds;
-    creds.reserve(numTablets);
+    NDDisk::TQueryCredentials creds[numTablets];
     for (ui32 t = 0; t < numTablets; ++t) {
-        creds.push_back(Connect(ctx, baseTabletId + t, 1));
+        creds[t] = Connect(ctx, baseTabletId + t, 1);
     }
 
     // Phase 1: each tablet writes block 0 of vchunk 0 (tablet1, tablet2 order)
@@ -831,10 +833,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
-    TVector<NDDisk::TQueryCredentials> creds;
-    creds.reserve(numTablets);
+    NDDisk::TQueryCredentials creds[numTablets];
     for (ui32 t = 0; t < numTablets; ++t) {
-        creds.push_back(Connect(ctx, baseTabletId + t, 1));
+        creds[t] = Connect(ctx, baseTabletId + t, 1);
     }
 
     for (ui32 t = 0; t < numTablets; ++t) {
@@ -964,10 +965,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
-    TVector<NDDisk::TQueryCredentials> creds;
-    creds.reserve(numTablets);
+    NDDisk::TQueryCredentials creds[numTablets];
     for (ui32 t = 0; t < numTablets; ++t) {
-        creds.push_back(Connect(ctx, baseTabletId + t, 1));
+        creds[t] = Connect(ctx, baseTabletId + t, 1);
     }
 
     // Phase 1: write to vchunks 0 and 1 for each tablet
@@ -1008,7 +1008,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 [[maybe_unused]] void TestReadWithoutConnect(NDDisk::TDDiskConfig ddiskConfig) {
     TTestContext ctx(std::move(ddiskConfig));
 
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(30, 1, 1);
+    NDDisk::TQueryCredentials creds;
+    creds.TabletId = 30;
+    creds.Generation = 1;
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
@@ -1026,13 +1028,10 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         NDDisk::TQueryCredentials Src;
         NDDisk::TQueryCredentials Dst;
     };
-    TVector<TabletCreds> tablets;
-    tablets.reserve(numTablets);
+    TVector<TabletCreds> tablets(numTablets);
     for (ui32 t = 0; t < numTablets; ++t) {
-        tablets.push_back(TabletCreds{
-            .Src = ConnectTo(ctx, 0, baseTabletId + t, 1),
-            .Dst = ConnectTo(ctx, 1, baseTabletId + t, 1),
-        });
+        tablets[t].Src = ConnectTo(ctx, 0, baseTabletId + t, 1);
+        tablets[t].Dst = ConnectTo(ctx, 1, baseTabletId + t, 1);
     }
 
     // Phase 1: batch-write to DDisk0

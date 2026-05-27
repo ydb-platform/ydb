@@ -55,6 +55,19 @@ namespace NKikimr::NDDisk {
 
         TQueryCredentials() = default;
 
+        TQueryCredentials(
+                ui64 tabletId,
+                ui32 generation,
+                std::optional<ui64> ddiskInstanceGuid,
+                bool isFromPersistentBuffer = false,
+                ui64 ddiskSessionSeqNo = 0)
+            : TabletId(tabletId)
+            , Generation(generation)
+            , DDiskInstanceGuid(ddiskInstanceGuid)
+            , IsFromPersistentBuffer(isFromPersistentBuffer)
+            , DDiskSessionSeqNo(ddiskSessionSeqNo)
+        {}
+
         static TQueryCredentials FromTablet(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
             return TQueryCredentials(tabletId, generation, std::nullopt, false, ddiskSessionSeqNo);
         }
@@ -97,21 +110,6 @@ namespace NKikimr::NDDisk {
                 pb->SetDDiskSessionSeqNo(DDiskSessionSeqNo);
             }
         }
-
-    private:
-
-        TQueryCredentials(
-                ui64 tabletId,
-                ui32 generation,
-                std::optional<ui64> ddiskInstanceGuid,
-                bool isFromPersistentBuffer,
-                ui64 ddiskSessionSeqNo)
-            : TabletId(tabletId)
-            , Generation(generation)
-            , DDiskInstanceGuid(ddiskInstanceGuid)
-            , IsFromPersistentBuffer(isFromPersistentBuffer)
-            , DDiskSessionSeqNo(ddiskSessionSeqNo)
-        {}
     };
 
     struct TBlockSelector {

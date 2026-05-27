@@ -49,7 +49,7 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
-    Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService, ELocalIndexAsSchemeObject) {        
+    Y_UNIT_TEST(CreateMinMaxIndex, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()

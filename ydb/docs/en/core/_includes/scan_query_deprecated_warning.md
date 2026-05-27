@@ -1,6 +1,6 @@
 {% note warning %}
 
-This functionality is deprecated. Its use is not recommended.
-You can use direct SQL queries to achieve the same result.
+This functionality is deprecated. Use standard query execution methods.
+See [Query execution](../reference/ydb-cli/sql.md).
 
 {% endnote %}

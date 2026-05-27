@@ -2189,7 +2189,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 }
 
-Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
+Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
     Y_UNIT_TEST(JsonExists) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // Basic path exists cases
@@ -4901,6 +4901,115 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
                     .AddListItem().Int64(1)
                     .EndList().Build().Build(),
                 "or");
+        });
+    }
+
+    Y_UNIT_TEST(SqlIn_Literal_List) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // List<String?>
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN ['1', '2']",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN [Just('1'), '2']",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN [Just('1'), Just('2')]",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+
+            // List<String?>?
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN Just(['1', '2'])",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN Just([Just('1'), Just('2')])",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+
+            // AsList[Strict]
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN AsList('1', '2')",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN AsListStrict('1', '2')",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+
+            // Empty list -> always false, index not applicable
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN ListCreate(String)");
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN Just(ListCreate(String))");
+
+            // NULL in list -> negation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN [Just('1'), NULL]");
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN [Just('1'), Nothing(Optional<String>)]");
+
+            // Parameters
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN [$p1, $p2]",
+                {NJsonIndex::TToken{"\3k1", "$p1"}, NJsonIndex::TToken{"\3k1", "$p2"}},
+                TParamsBuilder()
+                    .AddParam("$p1").String("1").Build()
+                    .AddParam("$p2").String("2").Build()
+                    .Build(), "or");
+
+            // Optional parameters -> cannot check nulls during compilation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN [$p1, $p2]",
+                TParamsBuilder()
+                    .AddParam("$p1").OptionalString("1").Build()
+                    .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
+                    .Build());
+        });
+    }
+
+    Y_UNIT_TEST(SqlIn_Parameter_List) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // List<String>
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p1",
+                {NJsonIndex::TToken{"\3k1", "$p1"}},
+                TParamsBuilder()
+                    .AddParam("$p1")
+                        .BeginList()
+                            .AddListItem().String("1")
+                            .AddListItem().String("2")
+                            .EndList()
+                        .Build()
+                    .Build(), "or");
+
+            // List<String?> -> cannot check nulls during compilation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p2",
+                TParamsBuilder()
+                    .AddParam("$p2")
+                        .BeginList()
+                            .AddListItem().OptionalString("1")
+                            .AddListItem().OptionalString("2")
+                            .EndList()
+                        .Build()
+                    .Build());
+
+            // List<String>? -> cannot check nulls during compilation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p3",
+                TParamsBuilder()
+                    .AddParam("$p3")
+                        .BeginOptional()
+                            .BeginList()
+                                .AddListItem().String("1")
+                                .AddListItem().String("2")
+                                .EndList()
+                            .EndOptional()
+                        .Build()
+                    .Build());
+
+            // List<String?>? -> cannot check nulls during compilation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p4",
+                TParamsBuilder()
+                    .AddParam("$p4")
+                        .BeginOptional()
+                            .BeginList()
+                                .AddListItem().OptionalString("1")
+                                .AddListItem().OptionalString("2")
+                                .EndList()
+                            .EndOptional()
+                        .Build()
+                    .Build());
+
+            // Empty list
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p5",
+                {NJsonIndex::TToken{"\3k1", "$p5"}},
+                TParamsBuilder()
+                    .AddParam("$p5")
+                        .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::String).Build())
+                        .Build()
+                    .Build(), "or");
         });
     }
 

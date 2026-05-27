@@ -214,12 +214,11 @@ std::optional<TString> EncodeValueToJsonPath(const TExprBase& node, bool negativ
 }
 
 bool IsSupportedJsonParamType(const TTypeAnnotationNode* type) {
-    const auto* innerType = RemoveAllOptionals(type);
-    if (!innerType || innerType->GetKind() != ETypeAnnotationKind::Data) {
+    if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
         return false;
     }
 
-    switch (innerType->Cast<TDataExprType>()->GetSlot()) {
+    switch (type->Cast<TDataExprType>()->GetSlot()) {
         case EDataSlot::String:
         case EDataSlot::Utf8:
         case EDataSlot::Bool:
@@ -557,7 +556,7 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
 
     if (collection.Maybe<TCoParameter>()) {
         const auto& param = collection.Cast<TCoParameter>();
-        const auto* paramTypeAnn = RemoveAllOptionals(param.Ref().GetTypeAnn());
+        const TTypeAnnotationNode* paramTypeAnn = param.Ref().GetTypeAnn();
 
         if (!paramTypeAnn || paramTypeAnn->GetKind() != ETypeAnnotationKind::List) {
             return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
@@ -590,8 +589,20 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         return baseResult;
     }
 
-    if (!collection.Maybe<TExprList>()) {
-        return std::nullopt;
+    std::vector<TExprBase> items;
+
+    if (collection.Maybe<TCoAsList>()) {
+        auto asList = collection.Cast<TCoAsList>();
+        for (size_t i = 0; i < asList.ArgCount(); ++i) {
+            items.push_back(TExprBase(asList.Arg(i)));
+        }
+    } else if (collection.Maybe<TExprList>()) {
+        auto list = collection.Cast<TExprList>();
+        for (const auto& item : list) {
+            items.push_back(TExprBase(item));
+        }
+    } else {
+        return MakeCollectError(ctx, collection.Pos(), "Unsupported collection type in SQL IN");
     }
 
     auto baseResult = ParseAndCollectJson(*jsonParams, ECallableType::JsonValue, std::nullopt, ctx, jsonLookup.Pos());
@@ -600,8 +611,8 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
     }
 
     std::optional<TPredicateCollectResult> acc;
-    for (const auto& item : collection.Cast<TExprList>()) {
-        const auto literal = UnwrapValue(TExprBase(item));
+    for (const auto& item : items) {
+        const auto literal = UnwrapValue(item);
         auto extracted = TryExtractComparisonValue(literal);
         if (!extracted.has_value()) {
             return MakeCollectError(ctx, literal.Pos(), extracted.error());

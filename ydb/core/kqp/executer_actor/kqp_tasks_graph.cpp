@@ -482,23 +482,6 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 }
 
 void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf::TUnboxedValue value) {
-    while (true) {
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-            if (!value) {
-                NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Null);
-                return;
-            }
-            type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType();
-            value = value.GetOptionalValue();
-            continue;
-        }
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tagged) {
-            type = static_cast<NKikimr::NMiniKQL::TTaggedType*>(type)->GetBaseType();
-            continue;
-        }
-        break;
-    }
-
     if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
         LOG_W("Cannot append parameter value to token, unexpected type: " << static_cast<int>(type->GetKind()));
         return;
@@ -628,22 +611,6 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
     }
 
     auto [type, value] = *paramPtr;
-    while (true) {
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-            if (!value) {
-                return {baseToken};
-            }
-            type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType();
-            value = value.GetOptionalValue();
-            continue;
-        }
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tagged) {
-            type = static_cast<NKikimr::NMiniKQL::TTaggedType*>(type)->GetBaseType();
-            continue;
-        }
-        break;
-    }
-
     if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::List) {
         return {ResolveFullTextQueryToken(token, stageInfo)};
     }

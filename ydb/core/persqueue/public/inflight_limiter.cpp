@@ -28,19 +28,37 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
         return true;
     }
 
+    Cerr << "[inflight_limiter] Add: Offset = " << Offset << ", Size = " << Size << ", TotalSize = " << TotalSize << Endl;
+
     auto wasMemoryLimitReached = IsMemoryLimitReached();
     if (Size == 0) {
         return !wasMemoryLimitReached;
     }
 
-    AFL_ENSURE(Layout.empty() || Offset > Layout.back());
-    if (TotalSize % LayoutUnitSize != 0) {
-        AFL_ENSURE(!Layout.empty());
-        Layout.back() = Offset;
+    AFL_ENSURE(Layout.empty() || Offset > Layout.back().Offset);
+
+    ui64 rest = Size;
+    if (!Layout.empty() && Layout.back().Size < LayoutUnitSize) {
+        const ui64 toCurrentUnit = std::min(rest, LayoutUnitSize - Layout.back().Size);
+        Layout.back().Offset = Offset;
+        Layout.back().Size += toCurrentUnit;
+        rest -= toCurrentUnit;
     }
 
-    auto unitsBefore = (TotalSize + LayoutUnitSize - 1) / LayoutUnitSize;
+    while (rest > 0) {
+        if (Layout.size() < MAX_LAYOUT_COUNT) {
+            const ui64 unitSize = std::min(rest, LayoutUnitSize);
+            Layout.emplace_back(Offset, unitSize);
+            rest -= unitSize;
+        } else {
+            Layout.back().Offset = Offset;
+            Layout.back().Size += rest;
+            rest = 0;
+        }
+    }
+
     TotalSize += Size;
+<<<<<<< HEAD
     auto unitsAfter = std::min(MAX_LAYOUT_COUNT, (TotalSize + LayoutUnitSize - 1) / LayoutUnitSize);
     for (auto currentUnits = unitsBefore; currentUnits < unitsAfter; currentUnits++) {
         Layout.push_back(Offset);
@@ -48,6 +66,8 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
     
     AFL_ENSURE(!Layout.empty());
     Layout.back() = Offset;
+=======
+>>>>>>> 3637b6478ff (LOGBROKER-9686 Inflight limiter better accuracy)
 
     bool isMemoryLimitReached = IsMemoryLimitReached();
     if (!wasMemoryLimitReached && isMemoryLimitReached && InFlightFullSince == TInstant::Zero()) {
@@ -63,9 +83,11 @@ bool TInFlightController::Remove(ui64 Offset) {
         return true;
     }
 
+    Cerr << "[inflight_limiter] Remove: Offset = " << Offset << ", TotalSize = " << TotalSize << Endl;
+
     auto wasMemoryLimitReached = IsMemoryLimitReached();
     for (auto it = Layout.begin(); it != Layout.end(); it = Layout.erase(it)) {
-        if (*it >= Offset) {
+        if (it->Offset >= Offset) {
             break;
         }
 
@@ -73,7 +95,7 @@ bool TInFlightController::Remove(ui64 Offset) {
             TotalSize = 0;
         } else {
             AFL_ENSURE(TotalSize >= LayoutUnitSize);
-            TotalSize -= LayoutUnitSize;
+            TotalSize -= it->Size;
         }
     }
 

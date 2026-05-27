@@ -153,7 +153,17 @@ TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
         NWilson::TTraceId());
     request->SetReplyCallback(
         [this](TBaseWriteRequestExecutor::TResponse response)
-        { CallbackResult = std::move(response); });
+        {
+            AllCompletedWrites =
+                AllCompletedWrites.Include(response.CompletedWrites);
+            CallbackResult = std::move(response);
+        });
+    request->SetNotifyCallback(
+        [this](THostMask completedWrites, ui64 lsn)
+        {
+            Y_UNUSED(lsn);
+            AllCompletedWrites = AllCompletedWrites.Include(completedWrites);
+        });
     return request;
 }
 

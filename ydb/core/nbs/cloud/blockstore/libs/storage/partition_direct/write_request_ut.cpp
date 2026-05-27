@@ -693,11 +693,9 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
 
     Y_UNIT_TEST_F(ShouldFailWriteOnDBGError, TWriteWithPbTestFixture)
     {
-        // make main request ok reply
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
             GetManyPBuffersHandlerHanging();
 
-        // prepare and call main request
         auto writeRequest =
             CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
 
@@ -711,9 +709,97 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         UNIT_ASSERT_EQUAL(
             VChunkConfig.PBufferHosts.GetPrimary(),
             response.RequestedWrites);
-        UNIT_ASSERT_EQUAL(
-            true,
-            response.CompletedWrites.Empty());
+        UNIT_ASSERT_EQUAL(true, response.CompletedWrites.Empty());
+    }
+
+    Y_UNIT_TEST_F(ShouldWorkWithMultipleResponses, TWriteWithPbTestFixture)
+    {
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+
+        writeRequest->Run();
+
+        {
+            TDBGWriteBlocksToManyPBuffersResponse partResponse;
+            partResponse.DirectBlockGroupError = MakeError(S_OK);
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{1}, .Error = MakeError(S_OK)});
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{2}, .Error = MakeError(S_OK)});
+
+            ManyPBufferCallback(std::move(partResponse));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            DirectWritePromises.size());   // retry from main
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+
+        UNIT_ASSERT_EQUAL(3, response.CompletedWrites.Count());
+
+        ManyPBufferCallback(CreateOneOkResponse(THostIndex{0}));
+        UNIT_ASSERT_EQUAL(3, response.CompletedWrites.Count());
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldWorkWithMultipleResponsesAndHedge,
+        TWriteWithPbTestFixture)
+    {
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            GetDirectWriteHandlerHanging();
+
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+
+        writeRequest->Run();
+
+        //  call hedge mechanism
+        RunScheduledHedge();
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+
+        {
+            TDBGWriteBlocksToManyPBuffersResponse partResponse;
+            partResponse.DirectBlockGroupError = MakeError(S_OK);
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
+            partResponse.Responses.push_back(
+                {.HostIndex = THostIndex{2}, .Error = MakeError(S_OK)});
+
+            ManyPBufferCallback(std::move(partResponse));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(false, CallbackResult.has_value());
+
+        {
+            ManyPBufferCallback(CreateOneOkResponse(THostIndex{1}));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(3, DirectWritePromises.size());
+
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+
+        UNIT_ASSERT_EQUAL(3, response.CompletedWrites.Count());
+
+        DirectWritePromises[0].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[1].SetValue(CreateOkDirectResponse());
+        DirectWritePromises[2].SetValue(CreateOkDirectResponse());
+
+        UNIT_ASSERT_EQUAL(5, AllCompletedWrites.Count());
     }
 }
 

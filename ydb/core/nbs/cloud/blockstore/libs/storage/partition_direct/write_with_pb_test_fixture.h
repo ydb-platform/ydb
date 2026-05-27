@@ -29,6 +29,7 @@ struct TWriteWithPbTestFixture: public TBaseFixture
     TVector<std::pair<TDuration, TCallback>> Scheduled;
 
     std::optional<TBaseWriteRequestExecutor::TResponse> CallbackResult;
+    THostMask AllCompletedWrites;
 
     TDirectBlockGroupMock::TWriteBlocksToManyPBuffersHandler
     GetManyPBuffersHandlerWithImmediateOkResponse();

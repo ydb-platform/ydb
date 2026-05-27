@@ -21,12 +21,9 @@ class TestViewer(object):
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
-<<<<<<< HEAD
             'enable_local_bloom_filter_index': True,
             'enable_local_index_as_scheme_object': True,
-=======
             'enable_extra_sids_control_for_http_viewer': True,
->>>>>>> upstream/main
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False

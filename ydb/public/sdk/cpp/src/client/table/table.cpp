@@ -3095,6 +3095,10 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         type = EIndexType::LocalBloomNgramFilter;
         specializedIndexSettings = TLocalBloomNgramFilterSettings::FromProto(proto.local_bloom_ngram_filter_index());
         break;
+    case TProto::kLocalMinMaxIndex:
+        type = EIndexType::LocalMinMax;
+        specializedIndexSettings = std::monostate{};
+        break;
     case TProto::TYPE_NOT_SET:
         type = EIndexType::GlobalSync;
         globalIndexSettings.resize(1);
@@ -3211,6 +3215,10 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
+    case EIndexType::LocalMinMax: {
+        proto.mutable_local_min_max_index();
+        break;
+    }
     case EIndexType::Unknown:
         break;
     }
@@ -3239,6 +3247,7 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::GlobalJson:
     case EIndexType::LocalBloomFilter:
     case EIndexType::LocalBloomNgramFilter:
+    case EIndexType::LocalMinMax:
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:

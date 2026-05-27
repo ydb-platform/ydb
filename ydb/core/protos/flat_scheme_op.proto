@@ -1325,6 +1325,7 @@ enum EIndexType {
     EIndexTypeGlobalJson = 7;
     EIndexTypeLocalBloomFilter = 8;
     EIndexTypeLocalBloomNgramFilter = 9;
+    EIndexTypeLocalMinMax = 10;
 }
 
 enum EIndexState {
@@ -1398,16 +1399,13 @@ message TGenericTxInFlyExtraData {
 message TIndexAlteringConfig {
     optional string Name = 1;
     optional EIndexState State = 2;
-<<<<<<< HEAD
-    repeated string KeyColumnNames = 3;
-    optional EIndexType Type = 4;
+    repeated string KeyColumnNames = 4;
+    optional EIndexType Type = 5;
     oneof SpecializedIndexDescription {
         TBloomFilter BloomFilterDescription = 8;
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
-=======
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
->>>>>>> upstream/main
 }
 
 message TIndexedTableCreationConfig {
@@ -2182,6 +2180,7 @@ enum EPathSubType {
     EPathSubTypeJsonIndexImplTable = 6;
     EPathSubTypeLocalBloomFilterIndex = 7;
     EPathSubTypeLocalBloomNgramFilterIndex = 8;
+    EPathSubTypeLocalMinMaxIndex = 9;
 }
 
 enum EPathState {

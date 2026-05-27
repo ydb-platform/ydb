@@ -4551,7 +4551,6 @@
         ],
         "TotalNodes": "1"
     },
-<<<<<<< HEAD
     "test.TestViewer.test_viewer_describe_column_table_local_index": {
         "root_child_names": [
             ".metadata",
@@ -4567,7 +4566,7 @@
             }
         ],
         "table_children_exist": true
-=======
+    },
     "test.TestViewer.test_viewer_external_http_access_controls": {
         "administration_bscontrollerinfo_database": {
             "status_code": 403,
@@ -7874,7 +7873,6 @@
             "status_code": 200,
             "text": "1\n"
         }
->>>>>>> upstream/main
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {

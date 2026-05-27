@@ -40,6 +40,7 @@ enum class EIndexType {
     GlobalJson,
     LocalBloomFilter,
     LocalBloomNgramFilter,
+    LocalMinMax,
 
     Unknown = std::numeric_limits<int>::max()
 };

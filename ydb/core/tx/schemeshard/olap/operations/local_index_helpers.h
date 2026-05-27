@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -49,8 +50,19 @@ inline bool ConvertOlapIndexToCreationConfig(
         config.AddKeyColumnNames(it->second);
         *config.MutableBloomNGrammFilterDescription() = indexProto.GetBloomNGrammFilter();
         return true;
+    } else if (indexProto.HasMinMaxIndex()) {
+        config.SetType(NKikimrSchemeOp::EIndexTypeLocalMinMax);
+        auto it = columnIdToName.find(indexProto.GetMinMaxIndex().GetColumnId());
+        
+        if (it == columnIdToName.end()) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "ConvertOlapIndexToCreationConfig: MinMaxIndex column ID " << indexProto.GetMinMaxIndex().GetColumnId()
+                << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+            return false;
+        }
+        config.AddKeyColumnNames(it->second);
+        return true;
     }
-
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "ConvertOlapIndexToCreationConfig: Unrecognized index type for index '" << indexProto.GetName() << "'");
     return false;
@@ -125,10 +137,25 @@ inline bool ConvertOlapIndexToRequested(
             }
             return true;
         }
+        case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+            NKikimrSchemeOp::TRequestedMinMaxIndex* min_max = dst.MutableMinMaxIndex();
+            if (src.GetMinMaxIndex().HasColumnId()) {
+                auto it = columnIdToName.find(src.GetMinMaxIndex().GetColumnId());
+                if (it == columnIdToName.end()) {
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "ConvertOlapIndexToRequested: MinMaxIndex column ID " << src.GetMinMaxIndex().GetColumnId()
+                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    return false;
+                }
+                min_max->SetColumnName(it->second);
+            }
+            return true;
+        }
         case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
         case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch:
-        case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex:
         case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str()));
             return false;
     }
 
@@ -182,10 +209,18 @@ inline bool ConvertRequestedIndexToCreationConfig(
             }
             return true;
         }
-        case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
+        case NKikimrSchemeOp::TOlapIndexRequested::kMinMaxIndex: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalMinMax);
+            const auto& min_max = indexProto.GetMinMaxIndex();
+            if (!min_max.GetColumnName().empty()) {
+                config.AddKeyColumnNames(min_max.GetColumnName());
+            }
+            return true;
+        }        case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
         case NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex:
         case NKikimrSchemeOp::TOlapIndexRequested::kCountMinSketch:
-        case NKikimrSchemeOp::TOlapIndexRequested::kMinMaxIndex:
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
     }
 
@@ -242,8 +277,20 @@ inline bool ConvertRequestedIndexToAlteringConfig(
             }
             return true;
         }
-        default:
+        case NKikimrSchemeOp::TOlapIndexRequested::kMinMaxIndex: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalMinMax);
+            const auto& min_max = indexProto.GetMinMaxIndex();
+            if (!min_max.GetColumnName().empty()) {
+                config.AddKeyColumnNames(min_max.GetColumnName());
+            }
+            return true;
+        }
+
+        default: {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertRequestedIndexToAlteringConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
+        }
     }
 
     return false;
@@ -335,7 +382,18 @@ inline bool ConvertCreationConfigToRequested(
             }
             return true;
         }
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax: {
+            requested.SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+            auto* min_max = requested.MutableMinMaxIndex();
+            for (const auto& colName : config.GetKeyColumnNames()) {
+                min_max->SetColumnName(colName);
+                break; // Only one column for min_max index
+            }
+            return true;
+        }
         default:
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                Sprintf("ConvertCreationConfigToRequested: unimplemented index type '%s'", EIndexType_Name(config.GetType()).c_str()));
             return false;
     }
 

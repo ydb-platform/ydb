@@ -29,4 +29,9 @@ inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName) {
 
 inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableLocalMinMaxIndex feature flag";
 
+inline const TString SchemeObjectFeatureFlagDisabledErrorMessage =
+    "Local min_max index is not treated as scheme object because feature flag EnableLocalIndexAsSchemeObject is disabled";
+
+inline const TString ProtoDescrptionLacksColumnIdErrorMessage = "Local min_max index description lacks required ColumnId field";
+
 }   // namespace NKikimr::NOlap::NIndexes::NMinMax

@@ -7,14 +7,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-<<<<<<< HEAD
 #include <ydb/core/local_indexes/bloom/const.h>
-#include <util/generic/hash_set.h>
-=======
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
->>>>>>> upstream/main
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
@@ -26,12 +19,15 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/protobuf/json/util.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr {
@@ -1002,6 +998,28 @@ void FillColumnTableIndexesFromOlapColumnSchema(
                 }
                 break;
             }
+            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+                const auto& min_max = olapIndex.GetMinMaxIndex();
+                if (!min_max.HasColumnId()) {
+                    continue;
+                }
+
+                const auto it = idToName.find(min_max.GetColumnId());
+                if (it == idToName.end()) {
+                    continue;
+                }
+
+                auto* ydbIndex = out.add_indexes();
+                if constexpr (kSetDescribeIndexStatus) {
+                    ydbIndex->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+                }
+
+                ydbIndex->set_name(olapIndex.GetName());
+                ydbIndex->add_index_columns(it->second);
+                ydbIndex->mutable_local_min_max_index();
+
+                break;
+            }
             default:
                 break;
         }
@@ -1850,6 +1868,9 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             break;
         case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
             FillLocalBloomNgramFilterIndexSettings(*index->mutable_local_bloom_ngram_filter_index(), tableIndex);
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            index->mutable_local_min_max_index();
             break;
         case NKikimrSchemeOp::EIndexTypeInvalid:
             break;

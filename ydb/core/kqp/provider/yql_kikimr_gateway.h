@@ -276,6 +276,8 @@ public:
                 return TIndexDescription::EType::LocalBloomFilter;
             case NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter:
                 return TIndexDescription::EType::LocalBloomNgramFilter;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax:
+                return TIndexDescription::EType::LocalMinMax;
             default:
                 YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
@@ -301,6 +303,8 @@ public:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomFilter;
             case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter;
+            case NYql::TIndexDescription::EType::LocalMinMax:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(indexType));
         }

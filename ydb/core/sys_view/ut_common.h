@@ -33,13 +33,10 @@ struct TTestEnvSettings {
     bool EnableTableCacheModes = false;
     bool EnableFulltextIndex = false;
     bool EnableCsDictionaryEncoding = false;
-<<<<<<< HEAD
     bool EnableLocalBloomFilterIndex = false;
     bool EnableLocalBloomNgramFilterIndex = false;
     bool EnableLocalIndexAsSchemeObject = false;
-=======
     bool EnableLocalMinMaxIndex = false;
->>>>>>> upstream/main
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;

@@ -1170,11 +1170,8 @@ message TActivity {
         BS_PERSISTENT_BUFFER = 686;
         BS_SYNCER_MERGER = 687;
         BS_PHANTOM_FLAG_STORAGE_WRITER = 688;
-<<<<<<< HEAD
-        SCHEMESHARD_LOCAL_INDEX_MIGRATOR = 689;
-=======
         BS_LOAD_NBS_DBG_LIKE = 689;
         BS_LOAD_NBS_DBG_LIKE_TABLET = 690;
->>>>>>> upstream/main
+        SCHEMESHARD_LOCAL_INDEX_MIGRATOR = 691;
     };
 };

@@ -208,9 +208,14 @@ public:
                         return TStringBuilder() << what << " SpecializedIndexDescription does not hold TBloomNGrammFilter for index type LocalBloomNgramFilter";
                     }
                     return std::nullopt;
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                    if (!std::holds_alternative<std::monostate>(info.SpecializedIndexDescription)) {
+                        return TStringBuilder() << what << " SpecializedIndexDescription is not empty for index type LocalMinMax";
+                    }
+                    return std::nullopt;
                 default:
                     return TStringBuilder() << "Unexpected index type " << static_cast<int>(info.Type)
-                        << " in TAlterLocalIndex::Propose. Only local bloom filter types are supported.";
+                        << " in TAlterLocalIndex::Propose. Only local bloom filter and min_max types are supported.";
             }
         };
 

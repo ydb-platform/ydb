@@ -348,6 +348,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalAsync:
                 case EIndexType::GlobalUnique:
                 case EIndexType::GlobalJson:
+                case EIndexType::LocalMinMax:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
                     break;
                 case EIndexType::LocalBloomFilter:
@@ -3394,6 +3395,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
+            case EIndexTypeLocalMinMax:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -4710,6 +4712,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 break;
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
+            case EIndexTypeLocalMinMax:
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

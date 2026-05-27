@@ -3005,6 +3005,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -3074,7 +3075,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     static bool IsLocalIndex(EType type) {
         return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
-            || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter;
+            || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
+            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax;
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
@@ -3099,6 +3101,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
@@ -3150,8 +3153,11 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                 alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
                 break;
+            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                alterData->SpecializedIndexDescription = std::monostate{};
+                break;
             default:
-                errMsg += TStringBuilder() << "TIndexAlteringConfig only supports local index types, got: " << static_cast<int>(config.GetType());
+                errMsg += TStringBuilder() << "TIndexAlteringConfig only supports local index types, got: " << NKikimrSchemeOp::EIndexType_Name(config.GetType());
                 return nullptr;
         }
 

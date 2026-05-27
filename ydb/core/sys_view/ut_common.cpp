@@ -149,7 +149,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableLocalBloomNgramFilterIndex(settings.EnableLocalBloomNgramFilterIndex);
     featureFlags.SetEnableLocalIndexAsSchemeObject(settings.EnableLocalIndexAsSchemeObject);
     featureFlags.SetEnableLocalMinMaxIndex(settings.EnableLocalMinMaxIndex);
-|
+
     Settings->SetFeatureFlags(featureFlags);
 
     Settings->SetEnablePersistentQueryStats(settings.EnableSVP);

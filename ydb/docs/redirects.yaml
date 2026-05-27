@@ -507,18 +507,12 @@ ru:
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
 
-<<<<<<< HEAD
-en:
-=======
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
-  - from: /devops/manual/initial-deploym  - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery/index.md
-  - from: /devops/backup-and-recovery.md
-    to: /devops/backup-and-recovery/index.mdent.md
+  - from: /devops/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
 
->>>>>>> ef92ba5423f ([Backport MAIN] PR #41066 [YDBDOCS-2112] Нужно пофиксить документацию по результатам https://github.com/ydb-platform/ydb/issues/39503 (#41287))
+en:
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md

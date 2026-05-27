@@ -255,12 +255,7 @@ namespace NKikimr::NDDisk {
         header.SlotId = SlotId;
         header.Erase.TabletId = tabletId;
         header.Erase.EraseIdx = 0;
-                Cerr << "TFastErase: " << header.RecordLsn << " lsns: ";
-                for (auto lsn : erase.Lsns) {
-                    Cerr << lsn << ", ";
-                }
-                Cerr << Endl;
-        return std::make_optional(TFastErase{oldChunkIdx, oldSectorIdx, erase.ChunkIdx, erase.SectorIdx, header});
+        return std::make_optional(TFastErase{oldChunkIdx, oldSectorIdx, erase.ChunkIdx, erase.SectorIdx, std::move(header)});
     }
 
     bool TPersistentBufferBarriersManager::AddErase(const TPersistentBufferHeader* header, ui32 chunkIdx, ui32 sectorIdx) {
@@ -270,11 +265,6 @@ namespace NKikimr::NDDisk {
         auto tabletId = header->Erase.TabletId;
         auto& erase = Erases[tabletId];
         if (erase.HeaderLsn > header->RecordLsn) {
-            Cerr << "Deprecated " << erase.HeaderLsn << " < " << header->RecordLsn << Endl;
-            for (auto lsn : Uncompact(header->Erase.CompactLsns)) {
-                Cerr << lsn << ", ";
-            }
-            Cerr << Endl;
             STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase deprecated HeaderLsn found ", (TabletId, tabletId), (erase.HeaderLsn, erase.HeaderLsn), (header->RecordLsn, header->RecordLsn));
             return false;
         }
@@ -282,11 +272,6 @@ namespace NKikimr::NDDisk {
         erase.SectorIdx = sectorIdx;
         erase.HeaderLsn = header->RecordLsn;
         erase.Lsns = Uncompact(header->Erase.CompactLsns);
-        Cerr << "AddErase " << erase.HeaderLsn << Endl;
-        for (auto lsn : erase.Lsns) {
-            Cerr << lsn << ", ";
-        }
-        Cerr << Endl;
         STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase", (TabletId, tabletId), (HeaderLsn, header->RecordLsn));
         return true;
     }
@@ -307,7 +292,6 @@ namespace NKikimr::NDDisk {
             while (pbIt != persistentBuffers.end() && std::get<0>(pbIt->first) == tid) {
                 TPersistentBuffer& buffer = pbIt->second;
                 for (ui64 lsn : erase.Lsns) {
-                    Cerr << "Restored erase " << lsn << Endl;
                     STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::RestoreErases tablet erase record found", (TabletId, tid), (Lsn, lsn));
                     buffer.Records.erase(lsn);
                 }

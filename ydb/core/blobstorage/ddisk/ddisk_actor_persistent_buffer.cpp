@@ -1080,6 +1080,11 @@ namespace NKikimr::NDDisk {
         partOp->SetPartCookie(cookie);
         partOp->SetIsErase(true);
         partOp->PrepareWrite(std::move(headerRope), diskOffset, fastErase.ChunkIdx, chunkOffset);
+        inflightRecord->second.Span.Event(
+#if defined(__linux__)
+            UringRouter ? "DirectUringOp" :
+#endif
+            "Send to pdisk");
         DirectUringOp(op);
     }
 
@@ -1154,7 +1159,9 @@ namespace NKikimr::NDDisk {
             const auto it = PersistentBuffers.find({creds.TabletId, generation});
             if (it != PersistentBuffers.end() && it->second.Records.find(lsn) != it->second.Records.end()) {
                 erases.emplace_back(lsn, generation);
-                fastErases.insert(lsn);
+                if (PersistentBufferFormat.EnableFastErases) {
+                    fastErases.insert(lsn);
+                }
             }
         }
 
@@ -1163,10 +1170,14 @@ namespace NKikimr::NDDisk {
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt, GetPersistentBufferFreeSpace(), NormalizedOccupancy));
             return;
         }
-        if (auto fastErase = PersistentBufferBarriersManager.Erase(creds.TabletId, fastErases, PersistentBufferSpaceAllocator); !fastErase) {
+        if (!PersistentBufferFormat.EnableFastErases) {
             ErasePersistentBuffer(*ev, creds, erases);
-        } else {
+            return;
+        }
+        if (auto fastErase = PersistentBufferBarriersManager.Erase(creds.TabletId, fastErases, PersistentBufferSpaceAllocator); fastErase) {
             FastErasePersistentBuffer(*ev, creds, erases, fastErase.value());
+        } else {
+            ErasePersistentBuffer(*ev, creds, erases);
         }
     }
 

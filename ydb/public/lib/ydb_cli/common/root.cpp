@@ -25,10 +25,10 @@ void TClientCommandRootBase::Config(TConfig& config) {
     opts.AddLongOption("ca-file",
         "File containing PEM encoded root certificates for SSL/TLS connections.\n"
         "If this parameter is empty, the default roots will be used")
-        .ProfileParam("ca-file", false)
+        .FileName("CA certificates").ProfileParam("ca-file", true)
         .LogToConnectionParams("ca-file")
-        .Env("YDB_CA_FILE", false, "CA certificates")
-        .RequiredArgument("PATH").StoreResult(&config.CaCertsFile);
+        .Env("YDB_CA_FILE", true, "CA certificates")
+        .RequiredArgument("PATH").StoreFilePath(&config.CaCertsFile).StoreResult(&config.CaCerts);
     opts.AddLongOption("client-cert-file",
         "File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded)")
         .FileName("Client certificate")
@@ -109,14 +109,7 @@ bool TClientCommandRootBase::ParseProtocol(TConfig& config, TString& message) {
 }
 
 void TClientCommandRootBase::ParseCaCerts(TConfig& config) {
-    if (!config.EnableSsl) {
-        config.CaCerts.clear();
-        config.CaCertsFile.clear();
-        return;
-    }
-    if (config.CaCertsFile) {
-        config.CaCerts = ReadFromFile(config.CaCertsFile, "CA certificates");
-    }
+    Y_UNUSED(config);
 }
 
 void TClientCommandRootBase::ParseClientCert(TConfig& config) {

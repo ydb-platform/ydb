@@ -997,6 +997,60 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         );
     }
 
+    Y_UNIT_TEST_F(ParseCAFileWithGrpcEndpointFromCommandLine, TCliTestFixture) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFileWithGrpcEndpointFromProfile, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-p", "active_test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+    }
+
     Y_UNIT_TEST_F(ParseClientCertFile, TCliTestFixtureWithSsl) {
         ExpectToken("token");
         ExpectClientCert();

@@ -738,10 +738,6 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     config.ChosenAuthMethod = ParseResult->GetChosenAuthMethod();
 }
 
-void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
-    TClientCommandRootBase::ParseCaCerts(config);
-}
-
 void TClientCommandRootCommon::ParseClientCert(TConfig& config) {
     if (!config.EnableSsl && config.ClientCert) {
         MisuseErrors.push_back("\"client-cert-file\"/\"client-cert-key-file\"/\"client-cert-key-password-file\" options are provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.");

@@ -76,7 +76,6 @@ private:
     void ParseProfile();
     void ParseAddress(TConfig&) override {}
     void ParseIamEndpoint(TConfig& config);
-    void ParseCaCerts(TConfig& config) override;
     void ParseClientCert(TConfig& config) override;
     void ParseStaticCredentials(TConfig& config);
     static TString GetAddressFromString(const TString& address, bool* enableSsl = nullptr, std::vector<TString>* errors = nullptr);

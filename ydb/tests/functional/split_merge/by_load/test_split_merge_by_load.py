@@ -10,7 +10,6 @@ import attr
 import pytest
 import requests
 
-from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.library.fixtures.safe_parametrize import ParameterSet, safe_mark_parametrize
@@ -476,9 +475,6 @@ def _wait_for_tablet_resolver_cache(context: _YdbTestContext) -> None:
         urllib.parse.urlencode({
             "database": context.database,
             "path": "{}/{}".format(context.database, _TABLE_NAME),
-            "enums": "true",
-            "partition_stats": "true",
-            "subs": "0",
         }),
     )
     response = requests.get(describe_url)

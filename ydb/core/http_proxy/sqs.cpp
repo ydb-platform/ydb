@@ -115,7 +115,6 @@ namespace NKikimr::NHttpProxy {
 
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
-                    {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
                 };
             
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
@@ -412,6 +411,9 @@ namespace NKikimr::NHttpProxy {
                 if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
+                } else if (!HttpContext.SecurityToken.empty()) {
+                    HttpContext.SerializedUserToken = HttpContext.SecurityToken;
+                    SendGrpcRequestNoDriver(ctx);
                 } else {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(

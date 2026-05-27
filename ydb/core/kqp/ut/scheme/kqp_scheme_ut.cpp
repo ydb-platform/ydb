@@ -8038,10 +8038,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
-        auto checkNotFound = [](const auto& result, const TString& error) {
+        auto checkNotFound = [](const auto& result, const TString& path, const TString& error) {
             const auto& issuesString = result.GetIssues().ToString();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, issuesString);
-            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, "does not exist", issuesString);
+            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, TStringBuilder() << "Path `" << path << "` does not exist", issuesString);
             UNIT_ASSERT_STRING_CONTAINS_C(issuesString, error, issuesString);
         };
 
@@ -8085,8 +8085,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSourceSql, settings));
         checkDisabled(ydb->ExecuteQuery(createTableSql, settings));
-        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), "Executing ESchemeOpDropExternalTable");
-        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), "Executing operation with object \"EXTERNAL_DATA_SOURCE\"");
+        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalTable", "Executing ESchemeOpDropExternalTable");
+        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalDataSource", "Executing operation with object \"EXTERNAL_DATA_SOURCE\"");
     }
 
     Y_UNIT_TEST(CreateExternalDataSource) {
@@ -11865,9 +11865,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
-        auto checkNotFound = [](const auto& result) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "does not exist", result.GetIssues().ToString());
+        auto checkNotFound = [](const auto& result, const TString& path) {
+            const auto& issuesString = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, issuesString);
+            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, TStringBuilder() << "Path `" << path << "` does not exist", issuesString);
         };
 
         const auto& createSql = R"(
@@ -11901,8 +11902,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // Serverless, disabled
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
-        checkNotFound(ydb->ExecuteQuery(alterSql, settings));
-        checkNotFound(ydb->ExecuteQuery(dropSql, settings));
+        checkNotFound(ydb->ExecuteQuery(alterSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/.metadata/workload_manager/pools/MyResourcePool");
+        checkNotFound(ydb->ExecuteQuery(dropSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/.metadata/workload_manager/pools/MyResourcePool");
     }
 
     Y_UNIT_TEST(ResourcePoolsValidation) {
@@ -13673,7 +13674,7 @@ END DO)",
             } else if (result.GetStatus() == EStatus::NOT_FOUND) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions") &&
-                    !issues.contains("does not exist")) {
+                    !issues.contains("Path `/Root/MyFolder/MyStreamingQuery` does not exist")) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected NOT_FOUND error: " << issues);
                 }
             } else if (result.GetStatus() == EStatus::ABORTED) {

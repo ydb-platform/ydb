@@ -705,18 +705,19 @@ def build_html(
       --remove: #cf222e;
     }}
     * {{ box-sizing: border-box; }}
+    html {{ font-size: 70%; }}
     body {{
       margin: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg); color: var(--text); line-height: 1.5;
+      background: var(--bg); color: var(--text); line-height: 1.45;
     }}
-    .wrap {{ max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }}
+    .wrap {{ max-width: 1280px; margin: 0 auto; padding: 17px 20px 34px; }}
     .hero {{
-      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-      padding: 28px 28px 24px; margin-bottom: 20px;
-      border-left: 6px solid {'var(--limited)' if bar_over else 'var(--open)'};
+      background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+      padding: 20px 20px 17px; margin-bottom: 14px;
+      border-left: 5px solid {'var(--limited)' if bar_over else 'var(--open)'};
     }}
-    .hero-top {{ display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }}
-    h1 {{ margin: 0; font-size: 1.5rem; }}
+    .hero-top {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }}
+    h1 {{ margin: 0; font-size: 1.35rem; }}
     .status {{
       font-size: .85rem; font-weight: 700; letter-spacing: .04em;
       padding: 6px 12px; border-radius: 999px;
@@ -740,27 +741,27 @@ def build_html(
       background: var(--accent); color: #fff; text-decoration: none; white-space: nowrap;
     }}
     .open-gate-btn:hover {{ background: #0550ae; color: #fff; }}
-    .hero-lead {{ font-size: 1.05rem; margin: 0 0 8px; }}
-    .hero-effect {{ color: var(--muted); margin: 0; }}
-    .meta-line {{ margin-top: 16px; font-size: .85rem; color: var(--muted); }}
+    .hero-lead {{ font-size: .95rem; margin: 0 0 6px; }}
+    .hero-effect {{ color: var(--muted); margin: 0; font-size: .92rem; }}
+    .meta-line {{ margin-top: 11px; font-size: .82rem; color: var(--muted); }}
     .meta-line a {{ color: var(--accent); }}
     .section-head-links {{ font-size: .88rem; font-weight: 500; margin-left: 8px; }}
     .section-head-links a {{ color: var(--accent); text-decoration: none; }}
     .section-head-links a:hover {{ text-decoration: underline; }}
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 14px; }}
     .metric {{
-      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 11px;
     }}
-    .metric-val {{ font-size: 1.75rem; font-weight: 700; line-height: 1.1; }}
-    .metric-label {{ font-size: .8rem; color: var(--muted); margin-top: 4px; }}
+    .metric-val {{ font-size: 1.5rem; font-weight: 700; line-height: 1.1; }}
+    .metric-label {{ font-size: .75rem; color: var(--muted); margin-top: 3px; }}
     .section {{
-      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-      padding: 20px; margin-bottom: 16px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px; margin-bottom: 11px;
     }}
-    .section h2 {{ margin: 0 0 14px; font-size: 1.05rem; }}
+    .section h2 {{ margin: 0 0 10px; font-size: .98rem; }}
     .flow {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }}
     .flow-step {{
-      flex: 1 1 160px; background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+      flex: 1 1 140px; background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px;
     }}
     .flow-step.active {{ border-color: var(--accent); background: #eef6ff; }}
     .flow-num {{ font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }}
@@ -778,9 +779,10 @@ def build_html(
       border-radius: 999px;
     }}
     .alert {{
-      background: #fff8c5; border: 1px solid #d4a72c; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+      background: #fff8c5; border: 1px solid #d4a72c; border-radius: 8px; padding: 8px 10px; margin-bottom: 11px;
+      font-size: .92rem;
     }}
-    .summary-row {{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }}
+    .summary-row {{ display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }}
     .chip {{ font-size: .82rem; padding: 6px 10px; border-radius: 999px; background: #f1f5f9; }}
     .chip.add {{ background: #dcfce7; color: var(--add); }}
     .chip.remove {{ background: #fee2e2; color: var(--remove); }}
@@ -810,7 +812,7 @@ def build_html(
     }}
     .queue-matrix.runner-matrix td[title] {{ cursor: help; }}
     .queue-matrix th {{
-      text-align: left; padding: 12px 14px; background: #f8fafc;
+      text-align: left; padding: 8px 14px; background: #f8fafc;
       border: 1px solid var(--border); border-left: none; vertical-align: top;
     }}
     .queue-matrix th:first-child {{ border-left: 1px solid var(--border); border-radius: 10px 0 0 0; }}
@@ -821,7 +823,7 @@ def build_html(
       padding: 2px 8px; border-radius: 999px; background: #eef2f7; color: var(--muted);
     }}
     .queue-matrix td {{
-      padding: 10px 14px; border: 1px solid var(--border); border-top: none; border-left: none;
+      padding: 7px 14px; border: 1px solid var(--border); border-top: none; border-left: none;
       vertical-align: top;
     }}
     .queue-matrix td:first-child {{ border-left: 1px solid var(--border); }}
@@ -833,19 +835,19 @@ def build_html(
     .queue-matrix td.idle {{ background: #fafbfc; }}
     .queue-matrix td.offline {{ background: #f1f5f9; color: var(--muted); }}
     .queue-matrix td.empty-cell {{ background: #fafbfc; }}
-    .cell-runner {{ font-size: .78rem; color: var(--muted); margin-bottom: 4px; word-break: break-all; }}
+    .cell-runner {{ font-size: .72rem; color: var(--muted); margin-bottom: 3px; word-break: break-all; }}
     .cell-runner a {{ color: var(--accent); text-decoration: none; }}
     .cell-runner a:hover {{ text-decoration: underline; }}
     .cell-wf {{ margin-bottom: 4px; overflow: hidden; }}
     .cell-wf strong {{
-      display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem;
+      display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .76rem;
     }}
-    .cell-idle {{ font-size: .85rem; color: var(--muted); font-style: italic; }}
+    .cell-idle {{ font-size: .78rem; color: var(--muted); font-style: italic; }}
     .matrix-scroll {{ overflow-x: auto; margin: 0 -4px; padding: 0 4px 4px; }}
     .cell-wait {{
       font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 4px;
     }}
-    .cell-run {{ margin-bottom: 6px; font-size: .75rem; line-height: 1.25; }}
+    .cell-run {{ margin-bottom: 4px; font-size: .7rem; line-height: 1.2; }}
     .cell-run a {{ color: var(--accent); text-decoration: none; }}
     .cell-run a:hover {{ text-decoration: underline; }}
     .cell-gate {{ margin-top: 2px; }}
@@ -864,21 +866,21 @@ def build_html(
     .empty {{ color: var(--muted); font-size: .9rem; margin: 0; }}
     code {{ background: #eef2f7; padding: 2px 6px; border-radius: 4px; font-size: .85em; }}
     .topbar {{
-      display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
-      margin-bottom: 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 11px;
+      margin-bottom: 11px; border-bottom: 1px solid var(--border);
     }}
     .tabs {{
       display: flex; gap: 4px; margin: 0; border-bottom: none; padding-bottom: 0; flex: 1;
     }}
     .topbar-actions {{ padding-bottom: 10px; flex-shrink: 0; display: flex; gap: 8px; flex-wrap: wrap; }}
     .tab {{
-      padding: 10px 18px; border: none; background: none; cursor: pointer;
-      font-size: .92rem; font-weight: 600; color: var(--muted);
+      padding: 7px 14px; border: none; background: none; cursor: pointer;
+      font-size: .88rem; font-weight: 600; color: var(--muted);
       border-bottom: 2px solid transparent; margin-bottom: -1px;
     }}
     .tab:hover {{ color: var(--text); }}
     .tab.active {{ color: var(--accent); border-bottom-color: var(--accent); }}
-    .tab-hero {{ display: none; margin-bottom: 20px; }}
+    .tab-hero {{ display: none; margin-bottom: 14px; }}
     .tab-hero.active {{ display: block; }}
     .tab-panel {{ display: none; }}
     .tab-panel.active {{ display: block; }}

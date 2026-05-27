@@ -53,6 +53,8 @@ namespace NKikimr::NDDisk {
         bool IsFromPersistentBuffer = false;
         ui64 DDiskSessionSeqNo = 0;
 
+        TQueryCredentials() = default;
+
         static TQueryCredentials FromTablet(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
             return TQueryCredentials(tabletId, generation, std::nullopt, false, ddiskSessionSeqNo);
         }
@@ -97,7 +99,6 @@ namespace NKikimr::NDDisk {
         }
 
     private:
-        TQueryCredentials() = default;
 
         TQueryCredentials(
                 ui64 tabletId,

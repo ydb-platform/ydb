@@ -43,7 +43,7 @@ struct ICompactionUnit {
     {
     }
 
-    virtual void AddPortion(typename TPortion::TConstPtr p) {
+    virtual void AddPortion(typename TPortion::TPtr p) {
         if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
             Counters.Portions->AddPortion(p);
         }
@@ -79,7 +79,7 @@ struct ICompactionUnit {
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
 
 protected:
-    virtual void DoAddPortion(typename TPortion::TConstPtr p) = 0;
+    virtual void DoAddPortion(typename TPortion::TPtr p) = 0;
     virtual void DoRemovePortion(typename TPortion::TConstPtr p) = 0;
 };
 

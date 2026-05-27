@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/settings.h>
@@ -35,13 +36,14 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         return;
     }
 
-    void DoAddPortion(typename TPortion::TConstPtr p) override {
+    void DoAddPortion(typename TPortion::TPtr p) override {
         const ui64 portionId = p->GetPortionId();
         const ui64 measure = Measure(p);
         this->Counters.Portions->AddWidth(measure);
         AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
         if (measure == 0) {
             AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
+            p->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
             Portions.insert(p);
         } else {
             AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
@@ -139,7 +141,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         return;
     }
 
-    void DoAddPortion(typename TPortion::TConstPtr p) override {
+    void DoAddPortion(typename TPortion::TPtr p) override {
         AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
         TotalBlobBytes += p->GetTotalBlobBytes();
         this->Counters.Portions->SetHeight(Portions.size());
@@ -236,7 +238,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
         return;
     }
 
-    void DoAddPortion(typename TPortion::TConstPtr p) override {
+    void DoAddPortion(typename TPortion::TPtr p) override {
         const ui64 id = p->GetPortionId();
         PortionById.emplace(id, p);
         Intersections.Add(id, p->IndexKeyStart(), p->IndexKeyEnd());

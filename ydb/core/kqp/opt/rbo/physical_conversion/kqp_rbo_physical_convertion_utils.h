@@ -20,6 +20,15 @@ TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector
 TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx);
 
 template <typename T>
+THashSet<TString> BuildNameSet(const TVector<T>& columns) {
+    THashSet<TString> result;
+    for (const auto& column : columns) {
+        result.insert(GetFullName(column));
+    }
+    return result;
+}
+
+template <typename T>
 TExprNode::TPtr BuildExpandMapForNarrowInput(TExprNode::TPtr input, const TVector<T>& inputs, TExprContext& ctx) {
     // clang-format off
     return ctx.Builder(input->Pos())

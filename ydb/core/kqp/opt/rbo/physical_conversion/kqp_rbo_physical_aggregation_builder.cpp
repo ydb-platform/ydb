@@ -641,6 +641,8 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
         // clang-format on
     }
 
+    const auto outputs = NPhysicalConvertionUtils::BuildNameSet(Aggregate->GetOutputIUs());
+
     // clang-format off
     return Ctx.Builder(Pos)
         .Callable("NarrowMap")
@@ -649,6 +651,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
                 .Params("wide_param", outputFields.size())
                 .Callable(0, "AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    ui32 outputIndex = 0;
                     for (ui32 i = 0; i < outputFields.size(); ++i) {
                         // Apply rename.
                         auto fieldName = outputFields[i];
@@ -656,7 +659,10 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
                         if (it != renameMap.end()) {
                             fieldName = it->second;
                         }
-                        parent.List(i)
+                        if (!outputs.contains(fieldName)) {
+                            continue;
+                        }
+                        parent.List(outputIndex++)
                             .Atom(0, fieldName)
                             .Arg(1, "wide_param", i)
                         .Seal();

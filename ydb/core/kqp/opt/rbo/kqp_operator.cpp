@@ -147,7 +147,14 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
     return OutputIUs;
+}
+
+void TOpRead::PropagateLiveness(ILivenessContext& ctx) {
+    Y_UNUSED(ctx);
 }
 
 bool TOpRead::NeedsMap() const {
@@ -326,6 +333,10 @@ TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysi
 }
 
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
+
     TVector<TInfoUnit> res = GetInput()->GetOutputIUs();
     THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
@@ -603,6 +614,10 @@ void TOpAddDependencies::SetDependencyPairs(const TVector<std::pair<TInfoUnit, c
 }
 
 TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
+
     auto ius = GetInput()->GetOutputIUs();
     ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
     return ius;
@@ -637,7 +652,12 @@ TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const 
     , FilterExpr(filterExpr) {
 }
 
-TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
+TVector<TInfoUnit> TOpFilter::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
+    return GetInput()->GetOutputIUs();
+}
 
 void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                           const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
@@ -705,6 +725,10 @@ TOpJoin::TOpJoin(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> ri
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys), JoinFilters(joinFilters) {}
 
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
+
     TVector<TInfoUnit> res;
 
     auto leftInputIUs = GetLeftInput()->GetOutputIUs();
@@ -919,6 +943,9 @@ TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOper
     : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput), Ordered(ordered) {}
 
 TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
     return GetLeftInput()->GetOutputIUs();
 }
 
@@ -971,6 +998,9 @@ TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TP
 }
 
 TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -1039,6 +1069,9 @@ TOpSort::TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhy
 }
 
 TVector<TInfoUnit> TOpSort::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -1150,6 +1183,10 @@ TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggr
 }
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
+
     // We assume that aggregation returns column is order [keys, states]
     TVector<TInfoUnit> outputIU = KeyColumns;
     for (const auto& aggTraits : AggregationTraitsList) {
@@ -1168,10 +1205,13 @@ TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
 }
 
 void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
+    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
     TInfoUnitSet inputLive;
     AddInfoUnits(inputLive, KeyColumns);
     for (const auto& traits : AggregationTraitsList) {
-        AddInfoUnit(inputLive, traits.OriginalColName);
+        if (liveOut.contains(traits.ResultColName)) {
+            AddInfoUnit(inputLive, traits.OriginalColName);
+        }
     }
     ctx.AddLiveColumns(GetInput(), inputLive);
 }
@@ -1323,6 +1363,9 @@ TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVec
 }
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() {
+    if (const auto& outputIUs = GetOutputIUsOverride()) {
+        return *outputIUs;
+    }
     return GetInput()->GetOutputIUs();
 }
 

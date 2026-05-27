@@ -461,6 +461,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
 
+    RBO.AddStage(std::make_unique<TNarrowByLivenessStage>());
+
     RBO.AddStage(std::make_unique<TPropagateHashFuncStage>());
 }
 

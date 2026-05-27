@@ -88,7 +88,7 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, NPhysicalConvertionUtils::BuildNameSet(Map->GetOutputIUs()), Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

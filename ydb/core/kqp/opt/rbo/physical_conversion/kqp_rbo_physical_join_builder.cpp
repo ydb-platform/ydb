@@ -490,12 +490,14 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     // Prepare renames.
     ui32 outputIdx = 0;
+    TVector<TString> joinOutputColumns;
     TVector<TCoAtom> leftRenames;
     if (!leftSideEmpty) {
         for (ui32 i = 0; i < leftInputColumns.size(); ++i) {
             if (leftOutputColumns.contains(leftInputColumns[i])) {
                 leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
                 leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+                joinOutputColumns.push_back(leftInputColumns[i]);
             }
         }
     }
@@ -506,6 +508,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
             if (rightOutputColumns.contains(rightInputColumns[i])) {
                 rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
                 rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(outputIdx++).Done());
+                joinOutputColumns.push_back(rightInputColumns[i]);
             }
         }
     }
@@ -587,7 +590,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     // clang-format off
     return Build<TCoFromFlow>(Ctx, Pos)
-        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, Join->GetOutputIUs(), Ctx))
+        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, joinOutputColumns, NPhysicalConvertionUtils::BuildNameSet(Join->GetOutputIUs()), Ctx))
     .Done().Ptr();
     // clang-format on
 }

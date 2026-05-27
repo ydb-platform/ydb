@@ -112,6 +112,7 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
     FLUENT_SETTING_DEFAULT(EDataFormat, DataFormat, TExportToS3Settings::EDataFormat::UNSPECIFIED);
+    FLUENT_SETTING_OPTIONAL(uint64_t, ParquetRowGroupSize);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
         EncryptionAlgorithm_ = algorithm;

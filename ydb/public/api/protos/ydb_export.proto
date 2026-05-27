@@ -166,7 +166,7 @@ message ExportToS3Settings {
     DataFormat data_format = 18;
 
     // Size of the row group to use with Parquet data format.
-    uint32 row_group_size = 19;
+    uint32 parquet_row_group_size = 19;
 }
 
 message ExportToS3Result {

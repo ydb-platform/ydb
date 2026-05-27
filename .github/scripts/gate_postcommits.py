@@ -27,8 +27,9 @@ YC_ACTIVE_RUNNERS_URL = (
 YC_MONITORING_FOLDER = "b1grf3mpoatgflnlavjd"
 YC_RUNNER_DASHBOARD = "runner-summary"
 GATE_WORKFLOW_ID = "gate_postcommits.yml"
+HOSTED_COLUMN = "GitHub-hosted"
 GENERIC_RUNNER_LABELS = frozenset(
-    {"self-hosted", "Linux", "Windows", "macOS", "X64", "ARM", "ARM64", "auto-provisioned"}
+    {"self-hosted", "Linux", "Windows", "macOS", "X64", "ARM", "ARM64", "auto-provisioned","ghrun"}
 )
 
 
@@ -216,9 +217,27 @@ def fetch_all_runners(repo: str, token: str) -> tuple[list[dict], int]:
     return all_runners, total
 
 
-def fetch_active_runner_jobs(repo: str, token: str, now_ts: float) -> dict[str, dict]:
-    """Map runner_name -> currently running workflow job."""
-    result: dict[str, dict] = {}
+def _job_info(run: dict, job: dict, now_ts: float) -> dict:
+    started_raw = job.get("started_at") or run.get("run_started_at") or run.get("created_at")
+    started_ts = datetime.fromisoformat(started_raw.replace("Z", "+00:00")).timestamp()
+    elapsed = max(0.0, now_ts - started_ts)
+    job_labels = job.get("labels") or []
+    return {
+        "workflow": run.get("name", "Unknown"),
+        "job_name": job.get("name", ""),
+        "run_id": run["id"],
+        "run_url": run["html_url"],
+        "elapsed_seconds": elapsed,
+        "elapsed_human": fmt_wait(elapsed),
+        "host_label": ", ".join(job_labels) if job_labels else "hosted",
+        "runner_name": job.get("runner_name") or "",
+    }
+
+
+def fetch_active_jobs(repo: str, token: str, now_ts: float) -> tuple[dict[str, dict], list[dict]]:
+    """Return self-hosted jobs by runner_name and GitHub-hosted in_progress jobs."""
+    runner_jobs: dict[str, dict] = {}
+    hosted_jobs: list[dict] = []
     page = 1
     while True:
         payload = api_request(
@@ -238,28 +257,27 @@ def fetch_active_runner_jobs(repo: str, token: str, now_ts: float) -> dict[str, 
             for job in jobs_payload.get("jobs", []):
                 if job.get("status") != "in_progress":
                     continue
-                runner_name = job.get("runner_name")
-                if not runner_name:
-                    continue
-                started_raw = job.get("started_at") or run.get("run_started_at") or run.get("created_at")
-                started_ts = datetime.fromisoformat(started_raw.replace("Z", "+00:00")).timestamp()
-                elapsed = max(0.0, now_ts - started_ts)
-                result[runner_name] = {
-                    "workflow": run.get("name", "Unknown"),
-                    "job_name": job.get("name", ""),
-                    "run_id": run["id"],
-                    "run_url": run["html_url"],
-                    "elapsed_seconds": elapsed,
-                    "elapsed_human": fmt_wait(elapsed),
-                }
+                info = _job_info(run, job, now_ts)
+                labels = job.get("labels") or []
+                if "self-hosted" in labels:
+                    runner_name = job.get("runner_name")
+                    if runner_name:
+                        runner_jobs[runner_name] = info
+                else:
+                    hosted_jobs.append(info)
         if len(runs) < 100:
             break
         page += 1
-    return result
+    hosted_jobs.sort(key=lambda item: item["elapsed_seconds"])
+    return runner_jobs, hosted_jobs
 
 
-def build_runner_label_view(raw_runners: list[dict], runner_jobs: dict[str, dict]) -> dict[str, list[dict]]:
-    label_priority = {"ghrun": 0, "postcommit": 1}
+def build_runner_label_view(
+    raw_runners: list[dict],
+    runner_jobs: dict[str, dict],
+    hosted_jobs: list[dict] | None = None,
+) -> dict[str, list[dict]]:
+    label_priority = {"ghrun": 0, "postcommit": 1, HOSTED_COLUMN: 1000}
     parsed = []
     for runner in raw_runners:
         labels = [lb["name"] for lb in runner.get("labels", []) if is_matrix_label(lb["name"])]
@@ -302,7 +320,24 @@ def build_runner_label_view(raw_runners: list[dict], runner_jobs: dict[str, dict
             )
         )
         by_label[label] = entries
-    return by_label
+
+    if hosted_jobs:
+        by_label[HOSTED_COLUMN] = [
+            {
+                "runner_name": job["host_label"],
+                "runner_id": "",
+                "status": "online",
+                "job": job,
+                "hosted": True,
+            }
+            for job in hosted_jobs
+        ]
+
+    order = sorted(
+        by_label.keys(),
+        key=lambda name: (label_priority.get(name, 99), name.lower()),
+    )
+    return {label: by_label[label] for label in order}
 
 
 def ghrun_runners(runners: list[dict]) -> list[dict]:
@@ -449,11 +484,14 @@ def _runner_label_matrix_table(by_label: dict[str, list[dict]], empty_text: str,
             entry = entries[row_idx]
             job = entry["job"]
             runner_name = entry["runner_name"]
-            runner_link = _runner_name_link(runner_name, now_ts)
+            if label == HOSTED_COLUMN or entry.get("hosted"):
+                runner_line = f'<div class="cell-runner">{esc(runner_name)}</div>'
+            else:
+                runner_line = f'<div class="cell-runner">{_runner_name_link(runner_name, now_ts)}</div>'
             if job:
                 cells.append(
                     f'<td class="busy">'
-                    f'<div class="cell-runner">{runner_link}</div>'
+                    f"{runner_line}"
                     f'<div class="cell-wf" title="{esc(job["workflow"])}">'
                     f'<strong>{esc(job["workflow"])}</strong></div>'
                     f'<div class="cell-wait">{esc(job["elapsed_human"])}</div>'
@@ -463,14 +501,14 @@ def _runner_label_matrix_table(by_label: dict[str, list[dict]], empty_text: str,
             elif entry["status"] == "offline":
                 cells.append(
                     f'<td class="offline">'
-                    f'<div class="cell-runner">{runner_link}</div>'
+                    f"{runner_line}"
                     f'<div class="cell-idle">offline</div>'
                     f"</td>"
                 )
             else:
                 cells.append(
                     f'<td class="idle">'
-                    f'<div class="cell-runner">{runner_link}</div>'
+                    f"{runner_line}"
                     f'<div class="cell-idle">idle</div>'
                     f"</td>"
                 )
@@ -800,7 +838,7 @@ def build_html(
         <h1>Runner labels</h1>
         <span class="status-muted">{busy_runners} busy · {matrix_runners} runners · {label_count} labels</span>
       </div>
-      <p class="hero-lead">Постоянные runner'ы по labels: что сейчас выполняется или idle. Generic labels (Linux, self-hosted, …) скрыты.</p>
+      <p class="hero-lead">Self-hosted runner'ы по labels + столбец <strong>{esc(HOSTED_COLUMN)}</strong> (jobs на <code>ubuntu-latest</code> и т.п.). Generic labels скрыты.</p>
       <p class="hero-effect"><strong>YC:</strong> <a href="{esc(YC_ACTIVE_RUNNERS_URL)}" target="_blank" rel="noopener">Active runners</a> · имя runner'а → мониторинг 24h · run ID → GitHub</p>
       <div class="meta-line">{esc(meta['check_time'])} · всего в репо: {meta['total_runners']} runner'ов</div>
     </div>
@@ -965,11 +1003,11 @@ def run(args: argparse.Namespace) -> int:
     keep_ids: list[str] = []
     actions: list[dict] = []
     runner_label_view: dict[str, list[dict]] = {}
-    runner_jobs = fetch_active_runner_jobs(repo, queue_token, now_ts)
+    runner_jobs, hosted_jobs = fetch_active_jobs(repo, queue_token, now_ts)
 
     try:
         all_runners, total_runners = fetch_all_runners(repo, runners_token)
-        runner_label_view = build_runner_label_view(all_runners, runner_jobs)
+        runner_label_view = build_runner_label_view(all_runners, runner_jobs, hosted_jobs)
         ghrun = ghrun_runners(all_runners)
         ghrun_count = len(ghrun)
         postcommit_count = sum(1 for r in ghrun if r["has_postcommit"])
@@ -983,6 +1021,7 @@ def run(args: argparse.Namespace) -> int:
         if exc.code == 403:
             runners_note = "Runners API unavailable (403). Queue stats are still real."
             print(f"WARN: {runners_note}", file=sys.stderr)
+            runner_label_view = build_runner_label_view([], runner_jobs, hosted_jobs)
         else:
             raise
 
@@ -1014,7 +1053,7 @@ def run(args: argparse.Namespace) -> int:
 
     (report_dir / "queue.json").write_text(json.dumps(queue, indent=2), encoding="utf-8")
     (report_dir / "runner-label-matrix.json").write_text(
-        json.dumps({"jobs": runner_jobs, "by_label": runner_label_view}, indent=2),
+        json.dumps({"jobs": runner_jobs, "hosted_jobs": hosted_jobs, "by_label": runner_label_view}, indent=2),
         encoding="utf-8",
     )
     (report_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")

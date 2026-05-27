@@ -300,6 +300,7 @@ import tech.ydb.exposed.dialect.ydbJsonDocument
 import tech.ydb.exposed.dialect.ydbUbyte
 import tech.ydb.exposed.dialect.ydbUint32
 import tech.ydb.exposed.dialect.ydbUint64
+import tech.ydb.exposed.dialect.ydbUshort
 import tech.ydb.exposed.dialect.ydbUlong
 import tech.ydb.exposed.dialect.ydbUuid
 
@@ -310,6 +311,7 @@ val uid = ydbUuid("uid")
 val flags = ydbUbyte("flags")
 val counter = ydbUint32("counter")
 val total = ydbUint64("total")
+val someField = ydbUshort("some_field")
 val totalFullRange = ydbUlong("total_full_range")
 val duration = ydbInterval("duration")
 val duration64 = ydbInterval64("duration64")

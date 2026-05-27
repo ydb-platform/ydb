@@ -372,35 +372,42 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 {
     Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building AlterMainTablePropose");
 
-    auto doFunc = [](const TIndexBuildInfo& buildInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
-        for (const auto& colInfo : buildInfo.BuildColumns) {
-            auto col = modifyScheme.MutableAlterTable()->AddColumns();
-            NScheme::TTypeInfo typeInfo;
-            TString typeMod;
-            Ydb::StatusIds::StatusCode status;
-            TString error;
-            if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
-                // todo gvit fix that
-                Y_ENSURE(false, "failed to extract column type info");
-            }
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.AlterMainTableTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
 
-            col->SetType(NScheme::TypeName(typeInfo, typeMod));
-            col->SetName(colInfo.ColumnName);
-            col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
-            col->SetIsBuildInProgress(true);
+    auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
 
-            if (!colInfo.FamilyName.empty()) {
-                col->SetFamilyName(colInfo.FamilyName);
-            }
-
-            if (colInfo.NotNull) {
-                col->SetNotNull(colInfo.NotNull);
-            }
-
+    for (const auto& colInfo : buildInfo.BuildColumns) {
+        auto col = modifyScheme.MutableAlterTable()->AddColumns();
+        NScheme::TTypeInfo typeInfo;
+        TString typeMod;
+        Ydb::StatusIds::StatusCode status;
+        TString error;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
+            // todo gvit fix that
+            Y_ENSURE(false, "failed to extract column type info");
         }
-    };
 
-    return AlterMainTableProposeTemplate(ss, buildInfo, buildInfo.AlterMainTableTxId, doFunc);
+        col->SetType(NScheme::TypeName(typeInfo, typeMod));
+        col->SetName(colInfo.ColumnName);
+        col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+        col->SetIsBuildInProgress(true);
+
+        if (!colInfo.FamilyName.empty()) {
+            col->SetFamilyName(colInfo.FamilyName);
+        }
+
+        if (colInfo.NotNull) {
+            col->SetNotNull(colInfo.NotNull);
+        }
+    }
+
+    *propose->Record.AddTransaction() = modifyScheme;
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "AlterMainTablePropose " << buildInfo.Id << " " << propose->Record.ShortDebugString());
+
+    return propose;
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(

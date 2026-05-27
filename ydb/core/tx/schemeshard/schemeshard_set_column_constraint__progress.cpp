@@ -19,15 +19,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWrites
 {
     Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableLockPropose");
 
-    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
-        for (const auto& columnName : operationInfo.NotNullColumns) {
-            auto col = modifyScheme.MutableAlterTable()->AddColumns();
-            col->SetName(TString(columnName));
-            col->SetNotNull(true);
-        }
-    };
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(operationInfo.LockNullWritesTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
 
-    return AlterMainTableProposeTemplate(ss, operationInfo, operationInfo.LockNullWritesTxId, doFunc);
+    auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
+
+    for (const auto& columnName : operationInfo.NotNullColumns) {
+        auto col = modifyScheme.MutableAlterTable()->AddColumns();
+        col->SetName(TString(columnName));
+        col->SetNotNull(true);
+    }
+
+    *propose->Record.AddTransaction() = modifyScheme;
+
+    return propose;
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWritesPropose(
@@ -35,15 +40,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
 {
     Y_ENSURE(operationInfo.IsSetColumnConstraint(), "Unknown operation kind while building AlterMainTableUnlockPropose");
 
-    auto doFunc = [](const TSetColumnConstraintOperationInfo& operationInfo, NKikimrSchemeOp::TModifyScheme& modifyScheme) -> void {
-        for (const auto& columnName : operationInfo.NotNullColumns) {
-            auto col = modifyScheme.MutableAlterTable()->AddColumns();
-            col->SetName(TString(columnName));
-            col->SetNotNull(false);
-        }
-    };
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(operationInfo.UnlockNullWritesTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
 
-    return AlterMainTableProposeTemplate(ss, operationInfo, operationInfo.UnlockNullWritesTxId, doFunc);
+    auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
+
+    for (const auto& columnName : operationInfo.NotNullColumns) {
+        auto col = modifyScheme.MutableAlterTable()->AddColumns();
+        col->SetName(TString(columnName));
+        col->SetNotNull(false);
+    }
+
+    *propose->Record.AddTransaction() = modifyScheme;
+
+    return propose;
 }
 
 struct TTxReplyAllocate : public TSchemeShard::TIndexBuilder::TTxBase {

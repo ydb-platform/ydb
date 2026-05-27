@@ -141,7 +141,7 @@ public:
 
         Self->PersistCreateSetColumnConstraint(db, *operationInfo);
 
-        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps;
+        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::Locking;
         Self->PersistSetColumnConstraintState(db, *operationInfo);
 
         Self->AddSetColumnConstraintOperation(operationInfo);

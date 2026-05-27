@@ -73,7 +73,7 @@ public:
         LOG_I("TTxReplyAllocate, id# " << BuildId << ", txId# " << txId);
 
         NIceDb::TNiceDb db(txc.DB);
-        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
             if (!operationInfo.LockTxId) {
                 operationInfo.LockTxId = txId;
                 Self->PersistSetColumnConstraintLockTxId(db, operationInfo);
@@ -91,7 +91,7 @@ public:
                 Self->PersistSetColumnConstraintUnlockNullWritesTxId(db, operationInfo);
                 Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Unlocking) {
             if (!operationInfo.UnlockTxId) {
                 operationInfo.UnlockTxId = txId;
                 Self->PersistSetColumnConstraintUnlockTxId(db, operationInfo);
@@ -185,7 +185,7 @@ public:
             return true;
         };
 
-        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
             Y_ENSURE(txId == operationInfo.LockTxId);
             operationInfo.LockTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
@@ -201,7 +201,7 @@ public:
             Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
             operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Unlocking) {
             Y_ENSURE(txId == operationInfo.UnlockTxId);
             operationInfo.UnlockTxStatus = record.GetStatus();
             Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
@@ -254,7 +254,7 @@ public:
         LOG_I("TTxReplyCompleted, id# " << BuildId << ", txId# " << txId);
 
         NIceDb::TNiceDb db(txc.DB);
-        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps) {
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
             Y_ENSURE(txId == operationInfo.LockTxId);
             operationInfo.LockTxDone = true;
             Self->PersistSetColumnConstraintLockTxDone(db, operationInfo);
@@ -266,7 +266,7 @@ public:
             Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
             operationInfo.UnlockNullWritesTxDone = true;
             Self->PersistSetColumnConstraintUnlockNullWritesTxDone(db, operationInfo);
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps) {
+        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Unlocking) {
             Y_ENSURE(txId == operationInfo.UnlockTxId);
             operationInfo.UnlockTxDone = true;
             Self->PersistSetColumnConstraintUnlockTxDone(db, operationInfo);
@@ -525,7 +525,7 @@ public:
                 Y_UNREACHABLE();
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::LockTableOnSchemaOps: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Locking: {
                 if (operationInfo.LockTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.LockTxStatus == NKikimrScheme::StatusSuccess) {
@@ -558,7 +558,7 @@ public:
                     if (operationInfo.ValidationFailed) {
                         ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites);
                     } else {
-                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps);
+                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Unlocking);
                     }
                     Progress(BuildId);
                 }
@@ -573,13 +573,13 @@ public:
                 } else if (!operationInfo.UnlockNullWritesTxDone) {
                     Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(operationInfo.UnlockNullWritesTxId)));
                 } else {
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps);
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Unlocking);
                     Progress(BuildId);
                 }
 
                 break;
             }
-            case TSetColumnConstraintOperationInfo::EOperationState::UnlockTableOnSchemaOps: {
+            case TSetColumnConstraintOperationInfo::EOperationState::Unlocking: {
                 if (operationInfo.UnlockTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.UnlockTxStatus == NKikimrScheme::StatusSuccess) {

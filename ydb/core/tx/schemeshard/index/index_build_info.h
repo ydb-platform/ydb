@@ -850,12 +850,12 @@ public:
 struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     enum class EOperationState: ui32 {
         Invalid = 0,
-        LockTableOnSchemaOps = 10,
+        Locking = 10,
         LockNullWrites = 20,
         Validate = 30,
         UnlockNullWrites = 40,
-        UnlockTableOnSchemaOps = 50,
-        Done = 60
+        Unlocking = 60,
+        Done = 200
     };
 
     struct TOperationState {
@@ -874,16 +874,16 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
             switch (Value) {
                 case EOperationState::Invalid:
                     return "Invalid";
-                case EOperationState::LockTableOnSchemaOps:
-                    return "LockTableOnSchemaOps";
+                case EOperationState::Locking:
+                    return "Locking";
                 case EOperationState::LockNullWrites:
                     return "LockNullWrites";
                 case EOperationState::Validate:
                     return "Validate";
                 case EOperationState::UnlockNullWrites:
                     return "UnlockNullWrites";
-                case EOperationState::UnlockTableOnSchemaOps:
-                    return "UnlockTableOnSchemaOps";
+                case EOperationState::Unlocking:
+                    return "Unlocking";
                 case EOperationState::Done:
                     return "Done";
             }

@@ -10,7 +10,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: drop file and set environment variable 
+    - name: Setup YDB service account credentials
       if: "${{ inputs.ci_ydb_service_account_key_file_credentials != '' }}"
       shell: bash
       run: |
@@ -32,8 +32,6 @@ runs:
         DELIM="YDB_QA_CONFIG_$(openssl rand -hex 8)"
         {
           echo "YDB_QA_CONFIG<<$DELIM"
-          printf '%s
-' "$YDB_QA_CONFIG_INPUT"
+          printf '%s\n' "$YDB_QA_CONFIG_INPUT"
           echo "$DELIM"
         } >> "$GITHUB_ENV"
-

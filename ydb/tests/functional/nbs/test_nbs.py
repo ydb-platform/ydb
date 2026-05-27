@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 from common import NbsTestBase
+from vhost_user_blk_client import (
+    VIRTIO_BLK_S_OK,
+    VhostUserBlkClient,
+    virtio_blk_status_name,
+)
 
 
 class TestNbs(NbsTestBase):
@@ -92,6 +97,70 @@ class TestNbs(NbsTestBase):
             assert (
                 read_data[: len(expected_data)] == expected_data
             ), f"Data mismatch at block {block_idx}: expected {len(expected_data)} bytes"
+
+    def test_nbs_vhost_unaligned_write(self):
+        """
+        Connect to the per-disk vhost-user-blk socket that the partition
+        actor creates at /tmp/<disk_id>.sock and issue unaligned virtio-blk
+        writes through it. This reproduces the scenario from the user-
+        reported fio failure:
+
+            fio --name=unaligned --filename=/dev/<dev> --direct=1 \\
+                --rw=write --ioengine=libaio --bs=4k --offset=1024 \\
+                --size=8k
+
+        which issues two 4 KiB writes at byte offsets 1024 and 5120 - both
+        unaligned with respect to the 4 KiB device block size. We verify
+        that the device handler returns success (VIRTIO_BLK_S_OK) for both
+        writes and that a subsequent unaligned read returns the data we
+        wrote.
+        """
+        disk_id = self.generate_disk_id()
+        self.create_ddisk_pool()
+        self.create_disk(disk_id)
+
+        block_size = 4096
+        # Two 4 KiB writes whose byte offsets are not multiples of the 4
+        # KiB block size but are valid 512-byte virtio-blk sectors.
+        first_offset = 1024
+        second_offset = first_offset + block_size
+
+        first_payload = bytes([ord('a')] * block_size)
+        second_payload = bytes([ord('b')] * block_size)
+
+        socket_path = "/tmp/{}.sock".format(disk_id)
+
+        with VhostUserBlkClient(socket_path) as client:
+            # Sanity check: an aligned write through the same vhost
+            # endpoint must succeed. This establishes that the client
+            # and the endpoint are wired up correctly before we exercise
+            # the unaligned path.
+            aligned_payload = bytes([ord('z')] * block_size)
+            status = client.write(0, aligned_payload)
+            assert status == VIRTIO_BLK_S_OK, (
+                "aligned sanity write at offset 0 failed: {}".format(
+                    virtio_blk_status_name(status)))
+
+            for offset, payload in (
+                (first_offset, first_payload),
+                (second_offset, second_payload),
+            ):
+                status = client.write(offset, payload)
+                assert status == VIRTIO_BLK_S_OK, (
+                    "unaligned write at offset {} failed: {}".format(
+                        offset, virtio_blk_status_name(status)))
+
+            # Read the same unaligned region back through the vhost
+            # endpoint and verify the contents.
+            status, data = client.read(first_offset, 2 * block_size)
+            assert status == VIRTIO_BLK_S_OK, (
+                "unaligned read at offset {} failed: {}".format(
+                    first_offset, virtio_blk_status_name(status)))
+
+        assert data[:block_size] == first_payload, (
+            "first 4 KiB region readback mismatch")
+        assert data[block_size:2 * block_size] == second_payload, (
+            "second 4 KiB region readback mismatch")
 
     def test_nbs_multiple_disks_creation(self):
         """

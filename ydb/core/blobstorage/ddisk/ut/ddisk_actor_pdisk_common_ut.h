@@ -331,7 +331,7 @@ TString MakeDataWithTabletAndBlock(ui32 tabletId, ui32 blockIdx, ui32 size) {
 }
 
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generation) {
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForDDisk(tabletId, generation, 1);
+    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(tabletId, generation, 1);
 
     auto connectResult = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
@@ -341,7 +341,7 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
 }
 
 NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tabletId, ui32 generation) {
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForDDisk(tabletId, generation, 1);
+    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(tabletId, generation, 1);
 
     auto connectResult = ctx.SendToAndGrab<NDDisk::TEvConnectResult>(diskIdx, new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
@@ -1008,7 +1008,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 [[maybe_unused]] void TestReadWithoutConnect(NDDisk::TDDiskConfig ddiskConfig) {
     TTestContext ctx(std::move(ddiskConfig));
 
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForDDisk(30, 1, 1);
+    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(30, 1, 1);
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));

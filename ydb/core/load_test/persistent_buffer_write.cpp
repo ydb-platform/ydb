@@ -347,7 +347,7 @@ public:
                 }
                 auto msg = std::make_unique<NDDisk::TEvReadPersistentBuffer>();
                 NDDisk::TQueryCredentials creds = Credentials;
-                creds.FromPersistentBuffer = true;
+                creds.IsFromPersistentBuffer = true;
                 creds.Serialize(msg->Record.MutableCredentials());
                 msg->Record.SetLsn(it.first);
                 msg->Record.SetGeneration(Credentials.Generation);

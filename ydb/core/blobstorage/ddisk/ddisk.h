@@ -50,18 +50,18 @@ namespace NKikimr::NDDisk {
         ui64 TabletId;
         ui32 Generation;
         std::optional<ui64> DDiskInstanceGuid;
-        bool FromPersistentBuffer = false;
+        bool IsFromPersistentBuffer = false;
         ui64 DDiskSessionSeqNo = 0;
 
-        static TQueryCredentials ForDDisk(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
+        static TQueryCredentials FromTablet(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
             return TQueryCredentials(tabletId, generation, std::nullopt, false, ddiskSessionSeqNo);
         }
 
-        static TQueryCredentials ForPersistentBuffer(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
+        static TQueryCredentials FromPersistentBuffer(ui64 tabletId, ui32 generation, ui64 ddiskSessionSeqNo) {
             return TQueryCredentials(tabletId, generation, std::nullopt, true, ddiskSessionSeqNo);
         }
 
-        static TQueryCredentials ForPersistentBuffer(
+        static TQueryCredentials FromPersistentBuffer(
                 ui64 tabletId,
                 ui32 generation,
                 ui64 ddiskSessionSeqNo,
@@ -78,7 +78,7 @@ namespace NKikimr::NDDisk {
             : TabletId(pb.GetTabletId())
             , Generation(pb.GetGeneration())
             , DDiskInstanceGuid(pb.HasDDiskInstanceGuid() ? std::make_optional(pb.GetDDiskInstanceGuid()) : std::nullopt)
-            , FromPersistentBuffer(pb.GetFromPersistentBuffer())
+            , IsFromPersistentBuffer(pb.GetFromPersistentBuffer())
             , DDiskSessionSeqNo(pb.GetDDiskSessionSeqNo())
         {}
 
@@ -88,8 +88,8 @@ namespace NKikimr::NDDisk {
             if (DDiskInstanceGuid) {
                 pb->SetDDiskInstanceGuid(*DDiskInstanceGuid);
             }
-            if (FromPersistentBuffer) {
-                pb->SetFromPersistentBuffer(FromPersistentBuffer);
+            if (IsFromPersistentBuffer) {
+                pb->SetFromPersistentBuffer(IsFromPersistentBuffer);
             }
             if (DDiskSessionSeqNo) {
                 pb->SetDDiskSessionSeqNo(DDiskSessionSeqNo);
@@ -103,12 +103,12 @@ namespace NKikimr::NDDisk {
                 ui64 tabletId,
                 ui32 generation,
                 std::optional<ui64> ddiskInstanceGuid,
-                bool fromPersistentBuffer,
+                bool isFromPersistentBuffer,
                 ui64 ddiskSessionSeqNo)
             : TabletId(tabletId)
             , Generation(generation)
             , DDiskInstanceGuid(ddiskInstanceGuid)
-            , FromPersistentBuffer(fromPersistentBuffer)
+            , IsFromPersistentBuffer(isFromPersistentBuffer)
             , DDiskSessionSeqNo(ddiskSessionSeqNo)
         {}
     };

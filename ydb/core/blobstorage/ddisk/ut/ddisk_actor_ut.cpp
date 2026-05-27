@@ -225,7 +225,7 @@ TRope MakeMisalignedRope(const TString& data) {
 }
 
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
-    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForDDisk(tabletId, generation, 1);
+    NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(tabletId, generation, 1);
 
     auto connectResult = SendToDDiskAndWait<NDDisk::TEvConnectResult>(ctx, serviceId, new NDDisk::TEvConnect(creds));
     AssertStatus(connectResult, TReplyStatus::OK);
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(1, 1);
 
-        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForDDisk(1, 1, 1);
+        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromTablet(1, 1, 1);
 
         auto noSessionRead = SendToDDiskAndWait<NDDisk::TEvReadResult>(
             ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(2, 1);
 
-        NDDisk::TQueryCredentials gen2 = NDDisk::TQueryCredentials::ForDDisk(11, 2, 1);
+        NDDisk::TQueryCredentials gen2 = NDDisk::TQueryCredentials::FromTablet(11, 2, 1);
         auto gen2Connect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
             ctx, disk.ServiceId, new NDDisk::TEvConnect(gen2));
         AssertStatus(gen2Connect, TReplyStatus::OK);
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(2, 2);
 
-        NDDisk::TQueryCredentials seq1 = NDDisk::TQueryCredentials::ForDDisk(12, 4, 1);
+        NDDisk::TQueryCredentials seq1 = NDDisk::TQueryCredentials::FromTablet(12, 4, 1);
         auto seq1Connect = SendToDDiskAndWait<NDDisk::TEvConnectResult>(
             ctx, disk.ServiceId, new NDDisk::TEvConnect(seq1));
         AssertStatus(seq1Connect, TReplyStatus::OK);

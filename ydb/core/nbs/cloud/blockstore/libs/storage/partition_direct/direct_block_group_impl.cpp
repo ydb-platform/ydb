@@ -106,11 +106,11 @@ TDirectBlockGroup::TDirectBlockGroup(
                     .ConnectionType = type,
                     .DDiskId = ddiskId,
                     .Credentials = type == EConnectionType::PBuffer
-                        ? NDDisk::TQueryCredentials::ForPersistentBuffer(
+                        ? NDDisk::TQueryCredentials::FromPersistentBuffer(
                             TabletId,
                             generation,
                             InitialDDiskSessionSeqNo)
-                        : NDDisk::TQueryCredentials::ForDDisk(
+                        : NDDisk::TQueryCredentials::FromTablet(
                             TabletId,
                             generation,
                             InitialDDiskSessionSeqNo)}});

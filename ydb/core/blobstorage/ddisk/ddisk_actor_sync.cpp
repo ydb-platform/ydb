@@ -134,7 +134,7 @@ namespace NKikimr::NDDisk {
         sync.Span = std::move(span);
 
         const auto& ddiskId = record.GetDDiskId();
-        const TQueryCredentials sourceCreds = TQueryCredentials::ForPersistentBuffer(
+        const TQueryCredentials sourceCreds = TQueryCredentials::FromPersistentBuffer(
             creds.TabletId,
             creds.Generation,
             creds.DDiskSessionSeqNo,

@@ -138,7 +138,7 @@ namespace NKikimr::NDDisk {
 
         TRope payload = ev->Get()->GetPayload(payloadId);
 
-        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForPersistentBuffer(
+        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::FromPersistentBuffer(
             inflight.TabletId,
             inflight.TabletGeneration,
             inflight.DDiskSessionSeqNo);
@@ -157,7 +157,7 @@ namespace NKikimr::NDDisk {
         auto cookie = NextCookie++;
         const auto& record = ev->Get()->Record;
         auto recordCreds = record.GetCredentials();
-        TQueryCredentials creds = TQueryCredentials::ForPersistentBuffer(
+        TQueryCredentials creds = TQueryCredentials::FromPersistentBuffer(
             recordCreds.GetTabletId(),
             recordCreds.GetGeneration(),
             recordCreds.GetDDiskSessionSeqNo());
@@ -204,7 +204,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
         auto recordCreds = record.GetCredentials();
-        TQueryCredentials creds = TQueryCredentials::ForPersistentBuffer(
+        TQueryCredentials creds = TQueryCredentials::FromPersistentBuffer(
             recordCreds.GetTabletId(),
             recordCreds.GetGeneration(),
             recordCreds.GetDDiskSessionSeqNo());

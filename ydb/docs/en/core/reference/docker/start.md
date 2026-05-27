@@ -109,11 +109,7 @@ For users who are not experienced with Docker, it's important to understand how 
        -e MON_PORT=8765
        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
    )
-<<<<<<< HEAD
-
-=======
    
->>>>>>> 5b1ddd57709 ((docs) Add documentation about init/preinit folders in local-ydb (#29984))
    docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
    ```
 

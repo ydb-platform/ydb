@@ -73,32 +73,50 @@ public:
         LOG_I("TTxReplyAllocate, id# " << BuildId << ", txId# " << txId);
 
         NIceDb::TNiceDb db(txc.DB);
-        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
-            if (!operationInfo.LockTxId) {
-                operationInfo.LockTxId = txId;
-                Self->PersistSetColumnConstraintLockTxId(db, operationInfo);
-                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+        switch (operationInfo.OperationState) {
+            case TSetColumnConstraintOperationInfo::EOperationState::Locking: {
+                if (!operationInfo.LockTxId) {
+                    operationInfo.LockTxId = txId;
+                    Self->PersistSetColumnConstraintLockTxId(db, operationInfo);
+                    Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+                }
+
+                break;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites) {
-            if (!operationInfo.LockNullWritesTxId) {
-                operationInfo.LockNullWritesTxId = txId;
-                Self->PersistSetColumnConstraintLockNullWritesTxId(db, operationInfo);
-                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+            case TSetColumnConstraintOperationInfo::EOperationState::LockNullWrites: {
+                if (!operationInfo.LockNullWritesTxId) {
+                    operationInfo.LockNullWritesTxId = txId;
+                    Self->PersistSetColumnConstraintLockNullWritesTxId(db, operationInfo);
+                    Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+                }
+
+                break;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites) {
-            if (!operationInfo.UnlockNullWritesTxId) {
-                operationInfo.UnlockNullWritesTxId = txId;
-                Self->PersistSetColumnConstraintUnlockNullWritesTxId(db, operationInfo);
-                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+            case TSetColumnConstraintOperationInfo::EOperationState::UnlockNullWrites: {
+                if (!operationInfo.UnlockNullWritesTxId) {
+                    operationInfo.UnlockNullWritesTxId = txId;
+                    Self->PersistSetColumnConstraintUnlockNullWritesTxId(db, operationInfo);
+                    Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+                }
+
+                break;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Unlocking) {
-            if (!operationInfo.UnlockTxId) {
-                operationInfo.UnlockTxId = txId;
-                Self->PersistSetColumnConstraintUnlockTxId(db, operationInfo);
-                Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+            case TSetColumnConstraintOperationInfo::EOperationState::Unlocking: {
+                if (!operationInfo.UnlockTxId) {
+                    operationInfo.UnlockTxId = txId;
+                    Self->PersistSetColumnConstraintUnlockTxId(db, operationInfo);
+                    Self->TxIdToSetColumnConstraintOperations[txId] = BuildId;
+                }
+
+                break;
             }
-        } else {
-            Y_UNREACHABLE();
+
+            case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
+            case TSetColumnConstraintOperationInfo::EOperationState::Validate:
+            case TSetColumnConstraintOperationInfo::EOperationState::Done: {
+                // We dont need to get TxId on these states
+                Y_UNREACHABLE();
+            }
         }
 
         Progress(BuildId);

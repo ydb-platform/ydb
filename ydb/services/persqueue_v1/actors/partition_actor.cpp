@@ -25,7 +25,7 @@ using namespace Topic;
 TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
-        const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
+        const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
         const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
@@ -68,7 +68,6 @@ TPartitionActor::TPartitionActor(
     , LockCounted(false)
     , TopicHolder(topicHolder)
     , Counters(counters)
-    , CommitsDisabled(commitsDisabled)
     , CommitCookie(1)
     , Topic(topic)
     , Database(database)
@@ -89,7 +88,7 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
 
     ui64 offset = ClientReadOffset;
 
-    if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY) {
+    if (NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY) {
         return;
     }
 
@@ -808,7 +807,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);
 
-    if (!CommitsDisabled && !RangesMode) {
+    if (!RangesMode) {
         Offsets.push_back({ReadIdToResponse, ReadOffset});
     }
 

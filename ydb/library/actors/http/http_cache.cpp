@@ -461,12 +461,12 @@ public:
 
         NJson::TJsonValue& outgoingRequests = result["OutgoingRequests"];
         outgoingRequests.SetType(NJson::JSON_ARRAY);
-        for (const auto& [request, key] : OutgoingRequests) {
+        for (const auto& requestPair : OutgoingRequests) {
+            const auto& key = requestPair.second;
             NJson::TJsonValue& requestJson = outgoingRequests.AppendValue({});
             requestJson["Host"] = key.Host;
             requestJson["Url"] = key.URL;
             requestJson["CacheRecordId"] = key.GetId();
-            requestJson["RequestPtr"] = TStringBuilder() << reinterpret_cast<const void*>(request);
         }
 
         Send(event->Sender, new TEvHttpProxy::TEvHttpDumpStateResponse(NJson::WriteJson(result, false, true)), 0, event->Cookie);
@@ -1022,11 +1022,11 @@ public:
 
         NJson::TJsonValue& incomingRequests = result["IncomingRequests"];
         incomingRequests.SetType(NJson::JSON_ARRAY);
-        for (const auto& [request, key] : IncomingRequests) {
+        for (const auto& requestPair : IncomingRequests) {
+            const auto& key = requestPair.second;
             NJson::TJsonValue& requestJson = incomingRequests.AppendValue({});
             requestJson["Url"] = key.URL;
             requestJson["CacheRecordId"] = key.GetId();
-            requestJson["RequestPtr"] = TStringBuilder() << reinterpret_cast<const void*>(request);
         }
 
         Send(event->Sender, new TEvHttpProxy::TEvHttpDumpStateResponse(NJson::WriteJson(result, false, true)), 0, event->Cookie);

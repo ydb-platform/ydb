@@ -1019,7 +1019,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(StoreStatsQuota) {
         TTestBasicRuntime runtime;
-        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
@@ -1041,6 +1040,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         auto& appData = runtime.GetAppData();
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
+
         {
             auto builder = CreateImmutableSnapshotRegistryBuilder();
             auto holder = CreateImmutableSnapshotRegistryHolder();

@@ -6,6 +6,20 @@
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
+    for (const auto& iter : root) {
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
+        for (const auto& iu : iter.Current->GetOutputIUs()) {
+            Y_ENSURE(!seen.contains(iu), "Duplicate visible column " << iu.GetFullName() << " after " << iter.Current->GetExplainName());
+            seen.insert(iu);
+        }
+    }
+}
+
+} // anonymous namespace
+
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     auto output = SimpleMatchAndApply(input, ctx, props);
@@ -122,6 +136,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
         stage->RunStage(root, rboCtx);
+        ValidateNoDuplicateOutputIUs(root);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }

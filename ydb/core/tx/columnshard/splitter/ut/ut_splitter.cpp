@@ -291,6 +291,22 @@ Y_UNIT_TEST_SUITE(Splitter) {
         return NKikimr::NOlap::TSimpleColumnInfo(
             1, field, NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(), false, false, true, nullptr, std::nullopt);
     }
+
+    std::shared_ptr<NKikimr::NOlap::NChunks::TChunkPreparation> MakeDictionaryChunk(
+        const std::vector<TString>& values, const NKikimr::NOlap::TChunkAddress& address, const NKikimr::NOlap::TSimpleColumnInfo& colInfo) {
+        using namespace NKikimr::NArrow::NAccessor;
+        TTrivialArray::TPlainBuilder builder;
+        for (ui32 i = 0; i < values.size(); ++i) {
+            builder.AddRecord(i, values[i]);
+        }
+        auto arr = builder.Finish(values.size());
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        return std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(
+            blobAndMeta.Blob, dict, address, colInfo, std::move(blobAndMeta.Meta));
+    }
     }   // namespace
 
     Y_UNIT_TEST(ChunkedColumnReaderDictionaryBlobWithMetadata) {
@@ -316,6 +332,22 @@ Y_UNIT_TEST_SUITE(Splitter) {
         UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "b");
         UNIT_ASSERT(reader.ReadNext());
         UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(2)->ToString(), "a");
+        UNIT_ASSERT(!reader.ReadNext());
+    }
+
+    Y_UNIT_TEST(ChunkedColumnReaderMultipleDictionaryChunksWithMetadata) {
+        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
+        const auto colInfo = MakeUtf8ColumnInfo();
+        auto chunk0 = MakeDictionaryChunk({ "foo", "bar" }, NKikimr::NOlap::TChunkAddress(1, 0), colInfo);
+        auto chunk1 = MakeDictionaryChunk({ "baz" }, NKikimr::NOlap::TChunkAddress(1, 1), colInfo);
+
+        NKikimr::NOlap::TChunkedColumnReader reader({ chunk0, chunk1 }, MakeDictionaryLoader(field));
+        UNIT_ASSERT(reader.IsCorrect());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "foo");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "bar");
+        UNIT_ASSERT(reader.ReadNext());
+        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "baz");
         UNIT_ASSERT(!reader.ReadNext());
     }
 };

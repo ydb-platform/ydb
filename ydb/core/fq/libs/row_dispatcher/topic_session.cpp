@@ -29,6 +29,7 @@ struct TTopicSessionMetrics {
         TopicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
         ReadGroup = TopicGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
         PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
+
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
         InFlySubscribe = PartitionGroup->GetCounter("InFlySubscribe");

@@ -717,20 +717,6 @@ void TActorCoordinator::UpdateGlobalState() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDuration GetCoordinatorRebalancingTimeout(
-    const TRowDispatcherSettings::TCoordinatorSettings& config
-) {
-    if (config.GetRebalancingTimeout()) {
-        return config.GetRebalancingTimeout();
-    }
-    ui64 ms = 0;
-    if (TryFromString<ui64>(GetEnv("YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"), ms)) {
-        return TDuration::MilliSeconds(ms);
-    }
-    const ui64 DefaultRebalancingTimeoutSec = 120;
-    return TDuration::Seconds(DefaultRebalancingTimeoutSec);
-}
-
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NConfig::TRowDispatcherCoordinatorConfig& config,

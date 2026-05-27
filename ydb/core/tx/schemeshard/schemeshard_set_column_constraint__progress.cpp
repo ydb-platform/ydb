@@ -605,7 +605,7 @@ public:
     void DoComplete(const TActorContext& ctx) override {
         // Send all prepared messages via pipes (similar to build_index)
         for (auto& [shardId, ev]: ToTabletSend) {
-            Self->IndexBuildPipes.Send(BuildId, shardId, std::move(ev), ctx);
+            Self->SetColumnConstraintPipes.Send(BuildId, shardId, std::move(ev), ctx);
         }
         ToTabletSend.clear();
     }

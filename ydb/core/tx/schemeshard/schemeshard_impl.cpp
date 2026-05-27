@@ -5353,6 +5353,7 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     }
 
     IndexBuildPipes.Shutdown(ctx);
+    SetColumnConstraintPipes.Shutdown(ctx);
     IncrementalRestorePipes.Shutdown(ctx);
     CdcStreamScanPipes.Shutdown(ctx);
     ShardDeleter.Shutdown(ctx);
@@ -6490,6 +6491,8 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
         return;
     }
 
+    // TODO(flown4qqqq): add retry SetColumnConstraintPipes
+
     if (IncrementalRestorePipes.Has(clientId)) {
         RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),
                                     IncrementalRestorePipes.GetTabletId(clientId), ctx);
@@ -6554,6 +6557,8 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
         Execute(CreatePipeRetry(IndexBuildPipes.GetOwnerId(clientId), IndexBuildPipes.GetTabletId(clientId)), ctx);
         return;
     }
+
+    // TODO(flown4qqqq): SetColumnConstraintPipes
 
     if (IncrementalRestorePipes.Has(clientId)) {
         RetryIncrementalRestorePipe(IncrementalRestorePipes.GetOwnerId(clientId),

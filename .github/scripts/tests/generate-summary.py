@@ -250,6 +250,8 @@ class TestSummary:
         self.lines: List[TestSummaryLine] = []
         self.is_failed = False
         self.is_retry = is_retry
+        self.oom_killed_count = 0
+        self.oom_dmesg_url = None
 
     def add_line(self, line: TestSummaryLine):
         self.is_failed |= line.is_failed
@@ -649,6 +651,15 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
     summary = TestSummary(is_retry=is_retry)
     stderr_fetch_cache = {}
     oom_killed_pids = _read_oom_killed_pids(oom_dmesg_log)
+    summary.oom_killed_count = len(oom_killed_pids)
+    if oom_killed_pids and oom_dmesg_log:
+        # Translate local oom_dmesg_log path → public URL when it lives under public_dir.
+        try:
+            if os.path.isabs(oom_dmesg_log) and os.path.commonpath([oom_dmesg_log, public_dir]) == os.path.abspath(public_dir):
+                rel = os.path.relpath(oom_dmesg_log, public_dir)
+                summary.oom_dmesg_url = f"{public_dir_url}/{rel}"
+        except ValueError:
+            pass
     if oom_killed_pids:
         print(
             f"[oom] dmesg evidence: {len(oom_killed_pids)} OOM-killed PID(s) from {oom_dmesg_log}: "
@@ -720,6 +731,31 @@ def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bo
     body = []
 
     body.append(result)
+
+    if getattr(summary, "oom_killed_count", 0):
+        attributed = sum(
+            1
+            for line in summary.lines
+            for test in line.tests
+            if getattr(test, "is_oom_issue", False)
+        )
+        link = (
+            f" See [oom_dmesg.txt]({summary.oom_dmesg_url})."
+            if getattr(summary, "oom_dmesg_url", None)
+            else ""
+        )
+        if attributed == 0:
+            body.append(
+                f":warning: **OOM detected:** kernel OOM-killer reaped "
+                f"{summary.oom_killed_count} process(es) during this try, but none of "
+                f"them could be attributed to a specific test.{link}"
+            )
+        else:
+            body.append(
+                f":warning: **OOM detected:** kernel OOM-killer reaped "
+                f"{summary.oom_killed_count} process(es) during this try "
+                f"({attributed} attributed to test(s) — see OOM badges).{link}"
+            )
 
     if not is_last_retry:
         body.append("")

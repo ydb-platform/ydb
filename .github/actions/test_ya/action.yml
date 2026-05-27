@@ -418,6 +418,17 @@ runs:
 
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
+          YA_MAKE_CMD=(
+            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
+            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
+            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
+          )
+
+          # Capture timestamp BEFORE running ya make so that we can later
+          # filter dmesg to only OOM events that happened during this try.
+          DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+
           set +e
           (sudo -n -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
@@ -425,19 +436,18 @@ runs:
              -p MemorySwapMax=0 \
              --uid=$(id -u) --gid=$(id -g) \
              -- \
-             ./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
-             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
-             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
+             "${YA_MAKE_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
 
           # Dump recent OOM evidence from dmesg to a separate per-try file
           # (uploaded to s3 together with the rest of $CURRENT_PUBLIC_DIR).
+          # Use --since=$DMESG_SINCE so that stale OOM events from previous tries
+          # or previous CI jobs on this runner do not leak into this report.
           OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
           OOM_DMESG_LOG_URL="$CURRENT_PUBLIC_DIR_URL/oom_dmesg.txt"
-          sudo dmesg -T 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true
+          sudo dmesg -T --since="$DMESG_SINCE" 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true
           if [ -s "$OOM_DMESG_LOG" ]; then
             echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
           fi

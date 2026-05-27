@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
             .ConcurrentQueryLimit(1)
             .QueueSize(2)
             .QueryCancelAfter(TDuration::Seconds(10))
-            .QueryMemoryLimitPercentPerNode(15)
+            .TotalMemoryLimitPercentPerNode(15)
             .Create();
 
         const auto& response = FetchPool(ydb);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         UNIT_ASSERT_VALUES_EQUAL(poolConfig.ConcurrentQueryLimit, settings.ConcurrentQueryLimit_);
         UNIT_ASSERT_VALUES_EQUAL(poolConfig.QueueSize, settings.QueueSize_);
         UNIT_ASSERT_VALUES_EQUAL(poolConfig.QueryCancelAfter, settings.QueryCancelAfter_);
-        UNIT_ASSERT_VALUES_EQUAL(poolConfig.QueryMemoryLimitPercentPerNode, settings.QueryMemoryLimitPercentPerNode_);
+        UNIT_ASSERT_VALUES_EQUAL(poolConfig.TotalMemoryLimitPercentPerNode, settings.TotalMemoryLimitPercentPerNode_);
     }
 
     Y_UNIT_TEST(TestPoolFetcherAclValidation) {
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         // Check alter access
         TSampleQueries::CheckSuccess(ydb->ExecuteQuery(TStringBuilder() << R"(
             ALTER RESOURCE POOL )" << NResourcePool::DEFAULT_POOL_ID << R"( SET (
-                QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=1
+                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=1
             );
         )", settings));
 
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceSubscriptions) {
             .QueueSize(10)
             .ConcurrentQueryLimit(5)
             .QueryCancelAfter(TDuration::Seconds(42))
-            .QueryMemoryLimitPercentPerNode(55.0)
+            .TotalMemoryLimitPercentPerNode(55.0)
             .DatabaseLoadCpuThreshold(30.0)
             .Create();
 

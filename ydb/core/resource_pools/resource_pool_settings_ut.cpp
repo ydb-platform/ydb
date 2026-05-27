@@ -59,12 +59,34 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TPoolSettings::TParser{"101.5"}, propertiesMap["query_memory_limit_percent_per_node"]), yexception, "Invalid percent value 101.5, it is should be between 0 and 100 or -1");
     }
 
+    Y_UNIT_TEST(TotalMemoryPercentSettingsParsing) {
+        TPoolSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        std::visit(TPoolSettings::TParser{"-1"}, propertiesMap["total_memory_limit_percent_per_node"]);
+        UNIT_ASSERT_VALUES_EQUAL(settings.TotalMemoryLimitPercentPerNode, -1);
+
+        std::visit(TPoolSettings::TParser{"0"}, propertiesMap["total_memory_limit_percent_per_node"]);
+        UNIT_ASSERT_VALUES_EQUAL(settings.TotalMemoryLimitPercentPerNode, 0);
+
+        std::visit(TPoolSettings::TParser{"55.5"}, propertiesMap["total_memory_limit_percent_per_node"]);
+        UNIT_ASSERT_VALUES_EQUAL(settings.TotalMemoryLimitPercentPerNode, 55.5);
+
+        std::visit(TPoolSettings::TParser{"100"}, propertiesMap["total_memory_limit_percent_per_node"]);
+        UNIT_ASSERT_VALUES_EQUAL(settings.TotalMemoryLimitPercentPerNode, 100);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TPoolSettings::TParser{"-1.5"}, propertiesMap["total_memory_limit_percent_per_node"]), yexception, "Invalid percent value -1.5, it is should be between 0 and 100 or -1");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TPoolSettings::TParser{"-0.5"}, propertiesMap["total_memory_limit_percent_per_node"]), yexception, "Invalid percent value -0.5, it is should be between 0 and 100 or -1");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(std::visit(TPoolSettings::TParser{"101.5"}, propertiesMap["total_memory_limit_percent_per_node"]), yexception, "Invalid percent value 101.5, it is should be between 0 and 100 or -1");
+    }
+
     Y_UNIT_TEST(SettingsExtracting) {
         TPoolSettings settings;
         settings.ConcurrentQueryLimit = 10;
         settings.QueueSize = -1;
         settings.QueryCancelAfter = TDuration::Seconds(15);
         settings.QueryMemoryLimitPercentPerNode = 0.5;
+        settings.TotalMemoryLimitPercentPerNode = 75.0;
         auto propertiesMap = settings.GetPropertiesMap();
 
         TPoolSettings::TExtractor extractor;
@@ -72,6 +94,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["queue_size"]), "-1");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["query_cancel_after_seconds"]), "15");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["query_memory_limit_percent_per_node"]), "0.5");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["total_memory_limit_percent_per_node"]), "75");
     }
 
     Y_UNIT_TEST(SettingsValidation) {
@@ -85,7 +108,13 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
             TPoolSettings settings;
             settings.QueueSize = 1;
             UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
-        }   
+        }
+
+        {  // QueryMemoryLimitPercentPerNode not supported yet
+            TPoolSettings settings;
+            settings.QueryMemoryLimitPercentPerNode = 50;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_memory_limit_percent_per_node is not supported yet. Use total_memory_limit_percent_per_node for pool-wide memory limit");
+        }
     }
 }
 

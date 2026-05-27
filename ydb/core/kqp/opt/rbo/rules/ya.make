@@ -14,7 +14,6 @@ SRCS(
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
     peephole_predicate.cpp
-    prune_columns_stage.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp
     push_limit_into_sort.cpp

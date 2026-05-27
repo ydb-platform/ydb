@@ -4,9 +4,7 @@ namespace NKikimr {
 namespace NKqp {
 
 // Remove extra maps that arrise during translation
-// Identity map that doesn't project can always be removed
-// Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
-// projections
+// Identity map can be removed when it only renames every visible column to itself.
 
 TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
@@ -18,11 +16,7 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
 
     auto map = CastOperator<TOpMap>(input);
 
-    /***
-     * If its a project map, check that it output the same number of columns as the operator below
-     */
-
-    if (map->Project && map->GetOutputIUs().size() != map->GetInput()->GetOutputIUs().size()) {
+    if (map->GetOutputIUs() != map->GetInput()->GetOutputIUs()) {
         return input;
     }
 

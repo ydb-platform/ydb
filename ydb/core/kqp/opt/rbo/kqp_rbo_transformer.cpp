@@ -425,9 +425,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
 
-    // Prune column stage.
-    RBO.AddStage(std::make_unique<TPruneColumnsStage>());
-
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
     physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>());

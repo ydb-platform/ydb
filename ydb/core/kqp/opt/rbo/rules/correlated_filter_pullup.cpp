@@ -71,7 +71,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
         for (const auto & mapEl : map->MapElements) {
             for (const auto & iu : mapEl.GetExpression().GetInputIUs(false, true)) {
                 if (correlated.contains(iu)) {
-                    if (!mapEl.IsRename() && !mapEl.GetExpression().IsSingleCallable({"Just"})) {
+                    if (!mapEl.IsColumnAccess() && !mapEl.GetExpression().IsSingleCallable({"Just"})) {
                         return false;
                     }
                 }
@@ -88,10 +88,9 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
             }
         }
 
-        // First we add needed columns to the map, if its a projection map
-        if (!addToMap.empty() && map->Project) {
+        if (!addToMap.empty()) {
             for (const auto & add : addToMap) {
-                map->MapElements.push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props));
+                map->MapElements.push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props, false));
             }
         }
 

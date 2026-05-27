@@ -50,7 +50,7 @@ TIntrusivePtr<TOpMap> MakeMapFromRenames(TIntrusivePtr<IOperator> input,
         mapElements.push_back(TMapElement(toIU, iu, pos, ctx, props));
     }
 
-    return MakeIntrusive<TOpMap>(input, pos, mapElements, true);
+    return MakeIntrusive<TOpMap>(input, pos, mapElements);
 }
 
 bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {

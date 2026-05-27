@@ -227,7 +227,7 @@ class TAssignStagesRule : public IRule {
 };
 
 /**
- * Separate global stage to remove extra renames and project out unneeded columns
+ * Separate global stage to remove extra renames
  */
 class TRenameStage : public IRBOStage {
   public:
@@ -241,15 +241,6 @@ class TRenameStage : public IRBOStage {
 class TConstantFoldingStage : public IRBOStage {
   public:
     TConstantFoldingStage();
-    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
-};
-
-/**
- * Prune unnecessary columns stage
- */
-class TPruneColumnsStage : public IRBOStage {
-  public:
-    TPruneColumnsStage();
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 };
 

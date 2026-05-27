@@ -6,6 +6,8 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <algorithm>
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -14,6 +16,165 @@ using namespace NYql;
 using namespace NNodes;
 
 using DependencyPairType = std::pair<TInfoUnit, const TTypeAnnotationNode*>;
+
+constexpr TStringBuf IgnoreArgPrefix = "__kqp_rbo_ignore_arg_";
+
+bool ContainsIU(const TVector<TInfoUnit>& units, const TInfoUnit& unit) {
+    return std::find(units.begin(), units.end(), unit) != units.end();
+}
+
+TInfoUnit MakeIgnoreIU(TPlanProps& props) {
+    TStringBuilder name;
+    name << IgnoreArgPrefix << props.InternalVarIdx++;
+    return TInfoUnit(TString(name));
+}
+
+void ValidateUniqueOutputIUs(const TIntrusivePtr<IOperator>& op, TExprContext& ctx) {
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
+    for (const auto& iu : op->GetOutputIUs()) {
+        Y_ENSURE(!seen.contains(iu), "Duplicate visible column " << iu.GetFullName() << " after " << op->ToString(ctx));
+        seen.insert(iu);
+    }
+}
+
+void AddIgnoreRenameToMap(const TIntrusivePtr<TOpMap>& map, const TInfoUnit& source, TExprContext& ctx, TPlanProps& props) {
+    map->MapElements.emplace_back(MakeIgnoreIU(props), source, map->Pos, &ctx, &props);
+}
+
+TInfoUnit AddIgnoreRename(TIntrusivePtr<IOperator>& input, const TInfoUnit& source, TPositionHandle pos, TExprContext& ctx, TPlanProps& props) {
+    const auto ignore = MakeIgnoreIU(props);
+
+    if (input->Kind == EOperator::Map) {
+        auto map = CastOperator<TOpMap>(input);
+        if (ContainsIU(map->GetInput()->GetOutputIUs(), source)) {
+            map->MapElements.emplace_back(ignore, source, map->Pos, &ctx, &props);
+            return ignore;
+        }
+    }
+
+    TVector<TMapElement> mapElements;
+    mapElements.emplace_back(ignore, source, pos, &ctx, &props);
+    input = MakeIntrusive<TOpMap>(input, pos, mapElements);
+    return ignore;
+}
+
+void RenameJoinSideReferences(TOpJoin& join, const TInfoUnit& from, const TInfoUnit& to, bool rightSide) {
+    for (auto& [leftKey, rightKey] : join.JoinKeys) {
+        auto& key = rightSide ? rightKey : leftKey;
+        if (key == from) {
+            key = to;
+        }
+    }
+
+    for (const auto& filter : join.JoinFilters) {
+        const auto filterIUs = filter.GetInputIUs(false, true);
+        Y_ENSURE(!ContainsIU(filterIUs, from), "Cannot normalize duplicate join output used by a join filter");
+    }
+}
+
+std::optional<TInfoUnit> TryPromoteAppendToRename(const TIntrusivePtr<IOperator>& input, const TInfoUnit& source,
+                                                  const TVector<TInfoUnit>& forbiddenOutputs) {
+    if (input->Kind != EOperator::Map) {
+        return std::nullopt;
+    }
+
+    auto map = CastOperator<TOpMap>(input);
+    for (auto& mapElement : map->MapElements) {
+        if (mapElement.IsRename() || !mapElement.IsColumnAccess() || mapElement.GetElementName() == source) {
+            continue;
+        }
+        if (mapElement.GetColumnAccess() != source) {
+            continue;
+        }
+        if (ContainsIU(forbiddenOutputs, mapElement.GetElementName())) {
+            continue;
+        }
+
+        mapElement.SetIsRename(true);
+        return mapElement.GetElementName();
+    }
+
+    return std::nullopt;
+}
+
+void NormalizeMap(const TIntrusivePtr<TOpMap>& map, TExprContext& ctx, TPlanProps& props) {
+    const auto inputIUs = map->GetInput()->GetOutputIUs();
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
+
+    for (const auto& mapElement : map->MapElements) {
+        if (mapElement.IsRename()) {
+            const auto source = mapElement.GetRename();
+            Y_ENSURE(ContainsIU(inputIUs, source), "Rename source " << source.GetFullName() << " is not visible in map input");
+            renameSources.insert(source);
+        }
+    }
+
+    const size_t originalSize = map->MapElements.size();
+    for (size_t i = 0; i < originalSize; ++i) {
+        auto& mapElement = map->MapElements[i];
+        const auto output = mapElement.GetElementName();
+
+        if (!mapElement.IsRename() && mapElement.IsColumnAccess() && mapElement.GetColumnAccess() == output) {
+            mapElement.SetIsRename(true);
+            renameSources.insert(output);
+            continue;
+        }
+
+        if (ContainsIU(inputIUs, output) && !renameSources.contains(output)) {
+            AddIgnoreRenameToMap(map, output, ctx, props);
+            renameSources.insert(output);
+        }
+    }
+
+    ValidateUniqueOutputIUs(map, ctx);
+}
+
+void NormalizeJoin(const TIntrusivePtr<TOpJoin>& join, TExprContext& ctx, TPlanProps& props) {
+    const bool leftVisible = join->JoinKind != "RightOnly" && join->JoinKind != "RightSemi";
+    const bool rightVisible = join->JoinKind != "LeftOnly" && join->JoinKind != "LeftSemi";
+    if (!leftVisible || !rightVisible) {
+        ValidateUniqueOutputIUs(join, ctx);
+        return;
+    }
+
+    auto leftOutput = join->GetLeftInput()->GetOutputIUs();
+    auto rightOutput = join->GetRightInput()->GetOutputIUs();
+    const auto conflicts = IUSetIntersect(leftOutput, rightOutput);
+
+    for (const auto& conflict : conflicts) {
+        TInfoUnit replacement;
+        if (auto promoted = TryPromoteAppendToRename(join->GetRightInput(), conflict, leftOutput)) {
+            replacement = *promoted;
+        } else {
+            replacement = AddIgnoreRename(join->GetRightInput(), conflict, join->Pos, ctx, props);
+        }
+
+        RenameJoinSideReferences(*join, conflict, replacement, true);
+        rightOutput = join->GetRightInput()->GetOutputIUs();
+        leftOutput = join->GetLeftInput()->GetOutputIUs();
+    }
+
+    ValidateUniqueOutputIUs(join, ctx);
+}
+
+void NormalizeInitialRenames(TOpRoot& root, TExprContext& ctx) {
+    for (auto iter : root) {
+        if (iter.Current->Kind == EOperator::Map) {
+            NormalizeMap(CastOperator<TOpMap>(iter.Current), ctx, root.PlanProps);
+        } else if (iter.Current->Kind == EOperator::Join) {
+            NormalizeJoin(CastOperator<TOpJoin>(iter.Current), ctx, root.PlanProps);
+        } else {
+            ValidateUniqueOutputIUs(iter.Current, ctx);
+        }
+    }
+
+    const auto rootOutput = root.GetInput()->GetOutputIUs();
+    for (const auto& column : root.ColumnOrder) {
+        const auto iu = TInfoUnit(column);
+        Y_ENSURE(ContainsIU(rootOutput, iu), "Root output column " << column << " is not visible before physical result narrowing");
+    }
+}
+
 /**
  * Computes dependent variables and updates the plan
  */
@@ -192,6 +353,10 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
         }
     }
 
+    opRoot->ComputeParents();
+    NormalizeInitialRenames(*opRoot, Ctx);
+    opRoot->ComputeParents();
+
     // For subplans, we need to compute dependent variables correctly
     ComputeDependentVariables(opRoot, &opRoot->PlanProps);
 
@@ -261,7 +426,6 @@ TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceO
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
-    auto project = opMap.Project().IsValid();
     const auto ordered = GetOrdered(opMap);
     TVector<TMapElement> mapElements;
 
@@ -270,7 +434,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
-            mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx);
+            mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx, nullptr, false);
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
             const auto forceOptional = GetForceOptional(element);
@@ -280,14 +444,14 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
-                mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx);
+                mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx, nullptr, false);
             } else {
                 TExpression exprLambda(GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx), &Ctx);
                 mapElements.emplace_back(iu, exprLambda);
             }
         }
     }
-    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, project, ordered);
+    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, ordered);
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::TPtr node) {
@@ -363,13 +527,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node)
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {
     auto opProject = TKqpOpProject(node);
-    auto input = ExprNodeToOperator(opProject.Input().Ptr());
-
-    TVector<TInfoUnit> projectList;
-    for (const auto& p : opProject.ProjectList()) {
-        projectList.push_back(TInfoUnit(p.StringValue()));
-    }
-    return MakeIntrusive<TOpProject>(input, node->Pos(), projectList);
+    return ExprNodeToOperator(opProject.Input().Ptr());
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node) {
@@ -394,7 +552,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node) 
     }
 
     if (mapElements.size()) {
-        output = MakeIntrusive<TOpMap>(input, input->Pos, mapElements, false);
+        output = MakeIntrusive<TOpMap>(input, input->Pos, mapElements);
     }
 
     output = MakeIntrusive<TOpSort>(output, node->Pos(), sortElements);

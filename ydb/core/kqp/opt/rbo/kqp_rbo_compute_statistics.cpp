@@ -273,35 +273,32 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
+    Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
-    if (Project) {
-        Props.Metadata->ColumnsCount = MapElements.size();
-    } else {
-        Props.Metadata->ColumnsCount += inputMetadata.ColumnsCount + MapElements.size();
-    }
+    auto propertyPreservingMappings = GetPropertyPreservingMappings(planProps);
 
-    auto renamesWithTransform = GetRenamesWithTransforms(planProps);
-
-    auto resolveRename = [&](const TInfoUnit& column) -> const TInfoUnit* {
-        for (const auto& [to, from] : renamesWithTransform) {
+    auto resolveRename = [&](const TInfoUnit& column) -> TVector<TInfoUnit> {
+        TVector<TInfoUnit> result;
+        for (const auto& [to, from] : propertyPreservingMappings) {
             if (column == from) {
-                return &to;
+                result.push_back(to);
             }
         }
-        return nullptr;
+        return result;
     };
 
     auto propagateColumns = [&](const TVector<TInfoUnit>& inputColumns,
                                 TVector<TInfoUnit>& outputColumns) {
+        const auto outputIUs = GetOutputIUs();
         for (const auto& column : inputColumns) {
-            if (const auto* renamed = resolveRename(column)) {
-                outputColumns.push_back(*renamed);
-            } else if (!Project) {
+            if (std::find(outputIUs.begin(), outputIUs.end(), column) != outputIUs.end()) {
                 outputColumns.push_back(column);
-            } else {
-                // Column not preserved by any order-maintaining mapping — guarantee broken
-                outputColumns = {};
-                break;
+            }
+
+            for (const auto& renamed : resolveRename(column)) {
+                if (std::find(outputIUs.begin(), outputIUs.end(), renamed) != outputIUs.end()) {
+                    outputColumns.push_back(renamed);
+                }
             }
         }
     };
@@ -311,14 +308,19 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     // Build lineage data
     Props.Metadata->ColumnLineage = {};
-    auto renames = GetRenames();
+    TVector<std::pair<TInfoUnit, TInfoUnit>> columnCopies;
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsColumnAccess()) {
+            columnCopies.emplace_back(mapElement.GetElementName(), mapElement.GetColumnAccess());
+        }
+    }
 
     for (const auto& iu : GetOutputIUs()) {
-        const auto it = std::find_if(renames.begin(), renames.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& rename) { return iu == rename.first; });
+        const auto it = std::find_if(columnCopies.begin(), columnCopies.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& rename) { return iu == rename.first; });
 
-        if (it != renames.end() && inputMetadata.ColumnLineage.Mapping.contains(it->second)) {
+        if (it != columnCopies.end() && inputMetadata.ColumnLineage.Mapping.contains(it->second)) {
             Props.Metadata->ColumnLineage.AddMapping(iu, inputMetadata.ColumnLineage.Mapping.at(it->second));
-        } else if (it == renames.end() && inputMetadata.ColumnLineage.Mapping.contains(iu)) {
+        } else if (it == columnCopies.end() && inputMetadata.ColumnLineage.Mapping.contains(iu)) {
             Props.Metadata->ColumnLineage.AddMapping(iu, inputMetadata.ColumnLineage.Mapping.at(iu));
         }
     }

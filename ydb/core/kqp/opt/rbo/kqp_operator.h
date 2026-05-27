@@ -20,7 +20,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -298,13 +298,17 @@ public:
 class TMapElement {
 public:
     TMapElement() = default;
-    TMapElement(const TInfoUnit& elementName, const TExpression& expr);
-    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
+    TMapElement(const TInfoUnit& elementName, const TExpression& expr, bool isRename = false);
+    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr, bool isRename = true);
 
     bool IsRename() const;
+    void SetIsRename(bool isRename);
+    bool IsColumnAccess() const;
     TInfoUnit GetRename() const;
+    TInfoUnit GetColumnAccess() const;
 
     TInfoUnit GetElementName() const;
+    void SetElementName(const TInfoUnit& elementName);
     TExpression GetExpression() const;
     TExpression& GetExpressionRef();
     void SetExpression(TExpression expr);
@@ -312,12 +316,13 @@ public:
 private:
     TInfoUnit ElementName;
     TExpression Expr;
+    bool Rename = false;
 };
 
 class TOpMap: public IUnaryOperator {
 public:
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered = false);
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements, bool project,
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered = false);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements,
            bool ordered = false);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
@@ -326,7 +331,7 @@ public:
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual TVector<std::reference_wrapper<TExpression>> GetComplexExpressions();
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetPropertyPreservingMappings(TPlanProps& props) const;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -344,9 +349,9 @@ public:
     }
 
     TVector<TMapElement>& GetMapElements() { return MapElements; }
+    bool HasRenames() const;
 
     TVector<TMapElement> MapElements;
-    bool Project = true;
     bool Ordered = false;
 };
 
@@ -369,20 +374,6 @@ public:
 
     TVector<TInfoUnit> Dependencies;
     TVector<const TTypeAnnotationNode*> Types;
-};
-
-class TOpProject: public IUnaryOperator {
-public:
-    TOpProject(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& projectList);
-    virtual TVector<TInfoUnit> GetOutputIUs() override;
-
-    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
-                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
-    virtual TString ToString(TExprContext& ctx) override;
-    virtual TString GetExplainName() const override { return "Project"; }
-
-
-    TVector<TInfoUnit> ProjectList;
 };
 
 struct TOpAggregationTraits {

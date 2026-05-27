@@ -5528,7 +5528,9 @@
                 "EnablePublicApiExternalBlobs": false,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
-                "EnableTopicTransfer": true
+                "EnableTopicTransfer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true
             },
             "FederatedQueryConfig": {
                 "Audit": {
@@ -6575,7 +6577,9 @@
                 "EnablePublicApiExternalBlobs": false,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
-                "EnableTopicTransfer": true
+                "EnableTopicTransfer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true
             },
             "FederatedQueryConfig": {
                 "Audit": {
@@ -7622,7 +7626,9 @@
                 "EnablePublicApiExternalBlobs": false,
                 "EnableSchemeTransactionsAtSchemeShard": true,
                 "EnableScriptExecutionOperations": true,
-                "EnableTopicTransfer": true
+                "EnableTopicTransfer": true,
+                "EnableLocalBloomFilterIndex": true,
+                "EnableLocalIndexAsSchemeObject": true
             },
             "FederatedQueryConfig": {
                 "Audit": {

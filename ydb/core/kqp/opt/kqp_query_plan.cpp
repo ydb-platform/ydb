@@ -1144,7 +1144,7 @@ private:
                 SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
             }
 
-            {
+            if (!tableSinkSettings.GetIndexes().empty()) {
                 NJson::TJsonValue updateIndexes;
                 updateIndexes.SetType(NJson::EJsonValueType::JSON_ARRAY);
                 for (const auto& index : tableSinkSettings.GetIndexes()) {

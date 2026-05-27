@@ -490,7 +490,16 @@ TCollectResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mo
 }
 
 TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode mode) {
-    auto inputCollectResult = Collect(Reader.ReadInput(item), mode);
+    // Unwind chained filters: path ? (p1) ? (p2) ...  ==  path ? (p1 && p2 && ...)
+    std::vector<const TJsonPathItem*> predicates;
+    const TJsonPathItem* inputItem = &item;
+
+    while (inputItem->Type == EJsonPathItemType::FilterPredicate) {
+        predicates.push_back(&Reader.ReadFilterPredicate(*inputItem));
+        inputItem = &Reader.ReadInput(*inputItem);
+    }
+
+    auto inputCollectResult = Collect(*inputItem, mode);
     if (inputCollectResult.IsError()) {
         return inputCollectResult;
     }
@@ -500,21 +509,34 @@ TCollectResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode
     // If input path is already stopped (e.g. $.a.*) or has multiple tokens,
     // we can't apply the filter to narrow down
     if (!inputCollectResult.CanCollect()) {
-        inputCollectResult.StopCollecting();
         return inputCollectResult;
     }
 
-    FilterObjectPrefixes.push_back(tokens.begin()->PathToken);
-    const auto& predicateItem = Reader.ReadFilterPredicate(item);
-    auto predicateResult = Collect(predicateItem, EMode::Filter);
-    FilterObjectPrefixes.pop_back();
-
-    if (predicateResult.IsError()) {
-        return predicateResult;
+    if (predicates.empty()) {
+        return TCollectResult(TIssue("Expected a predicate expression"));
     }
 
-    predicateResult.StopCollecting();
-    return predicateResult;
+    FilterObjectPrefixes.push_back(tokens.begin()->PathToken);
+
+    std::optional<TCollectResult> predicateResult;
+    for (const auto* predicateItem : predicates) {
+        auto current = Collect(*predicateItem, EMode::Filter);
+        if (current.IsError()) {
+            FilterObjectPrefixes.pop_back();
+            return current;
+        }
+
+        if (!predicateResult.has_value()) {
+            predicateResult = std::move(current);
+        } else {
+            predicateResult = MergeAnd(std::move(*predicateResult), std::move(current));
+        }
+    }
+
+    FilterObjectPrefixes.pop_back();
+
+    predicateResult->StopCollecting();
+    return *predicateResult;
 }
 
 TCollectResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {

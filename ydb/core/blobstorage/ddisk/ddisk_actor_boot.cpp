@@ -189,7 +189,8 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit,
-            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback) {
+            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete) {
         TString buffer;
         const bool success = data.SerializeToString(&buffer);
         Y_ABORT_UNLESS(success);
@@ -205,6 +206,7 @@ namespace NKikimr::NDDisk {
         if (chunkIdxToCommit) {
             cr.CommitChunks.push_back(chunkIdxToCommit);
         }
+        cr.DeleteChunks = std::move(chunksToDelete);
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr,
             TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr));

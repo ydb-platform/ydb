@@ -59,6 +59,7 @@ PEERDIR(
     ydb/core/blobstorage/ddisk
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/vdisk/localrecovery
     ydb/core/blobstorage/vdisk
     ydb/core/control/lib
     ydb/library/actors/retro_tracing

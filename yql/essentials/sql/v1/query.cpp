@@ -829,6 +829,11 @@ public:
             return Y("MrWalkFolders", initPath, rootAttributes, pickledInitState, initStateType,
                      preHandler, resolveHandler, diveHandler, postHandler);
         } else if (func == "tables") {
+            if (!ctx.Settings.AllowTablesFunction) {
+                ctx.Error(Pos_) << Func_ << " is not allowed in this context";
+                return nullptr;
+            }
+
             if (!Args_.empty()) {
                 ctx.Error(Pos_) << Func_ << " doesn't accept arguments";
                 return nullptr;

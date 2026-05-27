@@ -6,6 +6,7 @@
 #include "utils.h"
 
 #include <ydb/core/http_proxy/events.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
@@ -183,6 +184,13 @@ namespace NKikimr::NSqsTopic::V1 {
 
             if (NewQueueAttributes.ContentBasedDeduplication.Defined()) {
                 topicRequest.set_set_content_based_deduplication(*NewQueueAttributes.ContentBasedDeduplication);
+                if (*NewQueueAttributes.ContentBasedDeduplication) {
+                    topicRequest.set_set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
+                    topicRequest.set_set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
+                } else {
+                    topicRequest.set_set_partition_write_speed_messages_per_second(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+                    topicRequest.set_set_partition_write_burst_messages(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+                }
             }
 
             auto* consumer = topicRequest.add_alter_consumers();

@@ -285,7 +285,7 @@ private:
             const auto numberRows = newNumberRows - NumberRows;
             const auto rowSize = newDataPackerSize - DataPackerSize;
 
-            if (!numberRows && !rowSize && !Watermark) {
+            if (!numberRows && !Watermark) {
                 return;
             }
 

@@ -5484,13 +5484,13 @@ private:
         std::vector<TAckMessage> FlushDelayedAcks() {
             AFL_ENSURE(!Acks.empty());
 
+            std::swap(Acks.back().OutputData, Data);
             for (auto& data : Acks.back().OutputData) {
                 if (data) {
                     data->DetachAlloc();
                 }
             }
 
-            std::swap(Acks.back().OutputData, Data);
             std::vector<TAckMessage> result;
             std::swap(result, Acks);
 

@@ -10,9 +10,7 @@ namespace NSchemeShard {
 namespace {
 
 TString GetImportDisabledMessage(const TImportInfo& importInfo) {
-    return TStringBuilder() << "Imports from "
-        << (importInfo.Kind == TImportInfo::EKind::FS ? "FS" : "S3")
-        << " are disabled";
+    return TStringBuilder() << "Imports from " << importInfo.Kind << " are disabled";
 }
 
 } // anonymous namespace

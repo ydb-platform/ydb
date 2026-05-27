@@ -296,6 +296,7 @@ public:
         // Delete the whole old partitioning and persist the whole new partitioning as the indexes have changed
         context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo);
         context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
+        context.SS->ProcessForcedCompactionOnSplitMerge(db, tableId, allSrcShardIdxs, newShardsIdx);
         if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }

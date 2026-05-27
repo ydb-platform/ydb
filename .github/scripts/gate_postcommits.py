@@ -667,12 +667,17 @@ def build_html(
 def write_step_summary(meta: dict, summary_path: str | None) -> None:
     if not summary_path:
         return
+    report_url = os.environ.get("GATE_REPORT_URL", "").strip()
+    if report_url:
+        report_line = f"📄 HTML report: [{report_url}]({report_url})"
+    else:
+        report_line = "📄 HTML report: (upload to S3 pending)"
     lines = [
         "## Postcommits gate",
         "",
         f"**Decision:** `{meta['gate_mode']}` — {meta['decision']}",
         "",
-        "📄 HTML report: artifact `postcommits-gate-report` → `index.html`",
+        report_line,
         "",
         "| Setting | Value |",
         "|---------|-------|",

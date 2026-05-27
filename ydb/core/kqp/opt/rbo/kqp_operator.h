@@ -86,8 +86,6 @@ struct TPhysicalOpProps {
 
 class IOperator;
 
-using TInfoUnitSet = THashSet<TInfoUnit, TInfoUnit::THashFunction>;
-
 class ILivenessContext {
 public:
     virtual ~ILivenessContext() = default;

@@ -56,6 +56,9 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
     if (props & ERuleProperties::RequireStatistics) {
         root.ComputePlanStatistics(ctx);
     }
+    if (props & ERuleProperties::RequireLiveness) {
+        ComputePlanLiveness(root);
+    }
 }
 
 /**

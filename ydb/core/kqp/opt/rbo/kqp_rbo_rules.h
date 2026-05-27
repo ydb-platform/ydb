@@ -245,12 +245,13 @@ class TConstantFoldingStage : public IRBOStage {
 };
 
 /**
- * Compute logical column liveness and remove dead append-only map elements.
+ * Remove append-only map elements whose outputs are not live.
  */
-class TLogicalLivenessStage : public IRBOStage {
+class TPruneDeadMapElementsRule : public IRule {
   public:
-    TLogicalLivenessStage();
-    virtual void RunStage(TOpRoot& root, TRBOContext& ctx) override;
+    TPruneDeadMapElementsRule() : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness) {}
+
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /**

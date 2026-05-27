@@ -20,10 +20,13 @@ bool AddColumnsToSet(TInfoUnitSet& target, const TVector<TInfoUnit>& ius) {
 class TLogicalLiveness: public ILivenessContext {
 public:
     explicit TLogicalLiveness(TPlanProps& props)
-        : Props(props) {
+        : Props(props)
+        , LiveOut(props.LiveOut) {
     }
 
     void Run(TOpRoot& root) {
+        LiveOut.clear();
+
         TVector<TInfoUnit> rootColumns;
         rootColumns.reserve(root.ColumnOrder.size());
         for (const auto& column : root.ColumnOrder) {
@@ -32,7 +35,6 @@ public:
 
         AddLiveColumns(root.GetInput(), rootColumns);
         Propagate();
-        PruneDeadMapElements(root);
     }
 
     const TInfoUnitSet& GetLiveOut(IOperator* op) const override {
@@ -98,92 +100,56 @@ private:
         Queue.clear();
     }
 
-    bool PruneDeadMapElements(TOpRoot& root) {
-        bool changed = false;
-        for (auto it : root) {
-            if (it.Current->Kind != EOperator::Map) {
-                continue;
-            }
-
-            auto map = CastOperator<TOpMap>(it.Current);
-            const auto liveIt = LiveOut.find(map.get());
-            if (liveIt == LiveOut.end()) {
-                continue;
-            }
-
-            const auto& liveOut = liveIt->second;
-            TVector<TMapElement> newElements;
-            newElements.reserve(map->MapElements.size());
-            for (const auto& mapElement : map->MapElements) {
-                if (mapElement.IsRename() || liveOut.contains(mapElement.GetElementName())) {
-                    newElements.push_back(mapElement);
-                }
-            }
-
-            if (newElements.size() != map->MapElements.size()) {
-                map->MapElements = std::move(newElements);
-                changed = true;
-            }
-        }
-
-        while (RemoveOneEmptyMap(root)) {
-            changed = true;
-            root.ComputeParents();
-        }
-
-        if (changed) {
-            root.ComputeParents();
-        }
-
-        return changed;
-    }
-
-    bool RemoveOneEmptyMap(TOpRoot& root) {
-        root.ComputeParents();
-        for (auto it : root) {
-            if (it.Current->Kind != EOperator::Map) {
-                continue;
-            }
-
-            auto map = CastOperator<TOpMap>(it.Current);
-            if (!map->MapElements.empty()) {
-                continue;
-            }
-
-            auto replacement = map->GetInput();
-            if (it.Current->Parents.empty()) {
-                if (it.SubplanIU) {
-                    Props.Subplans.Replace(*it.SubplanIU, replacement);
-                } else {
-                    root.SetInput(replacement);
-                }
-            } else {
-                for (auto& [parent, childIdx] : it.Current->Parents) {
-                    parent->Children[childIdx] = replacement;
-                }
-            }
-            return true;
-        }
-        return false;
-    }
-
-private:
     TPlanProps& Props;
-    THashMap<IOperator*, TInfoUnitSet> LiveOut;
+    THashMap<IOperator*, TInfoUnitSet>& LiveOut;
     THashSet<IOperator*> Queued;
     TVector<TIntrusivePtr<IOperator>> Queue;
 };
 
-} // anonymous namespace
+TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut) {
+    TVector<TMapElement> newElements;
+    newElements.reserve(map->MapElements.size());
 
-TLogicalLivenessStage::TLogicalLivenessStage()
-    : IRBOStage("Logical liveness") {
-    Props = ERuleProperties::RequireParents;
+    for (const auto& mapElement : map->MapElements) {
+        if (mapElement.IsRename() || liveOut.contains(mapElement.GetElementName())) {
+            newElements.push_back(mapElement);
+        }
+    }
+
+    return newElements;
 }
 
-void TLogicalLivenessStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
-    Y_UNUSED(ctx);
+} // anonymous namespace
+
+void ComputePlanLiveness(TOpRoot& root) {
     TLogicalLiveness(root.PlanProps).Run(root);
+}
+
+bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(ctx);
+
+    if (input->Kind != EOperator::Map) {
+        return false;
+    }
+
+    auto map = CastOperator<TOpMap>(input);
+    const auto liveIt = props.LiveOut.find(map.get());
+    if (liveIt == props.LiveOut.end()) {
+        return false;
+    }
+
+    auto newElements = KeepLiveMapElements(map, liveIt->second);
+    if (newElements.size() == map->MapElements.size()) {
+        return false;
+    }
+
+    if (newElements.empty()) {
+        input = map->GetInput();
+    } else {
+        map->MapElements = std::move(newElements);
+    }
+
+    return true;
 }
 
 } // namespace NKqp

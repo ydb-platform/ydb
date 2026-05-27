@@ -92,7 +92,7 @@ void IOperator::PropagateLiveness(ILivenessContext& ctx) {
 }
 
 void IUnaryOperator::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
+    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
     TInfoUnitSet inputLive;
     for (const auto& iu : GetInput()->GetOutputIUs()) {
         if (liveOut.contains(iu)) {
@@ -403,7 +403,7 @@ TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
 }
 
 void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
+    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
     auto input = GetInput();
     TInfoUnitSet inputLive;
     TInfoUnitSet renameSources;
@@ -766,7 +766,7 @@ TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
 }
 
 void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
+    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
     const auto leftInput = GetLeftInput();
     const auto rightInput = GetRightInput();
     const auto leftOutput = MakeInfoUnitSet(leftInput->GetOutputIUs());
@@ -923,7 +923,7 @@ TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
 }
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
+    const TInfoUnitSet liveOut = ctx.GetLiveOut(this);
     ctx.AddLiveColumns(GetLeftInput(), liveOut);
     ctx.AddLiveColumns(GetRightInput(), liveOut);
 }

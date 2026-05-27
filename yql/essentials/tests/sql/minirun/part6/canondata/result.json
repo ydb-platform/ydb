@@ -274,9 +274,9 @@
     ],
     "test.test[blocks-agg_singular_type_value_optional-default.txt-Peephole]": [
         {
-            "checksum": "d08b0712106d32f528a371914ba24560",
-            "size": 3312,
-            "uri": "https://{canondata_backend}/1917492/53531106e44e755ea77008ec27c01bc41d81b31c/resource.tar.gz#test.test_blocks-agg_singular_type_value_optional-default.txt-Peephole_/opt.yql"
+            "checksum": "31752b3f6b5df165c1a6cae84ca116d0",
+            "size": 2976,
+            "uri": "https://{canondata_backend}/1937429/dc46215c48357c23193ef39fb1ae40847a4e9fd8/resource.tar.gz#test.test_blocks-agg_singular_type_value_optional-default.txt-Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-agg_singular_type_value_optional-default.txt-Results]": [
@@ -368,6 +368,27 @@
             "checksum": "88cf292f03f7446cbd4a93928a3e0e38",
             "size": 1398,
             "uri": "https://{canondata_backend}/1917492/53531106e44e755ea77008ec27c01bc41d81b31c/resource.tar.gz#test.test_blocks-pg_op-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[blocks-propagate_extractmembers_over_tablesource-default.txt-Debug]": [
+        {
+            "checksum": "0195cde6aa2c5d62cb36519850910654",
+            "size": 547,
+            "uri": "https://{canondata_backend}/1946324/de1ed7a60f4ea9118dcc0e11f1e0f3fdf6715c81/resource.tar.gz#test.test_blocks-propagate_extractmembers_over_tablesource-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-propagate_extractmembers_over_tablesource-default.txt-Peephole]": [
+        {
+            "checksum": "3cbaa036cb2fb50aaea2b28489ca29e7",
+            "size": 805,
+            "uri": "https://{canondata_backend}/1946324/de1ed7a60f4ea9118dcc0e11f1e0f3fdf6715c81/resource.tar.gz#test.test_blocks-propagate_extractmembers_over_tablesource-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-propagate_extractmembers_over_tablesource-default.txt-Results]": [
+        {
+            "checksum": "7fdea30a65daa313fe4f757e327849e4",
+            "size": 919,
+            "uri": "https://{canondata_backend}/1946324/de1ed7a60f4ea9118dcc0e11f1e0f3fdf6715c81/resource.tar.gz#test.test_blocks-propagate_extractmembers_over_tablesource-default.txt-Results_/results.txt"
         }
     ],
     "test.test[blocks-singular_type_scalar-default.txt-Debug]": [

@@ -12,7 +12,7 @@ items:
   - name: Fulltext search
     href: fulltext_search.md
   - name: Local indexes
-    href: bloom_skip_indexes.md
+    href: local_indexes.md
   - name: Federated query
     include:
       path: federated_query/toc_p.yaml

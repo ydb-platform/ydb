@@ -240,7 +240,7 @@ WITH (STORE = COLUMN);
 
 {% include [bloom_filter_concept.md](bloom_filter_concept.md) %}
 
-In column-oriented and row-oriented tables you can define [local Bloom skip indexes](../../glossary.md#local-bloom-skip-index) on columns with `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, either during [table creation](../../../yql/reference/syntax/create_table/bloom_skip_index.md) or with [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). See [local indexes](../../query_execution/bloom_skip_indexes.md) and [Bloom skip indexes](../../../dev/bloom-skip-indexes.md).
+In column-oriented and row-oriented tables you can define [local Bloom skip indexes](../../glossary.md#local-bloom-skip-index) on columns with `LOCAL USING bloom_filter` or `LOCAL USING bloom_ngram_filter`, either during [table creation](../../../yql/reference/syntax/create_table/bloom_skip_index.md) or with [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). See [local indexes](../../query_execution/local_indexes.md) and [Bloom skip indexes](../../../dev/bloom-skip-indexes.md).
 
 ### Partitioning Column-Oriented Tables {#olap-tables-partitioning}
 

@@ -270,7 +270,7 @@ WITH (STORE = COLUMN);
 
 {% include [bloom_filter_concept.md](bloom_filter_concept.md) %}
 
-В колоночных и строковых таблицах можно задавать [локальные Блум-индексы](../../glossary.md#local-bloom-skip-index) по колонкам: `LOCAL USING bloom_filter` или `LOCAL USING bloom_ngram_filter`. Индексы создаются при [создании таблицы](../../../yql/reference/syntax/create_table/bloom_skip_index.md) или добавляются через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). Подробнее: [локальные индексы](../../query_execution/bloom_skip_indexes.md), [Блум-индексы](../../../dev/bloom-skip-indexes.md).
+В колоночных и строковых таблицах можно задавать [локальные Блум-индексы](../../glossary.md#local-bloom-skip-index) по колонкам: `LOCAL USING bloom_filter` или `LOCAL USING bloom_ngram_filter`. Индексы создаются при [создании таблицы](../../../yql/reference/syntax/create_table/bloom_skip_index.md) или добавляются через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). Подробнее: [локальные индексы](../../query_execution/local_indexes.md), [Блум-индексы](../../../dev/bloom-skip-indexes.md).
 
 ### Партицирование колоночной таблицы {#olap-tables-partitioning}
 

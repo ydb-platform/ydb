@@ -1,6 +1,6 @@
 # Local indexes
 
-## Local and global indexes
+## How they differ from global indexes
 
 A [local index](../glossary.md#local-index) is an auxiliary structure stored together with table data and applied while reading from storage. It does not materialize a separate index table and is not selected in queries with `VIEW` (unlike global indexes).
 

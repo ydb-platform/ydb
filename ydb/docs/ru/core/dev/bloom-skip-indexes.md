@@ -6,10 +6,10 @@
 
 [Локальные Блум-индексы](../concepts/glossary.md#local-bloom-skip-index) — частный случай [локального индекса](../concepts/glossary.md#local-index). Поддерживаются два типа:
 
-* `bloom_filter` — фильтр по точным значениям индексируемой колонки; подходит для условий равенства и `IN` (см. [когда применять](../concepts/query_execution/bloom_skip_indexes.md#bloom-skip-indexes)).
+* `bloom_filter` — фильтр по точным значениям индексируемой колонки; подходит для условий равенства и `IN` (см. [когда применять](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter` — фильтр по n-граммам строковой колонки (`String`, `Utf8`); подходит для поиска подстрок и шаблонов `LIKE` в [колоночных таблицах](../concepts/glossary.md#column-oriented-table).
 
-Отличия типов и сравнение с глобальными индексами: [локальные индексы](../concepts/query_execution/bloom_skip_indexes.md).
+Отличия типов и сравнение с глобальными индексами: [локальные индексы](../concepts/query_execution/local_indexes.md).
 
 ## Параметры и значения по умолчанию {#parameters}
 

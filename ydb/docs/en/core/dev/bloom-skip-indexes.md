@@ -6,10 +6,10 @@ Bloom skip indexes are [local](../concepts/glossary.md#local-index) auxiliary st
 
 [Local Bloom skip indexes](../concepts/glossary.md#local-bloom-skip-index) are a kind of [local index](../concepts/glossary.md#local-index). {{ ydb-short-name }} supports two types:
 
-* `bloom_filter`: a filter over exact values of the indexed column; use for equality and `IN` (see [when to use which](../concepts/query_execution/bloom_skip_indexes.md#bloom-skip-indexes)).
+* `bloom_filter`: a filter over exact values of the indexed column; use for equality and `IN` (see [when to use which](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter`: a filter over n-grams of a string column (`String`, `Utf8`); use for substring and `LIKE` pattern search on [column-oriented tables](../concepts/glossary.md#column-oriented-table).
 
-For type differences and comparison with global indexes, see [local indexes](../concepts/query_execution/bloom_skip_indexes.md).
+For type differences and comparison with global indexes, see [local indexes](../concepts/query_execution/local_indexes.md).
 
 ## Parameters and defaults {#parameters}
 

@@ -1,6 +1,6 @@
 # Блум-индекс
 
-{% if backend_name == 'YDB' %}[Блум-индексы](../../../../dev/bloom-skip-indexes.md){% else %}Блум-индексы{% endif %} — [локальные индексы](../../../../concepts/glossary.md#local-index), их можно задать только с ключевым словом `LOCAL`. При создании таблицы в секции `INDEX` используются типы `bloom_filter` или `bloom_ngram_filter` (по аналогии с [вторичным индексом](secondary_index.md), но с обязательным `LOCAL` и соответствующим `USING`). См. также [локальные индексы](../../../../concepts/query_execution/bloom_skip_indexes.md).
+{% if backend_name == 'YDB' %}[Блум-индексы](../../../../dev/bloom-skip-indexes.md){% else %}Блум-индексы{% endif %} — [локальные индексы](../../../../concepts/glossary.md#local-index), их можно задать только с ключевым словом `LOCAL`. При создании таблицы в секции `INDEX` используются типы `bloom_filter` или `bloom_ngram_filter` (по аналогии с [вторичным индексом](secondary_index.md), но с обязательным `LOCAL` и соответствующим `USING`). См. также [локальные индексы](../../../../concepts/query_execution/local_indexes.md).
 
 ```yql
 CREATE TABLE `<table_name>` (

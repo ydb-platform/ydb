@@ -12,7 +12,7 @@ items:
   - name: Полнотекстовый поиск
     href: fulltext_search.md
   - name: Локальные индексы
-    href: bloom_skip_indexes.md
+    href: local_indexes.md
   - name: Федеративные запросы
     include:
       path: federated_query/toc_p.yaml

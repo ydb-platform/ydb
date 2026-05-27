@@ -204,7 +204,7 @@ A **local index** is an auxiliary structure stored together with table data (unl
 
 #### Local Bloom skip index {#local-bloom-skip-index}
 
-A **local Bloom skip index** is a kind of [local index](#local-index): a probabilistic column-value filter based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments that cannot contain the requested value. Supported types are `bloom_filter` and `bloom_ngram_filter`. See [Bloom skip indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/bloom_skip_indexes.md).
+A **local Bloom skip index** is a kind of [local index](#local-index): a probabilistic column-value filter based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments that cannot contain the requested value. Supported types are `bloom_filter` and `bloom_ngram_filter`. See [Bloom skip indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
 
 #### Column family {#column-family}
 

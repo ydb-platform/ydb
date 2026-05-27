@@ -28,6 +28,7 @@ ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactPublicApi
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql-UseQueryService
+ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
@@ -100,6 +101,11 @@ ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.Schemesha
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldNotCompactCascade
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldNotCompactSameTableSimultaneously
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.SchemeshardShouldNotCompactTableAndIndexImpleTableSimultaneously
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldContinueCompactionAfterMerge
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldContinueCompactionAfterSplit
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldNotAddNewShardsForCompactedShard
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldNotAddNewShardsOnSplitAfterCompactionDone
+ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldOnlyAddNewShardsFromUncompactedOnSplit
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldRetryOnError
 ydb/core/tx/schemeshard/ut_compaction TSchemeshardForcedCompactionTest.ShouldRetryOnTimeout
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[PipeResetsBucket0]

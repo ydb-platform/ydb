@@ -807,7 +807,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     config.SetTestMode(true);
     config.MutableHttpConfig()->SetPort(HttpServicePort);
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
-    config.MutableHttpConfig()->SetYmqEnabled(true);
+    config.MutableHttpConfig()->SetYmqEnabled(!enableSqsTopic);
     config.MutableHttpConfig()->SetSqsTopicEnabled(enableSqsTopic);
     SqsTopicMode = enableSqsTopic;
 

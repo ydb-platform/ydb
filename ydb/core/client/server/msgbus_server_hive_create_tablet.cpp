@@ -321,6 +321,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         }
     }
 };

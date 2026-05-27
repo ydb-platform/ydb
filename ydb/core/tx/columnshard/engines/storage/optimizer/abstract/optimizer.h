@@ -66,6 +66,26 @@ public:
         return TStringBuilder() << "(" << Level << "," << InternalLevelWeight << ")";
     }
 
+    static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
+        if (weight >= max) {
+            return TOptimizationPriority(10, weight);
+        }
+
+        if (weight < min) {
+            return TOptimizationPriority(0, weight);
+        }
+
+        // Never triggers, because if min < max one of two ifs must trigger
+        AFL_VERIFY(min < max);
+
+        ui64 range = max - min;
+        ui64 normalizedWeight = weight - min;
+
+        i64 level = 1 + (normalizedWeight * 9) / range;
+
+        return TOptimizationPriority(level, weight);
+    }
+
     static TOptimizationPriority Critical(const i64 weight) {
         return TOptimizationPriority(10, weight);
     }
@@ -127,6 +147,17 @@ protected:
         const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    virtual ui32 DoGetMaxCompactionInflight() const {
+        return 1;
+    }
+
+    virtual bool DoUsesPullCompactionScheduling() const {
+        return false;
+    }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
 
@@ -270,6 +301,17 @@ public:
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
 
+    std::shared_ptr<TColumnEngineChanges> GetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    ui32 GetMaxCompactionInflight() const {
+        return DoGetMaxCompactionInflight();
+    }
+
+    bool UsesPullCompactionScheduling() const {
+        return DoUsesPullCompactionScheduling();
+    }
+
     TOptimizationPriority GetUsefulMetric() const {
         auto result = DoGetUsefulMetric();
         result.Mul(WeightKff);
@@ -330,7 +372,7 @@ public:
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
         auto result = TFactory::MakeHolder(defaultCompactionName);
-        AFL_VERIFY(!!result);
+        AFL_VERIFY(!!result)("name", defaultCompactionName);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }
 

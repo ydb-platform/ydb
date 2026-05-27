@@ -637,10 +637,10 @@ NYT::TNode TYtTableBaseInfo::GetCodecSpecNode(const NCommon::TStructMemberMapper
     return res;
 }
 
-NYT::TNode TYtTableBaseInfo::GetAttrSpecNode(bool rowSpecCompactForm) const {
+NYT::TNode TYtTableBaseInfo::GetAttrSpecNode(ui64 nativeTypeCompatibility, bool rowSpecCompactForm) const {
     NYT::TNode res = NYT::TNode::CreateMap();
     if (RowSpec) {
-        RowSpec->FillAttrNode(res[YqlRowSpecAttribute], rowSpecCompactForm);
+        RowSpec->FillAttrNode(res[YqlRowSpecAttribute], nativeTypeCompatibility, rowSpecCompactForm);
     }
     return res;
 }
@@ -698,18 +698,22 @@ TYqlRowSpecInfo::TPtr TYtTableBaseInfo::GetRowSpec(TExprBase node) {
 }
 
 TYtTableStatInfo::TPtr TYtTableBaseInfo::GetStat(NNodes::TExprBase node) {
-    TExprNode::TPtr statNode;
+    TMaybeNode<TExprBase> stat;
     if (node.Maybe<TYtOutTable>()) {
-        statNode = node.Cast<TYtOutTable>().Stat().Ptr();
+        stat = node.Cast<TYtOutTable>().Stat();
     } else if (node.Maybe<TYtTable>()) {
-        statNode = node.Cast<TYtTable>().Stat().Ptr();
+        stat = node.Cast<TYtTable>().Stat();
     } else if (node.Maybe<TYtOutput>()) {
         auto tableWithCluster = GetOutTableWithCluster(node);
-        statNode = tableWithCluster.first.Cast<TYtOutTable>().Stat().Ptr();
+        stat = tableWithCluster.first.Cast<TYtOutTable>().Stat();
     } else {
         ythrow yexception() << "Not a table node " << (node.Raw() ? TString{node.Ref().Content()}.Quote() : TStringBuf("\"null\""));
     }
-    return MakeIntrusive<TYtTableStatInfo>(statNode);
+
+    if (stat.Maybe<TCoVoid>()) {
+        return {};
+    }
+    return MakeIntrusive<TYtTableStatInfo>(stat.Cast());
 }
 
 TStringBuf TYtTableBaseInfo::GetTableName(NNodes::TExprBase node) {
@@ -913,9 +917,9 @@ bool TYtTableInfo::HasSubstAnonymousLabel(NNodes::TExprBase node) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TYtOutTableInfo::TYtOutTableInfo(const TStructExprType* type, ui64 nativeTypeCompatibility, const TMaybe<TColumnOrder>& columnOrder) {
+TYtOutTableInfo::TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeFlags, const TMaybe<TColumnOrder>& columnOrder) {
     RowSpec = MakeIntrusive<TYqlRowSpecInfo>();
-    RowSpec->SetType(type, nativeTypeCompatibility);
+    RowSpec->SetType(type, nativeYtTypeFlags);
     RowSpec->SetColumnOrder(columnOrder);
 
     Meta = MakeIntrusive<TYtTableMetaInfo>();

@@ -14,6 +14,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
+#include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
@@ -470,6 +471,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", at schemeshard: " << Self->TabletID());
 
         AuditLogModifySchemeTransaction(record, Response->Record, Self, PeerName, UserSID, SanitizedToken);
+        SendTopicCloudEventIfNeeded(record, Response->Record, Self, PeerName, UserSID);
 
         //NOTE: Double audit output into the common log as a way to ease
         // transition to a new auditlog stream.
@@ -482,6 +484,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         OnComplete.ApplyOnComplete(Self, ctx);
     }
+
 };
 
 struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -1660,6 +1663,11 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     // ChangePathState
     case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
         return CreateChangePathState(op.NextPartId(), tx, context);
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
+        return CreateIncrementalRestoreLockTargets(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
+        return CreateIncrementalRestoreUnlockTargets(op.NextPartId(), tx, context);
 
     // Incremental Restore Finalization
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:

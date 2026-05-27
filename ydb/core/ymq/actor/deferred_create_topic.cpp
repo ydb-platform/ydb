@@ -4,6 +4,7 @@
 #include "executor.h"
 #include "log.h"
 
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/ymq/actor/cfg/cfg.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/queue_path.h>
@@ -100,6 +101,7 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
+            hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
             cFunc(TEvPoisonPill::EventType, PassAway);
         default:
             break;
@@ -135,7 +137,7 @@ private:
             OnReadAttributes(record);
             break;
         case EPhase::CreatingScheme:
-            OnCreateScheme(record);
+            Y_UNREACHABLE();
             break;
         case EPhase::MarkingDb:
             OnMarkDb(record);
@@ -181,7 +183,7 @@ private:
         const TQueuePath path(Cfg().GetRoot(), UserName_, QueueName_);
         const TString versionName = TStringBuilder() << "v" << Version_;
 
-        TPersQueueGroupTopicParams params;
+        TTopicParams params;
         ui64 retentionMs = LoadedAttrs_.MessageRetentionMs;
         if (!retentionMs) {
             retentionMs = TDuration::Days(4).MilliSeconds();
@@ -206,30 +208,21 @@ private:
         params.FolderId = FolderId_;
 
         auto tx = BuildCreateTopicTx(path.GetQueuePath(), versionName, IsFifo_, params);
-
-        const TString reqId = CreateGuidAsString();
-        const TQueuePath qpath(Cfg().GetRoot(), UserName_, QueueName_, Version_);
-        Register(new TMiniKqlExecutionActor(
-            SelfId(),
-            reqId,
-            std::move(tx),
-            true,
-            qpath,
-            TransactionCounters_,
-            TSqsEvents::TExecutedCallback()
-        ));
+        Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
+            .Database = Cfg().GetRoot() == "/Root/SQS" ? "/Root" : Cfg().GetRoot(),
+            .Request = std::move(tx),
+            .IfNotExists = true,
+        }));
     }
 
-    void OnCreateScheme(const NKikimrTxUserProxy::TEvProposeTransactionStatus& record) {
-        const auto status = record.GetStatus();
-        if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
-            && status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready)
-        {
-            LOG_SQS_WARN("Deferred topic: CreateTopic failed for [" << UserName_ << "/" << QueueName_ << "]: " << record);
+    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+        const auto& response = *ev->Get();
+        if (response.Status == Ydb::StatusIds::SUCCESS) {
+            RequestMarkTopicCreated();
+        } else {
+            LOG_SQS_WARN("Deferred topic: CreateTopic failed for [" << UserName_ << "/" << QueueName_ << "]: " << response.ErrorMessage);
             Finish(false);
-            return;
         }
-        RequestMarkTopicCreated();
     }
 
     void RequestMarkTopicCreated() {

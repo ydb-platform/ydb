@@ -2,8 +2,9 @@
 #include "dq_tasks_counters.h"
 #include "dq_tasks_runner.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_watermark_generator.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -27,6 +28,7 @@
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_watermark.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
@@ -351,9 +353,10 @@ public:
             auto& computationFactory = Context.ComputationFactory;
             if (auto res = computationFactory(callable, ctx)) {
                 return res;
-            }
-            if (callable.GetType()->GetName() == "MultiHoppingCore") {
+            } else if (callable.GetType()->GetName() == "MultiHoppingCore") {
                 return WrapMultiHoppingCore(callable, ctx, Watermark);
+            } else if (callable.GetType()->GetName() == "DqWatermarkGenerator") {
+                return WrapDqWatermarkGenerator(callable, ctx, Watermark);
             }
             return nullptr;
         };
@@ -367,10 +370,12 @@ public:
             optLLVM = "OFF";
         }
 
+        auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
+    
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
             AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
-            ComputationLogProvider.Get(), task.GetProgram().GetLangVer());
+            ComputationLogProvider.Get(), task.GetProgram().GetLangVer(), runtimeSettings);
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -1161,18 +1166,28 @@ private:
                         AllocatedHolder->CheckForNotConsumedLinear();
                     }
 
-                    LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
+                    LOG(TStringBuilder() << "task " << TaskId << ", execution finished, finish consumers");
                     AllocatedHolder->Output->Finish();
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {
                     auto status = ERunStatus::PendingInput;
                     // only for sync ca
-                    if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
-                        const auto watermark = WatermarksTracker->GetPendingWatermark();
-                        WatermarksTracker->PopPendingWatermark();
-
-                        Y_DEBUG_ABORT_UNLESS(watermark.Defined());
+                    const auto watermark = [this]() {
+                        if (!WatermarksTracker) {
+                            return TMaybe<TInstant>{};
+                        }
+                        if (WatermarksTracker->HasPendingWatermark()) {
+                            const auto result = WatermarksTracker->GetPendingWatermark();
+                            WatermarksTracker->PopPendingWatermark();
+                            return result;
+                        } else if (Watermark.WatermarkIn) {
+                            return std::exchange(Watermark.WatermarkIn, Nothing());
+                        } else {
+                            return TMaybe<TInstant>{};
+                        }
+                    }();
+                    if (watermark) {
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
                         AllocatedHolder->Output->Consume(std::move(watermarkRequest));

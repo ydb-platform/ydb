@@ -241,6 +241,7 @@ class LinuxDriver(Driver):
                 send_size_event()
 
         signal.signal(signal.SIGWINCH, on_terminal_resize)
+        send_size_event()
 
         self.write("\x1b[?1049h")  # Alt screen
 
@@ -276,8 +277,8 @@ class LinuxDriver(Driver):
         self.write("\x1b[>1u")  # https://sw.kovidgoyal.net/kitty/keyboard-protocol/
 
         self.flush()
-        self._key_thread = Thread(target=self._run_input_thread)
-        send_size_event()
+        self._key_thread = Thread(target=self._run_input_thread, name="textual-input")
+
         self._key_thread.start()
         self._request_terminal_sync_mode_support()
         self._query_in_band_window_resize()

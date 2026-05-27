@@ -6,7 +6,7 @@
 
 #include <yt/yt/core/net/address.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NYTree;
 
@@ -135,5 +135,5 @@ IBusPtr CreateLocalBypassReplyBus(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 

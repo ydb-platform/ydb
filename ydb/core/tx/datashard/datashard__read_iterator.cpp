@@ -1385,8 +1385,11 @@ std::unique_ptr<TEvDataShard::TEvReadResult> MakeEvReadResult(ui32 nodeId) {
 }
 
 
+const TDuration MaxTimePerIteration = TDuration::MilliSeconds(10);
+
 const NHPTimer::STime TReader::MaxCyclesPerIteration =
-    /* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100;
+    ((NHPTimer::GetCyclesPerSecond() * MaxTimePerIteration.MicroSeconds()) + TDuration::Seconds(1).MicroSeconds() - 1)
+    / TDuration::Seconds(1).MicroSeconds();
 
 } // namespace
 
@@ -2079,14 +2082,14 @@ public:
         }
 
         const auto& schedulableRead = state.SchedulableRead;
-        if (schedulableRead && !schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+        if (schedulableRead && !schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
             SetStatusError(
                 Result->Record,
                 Ydb::StatusIds::OVERLOADED,
                 TStringBuilder() << "Read quota for resource pool exceeded" // TODO: add pool id
                     << " (shard# " << Self->TabletID()
                     << " node# " << ctx.SelfID.NodeId() << ")");
-            Result->Record.SetThrottled(true);
+            Result->Record.SetThrottleDelayMs(schedulableRead->EstimateQuotaDelay(MaxTimePerIteration).MilliSeconds());
             return EExecutionStatus::DelayComplete;
         }
 
@@ -2222,13 +2225,14 @@ public:
         switch (state.LockMode) {
             case NKikimrDataEvents::OPTIMISTIC:
             case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            case NKikimrDataEvents::PESSIMISTIC_NONE:
                 break;
 
             default:
                 SetStatusError(
                     Result->Record,
                     Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented"
+                    TStringBuilder() << "Only OPTIMISTIC, OPTIMISTIC_SNAPSHOT_ISOLATION and PESSIMISTIC_NONE lock modes are currently implemented"
                         << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
                 return;
         }
@@ -2843,6 +2847,7 @@ private:
             break;
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             if (Reader->HadInconsistentResult()) {
                 HandleDeferredLockBreak(state, sysLocks, ctx);
                 handledDeferredBreak = true;
@@ -3400,14 +3405,14 @@ public:
         // Try to consume schedulable read quota before reading
         const auto& schedulableRead = state.SchedulableRead;
         if (schedulableRead) {
-            if (!schedulableRead->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+            if (!schedulableRead->TryConsumeQuota(MaxTimePerIteration)) {
                 // KQP read quota exhausted, reschedule with delay.
                 // Keep ReadContinuePending=true so that ReadAck doesn't schedule a duplicate TEvReadContinue while we wait.
                 state.ReadContinuePending = true;
                 Reader.reset();
                 Result.reset();
                 ctx.Schedule(
-                    schedulableRead->EstimateQuotaDelay(TDuration::MilliSeconds(10)),
+                    schedulableRead->EstimateQuotaDelay(MaxTimePerIteration),
                     new TEvDataShard::TEvReadContinue(LocalReadId));
                 return true;
             }
@@ -3469,6 +3474,7 @@ public:
             return Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult();
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+        case NKikimrDataEvents::PESSIMISTIC_NONE:
             return Reader->HadInconsistentResult();
 
         default:
@@ -3789,8 +3795,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     NKqp::NScheduler::TSchedulableReadPtr schedulableRead;
-    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory && *SchedulableReadFactory) {
-        schedulableRead = (*SchedulableReadFactory)->Get(record.GetDatabaseId(), record.GetPoolId());
+    if (record.HasPoolId() && !record.GetPoolId().empty() && SchedulableReadFactory) {
+        schedulableRead = SchedulableReadFactory->Get(record.GetDatabaseId(), record.GetPoolId());
     }
 
     ui64 localReadId = NextTieBreakerIndex++;

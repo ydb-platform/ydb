@@ -9,7 +9,14 @@ SRCS(
     auth_factory.h
     auth_actors.cpp
     auth_actors.h
+    controller_base.cpp
+    controller_base.h
+    controller_registry.cpp
     custom_metrics.h
+    datastreams.cpp
+    datastreams.h
+    datastreams_serialization.cpp
+    datastreams_serialization.h
     discovery_actor.cpp
     discovery_actor.h
     events.h
@@ -22,8 +29,19 @@ SRCS(
     http_service.cpp
     http_service.h
     json_proto_conversion.h
+    json_proto_conversion.cpp
     metrics_actor.cpp
     metrics_actor.h
+    serialization.cpp
+    serialization.h
+    sqs.cpp
+    sqs.h
+    sqs_serialization.cpp
+    sqs_serialization.h
+    utils.cpp
+    utils.h
+    ymq.cpp
+    ymq.h
 )
 
 PEERDIR(
@@ -43,6 +61,7 @@ PEERDIR(
     ydb/library/ycloud/impl
     ydb/library/naming_conventions
     ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/topic/codecs

@@ -99,6 +99,7 @@ enum class EYtSettingType: ui64 {
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
+    ReplaceParentCache       /* "replaceParentCache" */,
     JobCount                 /* "jobCount" */,                 // hybrid supported
     JoinReduce               /* "joinReduce" */,               // hybrid supported
     FirstAsPrimary           /* "firstAsPrimary" */,           // hybrid supported

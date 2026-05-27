@@ -12,6 +12,7 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -626,6 +627,33 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
 
                 break;
             }
+            case TIndexDescription::EType::LocalMinMax: {
+                if (index.KeyColumns.size() != 1) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.KeyColumns);
+                    return false;
+                }
+                if (!index.DataColumns.empty()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
+                    return false;
+                }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
+                if (columnIdIt == columnIdsByName.end()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    return false;
+                }
+
+                auto* upsert = tableDesc.MutableSchema()->AddIndexes();
+                upsert->SetId(nextIndexId++);
+                upsert->SetName(index.Name);
+                upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                auto* minmax = upsert->MutableMinMaxIndex();
+                minmax->SetColumnId(columnIdIt->second);
+                
+                break;
+            }
             default:
                 break;
         }
@@ -1041,6 +1069,13 @@ public:
                             continue;
                         }
 
+                        if (index.Type == TIndexDescription::EType::LocalMinMax) {
+                            if (metadata->StoreType != EStoreType::Column) {
+                                tablePromise.SetValue(ResultFromError<TGenericResult>(NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                return;
+                            }
+                        }
+
                         auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
                         indexDesc->SetName(index.Name);
                         indexDesc->SetType(TIndexDescription::ConvertIndexType(index.Type));
@@ -1179,10 +1214,21 @@ public:
             // DataShard LocalBloomFilter: not a real secondary index — maps to ByKeyFilterPrefixes
             // in the partition config via ESchemeOpAlterTable. ColumnShard LocalBloomFilter is
             // handled by AlterColumnTable and never reaches this path.
-            const bool isLocalBloom = std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+            const bool hasLocalBloom = std::any_of(req.add_indexes().begin(), req.add_indexes().end(),
                 [](const auto& idx) {
                     return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
                 });
+            const bool isLocalBloom = hasLocalBloom && std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+                [](const auto& idx) {
+                    return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
+                });
+            if (hasLocalBloom && !isLocalBloom) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue("ALTER TABLE cannot mix LocalBloomFilter indexes with secondary indexes in a single request"));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
 
             if (isLocalBloom) {
                 Ydb::StatusIds::StatusCode code;

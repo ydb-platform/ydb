@@ -11,6 +11,8 @@
 
 namespace NKikimr::NDDisk {
 
+    constexpr size_t DataAlignment = 4096;
+
     struct TEv {
         enum {
             EvConnect = EventSpaceBegin(TKikimrEvents::ES_DDISK),
@@ -39,6 +41,8 @@ namespace NKikimr::NDDisk {
             EvReadThenWritePersistentBuffers,
             EvGetPersistentBufferInfo,
             EvPersistentBufferInfo,
+            EvDeleteTabletChunks,
+            EvDeleteTabletChunksResult,
         };
     };
 
@@ -174,6 +178,7 @@ struct TPersistentBufferFormat {
     ui32 UpdateFreeSpaceInfoMilliseconds = 5000;
     ui64 PerTabletStorageLimit = 4096_MB;
     ui32 MaxBarriersLimit = 64;
+    ui32 MaxPendingEventsQueueSize = 1024;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -205,6 +210,8 @@ struct TPersistentBufferFormat {
     struct TEvReadThenWritePersistentBuffers;
     struct TEvGetPersistentBufferInfo;
     struct TEvPersistentBufferInfo;
+    struct TEvDeleteTabletChunks;
+    struct TEvDeleteTabletChunksResult;
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -257,6 +264,10 @@ struct TPersistentBufferFormat {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
             instruction.Serialize(Record.MutableInstruction());
+        }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
         }
     };
 
@@ -311,6 +322,10 @@ struct TPersistentBufferFormat {
             selector.Serialize(Record.MutableSelector());
             Record.SetLsn(lsn);
             instruction.Serialize(Record.MutableInstruction());
+        }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
         }
     };
 
@@ -387,6 +402,10 @@ struct TPersistentBufferFormat {
                 auto* pbId = Record.AddPersistentBufferIds();
                 *pbId = id;
             }
+        }
+
+        size_t GetPayloadAlignment() const {
+            return DataAlignment;
         }
     };
 
@@ -489,6 +508,16 @@ struct TPersistentBufferFormat {
             ui64 Size;
         };
 
+        struct TOpStats {
+            TString Name;
+            ui64 RequestsInFlight = 0;
+            ui64 Requests = 0; // requests in the measurement window
+            double LatencyP50Ms = 0;
+            double LatencyP99Ms = 0;
+            double LatencyMaxMs = 0;
+            double WindowSeconds = 0; // measurement window for Requests / latencies
+        };
+
         TInstant StartedAt;
         ui32 AllocatedChunks;
         ui32 MaxChunks;
@@ -499,9 +528,11 @@ struct TPersistentBufferFormat {
         ui64 InMemoryCacheLimit;
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
+        ui64 PerTabletStorageLimit;
         std::vector<TTabletInfo> TabletInfos;
         std::unordered_map<ui64, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
+        std::vector<TOpStats> OpStats;
     };
 
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
@@ -625,6 +656,28 @@ struct TPersistentBufferFormat {
             result->SetStatus(status);
             if (errorReason) {
                 result->SetErrorReason(errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(DeleteTabletChunks) {
+        using TResult = TEvDeleteTabletChunksResult;
+
+        TEvDeleteTabletChunks() = default;
+
+        TEvDeleteTabletChunks(const TQueryCredentials& creds) {
+            creds.Serialize(Record.MutableCredentials());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(DeleteTabletChunksResult) {
+        TEvDeleteTabletChunksResult() = default;
+
+        TEvDeleteTabletChunksResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
             }
         }
     };

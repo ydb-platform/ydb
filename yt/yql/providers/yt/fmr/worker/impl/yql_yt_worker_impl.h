@@ -1,11 +1,14 @@
 #pragma once
 
-#include <library/cpp/random_provider/random_provider.h>
-
 #include <yt/yql/providers/yt/fmr/coordinator/interface/yql_yt_coordinator.h>
-#include <yt/yql/providers/yt/fmr/job_factory/interface/yql_yt_job_factory.h>
+#include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 #include <yt/yql/providers/yt/fmr/job_preparer/interface/yql_yt_job_preparer_interface.h>
 #include <yt/yql/providers/yt/fmr/worker/interface/yql_yt_fmr_worker.h>
+
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/yson/node/node.h>
+
+#include <util/generic/maybe.h>
 
 namespace NYql::NFmr {
 
@@ -18,9 +21,12 @@ enum EFmrResourceType {
 struct TFmrWorkerSettings {
     ui32 WorkerId;
     TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
-    TDuration TimeToSleepBetweenRequests = TDuration::Seconds(1);
+    TDuration TimeToSleepBetweenRequests = TDuration::MilliSeconds(100);
     ui64 MemoryLimitBytes = 0;
+    TFmrJobFactorySettings JobFactorySettings;
 };
+
+TFmrWorkerSettings GetDefaultWorkerSettings(const TMaybe<NYT::TNode>& configOverride = Nothing());
 
 IFmrWorker::TPtr MakeFmrWorker(
     IFmrCoordinator::TPtr coordinator,

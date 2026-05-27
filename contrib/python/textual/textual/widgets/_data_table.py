@@ -4,7 +4,16 @@ import functools
 from dataclasses import dataclass
 from itertools import chain, zip_longest
 from operator import itemgetter
-from typing import Any, Callable, ClassVar, Generic, Iterable, NamedTuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Generic,
+    Iterable,
+    NamedTuple,
+    TypeVar,
+    Union,
+)
 
 import rich.repr
 from rich.console import RenderableType
@@ -259,6 +268,8 @@ class RowRenderables(NamedTuple):
 class DataTable(ScrollView, Generic[CellType], can_focus=True):
     """A tabular widget that contains data."""
 
+    ALLOW_SELECT = False
+
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("enter", "select_cursor", "Select", show=False),
         Binding("up", "cursor_up", "Cursor up", show=False),
@@ -319,7 +330,6 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         color: $foreground;
         height: auto;
         max-height: 100%;
-        
         &.datatable--fixed-cursor {
             background: $block-cursor-blurred-background;
         }
@@ -441,7 +451,7 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         ) -> None:
             self.data_table = data_table
             """The data table."""
-            self.value: CellType = value
+            self.value = value
             """The value in the highlighted cell."""
             self.coordinate: Coordinate = coordinate
             """The coordinate of the highlighted cell."""
@@ -749,6 +759,10 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         we need to re-render it. """
         self._cell_render_cache: LRUCache[CellCacheKey, SegmentLines] = LRUCache(10000)
         """Cache for individual cells."""
+        self._row_renderable_cache: LRUCache[tuple[int, int], RowRenderables] = (
+            LRUCache(1000)
+        )
+        """Caches row renderables - key is (update_count, row_index)"""
         self._line_cache: LRUCache[LineCacheKey, Strip] = LRUCache(1000)
         """Cache for lines within rows."""
         self._offset_cache: LRUCache[int, list[tuple[RowKey, int]]] = LRUCache(1)
@@ -1086,6 +1100,7 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
     def _clear_caches(self) -> None:
         self._row_render_cache.clear()
         self._cell_render_cache.clear()
+        self._row_renderable_cache.clear()
         self._line_cache.clear()
         self._styles_cache.clear()
         self._offset_cache.clear()
@@ -1109,6 +1124,7 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         super().notify_style_update()
         self._row_render_cache.clear()
         self._cell_render_cache.clear()
+        self._row_renderable_cache.clear()
         self._line_cache.clear()
         self._styles_cache.clear()
         self._get_styles_to_render_cell.cache_clear()
@@ -1152,6 +1168,9 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         self._clear_caches()
 
     def watch_zebra_stripes(self) -> None:
+        self._clear_caches()
+
+    def watch_header_height(self) -> None:
         self._clear_caches()
 
     def validate_cell_padding(self, cell_padding: int) -> int:
@@ -1537,7 +1556,7 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         y = sum(ordered_row.height for ordered_row in self.ordered_rows[:row_index])
         if self.show_header:
             y += self.header_height
-        row_region = Region(0, y, row_width, row.height)
+        row_region = Region(0, y, max(self.size.width, row_width), row.height)
         return row_region
 
     def _get_column_region(self, column_index: int) -> Region:
@@ -1716,20 +1735,41 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         self.check_idle()
         return row_key
 
-    def add_columns(self, *labels: TextType) -> list[ColumnKey]:
-        """Add a number of columns.
+    def add_columns(
+        self, *columns: Union[TextType, tuple[TextType, str]]
+    ) -> list[ColumnKey]:
+        """Add multiple columns to the DataTable.
 
         Args:
-            *labels: Column headers.
+            *columns: Column specifications. Each can be either:
+                - A string or Text object (label only, auto-generated key)
+                - A tuple of (label, key) for manual key control
 
         Returns:
             A list of the keys for the columns that were added. See
                 the `add_column` method docstring for more information on how
                 these keys are used.
+
+        Examples:
+            ```python
+            # Add columns with auto-generated keys
+            keys = table.add_columns("Name", "Age", "City")
+
+            # Add columns with manual keys
+            keys = table.add_columns(
+                ("Name", "name_col"),
+                ("Age", "age_col"),
+                "City"  # Mixed with auto-generated key
+            )
+            ```
         """
         column_keys = []
-        for label in labels:
-            column_key = self.add_column(label, width=None)
+        for column in columns:
+            if isinstance(column, tuple):
+                label, key = column
+                column_key = self.add_column(label, width=None, key=key)
+            else:
+                column_key = self.add_column(column, width=None)
             column_keys.append(column_key)
         return column_keys
 
@@ -1990,6 +2030,17 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         Returns:
             A RowRenderables containing the optional label and the rendered cells.
         """
+        update_count = self._update_count
+        cache_key = (update_count, row_index)
+        if cache_key in self._row_renderable_cache:
+            row_renderables = self._row_renderable_cache[cache_key]
+        else:
+            row_renderables = self._compute_row_renderables(row_index)
+            self._row_renderable_cache[cache_key] = row_renderables
+        return row_renderables
+
+    def _compute_row_renderables(self, row_index: int) -> RowRenderables:
+        """Actual computation for _get_row_renderables"""
         ordered_columns = self.ordered_columns
         if row_index == -1:
             header_row: list[RenderableType] = [
@@ -2104,17 +2155,17 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
 
             if is_header_cell:
                 row_height = self.header_height
-                options = self.app.console.options.update_dimensions(width, row_height)
+                options = self.app.console_options.update_dimensions(width, row_height)
             else:
                 # If an auto-height row hasn't had its height calculated, we don't fix
                 # the value for `height` so that we can measure the height of the cell.
                 row = self.rows[row_key]
                 if row.auto_height and row.height == 0:
                     row_height = 0
-                    options = self.app.console.options.update_width(width)
+                    options = self.app.console_options.update_width(width)
                 else:
                     row_height = row.height
-                    options = self.app.console.options.update_dimensions(
+                    options = self.app.console_options.update_dimensions(
                         width, row_height
                     )
 
@@ -2307,17 +2358,36 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         )
         remaining_space = max(0, widget_width - table_width)
         background_color = self.background_colors[1]
-        if row_style.bgcolor is not None:
-            # TODO: This should really be in a component class
-            faded_color = Color.from_rich_color(row_style.bgcolor).blend(
-                background_color, factor=0.25
+        if self.cursor_type == "row":
+            extend_style, _ = self._get_styles_to_render_cell(
+                row_index == -1,
+                False,
+                False,
+                should_highlight(
+                    hover_location, Coordinate(row_index or 0, 0), cursor_type
+                ),
+                row_index == cursor_location.row,
+                self.show_cursor,
+                self._show_hover_cursor,
+                False,
+                False,
             )
-            faded_style = Style.from_color(
-                color=row_style.color, bgcolor=faded_color.rich_color
-            )
+            extend_style = row_style + extend_style
         else:
-            faded_style = Style.from_color(row_style.color, row_style.bgcolor)
-        scrollable_row.append([Segment(" " * remaining_space, faded_style)])
+            if row_style.bgcolor is not None:
+                # TODO: This should really be in a component class
+                faded_color = Color.from_rich_color(row_style.bgcolor).blend(
+                    background_color, factor=0.25
+                )
+                extend_style = Style.from_color(
+                    color=row_style.color, bgcolor=faded_color.rich_color
+                )
+            else:
+                extend_style = Style.from_color(row_style.color, row_style.bgcolor)
+        extend_style += Style.from_meta(
+            {"row": row_index, "column": 0, "out_of_bounds": True}
+        )
+        scrollable_row.append([Segment(" " * remaining_space, extend_style)])
 
         row_pair = (fixed_row, scrollable_row)
         self._row_render_cache[cache_key] = row_pair
@@ -2339,7 +2409,7 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
                 return self._header_row_key, y
             y -= header_height
         if y > len(y_offsets):
-            raise LookupError("Y coord {y!r} is greater than total height")
+            raise LookupError(f"Y coord {y!r} is greater than total height")
 
         return y_offsets[y]
 
@@ -2491,6 +2561,10 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
             self._set_hover_cursor(False)
             return
 
+        if self.cursor_type != "row" and meta.get("out_of_bounds", False):
+            self._set_hover_cursor(False)
+            return
+
         if self.show_cursor and self.cursor_type != "none":
             try:
                 self.hover_coordinate = Coordinate(meta["row"], meta["column"])
@@ -2597,6 +2671,8 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         meta = event.style.meta
         if "row" not in meta or "column" not in meta:
             return
+        if self.cursor_type != "row" and meta.get("out_of_bounds", False):
+            return
 
         row_index = meta["row"]
         column_index = meta["column"]
@@ -2617,8 +2693,11 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
             self.post_message(message)
         elif self.show_cursor and self.cursor_type != "none":
             # Only post selection events if there is a visible row/col/cell cursor.
-            self.cursor_coordinate = Coordinate(row_index, column_index)
-            self._post_selected_message()
+            new_coordinate = Coordinate(row_index, column_index)
+            highlight_click = new_coordinate == self.cursor_coordinate
+            self.cursor_coordinate = new_coordinate
+            if highlight_click:
+                self._post_selected_message()
             self._scroll_cursor_into_view(animate=True)
             event.stop()
 

@@ -24,4 +24,4 @@ This package was tested with the following type checkers:
 * [pyright](https://github.com/microsoft/pyright) 1.1.408
 
 It was generated from typeshed commit
-[`563213272e5db2a858e37bdf6938b0c8742ec192`](https://github.com/python/typeshed/commit/563213272e5db2a858e37bdf6938b0c8742ec192).
+[`a7f0a8286aaf594602b81bef79c77175fcf9ceda`](https://github.com/python/typeshed/commit/a7f0a8286aaf594602b81bef79c77175fcf9ceda).

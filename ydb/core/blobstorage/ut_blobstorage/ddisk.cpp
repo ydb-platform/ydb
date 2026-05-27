@@ -761,13 +761,13 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.WritePB(0, 128, 8);
         f.WritePB(0, 128, 8);
         f.WritePB(0, 128, 8);
-        f.ErasePB(3000, 8); // all records deleted
+        f.ErasePB(2551  , 8); // all records deleted
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
             UNIT_ASSERT(b.size() == 3);
             UNIT_ASSERT(b[f.PBCreds[7].TabletId] == 2000);
-            UNIT_ASSERT(b[f.PBCreds[8].TabletId] == 3000); // Hole replaced
+            UNIT_ASSERT(b[f.PBCreds[8].TabletId] == 2551); // Hole replaced
             UNIT_ASSERT(b[f.PBCreds[1].TabletId] == 5);
         }
         f.WritePB(0, 128, 8);

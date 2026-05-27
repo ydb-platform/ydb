@@ -486,6 +486,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateConfigFromPeer, Handle);
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
+            cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);

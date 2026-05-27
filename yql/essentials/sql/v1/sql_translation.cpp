@@ -1522,10 +1522,23 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 hints = *tmp;
             }
 
+            TNodePtr watermarkLambda;
+            if (auto it = hints.find("watermark"); it != hints.end()) {
+                auto& exprs = it->second;
+                YQL_ENSURE(exprs.size() == 1);
+                watermarkLambda = std::move(exprs[0]);
+                hints.erase(it);
+            }
+
             if (hints || contextHints) {
                 if (!ret->SetTableHints(Ctx_, Ctx_.Pos(), hints, contextHints)) {
                     return false;
                 }
+            }
+
+            if (watermarkLambda) {
+                auto pos = watermarkLambda->GetPos();
+                ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda));
             }
 
             result.Source = ret;
@@ -3026,19 +3039,13 @@ bool TSqlTranslation::AlterTopicConsumer(
     auto iter = alterConsumers.insert(std::make_pair(
                                           name, TTopicConsumerDescription(std::move(consumerId))))
                     .first;
-    if (!AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second)) {
-        return false;
-    }
-    return true;
+    return AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second);
 }
 
 bool TSqlTranslation::CreateTopicEntry(const TRule_create_topic_entry& node, TCreateTopicParameters& params) {
     // Will need a switch() here if (ever) create_topic_entry gets more than 1 type of statement
     auto& consumer = node.GetRule_topic_create_consumer_entry1();
-    if (!CreateTopicConsumer(consumer, params.Consumers)) {
-        return false;
-    }
-    return true;
+    return CreateTopicConsumer(consumer, params.Consumers);
 }
 
 namespace {
@@ -5116,7 +5123,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         winSpecPtr->Frame->FrameExclusion = EFrameExclusions::FrameExclNone;
 
         winSpecPtr->Frame->FrameBegin->Settings = EFrameSettings::FramePreceding;
-        if (Ctx_.AnsiCurrentRow) {
+        if (Ctx_.AnsiCurrentRow && ordered) {
             // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             winSpecPtr->Frame->FrameType = EFrameType::FrameByRange;
             winSpecPtr->Frame->FrameEnd->Settings = EFrameSettings::FrameCurrentRow;
@@ -5598,10 +5605,7 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
     switch (alterAction.Alt_case()) {
         case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction1: {
             const auto& action = alterAction.GetAlt_alter_external_data_source_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                return false;
-            }
-            return true;
+            return StoreDataSourceSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result);
         }
         case TRule_alter_external_data_source_action::kAltAlterExternalDataSourceAction2: {
             const auto& action = alterAction.GetAlt_alter_external_data_source_action2().GetRule_alter_table_set_table_setting_compat1();
@@ -5873,7 +5877,7 @@ bool TSqlTranslation::ParseViewQuery(
 
 namespace {
 
-static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
+TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString StatementSeparator = ";\n";
 
     TVector<TString> statements;

@@ -198,7 +198,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "
-        "acquire data. Aborting.",
+        "acquire data. Returning an immediate error.",
         requestId);
 
     auto errorResponse =
@@ -326,7 +326,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
     } else {
         // That means that request is already completed
         // TODO handle this case in writeRequests through weak_ptr with erase
-        LOG_ERROR(
+        LOG_DEBUG(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "
@@ -378,7 +378,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "Sent HandleWriteToDDisk with requestId# %lu was failed - can't "
-        "acquire data. Immediate error's returning.",
+        "acquire data. Returning an immediate error.",
         requestId);
 
     auto errorResponse = std::make_unique<NKikimr::NDDisk::TEvWriteResult>();

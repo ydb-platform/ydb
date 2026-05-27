@@ -3,37 +3,34 @@
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
-
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/core/yql_execution.h>
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/type_ann/type_ann_expr.h>
-#include <yql/essentials/core/type_ann/type_ann_core.h>
-#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
-#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
-#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
-
-#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-
-#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
-
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
-
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
+
 namespace {
 
 using namespace NNodes;
@@ -1228,7 +1225,7 @@ namespace {
 
         return true;
     }
-}
+} // anonymous namespace
 
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
 private:
@@ -1594,7 +1591,6 @@ public:
     using TBase::TBase;
 };
 
-
 template <class TKiObject>
 class TSecretTransformer {
 private:
@@ -1959,7 +1955,7 @@ public:
                 if (desc.FalsePositiveProbability) {
                     proto->set_false_positive_probability(*desc.FalsePositiveProbability);
                 }
-                
+
                 if (desc.CaseSensitive) {
                     proto->set_case_sensitive(*desc.CaseSensitive);
                 }
@@ -2378,9 +2374,15 @@ public:
                                         TStringBuilder() << "JSON index support is disabled"));
                                     return SyncError();
                                 }
+                                if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        "JSON index is not supported on column tables"));
+                                    return SyncError();
+                                }
                                 add_index->mutable_global_json_index();
                             } else if (type == "localBloomFilter") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Local bloom filter index support is disabled"));
                                     return SyncError();
@@ -2388,13 +2390,21 @@ public:
 
                                 add_index->mutable_local_bloom_filter_index();
                             } else if (type == "localBloomNgramFilter") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                    !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Local bloom ngram filter index support is disabled"));
                                     return SyncError();
                                 }
 
                                 add_index->mutable_local_bloom_ngram_filter_index();
+                            } else if (type == "localMinMax") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                                    return SyncError();
+                                }
+                                add_index->mutable_local_min_max_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2487,6 +2497,11 @@ public:
                                                 name, value.StringValue(), error);
                                             break;
                                         }
+                                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                                << "min_max index does not support setting: " << name));
+                                            return SyncError();
+                                        }
                                         default:
                                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                                 << "Unknown index setting: " << name));
@@ -2534,7 +2549,7 @@ public:
                             break;
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
-                            if (!NKikimr::NKMeans::ValidateSettings(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                            if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }
@@ -2573,7 +2588,7 @@ public:
                                 const auto& pk = table.Metadata->KeyColumnNames;
                                 const auto& idxCols = add_index->index_columns();
                                 bool validPrefix = static_cast<size_t>(idxCols.size()) <= pk.size();
-                                for (int i = 0; validPrefix && i < idxCols.size(); ++i) {
+                                for (size_t i = 0; validPrefix && i < static_cast<size_t>(idxCols.size()); ++i) {
                                     validPrefix = (idxCols[i] == pk[i]);
                                 }
                                 if (!validPrefix) {
@@ -2590,6 +2605,27 @@ public:
                             }
 
                             break;
+                        case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                            if (table.Metadata->StoreType != EStoreType::Column) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                 NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                return SyncError();
+                            }
+
+                            if (!add_index->data_columns().empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(add_index->data_columns())));
+                                return SyncError();
+                            }
+
+                            if (add_index->index_columns_size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                                    NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(add_index->index_columns())));
+                                return SyncError();
+                            }
+
+                            break;
+                        }
                         case Ydb::Table::TableIndex::TYPE_NOT_SET: {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();
@@ -2679,7 +2715,8 @@ public:
                         add_index->set_name(alterIndexName);
 
                         if (!useBloomFilter) {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom ngram filter index support is disabled"));
                                 return SyncError();
@@ -2688,7 +2725,8 @@ public:
                             auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
                             applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
                         } else {
-                            if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                     "Local bloom filter index support is disabled"));
                                 return SyncError();
@@ -4017,7 +4055,7 @@ private:
     TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
 };
 
-} // namespace
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,

@@ -905,6 +905,158 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             UNIT_ASSERT_VALUES_EQUAL(unmatchedRows, 1);
         }
     }
+
+    Y_UNIT_TEST(BlockHashJoinNullableKeyMatchesGraceJoin) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/bhjoin_opt_l` (
+                        id Int32 NOT NULL,
+                        jk Int32,
+                        payload String NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/bhjoin_opt_r` (
+                        id Int32 NOT NULL,
+                        jk Int32 NOT NULL,
+                        payload String NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",
+                NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/bhjoin_opt_l` (id, jk, payload) VALUES
+                        (1, 10, "L1"),
+                        (2, NULL, "L2-null-key"),
+                        (3, 20, "L3");
+
+                    INSERT INTO `/Root/bhjoin_opt_r` (id, jk, payload) VALUES
+                        (1, 10, "R1"),
+                        (2, 20, "R2");
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        TString hints = R"(
+            PRAGMA TablePathPrefix='/Root';
+            PRAGMA ydb.OptimizerHints=
+                '
+                    Bytes(L # 10e12)
+                    Bytes(R # 10e12)
+                ';
+        )";
+        TString select = R"(
+            SELECT L.id AS lid, R.id AS rid, L.payload AS lp, R.payload AS rp
+            FROM `bhjoin_opt_l` AS L
+            INNER JOIN `bhjoin_opt_r` AS R
+            ON L.jk = R.jk
+            ORDER BY lid, rid;
+        )";
+
+        auto runWithBlockJoin = [&](bool useBlockHashJoin) {
+            TString blocks = TStringBuilder()
+                << "PRAGMA ydb.UseBlockHashJoin = \""
+                << (useBlockHashJoin ? "true" : "false")
+                << "\";\n\n";
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            return status.GetResultSets()[0];
+        };
+
+        auto rsGrace = runWithBlockJoin(false);
+        auto rsBlock = runWithBlockJoin(true);
+
+        UNIT_ASSERT_VALUES_EQUAL(rsGrace.RowsCount(), rsBlock.RowsCount());
+        UNIT_ASSERT_VALUES_EQUAL_C(rsGrace.RowsCount(), 2,
+            "INNER JOIN must drop the left row with NULL join key and return two matches");
+
+        auto parsePairs = [](const NYdb::TResultSet& rs) {
+            std::set<std::pair<i32, i32>> pairs;
+            TResultSetParser parser(rs);
+            while (parser.TryNextRow()) {
+                pairs.emplace(
+                    parser.ColumnParser("lid").GetInt32(),
+                    parser.ColumnParser("rid").GetInt32());
+            }
+            return pairs;
+        };
+
+        const auto pairsGrace = parsePairs(rsGrace);
+        const auto pairsBlock = parsePairs(rsBlock);
+        UNIT_ASSERT_C(
+            pairsGrace == pairsBlock,
+            TStringBuilder() << "Block hash join and grace join must return the same (lid, rid) pairs"
+        );
+
+        auto explainAst = [&](bool useBlockHashJoin) -> TString {
+            TString blocks = TStringBuilder()
+                << "PRAGMA ydb.UseBlockHashJoin = \""
+                << (useBlockHashJoin ? "true" : "false")
+                << "\";\n\n";
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                explainResult.GetStatus(),
+                EStatus::SUCCESS,
+                explainResult.GetIssues().ToString()
+            );
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            return TString(*astOpt);
+        };
+
+        const TString astBlock = explainAst(true);
+        const TString astGrace = explainAst(false);
+
+        Cout << "AST (UseBlockHashJoin=true): " << astBlock << Endl;
+        Cout << "AST (UseBlockHashJoin=false): " << astGrace << Endl;
+
+        UNIT_ASSERT_C(
+            astBlock.Contains("BlockHashJoin") || astBlock.Contains("DqBlockHashJoin"),
+            TStringBuilder() << "Expected BlockHashJoin in plan when enabled. AST: " << astBlock
+        );
+        UNIT_ASSERT_C(
+            !astBlock.Contains("FilterNullMembers"),
+            TStringBuilder() << "BlockHashJoin plan must not contain FilterNullMembers on the join remap path. AST: "
+                << astBlock
+        );
+
+        UNIT_ASSERT_C(
+            astGrace.Contains("GraceJoin"),
+            TStringBuilder() << "Expected GraceJoin in plan when block hash is disabled. AST: " << astGrace
+        );
+        UNIT_ASSERT_C(
+            !astGrace.Contains("BlockHashJoin") && !astGrace.Contains("DqBlockHashJoin"),
+            TStringBuilder() << "Grace plan must not use BlockHashJoin. AST: " << astGrace
+        );
+        UNIT_ASSERT_C(
+            astGrace.Contains("FilterNullMembers"),
+            TStringBuilder() << "GraceJoin plan should keep FilterNullMembers for nullable join-key alignment. AST: "
+                << astGrace
+        );
+    }
 }
 
 } // namespace NKqp

@@ -1,4 +1,5 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
@@ -14,9 +15,9 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <library/cpp/testing/hook/hook.h>
 
@@ -318,6 +319,96 @@ namespace {
                 return it->second;
             }
             return {};
+        }
+
+        ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1) {
+            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+
+            if (encryptionBlock) {
+                Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+            }
+
+            THolder<IEventHandle> injectResult;
+            auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvDataShard::EvProposeTransaction: {
+                        auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                        if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
+                            return TTestActorRuntime::EEventAction::PROCESS;
+                        }
+
+                        NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                        UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
+
+                        if (schemeTx.HasBackup()) {
+                            schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                            schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(minWriteBatchSize);
+                            record.SetTxBody(schemeTx.SerializeAsString());
+                        }
+
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+
+                    case NWrappers::NExternalStorage::EvUploadPartResponse: {
+                        if (injectResult) {
+                            return TTestActorRuntime::EEventAction::PROCESS;
+                        }
+
+                        auto response = MakeHolder<NWrappers::NExternalStorage::TEvUploadPartResponse>(
+                            std::nullopt,
+                            Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error>(
+                                Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::SLOW_DOWN, true)
+                            )
+                        );
+                        injectResult = MakeHolder<IEventHandle>(ev->Recipient, ev->Sender, response.Release(), ev->Flags, ev->Cookie);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+
+                    default: {
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+                }
+            });
+
+            TString compressionLine;
+            if (compression) {
+                compressionLine = Sprintf(R"(compression: "%s")", compression.c_str());
+            }
+
+            TString extraSettings;
+            if (compressionLine || encryptionBlock) {
+                extraSettings = compressionLine + "\n" + encryptionBlock;
+            }
+
+            const auto exportId = ++txId;
+            TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  number_of_retries: 10
+                  items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: ""
+                  }
+                  %s
+                }
+            )", S3Port(), extraSettings.c_str()));
+
+            if (!injectResult) {
+                TDispatchOptions opts;
+                opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
+                    return bool(injectResult);
+                });
+                Runtime().DispatchEvents(opts);
+            }
+
+            Runtime().SetObserverFunc(prevObserver);
+            Runtime().Send(injectResult.Release(), 0, true);
+
+            Env().TestWaitNotification(Runtime(), exportId);
+            TestGetExport(Runtime(), exportId, "/MyRoot");
+
+            return txId;
         }
 
         void TearDown(NUnitTest::TTestContext&) override {
@@ -3534,6 +3625,33 @@ state: STATE_ENABLED
         for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
             UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
         }
+
+        // Round-trip: import back and verify impl tables exist on the imported table.
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/TableImported"
+              }
+              index_population_mode: INDEX_POPULATION_MODE_IMPORT
+            }
+        )", s3Port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        const TString importedIndexPath = "/MyRoot/TableImported/index";
+        TestDescribeResult(DescribePrivatePath(runtime, importedIndexPath), {
+            NLs::PathExist,
+            NLs::IndexType(indexType),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+        for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime, TStringBuilder() << importedIndexPath << "/" << implTable),
+                {NLs::PathExist, NLs::IsTable});
+        }
     }
 
     Y_UNIT_TEST(IndexMaterializationDisabled) {
@@ -4370,4 +4488,118 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         TestIcb();
     }
 
+    Y_UNIT_TEST(ShouldNotCorruptBufferOnRetry) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        txId = ExportWithRetryInjection(txId);
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
+        UNIT_ASSERT(data);
+
+        const TString expected = "1,\"valueA\"\n2,\"valueB\"\n";
+        UNIT_ASSERT_VALUES_EQUAL_C(*data, expected, "Buffer corruption detected");
+    }
+
+    Y_UNIT_TEST(ShouldNotCorruptCompressedBufferOnRetry) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto generateValue = [](size_t size, ui32 seed) {
+            TString result;
+            result.reserve(size);
+            for (size_t i = 0; i < size; ++i) {
+                seed = seed * 1103515245 + 12345;
+                result.push_back('a' + (seed >> 16) % 26);
+            }
+            return result;
+        };
+        const TString value1 = generateValue(256'000, 1);
+        const TString value2 = generateValue(256'000, 2);
+        WriteRow(Runtime(), ++txId, "/MyRoot/Table", 0, 1, value1);
+        Env().TestWaitNotification(Runtime(), txId);
+        WriteRow(Runtime(), ++txId, "/MyRoot/Table", 0, 2, value2);
+        Env().TestWaitNotification(Runtime(), txId);
+
+        txId = ExportWithRetryInjection(txId, "zstd");
+
+        const auto importId = ++txId;
+        TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), importId);
+
+        TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldNotCorruptEncryptedBufferOnRetry) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UpdateRow(Runtime(), "Table", 1, "valueA");
+        UpdateRow(Runtime(), "Table", 2, "valueB");
+
+        txId = ExportWithRetryInjection(txId, "",
+        R"(
+            destination_prefix: "export1"
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+        )");
+
+        const auto* data = S3Mock().GetData().FindPtr("/export1/001/data_00.csv.enc");
+        UNIT_ASSERT(data);
+
+        TBuffer decryptedData;
+        NBackup::TEncryptionIV iv;
+        UNIT_ASSERT_NO_EXCEPTION(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+            NBackup::TEncryptionKey("0123456789012345"),
+            TBuffer(data->data(), data->size())
+        ));
+
+        const TString expected = "1,\"valueA\"\n2,\"valueB\"\n";
+        const TString decrypted(decryptedData.Data(), decryptedData.Size());
+        UNIT_ASSERT_VALUES_EQUAL_C(decrypted, expected, "Encrypted buffer corruption detected");
+    }
 }

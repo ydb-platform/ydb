@@ -1,5 +1,6 @@
 #include "test_client.h"
 
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
@@ -594,6 +595,7 @@ namespace Tests {
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
+            appData.DataShardExportFactory = Settings->DataShardExportFactory.get();
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;
             }
@@ -1438,6 +1440,16 @@ namespace Tests {
                 }
             }
 
+            if (federatedQuerySetupFactory) {
+                federatedQuerySetupFactory->SetScriptExecutionSettings({
+                    .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,
+                    .LeaseCheckStartupTimeout = TDuration::Zero(),
+                });
+            }
+
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
+
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
@@ -1447,16 +1459,6 @@ namespace Tests {
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
-
-            IActor* scriptFinalizeService = NKqp::CreateKqpFinalizeScriptService(
-                Settings->AppConfig->GetQueryServiceConfig(),
-                federatedQuerySetupFactory,
-                Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks,
-                TDuration::Zero()
-            );
-            TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
-            Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
         }
 
         {

@@ -19,36 +19,6 @@ namespace NMsgBusProxy {
 
 namespace NGRpcProxy {
 
-//! State of current request. It allows to:
-//!  - retrieve request's message;
-//!  - send reply to caller.
-class IRequestContext {
-public:
-    virtual ~IRequestContext() = default;
-
-    //! Get pointer to the request's message.
-    virtual const NProtoBuf::Message* GetRequest() const = 0;
-
-    //! Send reply.
-    virtual void Reply(const NKikimrClient::TResponse& resp) = 0;
-    virtual void Reply(const NKikimrClient::TJSON& resp) = 0;
-    virtual void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) = 0;
-    virtual void Reply(const NKikimrClient::TCmsResponse& resp) = 0;
-    virtual void Reply(const NKikimrClient::TSqsResponse& resp) = 0;
-    virtual void Reply(const NKikimrClient::TConsoleResponse& resp) = 0;
-
-    //! Send error reply when request wasn't handled properly.
-    virtual void ReplyError(const TString& reason) = 0;
-
-    //! Bind MessageBus context to the request.
-    virtual NMsgBusProxy::TBusMessageContext BindBusContext(int type) = 0;
-
-    virtual TVector<TStringBuf> FindClientCert() const = 0;
-
-    //! Returns peer address
-    virtual TString GetPeer() const = 0;
-};
-
 //! Implements interaction Kikimr via gRPC protocol.
 class TGRpcService
     : public NYdbGrpc::TGrpcServiceBase<NKikimrClient::TGRpcServer>

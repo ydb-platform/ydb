@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/scheme/scheme_tablecell.h>
+
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/decimal/yql_wide_int.h>
 
@@ -137,5 +138,6 @@ private:
 
 }; // TPartitionKeyRange
 
-} // NPQ
-} // NKikimr
+} // namespace NKikimr::NPQ
+
+} // namespace NKikimr

@@ -67,14 +67,14 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
         auto s = source[idx];
         TString data;
         ui32 rawBytes = s->GetRawBytesVerified();
-        const auto loadContext = Loader->BuildAccessorContext(s->GetRecordsCountVerified());
+        std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalData;
+        if (const auto* chunkPrep = dynamic_cast<const NChunks::TChunkPreparation*>(s.get())) {
+            additionalData = chunkPrep->GetRecord().GetMeta().GetAdditionalAccessorData();
+        }
+        const auto loadContext = Loader->BuildAccessorContext(s->GetRecordsCountVerified(), std::nullopt, additionalData);
         if (!DataAccessorConstructor.IsEqualTo(sourceColumnFeatures.DataAccessorConstructor)) {
-            std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> sourceAdditionalData;
-            if (const auto* chunkPrep = dynamic_cast<const NChunks::TChunkPreparation*>(s.get())) {
-                sourceAdditionalData = chunkPrep->GetRecord().GetMeta().GetAdditionalAccessorData();
-            }
-            auto chunkedArray = sourceColumnFeatures.Loader->ApplyVerified(
-                s->GetData(), s->GetRecordsCountVerified(), std::nullopt, std::move(sourceAdditionalData));
+            auto chunkedArray =
+                sourceColumnFeatures.Loader->ApplyVerified(s->GetData(), s->GetRecordsCountVerified(), std::nullopt, additionalData);
             auto newArray = DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult();
             rawBytes = newArray->GetRawSizeVerified();
             if (targetIsDictionary) {
@@ -86,9 +86,20 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
                 result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
             }
         } else {
-            data = DataAccessorConstructor.SerializeToString(
-                DataAccessorConstructor.DeserializeFromString(s->GetData(), loadContext).DetachResult(), loadContext);
-            result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
+            // Deserialize using the source serializer (blob was written with sourceColumnFeatures.Loader->Serializer),
+            // then re-serialize using the target serializer in `loadContext`.
+            const auto sourceLoadContext =
+                sourceColumnFeatures.Loader->BuildAccessorContext(s->GetRecordsCountVerified(), std::nullopt, additionalData);
+            auto arr = DataAccessorConstructor.DeserializeFromString(s->GetData(), sourceLoadContext).DetachResult();
+            rawBytes = arr->GetRawSizeVerified();
+            if (targetIsDictionary) {
+                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(arr, loadContext);
+                result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), arr, TChunkAddress(ColumnId, idx), *this, std::move(blobAndMeta.Meta)));
+            } else {
+                data = DataAccessorConstructor.SerializeToString(arr, loadContext);
+                result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
+            }
         }
     }
     return result;

@@ -339,6 +339,10 @@ private:
                         continue;
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                        auto implTablePath = childPath.Child(implTableName);
+                        if (implTablePath.IsDeleted()) {
+                            continue;
+                        }
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
                         indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }

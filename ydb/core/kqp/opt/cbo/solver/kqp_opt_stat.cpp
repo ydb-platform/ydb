@@ -22,6 +22,56 @@ namespace {
     THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
+    bool HasFlag(const TMaybeNode<TCoAtomList>& flags, TStringBuf flag) {
+        if (!flags) {
+            return false;
+        }
+
+        for (const auto& item : flags.Cast()) {
+            if (item.StringValue() == flag) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasSettingValue(const TCoNameValueTupleList& settings, TStringBuf name, TStringBuf value) {
+        for (const auto& setting : settings) {
+            if (setting.Name().Value() != name) {
+                continue;
+            }
+
+            if (const auto settingValue = setting.Value().Maybe<TCoAtom>()) {
+                return settingValue.Cast().Value() == value;
+            }
+        }
+        return false;
+    }
+
+    TMaybe<EJoinAlgoType> GetDqJoinBaseStatsAlgo(const TExprNode::TPtr& input) {
+        if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
+            return FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
+        }
+
+        if (TMaybeNode<TDqPhyMapJoin>(input)) {
+            return EJoinAlgoType::MapJoin;
+        }
+
+        if (auto graceJoin = TMaybeNode<TDqPhyGraceJoin>(input)) {
+            return HasFlag(graceJoin.Cast().Flags().Maybe<TCoAtomList>(), "Broadcast")
+                ? EJoinAlgoType::MapJoin
+                : EJoinAlgoType::GraceJoin;
+        }
+
+        if (auto blockHashJoin = TMaybeNode<TDqPhyBlockHashJoin>(input)) {
+            return HasSettingValue(blockHashJoin.Cast().Settings(), "BuildSide", "Left")
+                ? EJoinAlgoType::ReverseBlockJoin
+                : EJoinAlgoType::GraceJoin;
+        }
+
+        return Nothing();
+    }
+
     TVector<TString> UdfBlackList = {
         "RandomNumber",
         "Random",
@@ -142,6 +192,37 @@ namespace {
         res.insert(res.begin(), leftLabels.begin(), leftLabels.end());
         res.insert(res.end(), rightLabels.begin(), rightLabels.end());
         return res;
+    }
+
+    double AggregateSelectivity(std::shared_ptr<TOptimizerStatistics> aggStats, TVector<TString> strKeys) {
+        if (aggStats->KeyColumns) {
+            bool isPrefix = true;
+            bool isKey = false;
+
+            size_t i=0;
+            for (; i<aggStats->KeyColumns->Data.size(); i++) {
+                if (i == strKeys.size()) {
+                    break;
+                }
+                if (aggStats->KeyColumns->Data[i] != strKeys[i]){
+                    isPrefix = false;
+                    break;
+                }
+            }
+
+            if (i == aggStats->KeyColumns->Data.size()) {
+                isKey = true;
+            }
+
+            if (isKey) {
+                return 1.0;
+            }
+            if (isPrefix) {
+                return 0.1;
+            }
+        }
+
+        return 0.7;
     }
 
 }
@@ -469,13 +550,11 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* 
         return;
     }
 
-    EJoinAlgoType joinAlgo = EJoinAlgoType::Undefined;
-    if (auto dqJoin = TMaybeNode<TDqJoin>(input)) {
-        joinAlgo = FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
-        if (joinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */) {
-            return;
-        }
+    const auto maybeJoinAlgo = GetDqJoinBaseStatsAlgo(input);
+    if (!maybeJoinAlgo || (*maybeJoinAlgo == EJoinAlgoType::Undefined && join.JoinType().StringValue() != "Cross" /* we don't set any join algo to cross join */)) {
+        return;
     }
+    const auto joinAlgo = *maybeJoinAlgo;
 
     auto leftLabels = InferLabels(leftStats, join.LeftJoinKeyNames());
     auto rightLabels = InferLabels(rightStats, join.RightJoinKeyNames());
@@ -720,6 +799,11 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStor
     for (const auto& key: agg.Keys()) {
         strKeys.push_back(key.StringValue());
     }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    aggStats->Nrows = aggStats->Nrows * selectivity;
+    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
     kqpStats->SetStats(input.Get(), std::move(aggStats));
 }
@@ -739,7 +823,38 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TKqp
         return;
     }
 
-    kqpStats->SetStats( input.Get(), inputStats );
+      auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+
+    TVector<TString> strKeys;
+    strKeys.reserve(agg.Keys().Size());
+    for (const auto& key: agg.Keys()) {
+        strKeys.push_back(key.StringValue());
+    }
+
+    double selectivity = AggregateSelectivity(aggStats, strKeys);
+    aggStats->Nrows = aggStats->Nrows * selectivity;
+    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+
+    kqpStats->SetStats( input.Get(), aggStats );
+}
+
+void InferStatisticsForCombiner(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
+    auto inputNode = TExprBase(input);
+    auto agg = inputNode.Cast<TCoWideCombiner>();
+    auto aggInput = agg.Input();
+
+    auto inputStats = kqpStats->GetStats(aggInput.Raw() );
+    if (!inputStats) {
+        return;
+    }
+
+    auto aggStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    aggStats->Nrows = aggStats->Nrows / 7.0;
+    aggStats->ByteSize = aggStats->ByteSize / 7.0;
+
+    YQL_CLOG(TRACE, CoreDq) << "Stats for aggregatem, Nrows: " << aggStats->Nrows;
+
+    kqpStats->SetStats( input.Get(), aggStats );
 }
 
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {

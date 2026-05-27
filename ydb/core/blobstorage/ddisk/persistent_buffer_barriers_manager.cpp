@@ -5,6 +5,25 @@
 
 namespace NKikimr::NDDisk {
 
+    void TPersistentBufferBarriersManager::Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId) {
+        PersistentBufferUniqueId = uniqueId;
+        NodeId = nodeId;
+        PDiskId = pdiskId;
+        SlotId = slotId;
+    }
+
+    ui64 TPersistentBufferBarriersManager::GetBarrier(ui64 tabletId) const {
+        auto it = PersistentBufferBarriersLocation.find(tabletId);
+        if (it == PersistentBufferBarriersLocation.end()) {
+            return 0;
+        }
+        const auto pos = std::get<0>(it->second);
+        const auto hpos = std::get<1>(it->second);
+        Y_ABORT_UNLESS(pos < PersistentBufferBarriers.size());
+        Y_ABORT_UNLESS(hpos < TPersistentBufferHeader::MaxBarriersPerHeader);
+        return PersistentBufferBarriers[pos].Header.Barrier.Barriers[hpos].Lsn;
+    }
+
     bool TPersistentBufferBarriersManager::CanMoveBarrier(ui64 tabletId, ui32 barriersLimit) {
         return !PersistentBufferBarrierHoles.empty()
             || PersistentBufferBarriersLocation.find(tabletId) != PersistentBufferBarriersLocation.end()
@@ -12,7 +31,7 @@ namespace NKikimr::NDDisk {
             || PersistentBufferBarriers.size() < barriersLimit;
     }
 
-    std::unordered_map<ui64, ui64> TPersistentBufferBarriersManager::GetBarriers() {
+    std::unordered_map<ui64, ui64> TPersistentBufferBarriersManager::GetBarriers() const {
         std::unordered_map<ui64, ui64> res;
         for (auto& b : PersistentBufferBarriers) {
             for (auto& h : b.Header.Barrier.Barriers) {
@@ -42,7 +61,11 @@ namespace NKikimr::NDDisk {
                     memset(&header, 0, sizeof(TPersistentBufferHeader));
                     memcpy(header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
                     header.Flags = TPersistentBufferHeader::IS_BARRIER;
-                    header.Barrier.BarrierLsn = 0;
+                    header.RecordLsn = 0;
+                    header.PersistentBufferUniqueId = PersistentBufferUniqueId;
+                    header.NodeId = NodeId;
+                    header.PDiskId = PDiskId;
+                    header.SlotId = SlotId;
                     header.Barrier.BarrierIdx = PersistentBufferBarriers.size();
                     PersistentBufferBarriers.push_back({Max<ui32>(), Max<ui32>(), std::move(header)});
                 }
@@ -67,7 +90,7 @@ namespace NKikimr::NDDisk {
             STLOG(PRI_ERROR, BS_DDISK, BSDD29, "TPersistentBufferBarriersManager::MoveBarrier tablet new barrier lsn is not bigger than previous", (TabletId, tabletId), (Lsn, lsn), (PrevLsn, barrier.Header.Barrier.Barriers[pos].Lsn));
         }
         barrier.Header.Barrier.Barriers[pos] = {tabletId, lsn};
-        barrier.Header.Barrier.BarrierLsn++;
+        barrier.Header.RecordLsn++;
 
         return {oldChunkIdx, oldSectorIdx, barrier};
     }
@@ -126,7 +149,7 @@ namespace NKikimr::NDDisk {
             PersistentBufferBarriers.resize(idx + 1);
         }
 
-        if (PersistentBufferBarriers[idx].Header.Barrier.BarrierLsn < header->Barrier.BarrierLsn) {
+        if (PersistentBufferBarriers[idx].Header.RecordLsn < header->RecordLsn) {
             PersistentBufferBarriers[idx] = {chunkIdx, sectorIdx, *header};
         }
         return true;

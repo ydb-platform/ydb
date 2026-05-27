@@ -49,6 +49,10 @@ namespace NActors::NMon {
         }
     }
 
+    TString TEvRemoteHttpInfo::GetUserToken() const {
+        return ExtendedQuery ? ExtendedQuery->GetUserToken() : TString();
+    }
+
     HTTP_METHOD TEvRemoteHttpInfo::GetMethod() const {
         return ExtendedQuery ? static_cast<HTTP_METHOD>(ExtendedQuery->GetMethod()) : Method;
     }

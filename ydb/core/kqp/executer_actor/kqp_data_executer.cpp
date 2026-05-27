@@ -1,6 +1,5 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_locks_helper.h"
 #include "kqp_planner.h"
 #include "kqp_tasks_validate.h"
 
@@ -88,7 +87,8 @@ public:
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
             YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
-                || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW);
+                || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
+                || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         }
     }
 
@@ -120,6 +120,7 @@ public:
             !HasOlapTable &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
+        AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
         return forceSnapshot;
     }
@@ -685,7 +686,7 @@ private:
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
-            case NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED:
+            case NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO:
                 YQL_ENSURE(ReadOnlyTx);
                 TasksGraph.GetMeta().AllowInconsistentReads = true;
                 ImmediateTx = true;
@@ -876,7 +877,7 @@ private:
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
-            LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
+            LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem(), AppData()->TimeProvider->Now());
         }
 
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size());
@@ -1121,7 +1122,7 @@ private:
             (StateLoadMode, FederatedQuery::StateLoadMode_Name(stateLoadMode)),
             (StreamingDisposition, streamingDisposition.ShortDebugString()),
             (HasQueryPhysicalGraph, Request.QueryPhysicalGraph != nullptr),
-            (EnableWatermarks, Request.QueryPhysicalGraph ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks() : false),
+            (EnableWatermarks, Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()),
             (trace_id, TraceId()));
     }
 

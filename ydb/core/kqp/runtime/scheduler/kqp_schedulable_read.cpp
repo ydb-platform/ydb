@@ -73,12 +73,11 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
 }
 
 TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
-    Y_ASSERT(QuotaPerSecond != 0);
+    const auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
-    auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
-
-    if (AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {
+    if (QuotaPerSecond == 0 || AvailableQuotaMs >= static_cast<i64>(expectedQuotaMs)) {
         // Quota available, but TryIncreaseUsage() failed (fair-share exhausted)
+        // TODO: handle queries to the pool with 0% limit somewhere else, and don't allow them to execute.
         return TDuration::MilliSeconds(10) + RandomDuration(TDuration::MilliSeconds(1));
     }
 
@@ -92,7 +91,9 @@ TDuration TSchedulableRead::EstimateQuotaDelay(TDuration expectedQuota) const {
 
 TSchedulableReadFactory::TSchedulableReadFactory(TComputeSchedulerPtr scheduler)
     : Scheduler(std::move(scheduler))
-{}
+{
+    Y_ENSURE(Scheduler);
+}
 
 TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
     const auto databaseAndPoolId = std::make_pair(databaseId, poolId);

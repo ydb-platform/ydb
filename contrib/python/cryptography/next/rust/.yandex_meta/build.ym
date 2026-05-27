@@ -14,6 +14,10 @@ x86_64-unknown-linux-gnu
 x86_64-unknown-linux-musl
 {% endblock %}
 
+{% block msan_platforms %}
+x86_64-unknown-linux-gnu
+{% endblock %}
+
 {% block py_register %}
 _rust
 _openssl
@@ -34,10 +38,91 @@ export CC_{{p.replace('-', '_')}}=target-cc
 export CC_x86_64_unknown_linux_musl=musl-gcc
 export DEP_OPENSSL_INCLUDE={{arcadia_root}}/contrib/libs/openssl/include
 export PYO3_CROSS_PYTHON_VERSION=3.12
+
 rm -rf docs vectors tests
 cd src/rust
 {{super()}}
+
+{% for p in self.msan_platforms().strip().split('\n') %}
+export CC_{{p.replace('-', '_')}}=target-cc-msan
+{% endfor %}
+export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -C target-feature=-crt-static"
+export RUSTC_BOOTSTRAP=1
+
+{% for arch in self.msan_platforms().strip().split('\n') %}
+cargo {{self.cargo_flags().strip()}} build {{self.cargo_build_flags().strip()}} --release --target {{arch}} {{self.binary_type().strip()}} --target-dir ${BUILD}-msan \
+    {% if self.cargo_target() %}
+--package {{self.cargo_target().strip()}}
+    {% endif %}
+{% endfor %}
+
+find ${BUILD}-msan -name '*.a' -type f | while read l; do
+    llvm-nm --extern-only --defined-only -A ${l} | sed -e 's|.* ||' | grep -v 'PyInit_' | sort | while read s; do
+        echo "${s} {{self.mod_name().strip()}}_${s}" >> prog
+    done
+    llvm-objcopy --redefine-syms=prog ${l}
+    rm prog
+done
+
 rm -r .git
+
+# generate _openssl.c
+cd ${SRC}/src
+mkdir -p ${SRC}/autogen_cffi
+OUT_DIR=${SRC}/autogen_cffi ${BIN}/python3 _cffi_src/build_openssl.py
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+
+pushd ${BUILD}-msan
+{% if self.executable().strip() %}
+
+{% for arch in self.msan_platforms().strip().split('\n') %}
+  mkdir -p ${OUTPUT}/target/{{arch}}-msan/release
+  cp {{arch}}/release/{{self.executable().strip()}} ${OUTPUT}/target/{{arch}}-msan/release
+{% endfor %}
+
+{% else %}
+(find . -type f -name '*.a'; find . -type f -name '*.lib') | sed -e 's|./||' | grep -v '/deps/' | while read l; do
+    d=$(dirname ${l})
+    d_msan=$(echo "${d}" | sed 's|^\([^/]*\)|\1-msan|')
+    o=${OUTPUT}/a/${d_msan}
+    mkdir -p ${o}
+    cp ${l} ${o}/
+done
+{% endif %}
+popd
+
+cp ${SRC}/autogen_cffi/_openssl.c ${OUTPUT}/
+cp ${OUTPUT}/patches/msan.cpp ${OUTPUT}/
+
+cat {{arcadia_root}}/contrib/libs/openssl/redef.h | awk '/#define/{print $2" "$3}' > ${OUTPUT}/openssl_redefines.txt
+
+find ${OUTPUT} -name '*.a' | xargs -L1 llvm-objcopy --redefine-syms=${OUTPUT}/openssl_redefines.txt
+rm ${OUTPUT}/openssl_redefines.txt
+
+find ${OUTPUT} -name '*.a' -path "*msan*" | xargs -L1 llvm-objcopy --redefine-sym=__msan_set_alloca_origin_with_descr=__safe_msan_set_alloca_origin_with_descr
+find ${OUTPUT} -name '*.a' -path "*msan*" | xargs -L1 llvm-objcopy --redefine-sym=malloc=__safe_malloc
+{% endblock %}
+
+{% block prepare_yamake %}
+{{super()}}
+
+sed -i '/IF (FALSE)/r'<(cat <<EOF
+{% for p in self.msan_platforms().strip().split('\n') %}
+ELSEIF ({{p | ya_platform}} AND SANITIZER_TYPE == "memory")
+    COPY_FILE(a/{{p}}-msan/release/libcryptography_rust.a libcryptography_rust.a)
+    SRCS(msan.cpp)
+    CFLAGS(-fsanitize-memory-track-origins=2)
+{% endfor %}
+EOF
+) ya.make
+{% endblock %}
+
+{% block ya_make %}
+{{super()}}
+SRCS(_openssl.c)
 {% endblock %}
 
 {% block sanitize_output %}
@@ -45,6 +130,11 @@ rm -r .git
 {% for p in self.platforms().strip().split('\n') %}
 rm -rf ${OUTPUT}/a/{{p}}/release/build
 {% endfor %}
+
+{% for p in self.msan_platforms().strip().split('\n') %}
+rm -rf ${OUTPUT}/a/{{p}}-msan/release/build
+{% endfor %}
+
 {% endblock %}
 
 {% block prepare_env %}
@@ -61,5 +151,10 @@ cat << EOF > ${BIN}/target-cc
 exec ${CLANG} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
 EOF
 
-chmod +x ${BIN}/musl-gcc ${BIN}/target-cc
+cat << EOF > ${BIN}/target-cc-msan
+#!/usr/bin/env sh
+exec ${CLANG} -DUSE_PYTHON3 -fsanitize=memory -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
+EOF
+
+chmod +x ${BIN}/musl-gcc ${BIN}/target-cc ${BIN}/target-cc-msan
 {% endblock %}

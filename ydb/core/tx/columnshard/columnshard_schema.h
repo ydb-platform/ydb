@@ -88,6 +88,8 @@ struct Schema: NIceDb::Schema {
         InternalOwnerPathId = 20,
         MaxInternalPathId = 21,   //max internal path id ever known in this tablet
         LastCompletedBackupTransaction = 22,
+        LastCleanupSnapshotStep = 23,
+        LastCleanupSnapshotTxId = 24,
     };
 
     enum class EInsertTableIds: ui8 {
@@ -236,8 +238,11 @@ struct Schema: NIceDb::Schema {
 
         struct IsReadOnly: Column<7, NScheme::NTypeIds::Bool> {};
 
+        struct LastCompletedBackupTransaction: Column<8, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<PathId, SchemeShardLocalPathId>;
-        using TColumns = TableColumns<PathId, SchemeShardLocalPathId, DropStep, DropTxId, CopyStep, CopyTxId, IsReadOnly>;
+        using TColumns =
+            TableColumns<PathId, SchemeShardLocalPathId, DropStep, DropTxId, CopyStep, CopyTxId, IsReadOnly, LastCompletedBackupTransaction>;
     };
 
     struct TableVersionInfo: Table<(ui32)ECommonTables::TableVersionInfo> {
@@ -940,14 +945,17 @@ struct Schema: NIceDb::Schema {
 
     static void RenameTableSchemeShardLocalPathIdV1(NIceDb::TNiceDb& db, const TInternalPathId pathId,
         const TSchemeShardLocalPathId srcSchemeShardLocalPathId, const TSchemeShardLocalPathId dstSchemeShardLocalPathId,
-        const std::optional<NOlap::TSnapshot>& dropVersion, const std::optional<NOlap::TSnapshot>& copyVersion, const bool isReadOnly) {
+        const std::optional<NOlap::TSnapshot>& dropVersion, const std::optional<NOlap::TSnapshot>& copyVersion,
+        const std::optional<TString>& lastCompletedBackupTransaction, const bool isReadOnly) {
         EraseTableInfoV1(db, pathId, srcSchemeShardLocalPathId);
-        CopySchemeShardLocalPathIdV1(db, pathId, dstSchemeShardLocalPathId, dropVersion, copyVersion, isReadOnly);
+        CopySchemeShardLocalPathIdV1(
+            db, pathId, dstSchemeShardLocalPathId, dropVersion, copyVersion, lastCompletedBackupTransaction, isReadOnly);
     }
 
     static void CopySchemeShardLocalPathIdV1(NIceDb::TNiceDb& db, const TInternalPathId pathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId, const std::optional<NOlap::TSnapshot>& dropVersion,
-        const std::optional<NOlap::TSnapshot>& copyVersion, const bool isReadOnly) {
+        const std::optional<NOlap::TSnapshot>& copyVersion, const std::optional<TString>& lastCompletedBackupTransaction,
+        const bool isReadOnly) {
         if (dropVersion) {
             db.Table<TableInfoV1>()
                 .Key(pathId.GetRawValue(), dstSchemeShardLocalPathId.GetRawValue())
@@ -959,6 +967,11 @@ struct Schema: NIceDb::Schema {
                 .Key(pathId.GetRawValue(), dstSchemeShardLocalPathId.GetRawValue())
                 .Update(NIceDb::TUpdate<TableInfoV1::CopyStep>(copyVersion->GetPlanStep()),
                     NIceDb::TUpdate<TableInfoV1::CopyTxId>(copyVersion->GetTxId()));
+        }
+        if (lastCompletedBackupTransaction) {
+            db.Table<TableInfoV1>()
+                .Key(pathId.GetRawValue(), dstSchemeShardLocalPathId.GetRawValue())
+                .Update(NIceDb::TUpdate<TableInfoV1::LastCompletedBackupTransaction>(*lastCompletedBackupTransaction));
         }
         db.Table<TableInfoV1>()
             .Key(pathId.GetRawValue(), dstSchemeShardLocalPathId.GetRawValue())

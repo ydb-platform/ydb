@@ -5,6 +5,7 @@ RECURSE_FOR_TESTS(
     ut_backup
     ut_backup_collection
     ut_backup_collection_reboots
+    ut_incr_backup_reboots
     ut_base
     ut_base_reboots
     ut_bsvolume
@@ -29,6 +30,7 @@ RECURSE_FOR_TESTS(
     ut_extsubdomain
     ut_extsubdomain_reboots
     ut_failure_injection
+    ut_filestore
     ut_filestore_reboots
     ut_incremental_restore
     ut_incremental_restore_reboots
@@ -50,6 +52,7 @@ RECURSE_FOR_TESTS(
     ut_resource_pool
     ut_resource_pool_reboots
     ut_restore
+    ut_incr_restore_reboots
     ut_rtmr
     ut_rtmr_reboots
     ut_ru_calculator
@@ -168,6 +171,7 @@ SRCS(
     schemeshard__operation_create_restore.cpp
     schemeshard__operation_create_secret.cpp
     schemeshard__operation_create_restore_incremental_backup.cpp
+    schemeshard__operation_incr_restore_lock_targets.cpp
     schemeshard__operation_incremental_restore_finalize.cpp
     schemeshard__operation_create_rtmr.cpp
     schemeshard__operation_create_sequence.cpp
@@ -347,9 +351,10 @@ PEERDIR(
     ydb/core/metering
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/cloud_events
     ydb/core/persqueue/public/partition_index_generator
     ydb/core/persqueue/public/partition_key_range
-    ydb/core/persqueue/public/cloud_events
+    ydb/core/persqueue/public/schema
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/resource_pools

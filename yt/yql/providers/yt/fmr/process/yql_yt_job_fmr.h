@@ -24,22 +24,20 @@ namespace NYql::NFmr {
 struct TVanillaInfo {
     TStaticVanillaPeerTrackerSettings Tracker;
     ui16 TdsPort = 8002;
+    ui32 TdsMinIndex = 1;
 
     void Save(IOutputStream* s) const {
-        ::Save(s, Tracker);
-        ::Save(s, TdsPort);
+        ::SaveMany(s, Tracker, TdsPort, TdsMinIndex);
     }
 
     void Load(IInputStream* s) {
-        ::Load(s, Tracker);
-        ::Load(s, TdsPort);
+        ::LoadMany(s, Tracker, TdsPort, TdsMinIndex);
     }
 };
 
 struct TFmrUserJobOptions {
     bool WriteStatsToFile = false;
 };
-
 
 class TFmrUserJob: public TYqlUserJobBase {
 public:
@@ -88,8 +86,8 @@ public:
         VanillaInfo_ = std::move(info);
     }
 
-    void SetIsOrdered(bool isOrdered) {
-        IsOrdered_ = isOrdered;
+    void SetFmrJobType(EFmrJobType jobType) {
+        FmrJobType_ = jobType;
     }
 
     void SetSettings(const TFmrUserJobSettings& settings) {
@@ -98,6 +96,10 @@ public:
 
     void SetTvmSettings(const TMaybe<TFmrTvmJobSettings>& tvmSettings) {
         TvmSettings_ = tvmSettings;
+    }
+
+    void SetReduceOperationSpec(const TReduceOperationSpec& reduceOperationSpec) {
+        ReduceOperationSpec_ = reduceOperationSpec;
     }
 
     void Save(IOutputStream& s) const override;
@@ -116,6 +118,7 @@ private:
     void FillQueueFromSingleInputTable(ui64 tableIndex);
     void FillQueueFromInputTablesUnordered();
     void FillQueueFromInputTablesOrdered();
+    void FillQueueFromReduceInput();
 
     void InitializeFmrUserJob();
 
@@ -127,14 +130,17 @@ private:
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections_;
     TString TableDataServiceDiscoveryFilePath_;
     TString YtJobServiceType_; // file or native
-    bool IsOrdered_ = false;
+    EFmrJobType FmrJobType_ = EFmrJobType::Map;
     TFmrUserJobSettings Settings_ = TFmrUserJobSettings();
     TMaybe<TFmrTvmJobSettings> TvmSettings_ = Nothing();
     TMaybe<TVanillaInfo> VanillaInfo_ = Nothing();
+    TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
     // End of serializable part
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.
     ITableDataServiceDiscovery::TPtr Discovery_;
+    // Non-serialized: owns the static peer tracker created for subprocess vanilla TDS discovery.
+    std::unique_ptr<IVanillaPeerTracker> VanillaPeerTracker_;
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams
     TFmrRawTableQueueReader::TPtr QueueReader_;

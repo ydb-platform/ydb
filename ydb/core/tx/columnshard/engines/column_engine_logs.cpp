@@ -4,6 +4,7 @@
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
 #include "changes/counters/general.h"
+#include "changes/general_compaction.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
 
@@ -432,6 +433,35 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCo
     return changes;
 }
 
+bool TColumnEngineForLogs::UsesPullCompactionScheduling() const noexcept {
+    const auto granules = GranulesStorage->GetGranulesForCompaction();
+    if (granules.empty()) {
+        return false;
+    }
+    return granules.front().GetGranule()->UsesPullCompactionScheduling();
+}
+
+std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> TColumnEngineForLogs::GetNextCompactionTask(
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+    AFL_VERIFY(dataLocksManager);
+    auto granulesSortedDesc = GranulesStorage->GetGranulesForCompaction();
+    for (auto& orderedG : granulesSortedDesc) {
+        auto granule = orderedG.GetGranule();
+        TMonotonic startTime = TMonotonic::Now();
+        auto change = granule->GetNextOptimizationTask(granule, dataLocksManager);
+        NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), change ? 1 : 0);
+        if (change) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "found next compaction task")("weight", orderedG.GetPriority().DebugString())(
+                "path_id", granule->GetPathId());
+            return std::static_pointer_cast<NCompaction::TGeneralCompactColumnEngineChanges>(change);
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build next optimization task for granule")(
+            "weight", orderedG.GetPriority().DebugString())("path_id", granule->GetPathId());
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no next compaction task");
+    return nullptr;
+}
+
 std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(
     const THashSet<TInternalPathId>& pathsToDrop) noexcept {
     if (pathsToDrop.empty()) {
@@ -456,8 +486,8 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
     return changes;
 }
 
-std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(const TSnapshotHolders& snapshotHolders,
-    const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
+std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(const ISnapshotHolders& snapshotHolders,
+    const std::map<TSnapshot, THashSet<TInternalPathId>>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
@@ -469,13 +499,15 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     bool limitExceeded = false;
     const ui32 maxChunksCount = 500000;
     const ui32 maxPortionsCount = 1000;
-    const TInstant minPlanStepForNewReads = snapshotHolders.GetMinSnapshotForNewReads().GetPlanInstant();
+    const auto minSnapshotForNewReads = snapshotHolders.GetMinSnapshotForNewReads();
+    const TInstant minPlanStepForNewReads = minSnapshotForNewReads.GetPlanInstant();
+    changes->SetMinSnapshotForNewReads(minSnapshotForNewReads);
     for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
         auto& [removePlanStep, portions] = *it;
         if (minPlanStepForNewReads < removePlanStep) {
             // no point to proceed, we do not delete portions that are younger than minReadSnapshot
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("min_snapshot_for_new_reads",
-                snapshotHolders.GetMinSnapshotForNewReads().DebugString())("remove_planstep", removePlanStep.MilliSeconds());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")(
+                "min_snapshot_for_new_reads", minSnapshotForNewReads.DebugString())("remove_planstep", removePlanStep.MilliSeconds());
             break;
         }
         for (ui32 i = 0; i < portions.size();) {
@@ -511,33 +543,35 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         }
     }
 
-    for (TInternalPathId pathId : pathsToDrop) {
-        auto g = GranulesStorage->GetGranuleOptional(pathId);
-        if (!g) {
-            continue;
-        }
-        if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
-            continue;
-        }
-        for (auto& [portion, info] : g->GetPortions()) {
-            if (info->CheckForCleanup()) {
+    for (auto& [_, pathIds] : pathsToDrop) {
+        for (TInternalPathId pathId : pathIds) {
+            auto g = GranulesStorage->GetGranuleOptional(pathId);
+            if (!g) {
                 continue;
             }
-            if (dataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Cleanup)) {
-                ++skipLocked;
+            if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
                 continue;
             }
-            ++portionsCount;
-            chunksCount += info->GetApproxChunksCount(info->GetSchema(GetVersionedIndex())->GetColumnsCount());
-            if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {
-            } else {
-                limitExceeded = true;
-                break;
+            for (auto& [portion, info] : g->GetPortions()) {
+                if (info->CheckForCleanup()) {
+                    continue;
+                }
+                if (dataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Cleanup)) {
+                    ++skipLocked;
+                    continue;
+                }
+                ++portionsCount;
+                chunksCount += info->GetApproxChunksCount(info->GetSchema(GetVersionedIndex())->GetColumnsCount());
+                if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToAccess().empty()) {
+                } else {
+                    limitExceeded = true;
+                    break;
+                }
+                changes->AddPortionToRemove(info);
+                ++portionsFromDrop;
             }
-            changes->AddPortionToRemove(info);
-            ++portionsFromDrop;
+            changes->AddTableToDrop(pathId);
         }
-        changes->AddTableToDrop(pathId);
     }
 
     SignalCounters.OnCleanupPortionSkippedByLock(skipLocked);

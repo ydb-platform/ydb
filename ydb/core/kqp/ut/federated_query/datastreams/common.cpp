@@ -40,7 +40,7 @@ NKikimrConfig::TAppConfig& TStreamingTestFixture::SetupAppConfig() {
     EnsureNotInitialized("AppConfig");
 
     auto& result = AppConfig.emplace();
-    result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
+    result.MutableTableServiceConfig()->SetDqChannelVersion(2u);
     return result;
 }
 
@@ -98,7 +98,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         queryServiceConfig.SetEnableMatchRecognize(true);
 
         auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
-        tableServiceConfig.SetDqChannelVersion(1u);
+        tableServiceConfig.SetDqChannelVersion(2u);
 
         LogSettings
             .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
@@ -270,7 +270,13 @@ void TStreamingTestFixture::ReadTopicMessage(const std::string& topicName, const
     ReadTopicMessages(topicName, {expectedMessage}, disposition, /* sort */ false, local);
 }
 
-void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std::vector<std::string> expectedMessages, TInstant disposition, bool sort, bool local) {
+std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMessages(
+    const std::string& topicName,
+    std::vector<std::string> expectedMessages,
+    TInstant disposition,
+    bool sort,
+    bool local,
+    bool checkResult) {
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
         .WithoutConsumer()
@@ -286,7 +292,8 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
     );
 
     auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
-    std::vector<std::string> received;
+    std::vector<std::pair<std::string, TInstant>> received;
+
     WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
         if (!readSession->WaitEvent().HasValue()) {
             error = TStringBuilder() << "no event set, received #" << received.size() << " / " << expectedMessages.size() << " messages";
@@ -296,7 +303,7 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
         auto event = readSession->GetEvent(/* block */ true);
         if (const auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             for (const auto& message : dataEvent->GetMessages()) {
-                received.push_back(message.GetData());
+                received.push_back(std::make_pair(message.GetData(), message.GetWriteTime()));
             }
 
             if (received.size() == expectedMessages.size()) {
@@ -304,26 +311,29 @@ void TStreamingTestFixture::ReadTopicMessages(const std::string& topicName, std:
             }
         }
 
+        auto firsts_view = received | std::views::transform([](const auto& p) { return p.first; });
         UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
             << "expected #" << expectedMessages.size() << " messages ("
             << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ", received) << ")");
+            << JoinSeq(", ",  std::vector<std::string>(firsts_view.begin(), firsts_view.end())) << ")");
 
         error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
         return false;
     });
 
-    if (sort) {
-        Sort(expectedMessages);
-        Sort(received);
+    if (checkResult) {
+        if (sort) {
+            Sort(expectedMessages);
+            Sort(received);
+        }
+        
+        UNIT_ASSERT(received.size() == expectedMessages.size());
+        for (size_t i = 0; i < received.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedMessages[i]);
+        }
     }
-
-    UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessages.size());
-    for (size_t i = 0; i < received.size(); ++i) {
-        UNIT_ASSERT_VALUES_EQUAL(received[i], expectedMessages[i]);
-    }
+    return received;
 }
-
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;

@@ -1,8 +1,8 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>

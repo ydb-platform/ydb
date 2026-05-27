@@ -1601,8 +1601,8 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
     bool exactCopySort = false;
     bool hasAux = false;
     TVector<std::pair<TYqlRowSpecInfo::TPtr, bool>> rowSpecs;
-    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration);
-    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
+    const ui64 outNativeYtTypeFlags = outRowSpec ? outRowSpec->GetNativeYtTypeFlags() : (state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
     outTable.RowSpec->SetConstraints(opts.Constraints);
     TMaybe<NYT::TNode> outNativeType;
     if (outRowSpec) {
@@ -1729,7 +1729,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             for (size_t i = 0; i < section.Paths().Size(); ++i) {
                 auto path = section.Paths().Item(i);
                 if (rowSpecs[i].second) {
-                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
+                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
                     if (outNativeType) {
                         mapOutTable.RowSpec->CopyTypeOrders(*outNativeType, useNativeYtDefaultColumnOrder);
                     }
@@ -2490,10 +2490,55 @@ TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TS
     return finalCypressPaths;
 }
 
-ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config) {
-    const auto useNativeYtTypes = config.UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
-    const auto nativeTypeCompatibility = config.NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
-    return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
+bool CanReplaceParentOutputHash(const TExprNode& node) {
+    if (!node.IsCallable(TYtMerge::CallableName())) {
+        return false;
+    }
+
+    TYtMerge opMerge(&node);
+    if (!HasSetting(opMerge.Settings().Ref(), EYtSettingType::CombineChunks)) {
+        return false;
+    }
+    if (!HasSetting(opMerge.Settings().Ref(), EYtSettingType::ReplaceParentCache)) {
+        return false;
+    }
+    if (HasSettingsExcept(opMerge.Settings().Ref(), EYtSettingType::CombineChunks | EYtSettingType::ReplaceParentCache)) {
+        return false;
+    }
+
+    const auto sections = opMerge.Input();
+    if (sections.Size() != 1) {
+        return false;
+    }
+
+    const auto section = sections.Item(0);
+    if (!section.Settings().Empty()) {
+        return false;
+    }
+
+    const auto paths = section.Paths();
+    if (paths.Size() != 1) {
+        return false;
+    }
+
+    const auto path = paths.Item(0);
+    if (!path.Ranges().Maybe<TCoVoid>()
+        || !path.QLFilter().Maybe<TCoVoid>()
+        || !path.Columns().Maybe<TCoVoid>()
+        || path.AdditionalAttributes())
+    {
+        return false;
+    }
+
+    const TYtPathInfo pathInfo(path);
+    if (pathInfo.RequiresRemap()) {
+        return false;
+    }
+    if (pathInfo.Table->Meta && (pathInfo.Table->Meta->IsDynamic || pathInfo.Table->Meta->HasRLS)) {
+        return false;
+    }
+
+    return true;
 }
 
 } // NYql

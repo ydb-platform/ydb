@@ -63,7 +63,11 @@ Transaction locks invalidated. ... VictimQuerySpanId: 1111111111111111.
 
 Using this `VictimQuerySpanId`, you can find the full conflict context in the server logs: which query acquired the locks and which one broke them. For details on enabling logging, log entry format, event correlation, and the `find_tli_chain` utility for automated log analysis, see [{#T}](tli-logging.md).
 
-### Analysis via system view
+### Analysis via system views
+
+The following system views are available for analyzing lock conflicts:
+
+#### Query-level analysis
 
 To identify queries with the most conflicts, use the [`.sys/query_metrics_one_minute`](../../../dev/system-views.md#query-metrics) system view:
 
@@ -80,3 +84,36 @@ ORDER BY LocksBrokenAsBreaker + LocksBrokenAsVictim DESC;
 | `LocksBrokenAsVictim` | How many times this query's locks were broken |
 
 Queries with a high `LocksBrokenAsBreaker` are breakers: they cause other transactions to roll back. Queries with a high `LocksBrokenAsVictim` are victims.
+
+#### Partition-level analysis
+
+To analyze broken locks at the table partition level, use the following system views:
+
+* [`.sys/partition_stats`](../../../dev/system-views.md#partitions) — current partition statistics, contains the cumulative `LocksBroken` field
+* [`.sys/top_partitions_by_tli_one_minute`](../../../dev/system-views.md#top-tli-partitions) — top 10 partitions with non-zero broken locks for one-minute intervals
+* [`.sys/top_partitions_by_tli_one_hour`](../../../dev/system-views.md#top-tli-partitions) — top 10 partitions with non-zero broken locks for one-hour intervals
+
+Example query to find partitions with the most broken locks:
+
+```sql
+SELECT
+    Path,
+    SUM(LocksBroken) as TotalLocksBroken
+FROM `.sys/partition_stats`
+GROUP BY Path
+ORDER BY TotalLocksBroken DESC
+LIMIT 10;
+```
+
+Example query to view the history of broken locks by partition:
+
+```sql
+SELECT
+    IntervalEnd,
+    LocksBroken,
+    Path
+FROM `.sys/top_partitions_by_tli_one_hour`
+WHERE IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-12-31T00:00:00Z")
+ORDER BY IntervalEnd DESC, LocksBroken DESC
+LIMIT 100;
+```

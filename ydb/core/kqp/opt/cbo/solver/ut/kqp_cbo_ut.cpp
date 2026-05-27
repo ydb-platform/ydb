@@ -5,6 +5,7 @@
 
 #include "kqp_opt_join_cost_based.h"
 #include "kqp_opt_join.h"
+#include "kqp_opt_stat.h"
 
 using namespace NKikimr::NKqp;
 using namespace NYql::NNodes;
@@ -268,6 +269,100 @@ Y_UNIT_TEST(JoinSearchYT24403) {
         UNIT_ASSERT(pctx.CalledIsJoinApplicable.count(joinAlgo) > 0);
         UNIT_ASSERT(pctx.CalledComputeJoinStats.count(joinAlgo) > 0);
     }
+}
+
+Y_UNIT_TEST(ReverseBlockJoinHint) {
+    TBaseProviderContext pctx;
+    NYql::TExprContext dummyCtx;
+    auto orderings = MakeSimpleShared<TOrderingsStateMachine>();
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(
+        MakeNativeOptimizerNew(pctx, TCBOSettings{}, dummyCtx, true, orderings)
+    );
+
+    auto left = std::make_shared<TRelOptimizerNode>(
+        "left",
+        TOptimizerStatistics(BaseTable, 1000, 1, 0, 1000)
+    );
+    auto right = std::make_shared<TRelOptimizerNode>(
+        "right",
+        TOptimizerStatistics(BaseTable, 10, 1, 0, 10)
+    );
+    auto input = std::make_shared<TJoinOptimizerNode>(
+        std::static_pointer_cast<IBaseOptimizerNode>(left),
+        std::static_pointer_cast<IBaseOptimizerNode>(right),
+        TVector<TJoinColumn>{TJoinColumn("left", "key")},
+        TVector<TJoinColumn>{TJoinColumn("right", "key")},
+        EJoinKind::LeftJoin,
+        EJoinAlgoType::Undefined,
+        false,
+        false
+    );
+
+    TOptimizerHints hints;
+    hints.JoinAlgoHints->PushBack({"left", "right"}, EJoinAlgoType::ReverseBlockJoin, "ReverseBlockJoin(left right)");
+
+    auto join = optimizer->JoinSearch(input, hints);
+
+    UNIT_ASSERT_VALUES_EQUAL(join->JoinAlgo, EJoinAlgoType::ReverseBlockJoin);
+    UNIT_ASSERT_VALUES_EQUAL(join->ShuffleLeftSideBy.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(join->ShuffleRightSideBy.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(join->ShuffleLeftSideBy[0].RelName, "left");
+    UNIT_ASSERT_VALUES_EQUAL(join->ShuffleLeftSideBy[0].AttributeName, "key");
+    UNIT_ASSERT_VALUES_EQUAL(join->ShuffleRightSideBy[0].RelName, "right");
+    UNIT_ASSERT_VALUES_EQUAL(join->ShuffleRightSideBy[0].AttributeName, "key");
+}
+
+Y_UNIT_TEST(DqPhyMapJoinStatsUsesMapJoinAlgo) {
+    TMockProviderContextYT24403 pctx;
+    NYql::TExprContext ctx;
+    auto pos = ctx.AppendPosition({});
+
+    auto leftInput = Build<TCoAtomList>(ctx, pos)
+        .Done();
+
+    auto rightInput = Build<TCoAtomList>(ctx, pos)
+        .Done();
+
+    auto join = Build<TDqPhyMapJoin>(ctx, pos)
+        .LeftInput(leftInput)
+        .RightInput(rightInput)
+        .LeftLabel<TCoAtom>()
+            .Build("left")
+        .RightLabel<TCoAtom>()
+            .Build("right")
+        .JoinType()
+            .Build("Inner")
+        .JoinKeys<TDqJoinKeyTupleList>()
+            .Add<TDqJoinKeyTuple>()
+                .LeftLabel()
+                    .Build("left")
+                .LeftColumn()
+                    .Build("k")
+                .RightLabel()
+                    .Build("right")
+                .RightColumn()
+                    .Build("k")
+                .Build()
+            .Build()
+        .LeftJoinKeyNames()
+            .Add()
+                .Build("left.k")
+            .Build()
+        .RightJoinKeyNames()
+            .Add()
+                .Build("right.k")
+            .Build()
+        .Done();
+
+    TKqpStatsStore kqpStats;
+    kqpStats.SetStats(leftInput.Raw(), std::make_shared<TOptimizerStatistics>(BaseTable, 100, 1, 1));
+    kqpStats.SetStats(rightInput.Raw(), std::make_shared<TOptimizerStatistics>(BaseTable, 10, 1, 1));
+
+    InferStatisticsForDqJoinBase(join.Ptr(), &kqpStats, pctx);
+
+    UNIT_ASSERT(kqpStats.GetStats(join.Raw()));
+    UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(EJoinAlgoType::MapJoin), 1);
+    UNIT_ASSERT_VALUES_EQUAL(pctx.CalledComputeJoinStats.count(EJoinAlgoType::Undefined), 0);
 }
 
 Y_UNIT_TEST(RelCollector) {

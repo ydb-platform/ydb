@@ -3,10 +3,13 @@
 Functional tests for YDB CLI AI interactive mode.
 """
 
+import io
 import json
 import logging
 import os
 import pexpect
+import re
+import sys
 import threading
 import time
 import yaml
@@ -224,8 +227,10 @@ class BaseAiInteractiveTest(BaseInteractiveTest):
     def _create_minimal_ai_config(self):
         """Write a config that only sets ``interactive_mode: 1``.
 
-        The CLI will auto-create a profile from the default preset
-        (``sample_openai_model``) that is registered in the test binary.
+        The CLI will use the default preset (``sample_openai_model``) from the
+        test binary as an in-memory profile. Nothing is persisted to YAML until
+        the user makes an explicit choice via ``/model`` or edits and confirms
+        the profile via ``/config`` -> "Change current AI model settings".
         """
         path = str(self.tmp_path / "ai_profile.yaml")
         with open(path, "w") as f:
@@ -372,7 +377,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             req = self.mock_server.last_request["body"]
             assert "tools" in req
             tool_names = {t["function"]["name"] for t in req["tools"]}
-            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell"}
+            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell", "docs_search"}
             for tool in req["tools"]:
                 assert tool["type"] == "function"
                 assert "parameters" in tool["function"]
@@ -695,7 +700,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
 
             tools = self.mock_server.last_request["body"]["tools"]
             tool_names = {t["name"] for t in tools}
-            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell"}
+            assert tool_names == {"list_directory", "exec_query", "explain_query", "describe", "ydb_help", "exec_shell", 'docs_search'}
             for tool in tools:
                 assert "input_schema" in tool
                 assert "description" in tool
@@ -1086,9 +1091,10 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         with open(path) as f:
             return yaml.safe_load(f)
 
-    def test_preset_creates_correct_profile_file(self):
-        """After the CLI auto-creates a profile from the default preset the
-        YAML file contains all expected keys with correct values."""
+    def test_default_preset_profile_is_in_memory_only(self):
+        """A profile built from the default preset on the fly must not be
+        persisted to YAML. The CLI must work for queries, but afterwards the
+        profile file must stay minimal (only ``interactive_mode``)."""
         self.mock_server.set_openai_response("ok")
         profile_path = self._create_minimal_ai_config()
         child = self.spawn_interactive(timeout=15, profile_path=profile_path)
@@ -1107,17 +1113,10 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
         cfg = self._read_profile_yaml()
         assert cfg["interactive_mode"] == 1
-        assert cfg.get("current_profile"), "current_profile must be set"
-
-        profiles = cfg.get("ai_profiles", {})
-        assert len(profiles) >= 1, "at least one profile must exist"
-        profile_id = cfg["current_profile"]
-        assert profile_id in profiles, "current_profile must reference an existing entry"
-
-        p = profiles[profile_id]
-        assert p["name"], "profile name must be non-empty"
-        assert p["preset_id"] == "sample_openai_model"
-        assert len(p.keys()) == 2, "only name and preset_id are expected"
+        assert not cfg.get("current_profile"), \
+            "in-memory default preset must not set current_profile in YAML"
+        assert not cfg.get("ai_profiles"), \
+            "in-memory default preset must not be persisted to ai_profiles"
 
     def test_model_switch_updates_profile_file(self):
         """Switching model via ``/model`` persists the new profile and
@@ -1206,9 +1205,10 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
     # -- RemoveAiProfile (via /config) ---------------------------------------
 
-    def test_config_remove_profile_creates_new_from_preset(self):
-        """``/config`` -> "Remove current AI model" deletes the profile and
-        auto-creates a new one from the default preset."""
+    def test_config_remove_falls_back_to_in_memory_default(self):
+        """``/config`` -> "Remove current AI model" deletes the profile from
+        YAML, clears ``current_profile`` and falls back to an in-memory
+        default-preset profile. No replacement is written to disk."""
         child = self.spawn_ai_interactive("openai")
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
@@ -1234,29 +1234,57 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             child.close()
 
         cfg = self._read_profile_yaml()
-        profiles = cfg.get("ai_profiles", {})
+        profiles = cfg.get("ai_profiles") or {}
         assert "test_openai" not in profiles, "removed profile must be gone"
-        assert len(profiles) >= 1, "a replacement profile must have been created"
-        assert cfg["current_profile"] in profiles
+        assert not profiles, \
+            "no replacement profile must be persisted (default is in-memory)"
+        assert not cfg.get("current_profile"), \
+            "current_profile must be cleared after removing the active profile"
 
-    def test_config_remove_and_verify_new_profile_structure(self):
-        """After removing the profile and auto-creating a replacement, the
-        new profile in the YAML has the expected structure from the preset."""
-        child = self.spawn_ai_interactive("openai")
+    def test_config_edit_promotes_in_memory_profile_to_disk(self):
+        """Editing the in-memory default-preset profile via ``/config`` ->
+        "Change current AI model settings" -> any change -> "Finish editing"
+        must persist the profile to disk: ``ai_profiles`` gets a new entry
+        and ``current_profile`` references it."""
+        self.mock_server.set_openai_response("ok")
+        profile_path = self._create_minimal_ai_config()
+        child = self.spawn_interactive(timeout=15, profile_path=profile_path)
         try:
             child.expect("Welcome to YDB CLI", timeout=15)
             self._wait_for_ai_prompt(child)
+
+            # Warm up — make sure the model handler is functional.
             self._send_query(child, "init")
-            child.expect("Mock OpenAI response", timeout=15)
+            child.expect("ok", timeout=15)
             self._wait_for_ai_prompt(child)
 
             self._send_query(child, "/config")
-            child.expect("Remove current AI model", timeout=10)
+            child.expect("choose setting to change", timeout=10)
+            # /config menu for an in-memory profile has 3 items (no "Remove"):
+            # Clear / Switch / Change settings. Pick the third (2 downs).
+            for _ in range(2):
+                self._send_down(child)
+            self._send_enter(child)
+
+            # Edit menu — pick "Token" (3 downs from "API endpoint").
+            child.expect("choose setting to change.*API endpoint", timeout=10)
             for _ in range(3):
                 self._send_down(child)
             self._send_enter(child)
 
-            child.expect("profile is changed|Switching AI profile", timeout=15)
+            # Token menu — pick the first provider ("Test token"). This sets
+            # ``token_provider`` and marks the profile as changed.
+            child.expect("Please choose API token", timeout=10)
+            self._send_enter(child)
+
+            # Back in the Edit menu — pick "Finish editing" (5 downs from top).
+            child.expect("choose setting to change.*API endpoint", timeout=10)
+            for _ in range(5):
+                self._send_down(child)
+            self._send_enter(child)
+
+            # Promotion + ChangeAiProfile prints "profile is changed".
+            child.expect("profile is changed|Switching AI profile", timeout=10)
             self._send_escape(child)
             self._wait_for_ai_prompt(child)
 
@@ -1267,11 +1295,17 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             child.close()
 
         cfg = self._read_profile_yaml()
-        profile_id = cfg["current_profile"]
-        p = cfg["ai_profiles"][profile_id]
-        assert p.get("name"), "replacement profile must have a name"
-        assert p.get("preset_id"), "replacement profile must reference a preset"
-        assert len(p.keys()) == 2, "only name and preset_id are expected"
+        profile_id = cfg.get("current_profile")
+        assert profile_id, "promoted profile must set current_profile"
+        profiles = cfg.get("ai_profiles") or {}
+        assert profile_id in profiles, \
+            "current_profile must reference an entry in ai_profiles"
+
+        p = profiles[profile_id]
+        assert p.get("preset_id") == "sample_openai_model"
+        assert p.get("name"), "promoted profile must have a non-empty name"
+        # The edit step explicitly picked the "test_token" provider.
+        assert p.get("token_provider") == "test_token"
 
     # -- /model menu (presets from test binary) ------------------------------
 
@@ -1455,7 +1489,9 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
 
     def test_token_provider_resolves_correctly(self):
         """The ``test_token`` provider registered in the test binary resolves
-        to ``"test_token"`` and is sent as the Bearer token."""
+        to ``"test_token"`` and is sent as the Bearer token. The token must
+        be obtained via the preset's token provider and NOT written into
+        the in-memory default-preset profile."""
         self.mock_server.set_openai_response("token check ok")
         profile_path = self._create_minimal_ai_config()
         child = self.spawn_interactive(timeout=15, profile_path=profile_path)
@@ -1477,10 +1513,13 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
             self.mock_server.clear()
             child.close()
 
+        # The in-memory default-preset profile must not have been persisted —
+        # using the preset's token provider must not promote the profile to disk.
         cfg = self._read_profile_yaml()
-        profile_id = cfg["current_profile"]
-        p = cfg["ai_profiles"][profile_id]
-        assert p["name"] == "Sample Open AI model"
+        assert not cfg.get("current_profile"), \
+            "in-memory default preset must not set current_profile in YAML"
+        assert not cfg.get("ai_profiles"), \
+            "in-memory default preset must not be persisted to ai_profiles"
 
     # -- /config menu --------------------------------------------------------
 
@@ -1677,6 +1716,260 @@ class TestAiCommonPexpect(BaseAiInteractiveTest):
         finally:
             self.mock_server.clear()
             child.close()
+
+    # -- audit log (YDB_CLI_AI_AUDIT_LOG) ------------------------------------
+
+    AUDIT_TAG = "[AUDIT]"
+
+    def _spawn_with_audit_env(self, audit_enabled, api_type="openai"):
+        """Spawn the AI CLI with optional audit logging.
+
+        When *audit_enabled* is True, sets the YDB_CLI_AI_AUDIT_LOG env var and
+        bumps verbosity to Info (``-v -v``) so the audit log lines reach
+        stderr — both conditions are required for [AUDIT] entries to appear.
+        """
+        profile_path = self._create_ai_profile(api_type)
+        env = os.environ.copy()
+        if audit_enabled:
+            env["YDB_CLI_AI_AUDIT_LOG"] = "1"
+        return self.spawn_interactive(
+            timeout=15,
+            extra_args=["-v", "-v"],
+            profile_path=profile_path,
+            env=env,
+        )
+
+    @staticmethod
+    def _tee_output(child):
+        """Attach a tee to ``child.logfile_read`` and return a buffer with all
+        bytes the parent sees from the child PTY."""
+        buf = io.StringIO()
+
+        class _Tee:
+            def write(self_inner, data):
+                sys.stdout.write(data)
+                buf.write(data)
+
+            def flush(self_inner):
+                sys.stdout.flush()
+
+        child.logfile_read = _Tee()
+        return buf
+
+    def test_audit_log_disabled_by_default(self):
+        """Without ``YDB_CLI_AI_AUDIT_LOG`` no ``[AUDIT]`` line is emitted,
+        even with ``-v -v`` verbose logging that would otherwise expose Info
+        entries."""
+        self.mock_server.set_openai_response("plain response")
+        child = self._spawn_with_audit_env(audit_enabled=False)
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "say hi")
+            child.expect("plain response", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+        assert self.AUDIT_TAG not in buf.getvalue(), \
+            "Audit lines must not appear when YDB_CLI_AI_AUDIT_LOG is unset"
+
+    def test_audit_log_model_usage_emitted(self):
+        """Every model round-trip emits an ``[AUDIT] model_usage`` line that
+        carries the token-usage fields produced by the model. The line is
+        written *before* the response text is rendered."""
+        self.mock_server.set_openai_response("hello back")
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(
+                r"\[AUDIT\] model_usage[^\n]*input_tokens[^\n]*output_tokens",
+                timeout=15,
+            )
+            child.expect("hello back", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_audit_log_agent_response_emitted(self):
+        """The model's text response is recorded verbatim in an
+        ``[AUDIT] agent_response`` line so the conversation can be audited."""
+        self.mock_server.set_openai_response("audit-response-marker")
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(
+                r"\[AUDIT\] agent_response[^\n]*audit-response-marker",
+                timeout=15,
+            )
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_audit_log_tool_call_emitted(self):
+        """A tool invocation produces an ``[AUDIT] tool_call`` line that
+        carries the tool name."""
+        call_count = [0]
+
+        def handler(request):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "id": "call_audit_test",
+                                "type": "function",
+                                "function": {
+                                    "name": "list_directory",
+                                    "arguments": json.dumps({"directory": ""}),
+                                },
+                            }],
+                        }
+                    }]
+                }
+            return {"choices": [{"message": {"role": "assistant", "content": "Done."}}]}
+
+        self.mock_server.set_openai_handler(handler)
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "list root")
+            child.expect(r"\[AUDIT\] tool_call[^\n]*list_directory", timeout=30)
+            child.expect("Done.", timeout=30)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_audit_log_seq_increments(self):
+        """Successive audit entries carry strictly increasing ``seq``
+        counters so the log can be ordered."""
+        self.mock_server.set_openai_response("ack")
+        child = self._spawn_with_audit_env(audit_enabled=True)
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            for _ in range(2):
+                self._send_query(child, "ping")
+                child.expect("ack", timeout=15)
+                self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+        seqs = [int(m) for m in re.findall(r'\[AUDIT\][^\n]*?"seq":(\d+)', buf.getvalue())]
+        assert len(seqs) >= 4, \
+            "Expected at least 4 audit entries across two round-trips, got: {}".format(seqs)
+        assert seqs == sorted(seqs), "seq values must be monotonically non-decreasing: {}".format(seqs)
+        assert len(set(seqs)) == len(seqs), "seq values must be unique: {}".format(seqs)
+
+    @staticmethod
+    def _extract_model_usage(output):
+        """Return the parsed JSON of the first ``[AUDIT] model_usage`` entry
+        in *output*. Strips ANSI escape sequences so JSON survives intact."""
+        cleaned = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', output)
+        match = re.search(r'\[AUDIT\] model_usage (\{[^\n]*\})', cleaned)
+        assert match, "No [AUDIT] model_usage line in output:\n{}".format(cleaned)
+        return json.loads(match.group(1))
+
+    def test_audit_log_token_usage_openai_extraction(self):
+        """OpenAI ``usage`` block (``prompt_tokens`` / ``completion_tokens`` /
+        ``prompt_tokens_details.cached_tokens``) is mapped onto the audit log
+        with cached tokens subtracted from the input count."""
+        def handler(request):
+            return {
+                "choices": [{
+                    "message": {"role": "assistant", "content": "with usage"}
+                }],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "prompt_tokens_details": {"cached_tokens": 30},
+                },
+            }
+
+        self.mock_server.set_openai_handler(handler)
+        child = self._spawn_with_audit_env(audit_enabled=True, api_type="openai")
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(r"\[AUDIT\] model_usage", timeout=15)
+            child.expect("with usage", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+        usage = self._extract_model_usage(buf.getvalue())
+        assert usage["input_tokens"] == 70, usage  # prompt_tokens - cached_tokens
+        assert usage["output_tokens"] == 50, usage
+        assert usage["cached_input_tokens"] == 30, usage
+
+    def test_audit_log_token_usage_anthropic_extraction(self):
+        """Anthropic ``usage`` block (``input_tokens`` / ``output_tokens`` /
+        ``cache_read_input_tokens``) is mapped onto the audit log without
+        further arithmetic — Anthropic already reports input tokens excluding
+        the cached portion."""
+        def handler(request):
+            return {
+                "content": [{"type": "text", "text": "with usage"}],
+                "usage": {
+                    "input_tokens": 42,
+                    "output_tokens": 17,
+                    "cache_read_input_tokens": 8,
+                },
+            }
+
+        self.mock_server.set_anthropic_handler(handler)
+        child = self._spawn_with_audit_env(audit_enabled=True, api_type="anthropic")
+        buf = self._tee_output(child)
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "hi")
+            child.expect(r"\[AUDIT\] model_usage", timeout=15)
+            child.expect("with usage", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+            child.expect(pexpect.EOF, timeout=5)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+        usage = self._extract_model_usage(buf.getvalue())
+        assert usage["input_tokens"] == 42, usage
+        assert usage["output_tokens"] == 17, usage
+        assert usage["cached_input_tokens"] == 8, usage
 
     # -- multiple queries in a single session --------------------------------
 
@@ -2458,6 +2751,502 @@ class _ToolTestBase(BaseAiInteractiveTest):
                 props = es["input_schema"]["properties"]
 
             assert "command" in props
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_tool_schema_in_request(self):
+        """docs_search tool definition has action, language, path and pattern parameters."""
+        handler, _ = self._make_tool_handler(
+            "docs_search", {"action": "list", "language": "en"}, "ok"
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "search docs")
+            child.expect("ok", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            first_body = [
+                r for r in self.mock_server.requests
+                if r["path"].endswith("/chat/completions" if self.API_TYPE == "openai" else "/messages")
+            ][0]["body"]
+
+            if self.API_TYPE == "openai":
+                tools = first_body["tools"]
+                ds = [t for t in tools if t["function"]["name"] == "docs_search"][0]
+                props = ds["function"]["parameters"]["properties"]
+            else:
+                tools = first_body["tools"]
+                ds = [t for t in tools if t["name"] == "docs_search"][0]
+                props = ds["input_schema"]["properties"]
+
+            assert "action" in props
+            assert "language" in props
+            assert "path" in props
+            assert "pattern" in props
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_list_action(self):
+        """docs_search list action returns JSON array with path and title_path for each entry."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search", {"action": "list", "language": "en"}, "Documentation listed."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "list docs")
+            child.expect("Documentation listed", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            parsed = json.loads(tool_result)
+            assert isinstance(parsed, list), "docs_search list must return a JSON array"
+            assert len(parsed) > 0, "docs_search list must return at least one entry"
+            first = parsed[0]
+            assert "path" in first, "Each entry must have a 'path' field"
+            assert "title_path" in first, "Each entry must have a 'title_path' field"
+            assert isinstance(first["path"], str), "'path' must be a string"
+            assert isinstance(first["title_path"], list), "'title_path' must be an array"
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_list_with_path_filter(self):
+        """docs_search list action with path filter returns only pages under that path."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "list", "language": "en", "path": "core/concepts"},
+            "Filtered list done."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "list concepts docs")
+            child.expect("Filtered list done", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            parsed = json.loads(tool_result)
+            assert isinstance(parsed, list)
+            assert len(parsed) > 0
+            for entry in parsed:
+                assert entry["path"].startswith("core/concepts"), (
+                    "All entries must be under 'core/concepts', got: {}".format(entry["path"])
+                )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_list_ru_language(self):
+        """docs_search list action returns Russian documentation pages when language=ru."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "list", "language": "ru", "path": "core/concepts"},
+            "Russian docs listed."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "list russian docs")
+            child.expect("Russian docs listed", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            parsed = json.loads(tool_result)
+            assert isinstance(parsed, list)
+            assert len(parsed) > 0
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_get_action(self):
+        """docs_search get action returns Markdown content of the requested page."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "get", "language": "en", "path": "core/concepts/architecture.md"},
+            "Page content retrieved."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "get architecture page")
+            child.expect("Page content retrieved", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert len(tool_result) > 0, "get must return non-empty content"
+            assert "YDB" in tool_result, "architecture page must mention YDB"
+            assert "Architecture" in tool_result, "architecture page must mention Architecture"
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_get_action_not_found(self):
+        """docs_search get action returns an error for a non-existent page."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "get", "language": "en", "path": "core/concepts/nonexistent_page.md"},
+            "Page not found handled."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "get nonexistent page")
+            child.expect("Page not found handled", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "Documentation page \"core/concepts/nonexistent_page.md\" was not found in the archive" in tool_result, (
+                "Error message must mention the missing page path"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_find_action(self):
+        """docs_search find action returns matches with context around the pattern."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "find", "language": "en", "pattern": "Architecture Overview"},
+            "Pattern found."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "find architecture overview")
+            child.expect("Pattern found", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            parsed = json.loads(tool_result)
+            assert isinstance(parsed, list), "docs_search find must return a JSON array"
+            assert len(parsed) > 0, "Pattern 'Architecture Overview' must match at least one page"
+            first = parsed[0]
+            assert "path" in first
+            assert "title_path" in first
+            assert "matches" in first, "Each matching entry must have a 'matches' field"
+            assert isinstance(first["matches"], list), "'matches' must be an array"
+            assert len(first["matches"]) > 0
+            assert any("Architecture Overview" in m for m in first["matches"]), (
+                "Matches must contain context with the searched pattern"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_find_with_path_filter(self):
+        """docs_search find action with path filter narrows the search to a specific folder."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "find", "language": "en", "pattern": "YDB", "path": "core/concepts"},
+            "Filtered find done."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "find YDB in concepts")
+            child.expect("Filtered find done", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            parsed = json.loads(tool_result)
+            assert isinstance(parsed, list)
+            for entry in parsed:
+                if isinstance(entry, dict):
+                    assert entry["path"].startswith("core/concepts"), (
+                        "All matched entries must be under 'core/concepts', got: {}".format(entry["path"])
+                    )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_invalid_action(self):
+        """docs_search returns an error for an unknown action."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "invalid_action", "language": "en"},
+            "Invalid action handled."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "invalid docs action")
+            child.expect("Invalid action handled", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "Unknown action \"invalid_action\"" in tool_result, (
+                "Error message must mention the invalid action"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_invalid_language(self):
+        """docs_search returns an error for an unsupported language."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "list", "language": "de"},
+            "Invalid language handled."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "list docs in German")
+            child.expect("Invalid language handled", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "Unknown language \"de\"" in tool_result, (
+                "Error message must mention the unsupported language"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_get_without_path(self):
+        """docs_search get action without a path parameter returns an error."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "get", "language": "en"},
+            "Missing path handled."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "get doc without path")
+            child.expect("Missing path handled", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "\"path\" parameter is required for action" in tool_result.lower(), (
+                "Error message must mention missing path"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_find_without_pattern(self):
+        """docs_search find action without a pattern parameter returns an error."""
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "find", "language": "en"},
+            "Missing pattern handled."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "find without pattern")
+            child.expect("Missing pattern handled", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "\"pattern\" parameter is required for action" in tool_result.lower(), (
+                "Error message must mention missing pattern"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    # -- template / include / variable resolution tests ----------------------
+
+    def test_docs_search_get_resolves_variables(self):
+        """docs_search get expands {{ variable }} placeholders via presets.yaml.
+
+        architecture.md contains ``{{ ydb-short-name }}`` which must be
+        replaced with "YDB" by TTemplateResolver before the page is returned.
+        The raw template marker must not survive in the output.
+        """
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "get", "language": "en", "path": "core/concepts/architecture.md"},
+            "Variables resolved."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "get architecture page")
+            child.expect("Variables resolved", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "YDB Architecture Overview" in tool_result, (
+                "{{ ydb-short-name }} must be resolved to 'YDB' in the title"
+            )
+            assert "{{ ydb-short-name }}" not in tool_result, (
+                "Raw variable placeholders must not remain after resolution"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_get_resolves_includes(self):
+        """docs_search get expands {% include %} directives and resolves
+        variables inside the included file.
+
+        scan_query.md consists of a single include directive that pulls in
+        _includes/scan_query.md.  After resolution the output must contain the
+        included text and must not contain the raw include tag.  The included
+        file itself uses {{ ydb-short-name }}, so variable substitution inside
+        included content is verified too.
+        """
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "get", "language": "en", "path": "core/concepts/scan_query.md"},
+            "Include resolved."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "get scan query page")
+            child.expect("Include resolved", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "{% include" not in tool_result, (
+                "Include directives must be expanded and must not appear in the output"
+            )
+            assert "Scan queries are a separate data access" in tool_result, (
+                "Included file content must appear after include expansion"
+            )
+            assert "{{ ydb-short-name }}" not in tool_result, (
+                "Variables inside included files must also be resolved"
+            )
+            assert "YDB" in tool_result, (
+                "{{ ydb-short-name }} inside the included file must be substituted with 'YDB'"
+            )
+
+            self._send_query(child, "exit")
+            child.expect("Bye!", timeout=10)
+        finally:
+            self.mock_server.clear()
+            child.close()
+
+    def test_docs_search_get_resolves_nested_includes(self):
+        """docs_search get follows multi-level include chains.
+
+        transactions.md includes _includes/transactions.md, which in turn
+        includes two further files (_includes/not_allow_for_olap_text.md and
+        _includes/limitation-column-row-in-read-only-tx.md).  The final output
+        must contain text from those deeply-nested files and must not retain
+        any raw include directives.
+        """
+        handler, call_count = self._make_tool_handler(
+            "docs_search",
+            {"action": "get", "language": "en", "path": "core/concepts/transactions.md"},
+            "Nested includes resolved."
+        )
+        self._set_handler(handler)
+        child = self._spawn()
+        try:
+            child.expect("Welcome to YDB CLI", timeout=15)
+            self._wait_for_ai_prompt(child)
+            self._send_query(child, "get transactions page")
+            child.expect("Nested includes resolved", timeout=30)
+            self._wait_for_ai_prompt(child)
+
+            assert call_count[0] >= 2
+            tool_result = self._get_tool_result_content()
+            assert "{% include" not in tool_result, (
+                "All include directives must be expanded recursively"
+            )
+            # Text from _includes/not_allow_for_olap_text.md (2nd-level include)
+            assert "row-oriented" in tool_result, (
+                "Content from a 2nd-level nested include must appear in output"
+            )
+            # Text from _includes/limitation-column-row-in-read-only-tx.md (2nd-level include)
+            assert "column-oriented" in tool_result, (
+                "Content from a 2nd-level nested include must appear in output"
+            )
+            assert "{{ ydb-short-name }}" not in tool_result, (
+                "Variables must be resolved throughout all levels of includes"
+            )
 
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)

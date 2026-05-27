@@ -1,3 +1,4 @@
+#include <ydb/public/sdk/cpp/src/client/impl/observability/error_category/error_category.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
 #include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
 
@@ -13,23 +14,13 @@ namespace {
 constexpr const char kTestDbNamespace[] = "/Root/testdb";
 
 struct TSpanTestParams {
-    std::string Name;
     std::string ClientType;
 
     std::string ExecuteOp;
-    std::string ExecuteOpName;
-
     std::string CreateSessionOp;
-    std::string CreateSessionOpName;
-
     std::string CommitOp;
-    std::string CommitOpName;
-
     std::string RollbackOp;
-    std::string RollbackOpName;
-
     std::string RetryOp;
-    std::string RetryOpName;
 };
 
 } // namespace
@@ -65,7 +56,7 @@ TEST_P(SpanTest, SpanNameFormat) {
     span->End(EStatus::SUCCESS);
 
     ASSERT_EQ(Tracer->SpanCount(), 1u);
-    EXPECT_EQ(Tracer->GetLastSpanRecord().Name, p.ExecuteOpName);
+    EXPECT_EQ(Tracer->GetLastSpanRecord().Name, p.ExecuteOp);
 }
 
 TEST_P(SpanTest, SpanKindIsClient) {
@@ -96,7 +87,7 @@ TEST_P(SpanTest, DbNamespaceAndClientApi) {
     ASSERT_NE(fakeSpan, nullptr);
     EXPECT_EQ(fakeSpan->GetStringAttribute("db.namespace"), kTestDbNamespace);
     EXPECT_EQ(fakeSpan->GetStringAttribute("ydb.client.api"), p.ClientType);
-    EXPECT_EQ(fakeSpan->GetStringAttribute("db.operation.name"), p.ExecuteOpName);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("db.operation.name"), p.ExecuteOp);
 }
 
 TEST_P(SpanTest, ServerAddressAndPort) {
@@ -173,7 +164,7 @@ TEST_P(SpanTest, SuccessStatusDoesNotSetErrorAttrs) {
 
     auto fakeSpan = Tracer->GetLastSpan();
     ASSERT_NE(fakeSpan, nullptr);
-    EXPECT_EQ(fakeSpan->GetStringAttribute("db.response.status_code"), ToString(EStatus::SUCCESS));
+    EXPECT_FALSE(fakeSpan->HasStringAttribute("db.response.status_code"));
     EXPECT_FALSE(fakeSpan->HasStringAttribute("error.type"));
 }
 
@@ -267,16 +258,56 @@ TEST_P(SpanTest, EmptyPeerEndpointIgnored) {
     EXPECT_FALSE(fakeSpan->HasIntAttribute("network.peer.port"));
 }
 
+TEST_P(SpanTest, PeerEndpointWithNodeIdAndLocation) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.ExecuteOp, "discovery.ydb:2135");
+    span->SetPeerEndpoint("10.0.0.1:2136", /*nodeId=*/42, /*location=*/"vla");
+    span->End(EStatus::SUCCESS);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("network.peer.address"), "10.0.0.1");
+    EXPECT_EQ(fakeSpan->GetIntAttribute("network.peer.port"), 2136);
+    EXPECT_EQ(fakeSpan->GetIntAttribute("ydb.node.id"), 42);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("ydb.node.dc"), "vla");
+}
+
+TEST_P(SpanTest, PeerEndpointMissingNodeMetadataIsOmitted) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.ExecuteOp, "discovery.ydb:2135");
+    span->SetPeerEndpoint("10.0.0.1:2136", /*nodeId=*/0, /*location=*/"");
+    span->End(EStatus::SUCCESS);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("network.peer.address"), "10.0.0.1");
+    EXPECT_EQ(fakeSpan->GetIntAttribute("network.peer.port"), 2136);
+    EXPECT_FALSE(fakeSpan->HasIntAttribute("ydb.node.id"));
+    EXPECT_FALSE(fakeSpan->HasStringAttribute("ydb.node.dc"));
+}
+
+TEST_P(SpanTest, PeerEndpointSetsOnlyKnownNodeMetadata) {
+    const auto& p = GetParam();
+    auto span = MakeRequestSpan(p.ExecuteOp, "discovery.ydb:2135");
+    span->SetPeerEndpoint("10.0.0.1:2136", /*nodeId=*/0, /*location=*/"sas");
+    span->End(EStatus::SUCCESS);
+
+    auto fakeSpan = Tracer->GetLastSpan();
+    ASSERT_NE(fakeSpan, nullptr);
+    EXPECT_EQ(fakeSpan->GetStringAttribute("ydb.node.dc"), "sas");
+    EXPECT_FALSE(fakeSpan->HasIntAttribute("ydb.node.id"));
+}
+
 TEST_P(SpanTest, OperationNamesAreNormalized) {
     const auto& p = GetParam();
-    const std::vector<std::pair<std::string, std::string>> ops = {
-        {p.CreateSessionOp, p.CreateSessionOpName},
-        {p.ExecuteOp,       p.ExecuteOpName},
-        {p.CommitOp,        p.CommitOpName},
-        {p.RollbackOp,      p.RollbackOpName},
+    const std::vector<std::string> ops = {
+        p.CreateSessionOp,
+        p.ExecuteOp,
+        p.CommitOp,
+        p.RollbackOp,
     };
 
-    for (const auto& [op, _] : ops) {
+    for (const auto& op : ops) {
         auto span = MakeRequestSpan(op, "localhost:2135");
         span->End(EStatus::SUCCESS);
     }
@@ -284,22 +315,24 @@ TEST_P(SpanTest, OperationNamesAreNormalized) {
     auto spans = Tracer->GetSpans();
     ASSERT_EQ(spans.size(), ops.size());
     for (size_t i = 0; i < ops.size(); ++i) {
-        EXPECT_EQ(spans[i].Name, ops[i].second);
+        EXPECT_EQ(spans[i].Name, ops[i]);
         EXPECT_EQ(spans[i].Kind, NTrace::ESpanKind::CLIENT);
     }
 }
 
 TEST_P(SpanTest, MultipleErrorStatuses) {
     const auto& p = GetParam();
-    const std::vector<std::pair<EStatus, std::string>> errorStatuses = {
-        {EStatus::BAD_REQUEST,           "ydb_error"},
-        {EStatus::UNAUTHORIZED,          "ydb_error"},
-        {EStatus::INTERNAL_ERROR,        "ydb_error"},
-        {EStatus::UNAVAILABLE,           "ydb_error"},
-        {EStatus::OVERLOADED,            "ydb_error"},
-        {EStatus::TIMEOUT,               "ydb_error"},
-        {EStatus::NOT_FOUND,             "ydb_error"},
-        {EStatus::CLIENT_INTERNAL_ERROR, "transport_error"},
+    using NYdb::NObservability::kErrorTypeYdb;
+    using NYdb::NObservability::kErrorTypeTransport;
+    const std::vector<std::pair<EStatus, std::string_view>> errorStatuses = {
+        {EStatus::BAD_REQUEST,           kErrorTypeYdb},
+        {EStatus::UNAUTHORIZED,          kErrorTypeYdb},
+        {EStatus::INTERNAL_ERROR,        kErrorTypeYdb},
+        {EStatus::UNAVAILABLE,           kErrorTypeYdb},
+        {EStatus::OVERLOADED,            kErrorTypeYdb},
+        {EStatus::TIMEOUT,               kErrorTypeYdb},
+        {EStatus::NOT_FOUND,             kErrorTypeYdb},
+        {EStatus::CLIENT_INTERNAL_ERROR, kErrorTypeTransport},
     };
 
     for (const auto& [status, expectedErrorType] : errorStatuses) {
@@ -308,13 +341,21 @@ TEST_P(SpanTest, MultipleErrorStatuses) {
 
         auto fakeSpan = Tracer->GetLastSpan();
         ASSERT_NE(fakeSpan, nullptr);
-        EXPECT_EQ(
-            fakeSpan->GetStringAttribute("db.response.status_code"),
-            ToString(status)
-        );
+        if (expectedErrorType == kErrorTypeYdb) {
+            EXPECT_EQ(
+                fakeSpan->GetStringAttribute("db.response.status_code"),
+                ToString(status)
+            );
+        } else {
+            EXPECT_EQ(
+                fakeSpan->GetStringAttribute("db.response.status_code"),
+                ""
+            ) << "transport_error statuses must not set db.response.status_code (status="
+              << static_cast<int>(status) << ")";
+        }
         EXPECT_EQ(
             fakeSpan->GetStringAttribute("error.type"),
-            expectedErrorType
+            std::string(expectedErrorType)
         ) << "wrong error.type category for status " << static_cast<int>(status);
     }
 }
@@ -360,7 +401,7 @@ TEST_P(SpanTest, InternalSpanKindIsPropagated) {
     span->End(EStatus::SUCCESS);
 
     ASSERT_EQ(Tracer->SpanCount(), 1u);
-    EXPECT_EQ(Tracer->GetLastSpanRecord().Name, p.RetryOpName);
+    EXPECT_EQ(Tracer->GetLastSpanRecord().Name, p.RetryOp);
     EXPECT_EQ(Tracer->GetLastSpanRecord().Kind, NTrace::ESpanKind::INTERNAL);
 }
 
@@ -420,10 +461,10 @@ TEST_P(SpanTest, SuccessStatusDoesNotSetSpanStatus) {
     EXPECT_EQ(fakeSpan->GetStatus(), NTrace::ESpanStatus::Unset);
 }
 
-TEST_P(SpanTest, RecordExceptionEmitsEvent) {
+TEST_P(SpanTest, EndWithExceptionEmitsEvent) {
     const auto& p = GetParam();
     auto span = MakeRequestSpan(p.ExecuteOp, "localhost:2135");
-    span->RecordException("TimeoutException", "operation timed out");
+    span->EndWithException("TimeoutException", "operation timed out");
     span->End(EStatus::SUCCESS);
 
     auto fakeSpan = Tracer->GetLastSpan();
@@ -462,6 +503,95 @@ TEST_P(SpanTest, ExplicitParentIsPropagatedToTracer) {
         << "child span must receive parent pointer through ITracer::StartSpan";
 }
 
+TEST_P(SpanTest, FirstAttemptHasNoRetryAttributes) {
+    const auto& p = GetParam();
+
+    auto root = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType,
+        Tracer,
+        "RunWithRetry",
+        "localhost:2135",
+        kTestDbNamespace,
+        TLog{},
+        NTrace::ESpanKind::INTERNAL
+    );
+    ASSERT_NE(root, nullptr);
+
+    auto firstAttempt = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType,
+        Tracer,
+        "Try",
+        "localhost:2135",
+        kTestDbNamespace,
+        TLog{},
+        NTrace::ESpanKind::INTERNAL,
+        root
+    );
+    ASSERT_NE(firstAttempt, nullptr);
+    firstAttempt->SetRetryAttributes(/*attempt=*/0, /*backoffMs=*/0);
+    auto firstAttemptRecord = Tracer->GetLastSpanRecord();
+
+    auto child = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType,
+        Tracer,
+        p.ExecuteOp,
+        "localhost:2135",
+        kTestDbNamespace,
+        TLog{},
+        NTrace::ESpanKind::CLIENT,
+        firstAttempt
+    );
+    ASSERT_NE(child, nullptr);
+    auto childRecord = Tracer->GetLastSpanRecord();
+
+    child->End(EStatus::SUCCESS);
+    firstAttempt->End(EStatus::SUCCESS);
+    root->End(EStatus::SUCCESS);
+
+    EXPECT_FALSE(firstAttemptRecord.Span->HasIntAttribute("ydb.retry.attempt"))
+        << "first attempt span must not carry ydb.retry.attempt";
+    EXPECT_FALSE(firstAttemptRecord.Span->HasIntAttribute("ydb.retry.backoff_ms"))
+        << "first attempt span must not carry ydb.retry.backoff_ms";
+
+    EXPECT_EQ(childRecord.Parent, firstAttemptRecord.Span.get())
+        << "child RPC span must be parented to the first Try span (not to the retry root)";
+}
+
+TEST_P(SpanTest, RetryAttemptCarriesRetryAttributes) {
+    const auto& p = GetParam();
+
+    auto root = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType,
+        Tracer,
+        "RunWithRetry",
+        "localhost:2135",
+        kTestDbNamespace,
+        TLog{},
+        NTrace::ESpanKind::INTERNAL
+    );
+    ASSERT_NE(root, nullptr);
+
+    auto retryAttempt = NYdb::NObservability::TRequestSpan::Create(
+        p.ClientType,
+        Tracer,
+        "Try",
+        "localhost:2135",
+        kTestDbNamespace,
+        TLog{},
+        NTrace::ESpanKind::INTERNAL,
+        root
+    );
+    ASSERT_NE(retryAttempt, nullptr);
+    retryAttempt->SetRetryAttributes(/*attempt=*/2, /*backoffMs=*/250);
+    auto retryAttemptRecord = Tracer->GetLastSpanRecord();
+
+    retryAttempt->End(EStatus::SUCCESS);
+    root->End(EStatus::SUCCESS);
+
+    EXPECT_EQ(retryAttemptRecord.Span->GetIntAttribute("ydb.retry.attempt"), 2);
+    EXPECT_EQ(retryAttemptRecord.Span->GetIntAttribute("ydb.retry.backoff_ms"), 250);
+}
+
 TEST_P(SpanTest, RetryAttemptParentedToRoot) {
     const auto& p = GetParam();
 
@@ -473,7 +603,7 @@ TEST_P(SpanTest, RetryAttemptParentedToRoot) {
 
     // Imitating what retry contexts do: create attempt span with explicit parent.
     auto attempt = NYdb::NObservability::TRequestSpan::Create(
-        p.ClientType, Tracer, "ydb.Try", "localhost:2135", kTestDbNamespace,
+        p.ClientType, Tracer, "Try", "localhost:2135", kTestDbNamespace,
         TLog{}, NTrace::ESpanKind::INTERNAL, parent);
     ASSERT_NE(attempt, nullptr);
     auto attemptRecord = Tracer->GetLastSpanRecord();
@@ -487,35 +617,23 @@ INSTANTIATE_TEST_SUITE_P(
     SpanTest,
     ::testing::Values(
         TSpanTestParams{
-            /*Name=*/             "Query",
             /*ClientType=*/       "Query",
             /*ExecuteOp=*/        "ExecuteQuery",
-            /*ExecuteOpName=*/    "ydb.ExecuteQuery",
             /*CreateSessionOp=*/  "CreateSession",
-            /*CreateSessionOpName=*/"ydb.CreateSession",
             /*CommitOp=*/         "Commit",
-            /*CommitOpName=*/     "ydb.Commit",
             /*RollbackOp=*/       "Rollback",
-            /*RollbackOpName=*/   "ydb.Rollback",
-            /*RetryOp=*/          "ydb.RunWithRetry",
-            /*RetryOpName=*/      "ydb.RunWithRetry"
+            /*RetryOp=*/          "RunWithRetry"
         },
         TSpanTestParams{
-            /*Name=*/             "Table",
             /*ClientType=*/       "Table",
-            /*ExecuteOp=*/        "ydb.ExecuteDataQuery",
-            /*ExecuteOpName=*/    "ydb.ExecuteDataQuery",
-            /*CreateSessionOp=*/  "ydb.CreateSession",
-            /*CreateSessionOpName=*/"ydb.CreateSession",
-            /*CommitOp=*/         "ydb.Commit",
-            /*CommitOpName=*/     "ydb.Commit",
-            /*RollbackOp=*/       "ydb.Rollback",
-            /*RollbackOpName=*/   "ydb.Rollback",
-            /*RetryOp=*/          "ydb.RunWithRetry",
-            /*RetryOpName=*/      "ydb.RunWithRetry"
+            /*ExecuteOp=*/        "ExecuteDataQuery",
+            /*CreateSessionOp=*/  "CreateSession",
+            /*CommitOp=*/         "Commit",
+            /*RollbackOp=*/       "Rollback",
+            /*RetryOp=*/          "RunWithRetry"
         }
     ),
     [](const ::testing::TestParamInfo<TSpanTestParams>& info) {
-        return info.param.Name;
+        return info.param.ClientType;
     }
 );

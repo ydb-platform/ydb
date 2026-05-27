@@ -1124,95 +1124,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(FetchEmptyTopicScenario)
 
-    Y_UNIT_TEST(SwitchToServerBalancingScenario) {
-        TInsecureTestServer testServer("SwitchToServerBalancingScenario");
-
-        TString topicName = "/Root/topic-0-test";
-        TString shortTopicName = "topic-0-test";
-        TString group = "group-0-test";
-
-        TString key = "";
-        TString value = "value";
-
-        ui64 minActivePartitions = 10;
-
-        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        CreateTopic(pqClient, topicName, minActivePartitions, { group });
-
-        TKafkaTestClient client0(testServer.Port);
-        TKafkaTestClient client1(testServer.Port);
-
-        client0.PlainAuthenticateToKafka();
-        client1.PlainAuthenticateToKafka();
-
-        TString memberId0;
-        i32 generationId0;
-        {
-            std::vector<TString> topics = { topicName };
-            auto msg = client0.JoinGroup(topics, group, "roundrobin", 5000);
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            memberId0 = *msg->MemberId;
-            generationId0 = msg->GenerationId;
-        }
-
-        //TString memberId1;
-        //i32 generationId1;
-        {
-            std::vector<TString> topics = { topicName };
-            auto msg = client1.JoinGroup(topics, group, "server", 5000);
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-
-           // memberId1 = *msg->MemberId;
-            //generationId1 = msg->GenerationId;
-        }
-
-        Sleep(TDuration::MilliSeconds(100));
-
-        {
-            // Check FETCH
-            std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
-            auto msg = client0.Fetch(topics);
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)); // From version 7
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
-        }
-
-        {
-            // Double check FETCH
-            std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
-            auto msg = client0.Fetch(topics);
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)); // From version 7
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
-        }
-
-        {
-            auto msg = client0.Heartbeat(memberId0, generationId0, group);
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
-        }
-
-        {
-            TRequestHeaderData syncHeader = client0.Header(NKafka::EApiKey::SYNC_GROUP, 5);
-
-            TSyncGroupRequestData syncReq;
-            syncReq.GroupId = group;
-            syncReq.ProtocolType = "consumer";
-            syncReq.ProtocolName = "roundrobin";
-            syncReq.GenerationId = generationId0;
-            syncReq.MemberId = memberId0;
-
-            client0.WriteToSocket(syncHeader, syncReq);
-            auto msg = client0.ReadResponse<TSyncGroupResponseData>(syncHeader);
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
-        }
-
-    } // Y_UNIT_TEST(SwitchToServerBalancingScenario)
-
     void RunBalanceScenarionTest(bool forFederation) {
         TString protocolName = "roundrobin";
         TInsecureTestServer testServer("2", false, false);
@@ -2048,6 +1959,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.CreateTopics({ TTopicConfig("topic-994-test", 1) });
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), "topic-994-test");
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, TOPIC_ALREADY_EXISTS);
         }
 
         {

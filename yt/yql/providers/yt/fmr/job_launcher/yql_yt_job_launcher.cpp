@@ -1,6 +1,7 @@
 #include "yql_yt_job_launcher.h"
 
 #include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
+#include <util/generic/algorithm.h>
 #include <util/system/shellcommand.h>
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
@@ -56,11 +57,16 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     const std::vector<TFmrResourceTaskInfo>& jobFmrResources)
 {
     if (!RunInSeparateProcess_) {
-        YQL_ENSURE(jobFiles.empty() && jobYtResources.empty(), "Fmr job with linked resource files should be launched only in separate process");
-        return job.DoFmrJob(TFmrUserJobOptions{.WriteStatsToFile = false});
+        bool hasFmrJobResource = AnyOf(jobYtResources, [](const auto& r) {
+            return r.RichPath.FileName_.Defined() && *r.RichPath.FileName_ == "fmrjob";
+        });
+        if (!hasFmrJobResource) {
+            YQL_ENSURE(jobFiles.empty() && jobYtResources.empty(), "Fmr job with linked resource files should be launched only in separate process");
+            return job.DoFmrJob(TFmrUserJobOptions{.WriteStatsToFile = false});
+        }
+        // Fall through to separate-process launch using the fmrjob resource.
     }
 
-    YQL_ENSURE(!FmrJobBinaryPath_.empty(), "Job should be executed in separate process");
     YQL_ENSURE(GatewayType_ == "native" || GatewayType_ == "file");
 
     YQL_ENSURE(jobEnvironmentDir.Defined());
@@ -68,8 +74,19 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
 
     InitializeJobEnvironment(*jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
 
-    TFile jobStateFile(jobtmpDir.Child("fmrjob.bin"), CreateNew | RdWr);
-    TFile mapResultStatsFile(jobtmpDir.Child("stats.bin"), CreateNew | RdWr);
+    TString binaryPath = FmrJobBinaryPath_;
+    if (binaryPath.empty()) {
+        for (const auto& ytResource : jobYtResources) {
+            if (ytResource.RichPath.FileName_.Defined() && *ytResource.RichPath.FileName_ == "fmrjob") {
+                binaryPath = jobtmpDir.Child("fmrjob").GetPath();
+                break;
+            }
+        }
+        YQL_ENSURE(!binaryPath.empty(), "FmrJob binary is not available: neither FmrJobBinaryPath nor FmrJob resource is set");
+    }
+
+    TFile jobStateFile(jobtmpDir.Child("fmrjob.bin"), CreateAlways | RdWr);
+    TFile jobResultStatsFile(jobtmpDir.Child("stats.bin"), CreateAlways | RdWr);
 
     if (!TableDataServiceDiscoveryFilePath_.empty()) {
         TString tmpDirTableDataServiceDiscoveryPath = "tds_discovery.txt";
@@ -85,12 +102,12 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
     job.Save(jobStateFileOutputStream);
     jobStateFileOutputStream.Flush();
 
-    // execute map in separate process
+    // execute fmrJob in separate process
     TShellCommandOptions opts;
     TStringStream fmrJobOutputStream, fmrJobErrorStream;
     opts.SetUseShell(false).SetDetachSession(false).SetOutputStream(&fmrJobOutputStream).SetErrorStream(&fmrJobErrorStream);
 
-    TShellCommand command(FmrJobBinaryPath_, {}, opts, jobtmpDir);
+    TShellCommand command(binaryPath, {}, opts, jobtmpDir);
     command.Run();
     command.Wait();
 
@@ -107,7 +124,7 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
 
     YQL_CLOG(DEBUG, FastMapReduce) << "Process cerr: " << fmrJobErrorStream.Str();
 
-    TFileInput statsStream(mapResultStatsFile);
+    TFileInput statsStream(jobResultStatsFile);
     auto serializedProtoStats = statsStream.ReadAll();
     NProto::TStatistics protoStats;
     protoStats.ParseFromStringOrThrow(serializedProtoStats);
@@ -116,6 +133,10 @@ std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
 
 bool TFmrUserJobLauncher::RunInSeperateProcess() const {
     return RunInSeparateProcess_;
+}
+
+TString TFmrUserJobLauncher::GetFmrJobBinaryPath() const {
+    return FmrJobBinaryPath_;
 }
 
 } // namespace NYql::NFmr

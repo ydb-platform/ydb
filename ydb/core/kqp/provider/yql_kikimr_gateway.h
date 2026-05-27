@@ -118,6 +118,7 @@ public:
         LocalBloomFilter = 6,
         LocalBloomNgramFilter = 7,
         GlobalJson = 8,
+        LocalMinMax = 9,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -174,6 +175,7 @@ public:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -224,6 +226,7 @@ public:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -328,6 +331,7 @@ public:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::GlobalJson:
+            case EType::LocalMinMax:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
@@ -374,6 +378,7 @@ public:
                 return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return false;
         }
     }
@@ -390,6 +395,7 @@ public:
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
+            case EType::LocalMinMax:
                 return {};
         }
         return {};
@@ -838,6 +844,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         for(auto& [_, name]: orderMap) {
             ColumnOrder.emplace_back(name);
         }
+
     }
 
     bool IsSameTable(const TKikimrTableMetadata& other) {
@@ -905,12 +912,13 @@ struct TKikimrTableMetadata : public TThrRefBase {
                 implTable = implTable->Next;
             } while (implTable);
         }
+
     }
 
-    TString SerializeToString() const {
+    TString DebugString() const {
         NKikimrKqp::TKqpTableMetadataProto proto;
         ToMessage(&proto);
-        return proto.SerializeAsString();
+        return proto.DebugString();
     }
 
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, const TIndexDescription*> GetIndex(std::string_view indexName) const {

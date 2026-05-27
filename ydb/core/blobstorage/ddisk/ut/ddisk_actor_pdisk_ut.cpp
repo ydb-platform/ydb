@@ -134,6 +134,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     Y_UNIT_TEST(Smoke_2Tablets_2VChunks_1Segment) {
         TestSyncWithDDisk(2, 2, 8, 1);
     }
+
+    Y_UNIT_TEST(DeleteTabletChunks_Uring) {
+        TestDeleteTabletChunks({});
+    }
+
+    Y_UNIT_TEST(DeleteTabletChunks_PDiskFallback) {
+        TestDeleteTabletChunks({.ForcePDiskFallback = true});
+    }
 }
 
 } // NKikimr

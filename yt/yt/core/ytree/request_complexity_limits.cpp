@@ -27,7 +27,7 @@ void TReadRequestComplexityOverrides::Validate(TReadRequestComplexity max) const
         if (override && *override > max) {
             error.SetCode(NYT::EErrorCode::Generic);
             error.SetMessage("Read request complexity limits too large");
-            error = error << TErrorAttribute(TString(fieldName), *override);
+            error = error << TErrorAttribute(std::string(fieldName), *override);
         }
     };
 

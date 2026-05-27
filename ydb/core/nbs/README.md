@@ -71,12 +71,12 @@ code workspace/workspace.code-workspace
 2) Create partition:
     ```
     cd ydb_bg/ydb/apps/dstool/
-    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 1048576 --pool ddp1 --type=ssd --disk-id disk1
     ```
     On Remote:
     ```
     cd ydb_bg/ydb/apps/dstool/
-    ./ydb-dstool -d -e grpc://vla5-8296.search.yandex.net:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
+    ./ydb-dstool -d -e grpc://vla5-8296.search.yandex.net:2135 nbs partition create --block-size 4096 --blocks-count 1048576 --pool ddp1 --type=ssd --disk-id disk1
     ```
 
 3) Get load actor adapter id:

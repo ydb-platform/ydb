@@ -161,7 +161,7 @@ public:
             .LookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP,
 
             .KeyColumns = {},
-            .LookupKeyColumns = {},
+            .InputColumns = {},
             .Columns = {},
         };
 
@@ -194,12 +194,19 @@ public:
 
         {
             AFL_ENSURE(lookupKeyPrefix <= keyColumns.size());
-            settings.LookupKeyColumns.reserve(lookupKeyPrefix);
+            settings.InputColumns.reserve(lookupKeyPrefix);
             for (size_t index = 0; index < lookupKeyPrefix; ++index) {
                 const auto& keyColumn = keyColumns.at(index);
-                auto columnIt = settings.KeyColumns.find(keyColumn.GetName());
-                YQL_ENSURE(columnIt != settings.KeyColumns.end());
-                settings.LookupKeyColumns.push_back(&columnIt->second);
+                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
+                settings.InputColumns.push_back(
+                    TSysTables::TTableColumnInfo{
+                        keyColumn.GetName(),
+                        keyColumn.GetId(),
+                        typeInfo,
+                        keyColumn.GetTypeInfo().GetPgTypeMod(),
+                        static_cast<i32>(index)
+                    }
+                );
             }
         }
 
@@ -332,9 +339,10 @@ public:
         AFL_ENSURE(Settings.LockTxId && Settings.LockNodeId);
         record.SetLockTxId(Settings.LockTxId);
         record.SetLockNodeId(Settings.LockNodeId);
-        record.SetLockMode(!isUniqueCheck
-            ? Settings.LockMode
-            : NKikimrDataEvents::OPTIMISTIC);
+
+        record.SetLockMode((isUniqueCheck && Settings.LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION)
+            ? NKikimrDataEvents::OPTIMISTIC // Workaround for Snapshot Isolation with Unique Index
+            : Settings.LockMode);
         if (Settings.QuerySpanId) {
             record.SetQuerySpanId(Settings.QuerySpanId);
         }
@@ -476,8 +484,10 @@ public:
             case Ydb::StatusIds::OVERLOADED: {
                 CA_LOG_D("OVERLOADED was received from tablet: " << shardId << "."
                     << getIssues().ToOneLineString());
-                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
-                if (!RetryTableRead(record.GetReadId(), false, isThrottled)) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!RetryTableRead(record.GetReadId(), false, throttleDelay)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::OVERLOADED,
                         NYql::TIssuesIds::KIKIMR_OVERLOADED,
@@ -614,19 +624,24 @@ public:
         }
     }
 
-    bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, bool isThrottled = false) {
+    bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, std::optional<TDuration> throttleDelay = std::nullopt) {
         auto& failedRead = ReadIdToState.at(failedReadId);
         auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
         CA_LOG_D("Retry reading of table: " << lookupState.Worker->GetTablePath() << ", failedReadId: " << failedReadId
             << ", shardId: " << failedRead.ShardId);
         failedRead.Blocked = true;
 
-        if (!isThrottled && failedRead.RetryAttempts >= MaxShardRetries()) {
-            return false;
+        TDuration delay;
+        if (!throttleDelay) {
+            if (failedRead.RetryAttempts >= MaxShardRetries()) {
+                return false;
+            }
+            ++failedRead.RetryAttempts;
+            delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
 
-        ++failedRead.RetryAttempts;
-        auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);
         } else {

@@ -1035,6 +1035,8 @@ std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
     TActorId clientId = {},
     TDuration timeout = TDuration::Max());
 
+TString FormatIntReadResult(const TEvDataShard::TEvReadResult* msg);
+
 TString ReadTable(
     Tests::TServer::TPtr server,
     std::span<const ui64> tabletIds,

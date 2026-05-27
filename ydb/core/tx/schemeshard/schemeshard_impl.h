@@ -243,6 +243,8 @@ public:
 
     TBackupSettings BackupSettings;
 
+    TIncrementalRestoreSettings IncrementalRestoreSettings;
+
     struct TTenantInitState {
         enum EInitState {
             InvalidState = 0,
@@ -335,6 +337,8 @@ public:
 
     THashMap<ui64, TIncrementalRestoreState> IncrementalRestoreStates;
     THashMap<TOperationId, ui64> IncrementalRestoreOperationToState;
+    // Transient (not persisted): cleared on reboot so operations restart fresh.
+    THashSet<TOperationId> FailedIncrementalRestoreOperations;
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
@@ -1140,7 +1144,11 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
 
     class TTxProgressIncrementalRestore;
+    class TTxProgressIncrementalRestoreAllocateResult;
+    class TTxIncrementalRestoreShardProgress;
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(ui64 operationId);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestoreAllocateResult(
+        TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
 
     struct TTxShardStateChanged;
     NTabletFlatExecutor::ITransaction* CreateTxShardStateChanged(TEvDataShard::TEvStateChanged::TPtr& ev);
@@ -1281,10 +1289,50 @@ public:
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx);
-    void CreateIncrementalRestoreOperation(const TPathId& backupCollectionPathId, ui64 operationId, const TString& backupName, const TActorContext& ctx);
+    // Data-work completion from DS; SS deduplicates by Generation and records the shard result.
+    void Handle(TEvDataShard::TEvIncrementalRestoreShardProgress::TPtr& ev, const TActorContext& ctx);
 
-    void DiscoverAndCreateIndexRestoreOperations(
+    // Atomically persists a terminal state row (Completed/Failed) with FinalStatus/FinalIssues.
+    // All callers moving to a terminal value must use this to survive reboot visibility.
+    static void PersistIncrementalRestoreTerminalState(
+        TSchemeShard* self,
+        NIceDb::TNiceDb& db,
+        ui64 originalOpId,
+        TIncrementalRestoreState& state,
+        TIncrementalRestoreState::EState terminal,
+        ui32 finalStatus,
+        const TString& finalIssues = {});
+
+    void EnqueueIncrementalRestoreOperations(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TActorContext& ctx);
+
+    void DispatchPendingIncrementalRestoreTables(
+        TIncrementalRestoreState& state,
+        ui64 operationId,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx);
+
+    void EnqueueIncrementalRestoreItem(
+        ui64 originalOpId,
+        TIncrementalRestoreState& state,
+        TIncrementalRestoreState::TItem::EKind kind,
+        TPathId tablePathId,
+        THolder<TEvSchemeShard::TEvModifySchemeTransaction> request,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx,
+        TPathId srcTablePathId = TPathId{});
+
+    // Drops all IncrementalRestoreItem rows for originalOpId and clears the
+    // matching in-memory bookkeeping when `state` is non-null.
+    void CleanupIncrementalRestoreItems(
+        ui64 originalOpId,
+        NIceDb::TNiceDb& db,
+        TIncrementalRestoreState* state);
+
+    void EnqueueAndDiscoverIndexRestoreOperations(
         const TPathId& backupCollectionPathId,
         ui64 operationId,
         const TString& backupName,
@@ -1292,13 +1340,58 @@ public:
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TActorContext& ctx);
 
-    void DiscoverIndexesRecursive(
+    void EnqueueIncrementalRestoreIndexesRecursive(
         ui64 operationId,
         const TString& backupName,
-        const TPath& bcPath,
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TPath& currentPath,
         const TString& accumulatedRelativePath,
+        const TActorContext& ctx);
+
+    // Registers the sub-op in orchestrator maps and seeds ExpectedShards from the table's shards.
+    void TrackIncrementalRestoreSubOpAndExpectedShards(
+        TOperationId subOpId,
+        TPathId tablePathId,
+        ui64 incrementalRestoreId,
+        TIncrementalRestoreState& state);
+
+    // Sends TEvIncrementalRestoreSrcCreateRequest to every src-table shard;
+    // tracks payloads for pipe-retry and reboot re-dispatch.
+    void DispatchIncrementalRestoreShardRequests(
+        TOperationId subOpId,
+        TPathId srcPathId,
+        TPathId dstPathId,
+        ui64 incrementalRestoreId,
+        TIncrementalRestoreState& state,
+        NIceDb::TNiceDb& db,
+        const TActorContext& ctx);
+
+    void SendIncrementalRestoreShardRequest(
+        TIncrementalRestoreOpId restoreOpId,
+        TOperationId subOpId,
+        TShardIdx shardIdx,
+        TTabletId tabletId,
+        TPathId srcPathId,
+        TPathId dstPathId,
+        const TActorContext& ctx);
+
+    void PersistIncrementalRestoreShardDispatch(
+        const TIncrementalRestoreState& state,
+        ui64 incrementalRestoreId,
+        TOperationId subOpId,
+        NIceDb::TNiceDb& db);
+
+    void ReDispatchPathAIncrementalRestoreOnInit(
+        ui64 incrementalRestoreId,
+        TIncrementalRestoreState& state,
+        const TActorContext& ctx);
+
+    void CreateSingleTableRestoreOperation(
+        const TPathId& backupCollectionPathId,
+        ui64 operationId,
+        const TString& backupName,
+        const TString& targetTablePath,
+        NIceDb::TNiceDb& db,
         const TActorContext& ctx);
 
     void CreateSingleIndexRestoreOperation(
@@ -1308,10 +1401,11 @@ public:
         const TString& relativeTablePath,
         const TString& indexName,
         const TString& targetTablePath,
+        NIceDb::TNiceDb& db,
         const TActorContext& ctx,
         const TString& specificImplTableName = "");
 
-    TString FindTargetTablePath(
+    TString FindIncrementalRestoreTargetTablePath(
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
         const TString& relativeTablePath);
 
@@ -1636,6 +1730,7 @@ public:
     void AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& indexInfo);
 
     void PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexSpecializedDescription(NIceDb::TNiceDb& db, const TIndexBuildInfo& info);
     void PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue);
     void PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1774,6 +1869,7 @@ public:
     TFifoQueue<TPathId> ForcedCompactionTablesQueue;
     THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
     ui64 ForcedCompactionTotalInQueues = 0;
+    bool InProcessForcedCompactionQueues = false;
 
     TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> ForcedCompactionsDoneShardsToPersist; // info may be null
     ui32 ForcedCompactionPersistBatchSize = 100;
@@ -1818,6 +1914,7 @@ public:
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact);
+    void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
     void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);
 
     void FromForcedCompactionInfo(NKikimrForcedCompaction::TForcedCompaction& compaction, const TForcedCompactionInfo& forcedCompactionInfo);
@@ -1826,12 +1923,20 @@ public:
     bool IsForcedCompactionCompleted(const TForcedCompactionInfo& forcedCompactionInfo) const;
     void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId);
     void ProcessForcedCompactionQueues();
+    void ProcessForcedCompactionQueuesForTable(const TPathId& tablePathId, TForcedCompactionInfo& compaction);
+    void TryEnqueueOneShard(const TPathId& tablePathId, TForcedCompactionInfo& forcedCompactionInfo, THashSet<TPathId>* tablesWithoutCandidates);
     void UpdateForcedCompactionQueueMetrics();
 
     void EnqueueForcedCompaction(const TShardIdx& shardIdx);
     NOperationQueue::EStartStatus StartForcedCompaction(const TShardIdx& shardIdx);
     void OnForcedCompactionTimeout(const TShardIdx& shardIdx);
     void HandleForcedCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+
+    void ProcessForcedCompactionOnSplitMerge(
+        NIceDb::TNiceDb& db,
+        const TPathId& tablePathId,
+        const TVector<TShardIdx>& srcShardIdxs,
+        const TVector<TShardIdx>& dstShardIdxs);
 
     NTabletFlatExecutor::ITransaction* CreateTxCreateForcedCompaction(TEvForcedCompaction::TEvCreateRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxGetForcedCompaction(TEvForcedCompaction::TEvGetRequest::TPtr& ev);
@@ -1867,9 +1972,13 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev);
 
     // Transaction lifecycle constructor functions
-    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx);
+
+    // Pipe pool for TEvIncrementalRestoreSrcCreateRequest; entityId is the restore long-op id.
+    TDedicatedPipePool<TIncrementalRestoreOpId> IncrementalRestorePipes;
+    NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIncrementalRestoreOpId restoreOpId, TTabletId tabletId);
+    void RetryIncrementalRestorePipe(TIncrementalRestoreOpId restoreOpId, TTabletId tabletId, const TActorContext& ctx);
 
     // Notification function for incremental restore operation completion
     void NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx);

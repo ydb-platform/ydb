@@ -29,6 +29,7 @@ enum EOperationType {
     OPERATION_TYPE_DISTRIBUTED_UPLOAD = 5;
     OPERATION_TYPE_SORTED_MERGE = 6;
     OPERATION_TYPE_SORT = 7;
+    OPERATION_TYPE_PULL = 9;
 }
 
 enum ETaskType {
@@ -40,6 +41,7 @@ enum ETaskType {
     TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
     TASK_TYPE_SORTED_MERGE = 6;
     TASK_TYPE_LOCAL_SORT = 7;
+    TASK_TYPE_PULL = 9;
 }
 
 enum EFmrComponent {
@@ -107,8 +109,9 @@ message TFmrTableInputRef {
     repeated string Columns = 3;
     optional string ColumnGroups = 4;
     optional bool   IsFirstRowInclusive = 5;
-    optional bytes FirstRowKeys = 6;
-    optional bytes LastRowKeys = 7;
+    optional bool   IsLastRowInclusive = 6;
+    optional bytes  FirstRowKeys = 7;
+    optional bytes  LastRowKeys = 8;
 }
 
 message TSortingColumns {
@@ -183,7 +186,7 @@ message TSortedUploadOperationParams {
     TFmrTableRef Input = 1;
     TYtTableRef Output = 2;
     string SessionId = 3;
-    repeated string Cookies = 4;
+    repeated bytes Cookies = 4;
     uint32 SessionType = 5;
     string PartitionId = 6;
     bool IsOrdered = 7;
@@ -192,7 +195,7 @@ message TSortedUploadOperationParams {
 message TSortedUploadTaskParams {
     TFmrTableInputRef Input = 1;
     TYtTableRef Output = 2;
-    string CookieYson = 3;
+    bytes CookieYson = 3;
     uint32 SessionType = 4;
     uint64 Order = 5;
     optional TSortingColumns SortingColumns = 6;
@@ -233,23 +236,62 @@ message TMergeTaskParams {
     TFmrTableOutputRef Output = 2;
 }
 
+enum EFmrJobType {
+    MAP = 0;
+    ORDERED_MAP = 1;
+    REDUCE = 2;
+}
+
+enum EReduceType {
+    SORTED_REDUCE = 0;
+    JOIN_REDUCE = 1;
+}
+
 message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
     bytes SerializedMapJobState = 3;
-    bool IsOrdered = 4;
+    EFmrJobType MapJobType = 4;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
     bytes SerializedMapJobState = 3;
-    bool IsOrdered = 4;
+    EFmrJobType MapJobType = 4;
+}
+
+message TReduceOperationSpec {
+    TSortingColumns ReduceBy = 1;
+    TSortingColumns SortBy = 2;
+    EReduceType ReduceType = 3;
+}
+
+message TReduceOperationParams {
+    repeated TOperationTableRef Input = 1;
+    repeated TFmrTableRef Output = 2;
+    bytes SerializedReduceJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
+}
+
+message TReduceTaskParams {
+    TTaskTableInputRef Input = 1;
+    repeated TFmrTableOutputRef Output = 2;
+    bytes SerializedReduceJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
 }
 
 message TSortOperationParams {
     repeated TOperationTableRef Input = 1;
     TFmrTableRef Output = 2;
+}
+
+message TPullOperationParams {
+    repeated TOperationTableRef Input = 1;
+}
+
+message TPullTaskParams {
+    TTaskTableInputRef Input = 1;
 }
 
 message TLocalSortTaskParams {
@@ -266,6 +308,8 @@ message TOperationParams {
         TSortedUploadOperationParams SortedUploadOperationParams = 5;
         TSortedMergeOperationParams SortedMergeOperationParams = 6;
         TSortOperationParams SortOperationParams = 7;
+        TReduceOperationParams ReduceOperationParams = 8;
+        TPullOperationParams PullOperationParams = 9;
     }
 }
 
@@ -278,6 +322,8 @@ message TTaskParams {
         TSortedUploadTaskParams SortedUploadTaskParams = 5;
         TSortedMergeTaskParams SortedMergeTaskParams = 6;
         TLocalSortTaskParams LocalSortTaskParams = 7;
+        TReduceTaskParams ReduceTaskParams = 8;
+        TPullTaskParams PullTaskParams = 9;
     }
 }
 
@@ -318,7 +364,7 @@ message TTask {
     string SessionId = 4;
     optional uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
-    optional string JobSettings = 7;
+    optional bytes JobSettings = 7;
     repeated TFileInfo Files = 8;
     repeated TYtResourceInfo YtResources = 9;
     repeated TFmrResourceTaskInfo FmrResources = 10;
@@ -338,8 +384,12 @@ message TTaskMapResult {
 }
 
 message TTaskSortedUploadResult {
-    string FragmentResult = 1;
+    bytes FragmentResult = 1;
     uint64 FragmentOrder = 2;
+}
+
+message TTaskPullResult {
+    bytes Data = 1;
 }
 
 message TTaskResult {
@@ -349,6 +399,7 @@ message TTaskResult {
         TTaskMergeResult TaskMergeResult = 3;
         TTaskMapResult TaskMapResult = 4;
         TTaskSortedUploadResult TaskSortedUploadResult = 5;
+        TTaskPullResult TaskPullResult = 6;
     }
 }
 

@@ -74,6 +74,7 @@
 (let remove_optional_type (lambda '(type) (MatchType type 'Optional (lambda '() (OptionalItemType type)) (lambda '() type))))
 (let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
 (let convert_decimal_to_interval (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval))))
+(let convert_decimal_to_interval64 (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval64))))
 
 # list_type:type
 # doesn't support optional values
@@ -81,11 +82,14 @@
   (let init (lambda '(value) '((MatchType (TypeOf value)
                                           'Decimal (lambda '() (WidenIntegral value))
                                           'Interval (lambda '() (Apply convert_interval_to_decimal value ))
+                                          'Interval64 (lambda '() (Apply convert_interval_to_decimal value ))
                                           (lambda '() (Convert value 'Double))
                                ) (Uint64 '1))))
+
   (let update (lambda '(value state) '((AggrAdd (Nth state '0) (MatchType (TypeOf value)
                                                                     'Decimal (lambda '() (WidenIntegral value))
                                                                     'Interval (lambda '() (Apply convert_interval_to_decimal value ))
+                                                                    'Interval64 (lambda '() (Apply convert_interval_to_decimal value ))
                                                                     (lambda '() (Convert value 'Double)))
                                           ) (Inc (Nth state '1)))))
   (let save (lambda '(state) state))
@@ -97,6 +101,8 @@
                                (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type)))
                            'Interval
                                (lambda '() (Unwrap (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) ))
+                           'Interval64
+                               (lambda '() (Unwrap (Apply convert_decimal_to_interval64 (Div (Nth state '0) (Nth state '1)) ) ))
                            (lambda '() (Div (Nth state '0) (Nth state '1)))
                 )
   ))
@@ -352,7 +358,7 @@
 (let percentile_traits_factory_raw (lambda '(list_type n) (block '(
     (let convert_into (lambda  '(value) (MatchType (ListItemType list_type)
                                  'Interval (lambda '() (SafeCast value (DataType 'Double)) ) # TODO:YQL-14129 cast to Decimal
-                                 (lambda '() value)
+                                 (lambda '() value) # TODO(YQL-21136): test Interval64
                       ))
     )
     # Currently for Intervals: converts double value back to interval

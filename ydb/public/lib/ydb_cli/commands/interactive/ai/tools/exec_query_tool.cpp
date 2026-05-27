@@ -119,12 +119,26 @@ IMPORTANT:
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
-- If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks.
+- ALWAYS wrap any scheme object paths inside folders in backticks. If a scheme path contains `-`, `/`, `@`, or `.` (generally non [a-zA-Z0-9] symbol or when path starts from number), also wrap it in backticks, for example: `path/to/table`.
+  - Examples of table paths correctly wrapped in backticks:
+    - SELECT * FROM `national_league/goals`
+    - SELECT * FROM `ships/crew/legacy`
+    - SELECT * FROM `ships.crew.legacy`
+    - SELECT * FROM `ships@crew@legacy`
+- If your query contains a non-simple string literal (e.g. if it contains ' or "), wrap it in @@ instead of escaping it:
+  - SELECT * FROM `national_league/goals` WHERE Name = @@John'Doe@@;
+  - SELECT * FROM `national_league/goals` WHERE Name = @@John "Doe" doesn't@@;
+- Some YQL string functions differ from SQL:
+  - Use String::AsciiToLower instead of LOWER (there is no such built-in function in YQL), for example: SELECT String::AsciiToLower(Name) FROM `mars_rover/photos` WHERE Name LIKE @@%mao'play%@@;
+
+In simple cases, you can avoid backticks and '@', for example (this is the preferred way to write queries when possible):
+
+SELECT * FROM my_table WHERE Data = "simple_data";
 
 Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:
 ```
-$filtered = SELECT * FROM my_table WHERE Data IS NOT NULL;
+$filtered = SELECT * FROM `folder/my_table` WHERE Data = @@Some 'my 'data' of "this" type@@;
 SELECT Data || "-first" FROM $filtered;
 SELECT Data || "-second" FROM $filtered;
 ```
@@ -193,9 +207,10 @@ public:
         , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
         , Prompt(settings.Prompt)
         , Database(settings.Database)
-        , Driver(settings.Driver)
-        , ExecuteRunner(settings.Driver)
-    {}
+        , LazyDriver(settings.LazyDriver)
+    {
+        Y_VALIDATE(LazyDriver, "TExecQueryTool requires a non-null LazyDriver");
+    }
 
 protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
@@ -236,8 +251,9 @@ protected:
     TResponse DoExecute() final {
         Y_DEFER { ResetInterrupted(); };
 
+        TQueryRunner executeRunner(LazyDriver->Get());
         try {
-            if (ExecuteRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
+            if (executeRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
                 YDB_CLI_LOG(Notice, "Query execution was interrupted by user");
                 return TResponse::Error("Query execution was interrupted by user", UserMessage);
             }
@@ -246,13 +262,13 @@ protected:
             return TResponse::Error(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
-        return TResponse::Success(ExecuteRunner.ExtractResults(), UserMessage);
+        return TResponse::Success(executeRunner.ExtractResults(), UserMessage);
     }
 
 private:
     bool RequestQueryText() {
         const auto lineReader = CreateLineReader({
-            .Driver = Driver,
+            .LazyDriver = LazyDriver,
             .Database = Database,
             .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "YQL" << Colors.OldColor() << "> ",
             .EnableSwitchMode = false,
@@ -290,8 +306,7 @@ private:
     const IYQLHighlighter::TPtr YQLHighlighter;
     const TString Prompt;
     const TString Database;
-    const TDriver Driver;
-    TQueryRunner ExecuteRunner;
+    const TLazyDriver::TPtr LazyDriver;
 
     TString Query;
     TString UserMessage;

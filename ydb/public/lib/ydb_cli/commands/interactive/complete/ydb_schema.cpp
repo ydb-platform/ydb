@@ -1,5 +1,6 @@
 #include "ydb_schema.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
@@ -9,11 +10,12 @@ namespace NYdb::NConsoleClient {
 
     class TYDBSchema: public NSQLComplete::ISimpleSchema {
     public:
-        explicit TYDBSchema(TDriver driver, TString database, bool isVerbose)
-            : Driver_(std::move(driver))
+        explicit TYDBSchema(TLazyDriver::TPtr lazyDriver, TString database, bool isVerbose)
+            : LazyDriver_(std::move(lazyDriver))
             , Database_(std::move(database))
             , IsVerbose_(isVerbose)
         {
+            Y_VALIDATE(LazyDriver_, "TYDBSchema requires a non-null lazy driver");
         }
 
         NSQLComplete::TSplittedPath Split(TStringBuf path) const override {
@@ -28,7 +30,7 @@ namespace NYdb::NConsoleClient {
         }
 
         NThreading::TFuture<TVector<NSQLComplete::TFolderEntry>> List(TString folder) const override {
-            return NScheme::TSchemeClient(Driver_)
+            return NScheme::TSchemeClient(LazyDriver_->Get())
                 .ListDirectory(Qualified(folder))
                 .Apply([this, folder](auto f) { return this->Convert(folder, f.ExtractValue()); });
         }
@@ -36,7 +38,7 @@ namespace NYdb::NConsoleClient {
         NThreading::TFuture<TMaybe<NSQLComplete::TTableDetails>>
         DescribeTable(const TString& /* cluster */, const TString& path) const override {
             auto promise = NThreading::NewPromise<TMaybe<NSQLComplete::TTableDetails>>();
-            NTable::TTableClient(Driver_)
+            NTable::TTableClient(LazyDriver_->Get())
                 .GetSession(NTable::TCreateSessionSettings())
                 .Apply([this, path, promise](auto f) mutable {
                     static_cast<NTable::TCreateSessionResult>(f.ExtractValue())
@@ -147,14 +149,14 @@ namespace NYdb::NConsoleClient {
             return details;
         }
 
-        TDriver Driver_;
+        TLazyDriver::TPtr LazyDriver_;
         TString Database_;
         bool IsVerbose_;
     };
 
     NSQLComplete::ISimpleSchema::TPtr MakeYDBSchema(
-        TDriver driver, TString database, bool isVerbose) {
-        return new TYDBSchema(std::move(driver), std::move(database), isVerbose);
+        TLazyDriver::TPtr lazyDriver, TString database, bool isVerbose) {
+        return new TYDBSchema(std::move(lazyDriver), std::move(database), isVerbose);
     }
 
 } // namespace NYdb::NConsoleClient

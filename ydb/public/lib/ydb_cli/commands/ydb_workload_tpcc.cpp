@@ -261,10 +261,15 @@ void TCommandTPCCRun::Config(TConfig& config) {
                     return NQuery::TTxSettings::SerializableRW();
                 } else if (value == "snapshot-rw") {
                     return NQuery::TTxSettings::SnapshotRW();
+                } else if (value == "read-committed-rw") {
+                    // Experimental isolation level. Hidden from help at current time.
+                    return NQuery::TTxSettings::ReadCommittedRW();
                 }
                 throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
             }).DefaultValue("serializable-rw")
-            .ChoicesWithCompletion({{"serializable-rw", "Serializable read-write"}, {"snapshot-rw", "Snapshot read-write"}});
+            .ChoicesWithCompletion({{"serializable-rw", "Serializable read-write"},
+                                    {"snapshot-rw", "Snapshot read-write"},
+                                    {"read-committed-rw", "Read Committed read-write"}});
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")

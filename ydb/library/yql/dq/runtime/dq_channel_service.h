@@ -6,7 +6,9 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
@@ -64,6 +66,24 @@ public:
         Timestamp = TInstant::Now();
     }
 
+    TDataChunk(
+        NDqProto::TCheckpoint&& checkpoint,
+        bool leading)
+        : Bytes(1)
+        , Leading(leading)
+        , Timestamp(TInstant::Now())
+        , Checkpoint(std::move(checkpoint))
+    {}
+
+    TDataChunk(
+        NDqProto::TWatermark&& watermark,
+        bool leading)
+        : Bytes (1)
+        , Leading(leading)
+        , Timestamp(TInstant::Now())
+        , Watermark(std::move(watermark))
+    {}
+
     TChunkedBuffer Buffer;
 
     ui64 Rows = 0;
@@ -73,6 +93,8 @@ public:
     bool Leading = false;
     bool Finished = false;
     TInstant Timestamp;
+    TMaybe<NDqProto::TCheckpoint> Checkpoint;
+    TMaybe<NDqProto::TWatermark> Watermark;
 };
 
 class IChannelBuffer {
@@ -112,6 +134,7 @@ public:
     virtual IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) = 0;
     virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) = 0;
     virtual std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) = 0;
+    virtual void SetServiceActorId(NActors::TActorId serviceActorId) = 0;
 };
 
 inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
@@ -122,8 +145,11 @@ inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
 struct TDqChannelLimits {
     ui64 LocalChannelInflightBytes  =  8_MB;    // max bytes per local channel
     ui64 RemoteChannelInflightBytes = 16_MB;    // max bytes per remote channel == output.push - input.pop
-    ui64 NodeSessionIcInflightBytes = 64_MB;    // max bytes in network/IC per node-to-node session
+    ui64 RemoteSessionInflightBytes = 64_MB;    // max bytes in network/IC per node-to-node session
     ui64 ReconciliationCount = 3;    // number of retries before node session is completely destroyed
+    TDuration CleanupPeriod = TDuration::MilliSeconds(30000);
+    TDuration IdlePingPeriod = TDuration::MilliSeconds(30000);
+    TDuration IdleDestroyPeriod = TDuration::MilliSeconds(30000);
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

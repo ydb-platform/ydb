@@ -46,6 +46,7 @@ SRCS(
     logoblob.cpp
     logoblob.h
     memory_controller_iface.h
+    mon_auth.cpp
     nameservice.h
     nodestate.h
     path.cpp
@@ -88,8 +89,6 @@ SRCS(
     tx_processing.cpp
     user_registry.h
     wilson_tracing_control.cpp
-    json_index.cpp
-    json_index.h
 )
 
 PEERDIR(
@@ -128,6 +127,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
+    library/cpp/json
 )
 
 YQL_LAST_ABI_VERSION()

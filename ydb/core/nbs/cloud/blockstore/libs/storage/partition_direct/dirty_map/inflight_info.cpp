@@ -2,6 +2,11 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
+
+#include <util/string/builder.h>
+#include <util/string/cast.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -10,28 +15,30 @@ TInflightInfo::TInflightInfo(
     IReadyQueue* readyQueues,
     ui64 lsn,
     size_t byteCount,
-    ELocation location)
+    THostIndex host)
     : State(EState::PBufferIncompleteWrite)
     , ReadyQueue(readyQueues)
     , Lsn(lsn)
     , ByteCount(byteCount)
+    , StartAt(TInstant::Now())
 {
-    WriteRequested.Set(location);
-    WriteConfirmed.Set(location);
+    WriteRequested.Set(host);
+    WriteConfirmed.Set(host);
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Clone);
-    ApplyBytes(location, IReadyQueue::EPBufferCounter::Total, true);
+    ApplyBytes(host, IReadyQueue::EPBufferCounter::Total, true);
 }
 
 TInflightInfo::TInflightInfo(
     IReadyQueue* readyQueue,
     ui64 lsn,
     size_t byteCount,
-    TLocationMask writeRequested,
-    TLocationMask writeConfirmed)
+    THostMask writeRequested,
+    THostMask writeConfirmed)
     : State(EState::PBufferWritten)
     , ReadyQueue(readyQueue)
     , Lsn(lsn)
     , ByteCount(byteCount)
+    , StartAt(TInstant::Now())
     , WriteRequested(writeRequested)
     , WriteConfirmed(writeConfirmed)
 {
@@ -46,10 +53,13 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , ReadyQueue(other.ReadyQueue)
     , Lsn(other.Lsn)
     , ByteCount(other.ByteCount)
+    , StartAt(other.StartAt)
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
     , FlushRequested(other.FlushRequested)
     , FlushConfirmed(other.FlushConfirmed)
+    , EraseRequested(other.EraseRequested)
+    , EraseConfirmed(other.EraseConfirmed)
 {
     other.ReadyQueue = nullptr;
 }
@@ -66,19 +76,18 @@ void TInflightInfo::Detach()
     ReadyQueue = nullptr;
 }
 
-void TInflightInfo::RestorePBuffer(ELocation location)
+void TInflightInfo::RestorePBuffer(THostIndex host)
 {
-    Y_ABORT_UNLESS(IsPBuffer(location));
     Y_ABORT_UNLESS(
         State == EState::PBufferIncompleteWrite ||
         State == EState::PBufferWritten);
-    Y_ABORT_UNLESS(!WriteRequested.Get(location));
-    Y_ABORT_UNLESS(!WriteConfirmed.Get(location));
+    Y_ABORT_UNLESS(!WriteRequested.Get(host));
+    Y_ABORT_UNLESS(!WriteConfirmed.Get(host));
 
-    WriteRequested.Set(location);
-    WriteConfirmed.Set(location);
+    WriteRequested.Set(host);
+    WriteConfirmed.Set(host);
 
-    ApplyBytes(location, IReadyQueue::EPBufferCounter::Total, true);
+    ApplyBytes(host, IReadyQueue::EPBufferCounter::Total, true);
 
     if (WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount) {
         if (QuorumReadyPromise.Initialized()) {
@@ -103,67 +112,62 @@ NThreading::TFuture<void> TInflightInfo::GetQuorumReadyFuture()
     return QuorumReadyPromise.GetFuture();
 }
 
-TLocationMask TInflightInfo::ReadMask() const
+TReadSource TInflightInfo::ReadMask() const
 {
     switch (State) {
         case EState::PBufferIncompleteWrite:
             // Reading will be possible only after receiving a quorum.
-            return TLocationMask::MakeEmpty();
+            return {THostMask::MakeEmpty(), /*Lsn=*/0};
 
         case EState::PBufferWritten:
         case EState::PBufferFlushing:
             // The data is written to PBuffer, but not transferred to DDisk.
-            // Will read from confirmed PBuffer.
-            return WriteConfirmed;
+            // Will read from confirmed PBuffer at this inflight's Lsn.
+            return {WriteConfirmed, Lsn};
 
         case EState::PBufferFlushed:
         case EState::PBufferErasing:
         case EState::PBufferErased:
             // The data has already been transferred to DDisk.
-            // Will read from DDisks.
+            // Will read from DDisks. Lsn=0 marks a DDisk read.
             // Filter out non-desired or fresh later.
-            return TLocationMask::MakeAllDDisks();
+            return {THostMask::MakeAll(MaxHostCount), /*Lsn=*/0};
     }
 }
 
-ELocation TInflightInfo::RequestFlush(ELocation destination)
+THostIndex TInflightInfo::RequestFlush(THostIndex destination)
 {
-    Y_ABORT_UNLESS(IsDDisk(destination));
     Y_ABORT_UNLESS(
         State == EState::PBufferWritten || State == EState::PBufferFlushing);
 
     FlushDesired.Set(destination);
 
     if (FlushRequested.Get(destination)) {
-        return ELocation::Unknown;
+        return InvalidHostIndex;
     }
 
-    const ELocation bestSource = TranslateDDiskToPBuffer(destination);
-    if (WriteConfirmed.Get(bestSource)) {
+    if (WriteConfirmed.Get(destination)) {
         State = EState::PBufferFlushing;
         FlushRequested.Set(destination);
-        return bestSource;
+        return destination;
     }
 
-    for (ELocation source: PBufferLocations) {
-        if (WriteConfirmed.Get(source)) {
-            State = EState::PBufferFlushing;
-            FlushRequested.Set(destination);
-            return source;
-        }
+    for (auto source: WriteConfirmed) {
+        State = EState::PBufferFlushing;
+        FlushRequested.Set(destination);
+        return source;
     }
 
     Y_ABORT_UNLESS(false);
 }
 
-void TInflightInfo::ConfirmFlush(TRoute route)
+void TInflightInfo::ConfirmFlush(THostRoute route)
 {
-    Y_ABORT_UNLESS(IsDDisk(route.Destination));
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
-    Y_ABORT_UNLESS(FlushRequested.Get(route.Destination));
-    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.Destination));
+    Y_ABORT_UNLESS(FlushRequested.Get(route.DestinationHostIndex));
+    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.DestinationHostIndex));
 
-    FlushConfirmed.Set(route.Destination);
+    FlushConfirmed.Set(route.DestinationHostIndex);
 
     if (FlushDesired == FlushConfirmed) {
         State = EState::PBufferFlushed;
@@ -174,59 +178,55 @@ void TInflightInfo::ConfirmFlush(TRoute route)
     }
 }
 
-void TInflightInfo::FlushFailed(TRoute route)
+void TInflightInfo::FlushFailed(THostRoute route)
 {
-    Y_ABORT_UNLESS(IsDDisk(route.Destination));
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
-    Y_ABORT_UNLESS(FlushRequested.Get(route.Destination));
-    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.Destination));
+    Y_ABORT_UNLESS(FlushRequested.Get(route.DestinationHostIndex));
+    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.DestinationHostIndex));
 
-    FlushRequested.Reset(route.Destination);
+    FlushRequested.Reset(route.DestinationHostIndex);
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
 }
 
-TLocationMask TInflightInfo::GetRequestedFlushes() const
+THostMask TInflightInfo::GetRequestedFlushes() const
 {
     return FlushRequested;
 }
 
-bool TInflightInfo::RequestErase(ELocation location)
+bool TInflightInfo::RequestErase(THostIndex host)
 {
-    Y_ABORT_UNLESS(IsPBuffer(location));
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
     Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
 
-    if (WriteRequested.Get(location) && !EraseRequested.Get(location)) {
+    if (WriteRequested.Get(host) && !EraseRequested.Get(host)) {
         State = EState::PBufferErasing;
-        EraseRequested.Set(location);
+        EraseRequested.Set(host);
         return true;
     }
     return false;
 }
 
-bool TInflightInfo::ConfirmErase(ELocation location)
+bool TInflightInfo::ConfirmErase(THostIndex host)
 {
-    Y_ABORT_UNLESS(IsPBuffer(location));
     Y_ABORT_UNLESS(State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(EraseRequested.Get(location));
-    Y_ABORT_UNLESS(!EraseConfirmed.Get(location));
+    Y_ABORT_UNLESS(EraseRequested.Get(host));
+    Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
 
-    EraseConfirmed.Set(location);
-    if (EraseConfirmed == EraseRequested) {
+    EraseConfirmed.Set(host);
+    if (EraseConfirmed == WriteRequested) {
         State = EState::PBufferErased;
     }
 
     return State == EState::PBufferErased;
 }
 
-void TInflightInfo::EraseFailed(ELocation location)
+void TInflightInfo::EraseFailed(THostIndex host)
 {
-    Y_ABORT_UNLESS(IsPBuffer(location));
     Y_ABORT_UNLESS(State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(!EraseConfirmed.Get(location));
+    Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
 
-    EraseRequested.Reset(location);
+    EraseRequested.Reset(host);
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
 }
 
@@ -264,8 +264,23 @@ void TInflightInfo::UnlockPBuffer()
     }
 }
 
+THostMask TInflightInfo::GetWriteRequested() const
+{
+    return WriteRequested;
+}
+
+TString TInflightInfo::DebugPrint(TInstant now) const
+{
+    TStringBuilder result;
+    result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
+           << ", size:" << ByteCount << ", locks:" << PBuffersLockCount
+           << ", requested:" << WriteRequested.Print()
+           << ", confirmed:" << WriteConfirmed.Print();
+    return result;
+}
+
 void TInflightInfo::ApplyBytes(
-    ELocation location,
+    THostIndex host,
     IReadyQueue::EPBufferCounter counter,
     bool add) const
 {
@@ -274,19 +289,19 @@ void TInflightInfo::ApplyBytes(
     }
 
     if (add) {
-        ReadyQueue->DataToPBufferAdded(location, counter, ByteCount);
+        ReadyQueue->DataToPBufferAdded(host, counter, ByteCount);
     } else {
-        ReadyQueue->DataFromPBufferReleased(location, counter, ByteCount);
+        ReadyQueue->DataFromPBufferReleased(host, counter, ByteCount);
     }
 }
 
 void TInflightInfo::ApplyBytes(
-    TLocationMask mask,
+    THostMask mask,
     IReadyQueue::EPBufferCounter counter,
     bool add) const
 {
-    for (auto location: mask) {
-        ApplyBytes(location, counter, add);
+    for (auto host: mask) {
+        ApplyBytes(host, counter, add);
     }
 }
 

@@ -573,6 +573,11 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
                 ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressStartupDataSyncCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressLocalRecoveryCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressSyncCount, 0, 0, 1'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
                 ADD_ICB_CONTROL(PDiskControls.MaxActiveCompactionsPerPDisk, 0, 0, 1'000'000, 0);
@@ -639,6 +644,10 @@ config:
         localConfig->TabletClassInfo[TTabletTypes::BlobDepot] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
             &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID, TMailboxType::ReadAsFilled,
             Runtime->SYSTEM_POOL_ID));
+
+        localConfig->TabletClassInfo[TTabletTypes::NbsLoadTablet] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+            &NKikimr::NNbsDbgLike::CreateNbsDbgLikeLoadTablet, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID,
+            TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID));
 
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);

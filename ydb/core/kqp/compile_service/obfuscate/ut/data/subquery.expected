@@ -1,0 +1,1 @@
+SELECT column_0 , column_5 FROM table_1 WHERE column_0 IN ( SELECT column_1 FROM table_0 WHERE column_2 > 0 )

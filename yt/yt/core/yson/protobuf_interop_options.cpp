@@ -6,20 +6,19 @@ namespace NYT::NYson {
 
 TProtobufWriterOptions::TUnknownYsonFieldModeResolver TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode mode)
 {
-    return [mode] (const NYPath::TYPath& /*path*/) {
+    return [mode] (NYPath::TYPathBuf /*path*/) {
         return mode;
     };
 }
 
-TProtobufWriterOptions TProtobufWriterOptions::CreateChildOptions(
-    const NYPath::TYPath& path) const
+TProtobufWriterOptions TProtobufWriterOptions::CreateChildOptions(NYPath::TYPathBuf path) const
 {
     auto options = *this;
-    options.UnknownYsonFieldModeResolver = [path, parentResolver = UnknownYsonFieldModeResolver] (
-        const NYPath::TYPath& subpath)
-    {
-        return parentResolver(path + subpath);
-    };
+    options.UnknownYsonFieldModeResolver =
+        [path = NYPath::TYPath(path), parentResolver = UnknownYsonFieldModeResolver] (NYPath::TYPathBuf subpath)
+        {
+            return parentResolver(path + subpath);
+        };
 
     return options;
 }

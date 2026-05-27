@@ -58,6 +58,8 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , WriteConfirmed(other.WriteConfirmed)
     , FlushRequested(other.FlushRequested)
     , FlushConfirmed(other.FlushConfirmed)
+    , EraseRequested(other.EraseRequested)
+    , EraseConfirmed(other.EraseConfirmed)
 {
     other.ReadyQueue = nullptr;
 }
@@ -212,7 +214,7 @@ bool TInflightInfo::ConfirmErase(THostIndex host)
     Y_ABORT_UNLESS(!EraseConfirmed.Get(host));
 
     EraseConfirmed.Set(host);
-    if (EraseConfirmed == EraseRequested) {
+    if (EraseConfirmed == WriteRequested) {
         State = EState::PBufferErased;
     }
 
@@ -260,6 +262,11 @@ void TInflightInfo::UnlockPBuffer()
             ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
         }
     }
+}
+
+THostMask TInflightInfo::GetWriteRequested() const
+{
+    return WriteRequested;
 }
 
 TString TInflightInfo::DebugPrint(TInstant now) const

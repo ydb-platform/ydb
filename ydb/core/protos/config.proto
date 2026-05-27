@@ -1867,6 +1867,30 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 MaxInProgressStartupDataSyncCount = 43 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressStartupDataSyncPerPDiskCount = 44 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryCount = 45 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryPerPDiskCount = 46 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {

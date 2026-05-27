@@ -232,7 +232,7 @@ public:
             }
 
             udfRequest->SetLangVer(udf->LangVer);
-            udfRequest->MutableRuntimeSettings()->MergeFrom(SerializeRuntimeSettingsToProto(*udf->RuntimeSettings));
+            *udfRequest->MutableRuntimeSettings() = SerializeRuntimeSettingsToProto(*udf->RuntimeSettings);
         }
 
         TResolveResult response;

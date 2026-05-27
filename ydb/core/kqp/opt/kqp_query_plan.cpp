@@ -1,33 +1,34 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
-#include <ydb/core/base/json_index.h>
+#include <ydb/library/json_index/json_index.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
-#include <ydb/library/yql/utils/plan/plan_utils.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/utf8.h>
 
-#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
-
-#include <ydb/public/lib/ydb_cli/common/format.h>
-
-#include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/queue.h>
@@ -38,10 +39,7 @@
 #include <unordered_map>
 #include <regex>
 
-#include <yql/essentials/utils/log/log.h>
-
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -3015,7 +3013,7 @@ TString SerializeTxPlans(
     return AddSimplifiedPlan(resultPlan, false, optCtx);
 }
 
-} // namespace
+} // anonymous namespace
 
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
@@ -3738,5 +3736,4 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
     return writer.Str();
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

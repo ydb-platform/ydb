@@ -1035,12 +1035,16 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
         }
         case TUnaryCasualExprRule::TBlock1::kAlt2: {
             auto& alt = block.GetAlt2();
+
+            TSqlExpression child(*this);
+            child.IsSourceAllowed_ = child.IsSourceAllowed_ && suffixIsEmpty;
+
             TSQLResult<TExprOrIdent> exprOrId;
             if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) {
-                exprOrId = AtomExpr(alt.GetRule_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
+                exprOrId = child.AtomExpr(alt.GetRule_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
             } else {
                 MaybeUnnamedSmartParenOnTop_ = false;
-                exprOrId = InAtomExpr(alt.GetRule_in_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
+                exprOrId = child.InAtomExpr(alt.GetRule_in_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
             }
 
             if (!exprOrId) {
@@ -1207,13 +1211,6 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
             case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
                 // dot
                 if (lastExpr) {
-                    if (TSourcePtr source = MoveOutIfSource(lastExpr)) {
-                        lastExpr = ToSubSelectNode(std::move(source));
-                        if (!lastExpr) {
-                            return std::unexpected(ESQLError::Basic);
-                        }
-                    }
-
                     ids.push_back(lastExpr);
                 }
 

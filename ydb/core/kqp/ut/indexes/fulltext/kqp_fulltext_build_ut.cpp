@@ -1267,8 +1267,8 @@ Y_UNIT_TEST(ReplaceRowMultipleTimes) {
     ])", NYdb::FormatResultSetYson(index));
 }
 
-Y_UNIT_TEST(ReplaceRowReturning) {
-    auto kikimr = Kikimr();
+Y_UNIT_TEST_TWIN(ReplaceRowReturning, EnableIndexStreamWrite) {
+    auto kikimr = Kikimr(EnableIndexStreamWrite);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);

@@ -687,6 +687,24 @@ public:
         const TMasterExitReadOnlyOptions& options),
         (options))
 
+    DELEGATE_METHOD(TFuture<void>, FreezeHydraPeer, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TFreezeHydraPeerOptions& options),
+        (cellId, address, options))
+
+    DELEGATE_METHOD(TFuture<void>, TruncateChangelog, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TTruncateChangelogOptions& options),
+        (cellId, address, options))
+
+    DELEGATE_METHOD(TFuture<void>, ScheduleRestart, (
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TScheduleRestartOptions& options),
+        (cellId, address, options))
+
     DELEGATE_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (
         const TResetDynamicallyPropagatedMasterCellsOptions& options),
         (options))

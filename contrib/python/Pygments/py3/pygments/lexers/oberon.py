@@ -4,7 +4,7 @@
 
     Lexers for Oberon family languages.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -114,7 +114,7 @@ class ComponentPascalLexer(RegexLexer):
             result += 0.01
         if 'PROCEDURE' in text:
             result += 0.01
-        if 'END' in text:
+        if 'MODULE' in text:
             result += 0.01
 
         return result

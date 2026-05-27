@@ -51,11 +51,9 @@ private:
                                            const TVector<TPhysicalAggregationTraits>& aggTraitsList);
     // 3) Performs an aggregation.
     TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
-                                             const TVector<TPhysicalAggregationTraits>& aggTraitsList);
+                                             const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool isDistinct);
     // 4) Returns result after aggregation.
-    TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool distinctAll);
-    // Build a map to extend input from narrow to wide for aggregation.
-    TExprNode::TPtr BuildExpandMapForPhysicalAggregationInput(TExprNode::TPtr input, const TVector<TString>& inputColumns);
+    TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool isDistinct);
     // Build a map to fuse output from wide to narrow for aggregation.
     TExprNode::TPtr BuildNarrowMapForPhysicalAggregationOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
                                                                const TVector<TPhysicalAggregationTraits>& aggTraitsList,

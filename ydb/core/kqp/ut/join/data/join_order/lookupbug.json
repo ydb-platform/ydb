@@ -21,7 +21,7 @@
                 ]
             },
             {
-              "op_name":"TableLookup",
+              "op_name":"TableFullScan",
               "table":"browser_groups"
             }
           ]

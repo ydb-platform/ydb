@@ -177,7 +177,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     new TEvBiStreamPingRequest(
                         context,
                         NGRpcService::TRequestAuxSettings{
-                            .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseAllowed
+                            .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden
                         }
                     )
                 );

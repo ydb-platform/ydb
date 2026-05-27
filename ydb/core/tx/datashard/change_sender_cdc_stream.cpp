@@ -202,16 +202,20 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
         using namespace NChangeExchange;
 
+        const auto tabletAppPath = AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+            ? ETabletAppPath::Secure
+            : ETabletAppPath::Plain;
+
         TStringStream html;
 
         HTML(html) {
-            Header(html, "CdcStream partition change sender", DataShard.TabletId);
+            Header(html, "CdcStream partition change sender", DataShard.TabletId, tabletAppPath);
 
-            SimplePanel(html, "Info", [this](IOutputStream& html) {
+            SimplePanel(html, "Info", [this, tabletAppPath](IOutputStream& html) {
                 HTML(html) {
                     DL_CLASS("dl-horizontal") {
                         TermDesc(html, "PartitionId", PartitionId);
-                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId));
+                        TermDescLink(html, "ShardId", ShardId, TabletPath(ShardId, tabletAppPath));
                         TermDesc(html, "SourceId", SourceId);
                         TermDesc(html, "Writer", Writer);
                         TermDesc(html, "MaxSeqNo", MaxSeqNo);

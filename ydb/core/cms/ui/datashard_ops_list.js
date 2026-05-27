@@ -98,7 +98,7 @@ function loadOperationsList() {
         return;
 
     OperationsListState.loading = true;
-    var url = '../cms/api/datashard/json/listoperations?tabletid=' + TabletId;
+    var url = makeMonUrl('/cms/api/datashard/json/listoperations?tabletid=' + TabletId);
     $.get(url).done(onOperationsListLoaded).fail(onOperationsListFailed);
 }
 

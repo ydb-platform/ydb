@@ -4,7 +4,7 @@
 
     Lexers for Haxe and related stuff.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -890,8 +890,14 @@ class HaxeLexer(ExtendedRegexLexer):
     }
 
     def analyse_text(text):
-        if re.match(r'\w+\s*:\s*\w', text):
-            return 0.3
+        rv = 0
+        if re.search(r'\bimport\s+haxe\.', text):
+            rv = max(rv, 0.2)
+        if re.search(r'\bStd\.', text):
+            rv = max(rv, 0.1)
+        if re.search(r'\btrace\s*\(', text):
+            rv = max(rv, 0.05)
+        return rv
 
 
 class HxmlLexer(RegexLexer):

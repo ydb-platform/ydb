@@ -513,6 +513,25 @@ private:
             TYtOutput ytOutput(node);
             const auto oldOp = GetOutputOp(ytOutput);
 
+            auto settingsBuilder =
+                Build<TCoNameValueTupleList>(ctx, oldOp.Pos())
+                    .Add()
+                        .Name().Value(ToString(EYtSettingType::CombineChunks)).Build()
+                    .Build();
+
+            const auto queryCacheMode = State_->Configuration->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+            if (State_->Configuration->QueryCacheCombineChunksReplace.Get().GetOrElse(DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE)
+                && queryCacheMode != EQueryCacheMode::Disable
+                && queryCacheMode != EQueryCacheMode::Readonly)
+            {
+                settingsBuilder
+                    .Add()
+                        .Name().Value(ToString(EYtSettingType::ReplaceParentCache)).Build()
+                    .Build();
+            }
+
+            auto settings = settingsBuilder.Done();
+
             auto combiningOp =
                 Build<TYtMerge>(ctx, oldOp.Pos())
                     .World<TCoWorld>().Build()
@@ -541,11 +560,7 @@ private:
                             .Build()
                         .Build()
                     .Build()
-                    .Settings()
-                        .Add()
-                            .Name().Value(ToString(EYtSettingType::CombineChunks)).Build()
-                        .Build()
-                    .Build()
+                    .Settings(settings)
                 .Done();
 
             auto newYtOutput =

@@ -238,7 +238,7 @@ TString GenerateProtobufTypeConfig(
     }
 
     if (options.YtMode) {
-         ret["view"]["yt_mode"] = true;
+        ret["view"]["yt_mode"] = true;
     }
 
     if (options.Deterministic) {

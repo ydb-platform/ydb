@@ -144,19 +144,16 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         PARTITION BY HASH(pk)
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
-        ------
-        SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)
-        ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
         ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
+        ------
         ONE_ACTUALIZATION
         ------
-        READ: SELECT ChunkDetails FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
-        EXPECTED: [[["{\"min\":\"x\",\"max\":\"x\"}"]]]
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
     )";
     Y_UNIT_TEST(ChunkDetailsMinMax) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(TKikimrSettings().SetColumnShardAlterObjectEnabled(true));

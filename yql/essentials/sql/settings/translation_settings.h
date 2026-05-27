@@ -141,6 +141,7 @@ struct TTranslationSettings {
     bool EmitReadsForExists = true;
     bool AlwaysAllowExports = false;
     bool IsReplay = false;
+    bool AllowTablesFunction = false;
 };
 
 struct TParsedSettings {

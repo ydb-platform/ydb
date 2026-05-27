@@ -3,6 +3,8 @@
 
 #include "sql_select_yql.h"
 
+#include <yql/essentials/utils/string/trim_indent.h>
+
 #include <library/cpp/iterator/cartesian_product.h>
 
 #include <util/generic/overloaded.h>
@@ -7041,6 +7043,37 @@ Y_UNIT_TEST(TooManyErrors) {
 )");
 };
 
+Y_UNIT_TEST(TooManyErrorsOnBuild) {
+    TString q = R"sql(
+        SELECT AsStruct(
+            1 as '1',
+            2 as '2',
+            3 as '3',
+            4 as '4',
+            5 as '5',
+            6 as '6',
+            7 as '7',
+            8 as '8',
+            9 as '9',
+            10 as '10',
+            11 as '11',
+            12 as '12'
+        );
+    )sql";
+
+    NYql::TAstParseResult res = SqlToYql(q, 4);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_NO_DIFF(
+        Err2Str(res),
+        NYql::TrimIndent(R"(
+            <main>:3:18: Error: String literal can not be used here
+            <main>:4:18: Error: String literal can not be used here
+            <main>:5:18: Error: String literal can not be used here
+            <main>: Error: Too many issues, code: 1
+
+        )"));
+};
+
 Y_UNIT_TEST(ShouldCloneBindingForNamedParameter) {
     NYql::TAstParseResult res = SqlToYql(R"($f = () -> {
     $value_type = TypeOf(1);
@@ -8022,6 +8055,12 @@ Y_UNIT_TEST(ScalarContextUsage4) {
     ExpectFailWithError(query, "<main>:3:39: Error: Source used in expression should contain one concrete column\n"
                                "<main>:4:25: Error: Source is used here\n");
 }
+Y_UNIT_TEST(TablesFunctionDisallowedByDefault) {
+    auto res = SqlToYql("USE plato; SELECT * FROM TABLES()");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TABLES is not allowed in this context");
+}
+
 } // Y_UNIT_TEST_SUITE(SqlToYQLErrors)
 
 inline void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {
@@ -12683,6 +12722,18 @@ Y_UNIT_TEST(AtExpression) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(AtUnarySubexpr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT 1)[0];
+        SELECT (SELECT 1)[(SELECT 1)];
+        SELECT (SELECT <| x: 1 |>).x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(UnionParenthesis) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 4);
@@ -13322,21 +13373,6 @@ Y_UNIT_TEST(Join2) {
         SELECT id FROM xx JOIN yy ON xx.id = yy.id;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-}
-
-Y_UNIT_TEST(AsteriskJoin) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
-
-    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
-        PRAGMA YqlSelect = 'force';
-        USE plato;
-        SELECT * FROM xx JOIN yy ON xx.id = yy.id;
-    )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(
-        Err2Str(res),
-        "YqlSelect unsupported: JOIN with an asterisk projection");
 }
 
 Y_UNIT_TEST(QualifiedAsteriskJoin) {
@@ -14787,6 +14823,40 @@ Y_UNIT_TEST(WindowBad) {
     )sql", settings);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":2:27: Error: Expected a YqlSelect-compatible window function, but got Length");
+}
+
+Y_UNIT_TEST(AnsiCurrentRow) {
+    const auto check = [](TString spec, TString a, TString b, TString c, THashSet<TString> flags) {
+        TString query = R"sql(
+            PRAGMA YqlSelect = 'force';
+            $events = (SELECT * FROM (VALUES
+                (1, 10,  5),
+                (2, 10,  5),
+                (3, 20, 10)
+            ) AS events (event_id, ts, val));
+            SELECT ts, val, SUM(val) OVER (SPEC) AS run_sum FROM $events ORDER BY ts, event_id;
+        )sql";
+        SubstGlobal(query, "SPEC", spec);
+
+        NSQLTranslation::TTranslationSettings settings;
+        settings.Flags = std::move(flags);
+        settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive stat = {"YqlSelect"};
+        TString program = VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 4);
+        UNIT_ASSERT_STRING_CONTAINS(program, "'('type '" + a + ")");
+        UNIT_ASSERT_STRING_CONTAINS(program, "'('from '" + b + ")");
+        UNIT_ASSERT_STRING_CONTAINS(program, "'('to '" + c + ")");
+    };
+
+    check("ORDER BY ts", "rows", "up", "f", {}); // to_value is 0
+    check("", /*      */ "rows", "up", "uf", {});
+    check("ORDER BY ts", "range", "up", "c", {"AnsiCurrentRow"});
+    check("", /*      */ "rows", "up", "uf", {"AnsiCurrentRow"});
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

@@ -1,5 +1,6 @@
 #include "kqp_opt_hash_func_propagate_transformer.h"
 
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>

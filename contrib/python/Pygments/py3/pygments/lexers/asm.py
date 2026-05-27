@@ -4,7 +4,7 @@
 
     Lexers for assembly languages.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -397,7 +397,14 @@ class LlvmLexer(RegexLexer):
         ],
         'whitespace': [
             (r'(\n|\s+)+', Whitespace),
-            (r';.*?\n', Comment)
+            (r';.*?\n', Comment),
+            (r'/\*', Comment, 'c-comment'),
+        ],
+        'c-comment': [
+            (r'[^*]+', Comment),
+            (r'\*/', Comment, '#pop'),
+            # Consume lone asterisks as non-comment-ending content.
+            (r'\*', Comment),
         ],
         'keyword': [
             # Regular keywords

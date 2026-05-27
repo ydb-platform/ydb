@@ -4,8 +4,9 @@ import subprocess
 
 import pytest
 
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+
+from cluster_config import create_ydb_configurator
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
 
@@ -104,53 +105,6 @@ def generate_certificates(certs_tmp_dir):
     }
 
 
-def create_ydb_configurator(
-    certificates,
-    enforce_user_token_requirement=True,
-    require_counters_authentication=None,
-    require_healthcheck_authentication=None,
-):
-    cluster_config = {
-        'default_clusteradmin': 'root@builtin',
-        'enforce_user_token_requirement': enforce_user_token_requirement,
-    }
-    config_generator = KikimrConfigGenerator(**cluster_config)
-
-    if 'grpc_config' not in config_generator.yaml_config:
-        config_generator.yaml_config['grpc_config'] = {}
-
-    config_generator.yaml_config['grpc_config']['cert'] = certificates['server_cert']
-    config_generator.yaml_config['grpc_config']['key'] = certificates['server_key']
-
-    config_generator.monitoring_tls_cert_path = certificates['server_cert']
-    config_generator.monitoring_tls_key_path = certificates['server_key']
-
-    security_config = config_generator.yaml_config['domains_config']['security_config']
-    security_config['database_allowed_sids'] = ['database@builtin']
-    security_config['viewer_allowed_sids'] = ['viewer@builtin']
-    security_config['monitoring_allowed_sids'] = ['monitoring@builtin']
-
-    assert (
-        'administration_allowed_sids' in security_config and len(security_config['administration_allowed_sids']) > 0
-    ), 'administration_allowed_sids was supposed to be set due to default_clusteradmin'
-
-    if require_counters_authentication is not None or require_healthcheck_authentication is not None:
-        if 'monitoring_config' not in config_generator.yaml_config:
-            config_generator.yaml_config['monitoring_config'] = {}
-
-        if require_counters_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_counters_authentication'
-            ] = require_counters_authentication
-
-        if require_healthcheck_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_healthcheck_authentication'
-            ] = require_healthcheck_authentication
-
-    return config_generator
-
-
 @pytest.fixture(scope='module')
 def certificates(tmp_path_factory):
     certs_tmp_dir = tmp_path_factory.mktemp('monitoring_certs_')
@@ -169,11 +123,60 @@ def ydb_cluster_with_enforce_user_token(certificates):
     cluster.stop()
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_without_enforce_user_token(certificates):
+_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
+    pytest.param(
+        {
+            'case_name': 'enforce_user_token_enabled',
+            'enforce_user_token_requirement': True,
+        },
+        id='enforce_user_token_enabled',
+    ),
+    pytest.param(
+        {
+            'case_name': 'enforce_user_token_disabled',
+            'enforce_user_token_requirement': False,
+        },
+        id='enforce_user_token_disabled',
+    ),
+    pytest.param(
+        {
+            'case_name': 'require_counters_authentication',
+            'enforce_user_token_requirement': True,
+            'require_counters_authentication': True,
+        },
+        id='require_counters_authentication',
+    ),
+    pytest.param(
+        {
+            'case_name': 'require_healthcheck_authentication',
+            'enforce_user_token_requirement': True,
+            'require_healthcheck_authentication': True,
+        },
+        id='require_healthcheck_authentication',
+    ),
+)
+
+
+@pytest.fixture(scope='module', params=_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS)
+def ydb_cluster_for_mon_endpoints_auth(request, certificates):
+    params = request.param.copy()
+    case_name = params.pop('case_name')
     configurator = create_ydb_configurator(
         certificates,
-        enforce_user_token_requirement=False,
+        **params,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield case_name, cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_external_access_controls(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        extra_feature_flags=['enable_extra_sids_control_for_http_viewer'],
     )
     cluster = KiKiMR(configurator)
     cluster.start()
@@ -182,24 +185,11 @@ def ydb_cluster_without_enforce_user_token(certificates):
 
 
 @pytest.fixture(scope='module')
-def ydb_cluster_with_require_counters_auth(certificates):
+def ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag(certificates):
     configurator = create_ydb_configurator(
         certificates,
         enforce_user_token_requirement=True,
-        require_counters_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_healthcheck_auth(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_healthcheck_authentication=True,
+        enable_tablet_dev_ui_secure_path=True,
     )
     cluster = KiKiMR(configurator)
     cluster.start()

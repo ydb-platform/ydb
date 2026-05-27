@@ -593,9 +593,6 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
     map[TCoPartitionByKey::CallableName()] = map[TCoPartitionsByKeys::CallableName()] =
         [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx)
     {
-        if (node->IsCallable(TCoPartitionsByKeys::CallableName()) && !CanApplyExtractMembersToPartitionsByKeys(optCtx.Types)) {
-            return true;
-        }
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToPartitionByKey(input, members, ctx, " with multi-usage");

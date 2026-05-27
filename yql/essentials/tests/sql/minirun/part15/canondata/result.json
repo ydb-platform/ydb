@@ -518,9 +518,9 @@
     ],
     "test.test[linear-dict_insert-default.txt-Debug]": [
         {
-            "checksum": "4adfc42dddaa0fd891d167626875ff54",
-            "size": 451,
-            "uri": "https://{canondata_backend}/1777230/1de313d944cae10d4384ec6656e7270944aba259/resource.tar.gz#test.test_linear-dict_insert-default.txt-Debug_/opt.yql"
+            "checksum": "a845b621ea9347e79a8414b11e064655",
+            "size": 547,
+            "uri": "https://{canondata_backend}/1937429/30e1f40fb82fb59da053914c4197cacffef4d2f0/resource.tar.gz#test.test_linear-dict_insert-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[linear-dict_insert-default.txt-Results]": [
@@ -994,9 +994,9 @@
     ],
     "test.test[select_yql-window_fn_cumedist_0-default.txt-Debug]": [
         {
-            "checksum": "2d39ed204a785c79a400c7aec8ddc666",
-            "size": 1138,
-            "uri": "https://{canondata_backend}/1777230/1de313d944cae10d4384ec6656e7270944aba259/resource.tar.gz#test.test_select_yql-window_fn_cumedist_0-default.txt-Debug_/opt.yql"
+            "checksum": "4321b5cc8380c1aec98022db246896cf",
+            "size": 1130,
+            "uri": "https://{canondata_backend}/1597364/1bca78d7b758defd06b4be98f2fe193a42e01356/resource.tar.gz#test.test_select_yql-window_fn_cumedist_0-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_fn_cumedist_0-default.txt-Results]": [
@@ -1022,9 +1022,9 @@
     ],
     "test.test[select_yql-window_sum_order_by-default.txt-Debug]": [
         {
-            "checksum": "d18704b7cd5687a47a6223cc27c22273",
-            "size": 1489,
-            "uri": "https://{canondata_backend}/1777230/1de313d944cae10d4384ec6656e7270944aba259/resource.tar.gz#test.test_select_yql-window_sum_order_by-default.txt-Debug_/opt.yql"
+            "checksum": "0c8a8e52161c45ab0943f3e3de0201b7",
+            "size": 1483,
+            "uri": "https://{canondata_backend}/1597364/1bca78d7b758defd06b4be98f2fe193a42e01356/resource.tar.gz#test.test_select_yql-window_sum_order_by-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-window_sum_order_by-default.txt-Results]": [

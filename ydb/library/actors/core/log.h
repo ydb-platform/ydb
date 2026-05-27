@@ -73,6 +73,15 @@
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
 #define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
 
+#define LOG_LOG_SOURCELESS_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                      \
+    do {                                                                                                                        \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                     \
+            ::NActors::MemLogAdapter(actorCtxOrSystem, priority, component, nullptr, 0, __VA_ARGS__);                           \
+        }                                                                                                                       \
+    } while (0) /**/
+
+#define LOG_LOG_SOURCELESS(actorCtxOrSystem, priority, component, ...) LOG_LOG_SOURCELESS_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
+
 // use these macros for logging via actor system or actor context
 #define LOG_EMERG(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, __VA_ARGS__)
 #define LOG_ALERT(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, __VA_ARGS__)
@@ -83,6 +92,9 @@
 #define LOG_INFO(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, __VA_ARGS__)
 #define LOG_DEBUG(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, __VA_ARGS__)
 #define LOG_TRACE(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, __VA_ARGS__)
+
+#define LOG_WARN_SOURCELESS(actorCtxOrSystem, component, ...) LOG_LOG_SOURCELESS(actorCtxOrSystem, NActors::NLog::PRI_WARN, component, __VA_ARGS__)
+#define LOG_NOTICE_SOURCELESS(actorCtxOrSystem, component, ...) LOG_LOG_SOURCELESS(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, __VA_ARGS__)
 
 #define LOG_EMERG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, stream)
 #define LOG_ALERT_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, stream)

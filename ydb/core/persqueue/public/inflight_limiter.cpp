@@ -56,16 +56,6 @@ bool TInFlightController::Add(ui64 Offset, ui64 Size) {
     }
 
     TotalSize += Size;
-<<<<<<< HEAD
-    auto unitsAfter = std::min(MAX_LAYOUT_COUNT, (TotalSize + LayoutUnitSize - 1) / LayoutUnitSize);
-    for (auto currentUnits = unitsBefore; currentUnits < unitsAfter; currentUnits++) {
-        Layout.push_back(Offset);
-    }
-    
-    AFL_ENSURE(!Layout.empty());
-    Layout.back() = Offset;
-=======
->>>>>>> 3637b6478ff (LOGBROKER-9686 Inflight limiter better accuracy)
 
     bool isMemoryLimitReached = IsMemoryLimitReached();
     if (!wasMemoryLimitReached && isMemoryLimitReached && InFlightFullSince == TInstant::Zero()) {

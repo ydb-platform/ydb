@@ -6546,6 +6546,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                 .Callable(1, "DependsOn")
                                     .Arg(0, "parent")
                                 .Seal()
+                                .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                                    for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                                        builder.Callable(i + 1, "DependsOn")
+                                            .Add(0, node->ChildPtr(i))
+                                            .Seal();
+                                    }
+
+                                    return builder;
+                                })
                             .Seal()
                         .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
                             for (ui32 i = 1; i < node->ChildrenSize(); ++i) {

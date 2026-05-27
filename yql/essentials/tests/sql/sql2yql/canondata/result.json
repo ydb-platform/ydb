@@ -5788,6 +5788,13 @@
             "uri": "https://{canondata_backend}/1942173/c3b3585ee1af3d335e3ea82d5dc3829d99a10687/resource.tar.gz#test_sql2yql.test_linear-dyn_linear_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-fail_changed_scope]": [
+        {
+            "checksum": "b003e3808b18971a49cbb071fd796190",
+            "size": 1488,
+            "uri": "https://{canondata_backend}/1600758/8f6b29b445ef64bbc76f367c8a5539b5ee202872/resource.tar.gz#test_sql2yql.test_linear-fail_changed_scope_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-fail_dyn_linear]": [
         {
             "checksum": "2fec0db4b26fc1418b515244b2e242e0",
@@ -5940,6 +5947,13 @@
             "checksum": "a21c2749fcd9fc712341db241cecefb3",
             "size": 1304,
             "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_remove_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-mutdict_scope]": [
+        {
+            "checksum": "eccb8509ae906f24eb29109e08bf6cb5",
+            "size": 1248,
+            "uri": "https://{canondata_backend}/1600758/8f6b29b445ef64bbc76f367c8a5539b5ee202872/resource.tar.gz#test_sql2yql.test_linear-mutdict_scope_/sql.yql"
         }
     ],
     "test_sql2yql.test[linear-mutdict_update]": [
@@ -16146,6 +16160,11 @@
             "uri": "file://test_sql_format.test_linear-dyn_linear_/formatted.sql"
         }
     ],
+    "test_sql_format.test[linear-fail_changed_scope]": [
+        {
+            "uri": "file://test_sql_format.test_linear-fail_changed_scope_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[linear-fail_dyn_linear]": [
         {
             "uri": "file://test_sql_format.test_linear-fail_dyn_linear_/formatted.sql"
@@ -16254,6 +16273,11 @@
     "test_sql_format.test[linear-mutdict_remove]": [
         {
             "uri": "file://test_sql_format.test_linear-mutdict_remove_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-mutdict_scope]": [
+        {
+            "uri": "file://test_sql_format.test_linear-mutdict_scope_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-mutdict_update]": [

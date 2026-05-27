@@ -257,6 +257,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
         settings.Flags = GetSqlFlags(BlockEngineMode_);
+        settings.AllowTablesFunction = true;
         for (const auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {

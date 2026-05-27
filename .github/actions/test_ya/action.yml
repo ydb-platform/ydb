@@ -425,8 +425,7 @@ runs:
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
           )
 
-          # Capture timestamp BEFORE running ya make so that we can later
-          # filter dmesg to only OOM events that happened during this try.
+          # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
 
           set +e
@@ -441,10 +440,7 @@ runs:
           set -e
           RC=`cat exit_code`
 
-          # Dump recent OOM evidence from dmesg to a separate per-try file
-          # (uploaded to s3 together with the rest of $CURRENT_PUBLIC_DIR).
-          # Use --since=$DMESG_SINCE so that stale OOM events from previous tries
-          # or previous CI jobs on this runner do not leak into this report.
+          # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
           OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
           OOM_DMESG_LOG_URL="$CURRENT_PUBLIC_DIR_URL/oom_dmesg.txt"
           sudo dmesg -T --since="$DMESG_SINCE" 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true

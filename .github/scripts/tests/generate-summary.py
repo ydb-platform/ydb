@@ -73,7 +73,7 @@ class TestResult:
     is_timeout_issue: bool = False
     is_xfailed_issue: bool = False
     is_verify_issue: bool = False
-    is_oom_issue: bool = False
+    is_possible_oom: bool = False
     is_not_launched: bool = False
 
     @property
@@ -192,12 +192,12 @@ class TestResult:
             stderr_url=log_urls.get('stderr', ''),
             log_url=log_url,
             error_type=error_type or '',
-            # is_sanitizer_issue, is_verify_issue and is_oom_issue are set after stderr/log prefetch in gen_summary.
+            # is_sanitizer_issue, is_verify_issue and is_possible_oom are set after stderr/log prefetch in gen_summary.
             is_sanitizer_issue=False,
             is_timeout_issue=is_timeout_issue(error_type),
             is_xfailed_issue=is_xfailed_issue(error_type),
             is_verify_issue=False,
-            is_oom_issue=False,
+            is_possible_oom=False,
             # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
             is_not_launched=is_not_launched_issue(error_type, status.name)
         )
@@ -250,7 +250,7 @@ class TestSummary:
         self.lines: List[TestSummaryLine] = []
         self.is_failed = False
         self.is_retry = is_retry
-        self.oom_killed_count = 0
+        self.dmesg_has_oom = False
         self.oom_dmesg_url = None
 
     def add_line(self, line: TestSummaryLine):
@@ -609,63 +609,52 @@ def _failure_row_pairs_for_summary_tests(tests):
     return pairs
 
 
-# Matches `Out of memory: Killed process <PID> ...` and the leading line
-# `<comm> invoked oom-killer: ... pid=<PID>` (rarer). The PID-of-the-killed
-# process is what we correlate against test logs.
-_OOM_KILLED_PID_RE = re.compile(
-    r'\bOut of memory:\s+Killed process\s+(\d+)\b', re.IGNORECASE
+# Did dmesg show ANY OOM-killer event during this try?
+_OOM_DMESG_EVIDENCE_RE = re.compile(
+    r'\b(?:Out of memory:\s+Killed process|invoked oom-killer|Memory cgroup out of memory)\b',
+    re.IGNORECASE,
 )
 
 
-def _read_oom_killed_pids(oom_dmesg_log):
-    """Return the set of PIDs (as strings) that the kernel OOM-killer reaped.
-
-    Source: per-try dmesg dump produced by [`action.yml`](.github/actions/test_ya/action.yml) at
-    `$CURRENT_PUBLIC_DIR/oom_dmesg.txt`. Empty set means either the file is
-    missing/empty or the dmesg slice has no OOM-killer events for this try.
-    """
+def _dmesg_has_oom(oom_dmesg_log):
+    """True if the per-try dmesg dump contains any OOM-killer evidence."""
     if not oom_dmesg_log:
-        return set()
+        return False
     try:
         if not os.path.isfile(oom_dmesg_log) or os.path.getsize(oom_dmesg_log) == 0:
-            return set()
+            return False
         with open(oom_dmesg_log, 'r', encoding='utf-8', errors='replace') as f:
-            text = f.read()
+            return _OOM_DMESG_EVIDENCE_RE.search(f.read()) is not None
     except OSError:
-        return set()
-    pids = set(_OOM_KILLED_PID_RE.findall(text))
-    return pids
-
-
-def _text_mentions_any_pid(text, pids):
-    """True if *text* mentions any pid from *pids* as a standalone token."""
-    if not text or not pids:
         return False
-    # Build one combined word-boundary regex across all pids; this is much
-    # faster than searching per-pid when there are many failed tests.
-    pattern = r'\b(?:' + '|'.join(re.escape(p) for p in pids) + r')\b'
-    return re.search(pattern, text) is not None
+
+
+# Test runner reports `Process exit_code = -9` when the test process was killed
+# by SIGKILL — the typical signal the kernel OOM-killer sends. Flag such tests
+# as "possible OOM".
+_POSSIBLE_OOM_RE = re.compile(r'\bProcess exit_code\s*=\s*-9\b')
+
+
+def _is_possible_oom(status_description):
+    """True if status_description shows a SIGKILL exit (likely OOM)."""
+    if not status_description:
+        return False
+    return _POSSIBLE_OOM_RE.search(status_description) is not None
 
 
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None, oom_dmesg_log=None):
     summary = TestSummary(is_retry=is_retry)
     stderr_fetch_cache = {}
-    oom_killed_pids = _read_oom_killed_pids(oom_dmesg_log)
-    summary.oom_killed_count = len(oom_killed_pids)
-    if oom_killed_pids and oom_dmesg_log:
-        # Translate local oom_dmesg_log path → public URL when it lives under public_dir.
+    summary.dmesg_has_oom = _dmesg_has_oom(oom_dmesg_log)
+    if summary.dmesg_has_oom and oom_dmesg_log:
         try:
             if os.path.isabs(oom_dmesg_log) and os.path.commonpath([oom_dmesg_log, public_dir]) == os.path.abspath(public_dir):
                 rel = os.path.relpath(oom_dmesg_log, public_dir)
                 summary.oom_dmesg_url = f"{public_dir_url}/{rel}"
         except ValueError:
             pass
-    if oom_killed_pids:
-        print(
-            f"[oom] dmesg evidence: {len(oom_killed_pids)} OOM-killed PID(s) from {oom_dmesg_log}: "
-            f"{sorted(oom_killed_pids, key=int)[:20]}{'...' if len(oom_killed_pids) > 20 else ''}",
-            flush=True,
-        )
+    if summary.dmesg_has_oom:
+        print(f"[oom] dmesg evidence found in {oom_dmesg_log}", flush=True)
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
@@ -682,9 +671,6 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             local_url_prefix=public_dir_url,
         )
         # Set text-derived badge flags after prefetch.
-        # Each badge uses is_*_classification(snippet, stderr_text, log_text).
-        # To add a new badge: add is_<name>_issue field to TestResult (default False),
-        # then add one line here: test.is_<name>_issue = is_<name>_classification(...).
         for test, fr in pairs:
             stderr_text, log_text = get_debug_texts_from_cache(fr, stderr_fetch_cache)
             test.is_sanitizer_issue = is_sanitizer_classification(
@@ -693,14 +679,9 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             test.is_verify_issue = is_verify_classification(
                 test.status_description, stderr_text, log_text
             )
-
-            test.is_oom_issue = bool(
-                oom_killed_pids
-                and (
-                    _text_mentions_any_pid(stderr_text, oom_killed_pids)
-                    or _text_mentions_any_pid(log_text, oom_killed_pids)
-                )
-            )
+            # "Possible OOM": status_description has `Process exit_code = -9`
+            # (SIGKILL — most likely from the kernel OOM-killer).
+            test.is_possible_oom = _is_possible_oom(test.status_description)
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
@@ -732,30 +713,17 @@ def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bo
 
     body.append(result)
 
-    if getattr(summary, "oom_killed_count", 0):
-        attributed = sum(
-            1
-            for line in summary.lines
-            for test in line.tests
-            if getattr(test, "is_oom_issue", False)
-        )
+    # Surface OOM evidence from dmesg in the report header.
+    if getattr(summary, "dmesg_has_oom", False):
         link = (
             f" See [oom_dmesg.txt]({summary.oom_dmesg_url})."
             if getattr(summary, "oom_dmesg_url", None)
             else ""
         )
-        if attributed == 0:
-            body.append(
-                f":warning: **OOM detected:** kernel OOM-killer reaped "
-                f"{summary.oom_killed_count} process(es) during this try, but none of "
-                f"them could be attributed to a specific test.{link}"
-            )
-        else:
-            body.append(
-                f":warning: **OOM detected:** kernel OOM-killer reaped "
-                f"{summary.oom_killed_count} process(es) during this try "
-                f"({attributed} attributed to test(s) — see OOM badges).{link}"
-            )
+        body.append(
+            f":warning: **OOM detected** in dmesg during this try. "
+            f"Tests killed by SIGKILL are flagged with the 'possible OOM' badge.{link}"
+        )
 
     if not is_last_retry:
         body.append("")
@@ -800,9 +768,7 @@ def main():
     parser.add_argument('--pr_number', required=False, type=int, help="Pull request number")
     parser.add_argument('--workflow_run_id', required=False, help="GitHub workflow run ID")
     parser.add_argument('--oom_dmesg_log', required=False, default=None,
-                        help="Path to per-try dmesg OOM dump (e.g. $CURRENT_PUBLIC_DIR/oom_dmesg.txt). "
-                             "If the file exists and contains OOM-killer evidence, every failed test "
-                             "in this try will be flagged with an OOM badge.")
+                        help="Path to per-try dmesg OOM dump for OOM badge correlation.")
     parser.add_argument("args", nargs="+", metavar="TITLE html_out build-results-report-path")
     args = parser.parse_args()
 

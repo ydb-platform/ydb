@@ -11,6 +11,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts/gate_postcommits.py
+            .github/actions/s3cmd
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
 
       - name: Run postcommits gate
         env:

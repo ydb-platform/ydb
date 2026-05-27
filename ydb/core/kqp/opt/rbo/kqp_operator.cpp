@@ -35,6 +35,22 @@ TString FormatSortElements(const TVector<TSortElement>& sortElements) {
     return result;
 }
 
+bool AddInfoUnit(TInfoUnitSet& target, const TInfoUnit& iu) {
+    return target.insert(iu).second;
+}
+
+void AddInfoUnits(TInfoUnitSet& target, const TVector<TInfoUnit>& ius) {
+    for (const auto& iu : ius) {
+        AddInfoUnit(target, iu);
+    }
+}
+
+TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius) {
+    TInfoUnitSet result;
+    AddInfoUnits(result, ius);
+    return result;
+}
+
 } // namespace
 
 /**
@@ -69,6 +85,21 @@ NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
     auto res = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
     res["Name"] = GetExplainName();
     return res;
+}
+
+void IOperator::PropagateLiveness(ILivenessContext& ctx) {
+    Y_UNUSED(ctx);
+}
+
+void IUnaryOperator::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    TInfoUnitSet inputLive;
+    for (const auto& iu : GetInput()->GetOutputIUs()) {
+        if (liveOut.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+    ctx.AddLiveColumns(GetInput(), inputLive);
 }
 
 /**
@@ -371,6 +402,35 @@ TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
     return res;
 }
 
+void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    auto input = GetInput();
+    TInfoUnitSet inputLive;
+    TInfoUnitSet renameSources;
+
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            renameSources.insert(mapElement.GetRename());
+            // Renames are not pruned in this stage, so their source must stay available.
+            ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
+        }
+    }
+
+    for (const auto& iu : input->GetOutputIUs()) {
+        if (!renameSources.contains(iu) && liveOut.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+
+    for (const auto& mapElement : MapElements) {
+        if (!mapElement.IsRename() && liveOut.contains(mapElement.GetElementName())) {
+            ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
+        }
+    }
+
+    ctx.AddLiveColumns(input, inputLive);
+}
+
 // Returns explicit renames as pairs of <to, from>
 
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
@@ -605,6 +665,12 @@ TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
     return FilterExpr.GetInputIUs(false, true);
 }
 
+void TOpFilter::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    ctx.AddExpressionDeps(FilterExpr, inputLive);
+    ctx.AddLiveColumns(GetInput(), inputLive);
+}
+
 TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> res;
     for (const auto& iu : GetFilterIUs(props)) {
@@ -697,6 +763,57 @@ TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
         result.push_back(expr);
     }
     return result;
+}
+
+void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    const auto leftInput = GetLeftInput();
+    const auto rightInput = GetRightInput();
+    const auto leftOutput = MakeInfoUnitSet(leftInput->GetOutputIUs());
+    const auto rightOutput = MakeInfoUnitSet(rightInput->GetOutputIUs());
+
+    TInfoUnitSet leftLive;
+    TInfoUnitSet rightLive;
+
+    const bool outputsLeft = JoinKind != "RightOnly" && JoinKind != "RightSemi";
+    const bool outputsRight = JoinKind != "LeftOnly" && JoinKind != "LeftSemi";
+
+    if (outputsLeft) {
+        for (const auto& iu : leftOutput) {
+            if (liveOut.contains(iu)) {
+                AddInfoUnit(leftLive, iu);
+            }
+        }
+    }
+
+    if (outputsRight) {
+        for (const auto& iu : rightOutput) {
+            if (liveOut.contains(iu)) {
+                AddInfoUnit(rightLive, iu);
+            }
+        }
+    }
+
+    for (const auto& [leftKey, rightKey] : JoinKeys) {
+        AddInfoUnit(leftLive, leftKey);
+        AddInfoUnit(rightLive, rightKey);
+    }
+
+    for (const auto& filter : JoinFilters) {
+        TInfoUnitSet filterDeps;
+        ctx.AddExpressionDeps(filter, filterDeps);
+        for (const auto& iu : filterDeps) {
+            if (leftOutput.contains(iu)) {
+                AddInfoUnit(leftLive, iu);
+            }
+            if (rightOutput.contains(iu)) {
+                AddInfoUnit(rightLive, iu);
+            }
+        }
+    }
+
+    ctx.AddLiveColumns(leftInput, leftLive);
+    ctx.AddLiveColumns(rightInput, rightLive);
 }
 
 TString GetJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
@@ -805,6 +922,12 @@ TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
     return GetLeftInput()->GetOutputIUs();
 }
 
+void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    ctx.AddLiveColumns(GetLeftInput(), liveOut);
+    ctx.AddLiveColumns(GetRightInput(), liveOut);
+}
+
 TString TOpUnionAll::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx); 
     return "UnionAll";
@@ -849,6 +972,15 @@ TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TP
 
 TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
     return GetInput()->GetOutputIUs();
+}
+
+void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    ctx.AddExpressionDeps(LimitCond, inputLive);
+    if (OffsetCond) {
+        ctx.AddExpressionDeps(*OffsetCond, inputLive);
+    }
+    ctx.AddLiveColumns(GetInput(), inputLive);
 }
 
 void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -917,6 +1049,17 @@ TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
         result.push_back(element.SortColumn);
     }
     return result;
+}
+
+void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    for (const auto& sortElement : SortElements) {
+        AddInfoUnit(inputLive, sortElement.SortColumn);
+    }
+    if (LimitCond) {
+        ctx.AddExpressionDeps(*LimitCond, inputLive);
+    }
+    ctx.AddLiveColumns(GetInput(), inputLive);
 }
 
 void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
@@ -1022,6 +1165,15 @@ TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
         usedIUs.push_back(aggTraits.OriginalColName);
     }
     return usedIUs;
+}
+
+void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, KeyColumns);
+    for (const auto& traits : AggregationTraitsList) {
+        AddInfoUnit(inputLive, traits.OriginalColName);
+    }
+    ctx.AddLiveColumns(GetInput(), inputLive);
 }
 
 void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -1133,6 +1285,12 @@ TOpCBOTree::TOpCBOTree(TIntrusivePtr<IOperator> treeRoot, TVector<TIntrusivePtr<
                 Children.push_back(c);
             }
         }
+    }
+}
+
+void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
+    for (const auto& child : Children) {
+        ctx.AddLiveColumns(child, child->GetOutputIUs());
     }
 }
 

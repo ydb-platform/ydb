@@ -190,7 +190,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 AddIssue(
                     FillIssue(
                         TStringBuilder() << "path '" << path <<
-                        "' does not exist or you do not have access rights " << response.Status,
+                        "' does not exist or you do not have access rights",
                         Ydb::PersQueue::ErrorCode::ACCESS_DENIED
                     )
                 );

@@ -3,7 +3,6 @@
 
 #include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -18,12 +17,7 @@ namespace NKikimr::NArrow::NAccessor::NDictionary {
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
     if (!externalInfo.HasAdditionalAccessorData()) {
-        // Legacy plain-encoded blob (e.g. column switched to DICT without portion actualization).
-        auto plainArray = NPlain::TConstructor().DeserializeFromString(originalData, externalInfo);
-        if (!plainArray) {
-            return plainArray;
-        }
-        return Construct(plainArray.DetachResult(), externalInfo);
+        return TConclusionStatus::Fail("dictionary blob requires additional accessor data in chunk metadata");
     }
     const TDictionaryAccessorData* dictData = dynamic_cast<const TDictionaryAccessorData*>(externalInfo.GetAdditionalAccessorData().get());
     if (!dictData) {

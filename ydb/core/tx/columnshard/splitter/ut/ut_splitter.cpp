@@ -4,7 +4,6 @@
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
@@ -317,27 +316,6 @@ Y_UNIT_TEST_SUITE(Splitter) {
         UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "b");
         UNIT_ASSERT(reader.ReadNext());
         UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(2)->ToString(), "a");
-        UNIT_ASSERT(!reader.ReadNext());
-    }
-
-    Y_UNIT_TEST(ChunkedColumnReaderLegacyPlainBlobWithDictionaryLoader) {
-        using namespace NKikimr::NArrow::NAccessor;
-        TTrivialArray::TPlainBuilder builder;
-        builder.AddRecord(0, "legacy");
-        builder.AddRecord(1, "plain");
-        auto arr = builder.Finish(2);
-        TChunkConstructionData info(
-            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
-        const TString plainBlob = NPlain::TConstructor().SerializeToString(arr, info);
-        const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
-        const auto colInfo = MakeUtf8ColumnInfo();
-        auto chunk = std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(plainBlob, arr, NKikimr::NOlap::TChunkAddress(1, 0), colInfo);
-
-        NKikimr::NOlap::TChunkedColumnReader reader({ chunk }, MakeDictionaryLoader(field));
-        UNIT_ASSERT(reader.IsCorrect());
-        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(0)->ToString(), "legacy");
-        UNIT_ASSERT(reader.ReadNext());
-        UNIT_ASSERT_VALUES_EQUAL(reader.GetCurrentChunk()->GetScalar(1)->ToString(), "plain");
         UNIT_ASSERT(!reader.ReadNext());
     }
 };

@@ -1789,7 +1789,6 @@ private:
                     for (const auto& columnName : columns) {
                         columnsSet.insert(columnName);
                     }
-                    THashSet<TStringBuf> mainKeyColumnsSet;
                     for (const auto& columnName : tableMeta->KeyColumnNames) {
                         mainKeyColumnsSet.insert(columnName);
                         AFL_ENSURE(columnsSet.contains(columnName));
@@ -1962,8 +1961,7 @@ private:
                                 return !mainKeyColumnsSet.contains(keyColumnName);
                             })
                         && settings.Mode().StringValue() != "delete"
-                        && settings.Mode().StringValue() != "insert"
-                        && settingsProto.GetNeedLookup());
+                        && settings.Mode().StringValue() != "insert");
                 }
 
                 settingsProto.SetSkipMissingRows(

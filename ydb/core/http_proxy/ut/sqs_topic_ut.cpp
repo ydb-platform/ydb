@@ -1321,6 +1321,20 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
     }
 
+    Y_UNIT_TEST_F(TestCreateQueueWithBadSecurityToken, TWithEnforceUserTokenRequirementFixture) {
+        const TString queueName = "SecurityTokenQueue";
+        auto json = CreateQueueWithSecurityToken({{"QueueName", queueName}}, "invalid_token", 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AccessDeniedException");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithEmptySecurityToken, TWithEnforceUserTokenRequirementFixture) {
+        const TString queueName = "SecurityTokenQueue";
+        auto json = CreateQueueWithSecurityToken({{"QueueName", queueName}}, "", 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "IncompleteSignature");
+    }
+
     Y_UNIT_TEST_F(TestCreateQueueWithCustomConsumer, TFixture) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName@custom-consumer"}});
         UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());

@@ -119,7 +119,7 @@ namespace NKikimr::NHttpProxy {
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                 };
-            
+
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                     std::move(Request),
                     HttpContext.DatabasePath,
@@ -161,16 +161,18 @@ namespace NKikimr::NHttpProxy {
             }
 
             void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-                if (ev->Get()->HasError()) {
+                const auto& token = ev->Get()->Token;
+                if (ev->Get()->HasError() || !token) {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement) {
-                        return ReplyWithYdbError(
+                        ReplyWithYdbError(
                             ctx,
                             ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
                             TString{ev->Get()->Error.Message});
+                        ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
                     }
                 } else {
-                    HttpContext.SerializedUserToken = ev->Get()->Token->GetSerializedToken();
-                    UserSid_ = ev->Get()->Token->GetUserSID();
+                    HttpContext.SerializedUserToken = token->GetSerializedToken();
+                    UserSid_ = token->GetUserSID();
                 }
                 SendGrpcRequestNoDriver(ctx);
             }

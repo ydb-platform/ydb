@@ -174,19 +174,20 @@ public:
                 }
                 auto listType = AS_TYPE(NKikimr::NMiniKQL::TListType, type);
                 auto itemType = listType->GetItemType();
-                NKikimr::NMiniKQL::TUnboxedValueVector resultValues;
+                auto listBuilder = HolderFactory->NewList();
                 for (auto elt : jsonValue.get_array()) {
                     simdjson::builtin::ondemand::value eltValue;
                     CHECK_JSON_ERROR(elt.get(eltValue)) {
                         SetParsingError(error, jsonValue, "parse as array", status);
                         return false;
                     }
-                    auto& value = resultValues.emplace_back();
+                    NYql::NUdf::TUnboxedValue value;
                     if (!ParseNestedValue(std::move(eltValue), value, status, itemType, false)) {
                         return false;
                     }
+                    listBuilder->Add(std::move(value));
                 }
-                resultValue = HolderFactory->VectorAsArray(resultValues);
+                resultValue = listBuilder->Build();
                 break;
             }
 
@@ -277,6 +278,17 @@ public:
                 if (cellType != simdjson::builtin::ondemand::json_type::object) {
                     status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Dict), expected object, but got " << JsonTypeToString(cellType));
                     return false;
+                }
+                {
+                    bool isEmpty;
+                    CHECK_JSON_ERROR(jsonValue.get_object().is_empty().get(isEmpty)) {
+                        SetParsingError(error, jsonValue, "parse as object", status);
+                        return false;
+                    }
+                    if (isEmpty) {
+                        resultValue = HolderFactory->GetEmptyContainerLazy();
+                        return true;
+                    }
                 }
                 auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
                 auto keyType = dictType->GetKeyType();

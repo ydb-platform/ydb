@@ -279,6 +279,9 @@ private:
             PrintDwarfBackTrace(out, stack, sz, sep, forLog);
             return;
         }
+#else
+        Y_UNUSED(forLog);
+        Y_UNUSED(UseDwarfBacktracePrinting);
 #endif
 
         PrintResolvedBackTrace(out, stack, sz, sep);

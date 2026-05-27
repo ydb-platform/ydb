@@ -618,12 +618,12 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         auto asDict = collection.Cast<TCoAsDict>();
         for (const auto& pair : asDict.Args()) {
             const auto& pairRef = pair.Ref();
-            if (pairRef.ChildrenSize() < 1) {
-                return MakeCollectError(ctx, pair.Pos(), "Malformed dict literal in SQL IN");
+            if (pairRef.ChildrenSize() != 2) {
+                return MakeCollectError(ctx, pair.Pos(), "Dict literal must have exactly two elements");
             }
             items.push_back(TExprBase(pairRef.ChildPtr(0)));
         }
-    } else if (collection.Ref().IsCallable("AsSet")) {
+    } else if (collection.Ref().IsCallable({"AsSet", "AsSetStrict", "AsSetMayWarn"})) {
         for (size_t i = 0; i < collection.Ref().ChildrenSize(); ++i) {
             items.push_back(TExprBase(collection.Ref().ChildPtr(i)));
         }

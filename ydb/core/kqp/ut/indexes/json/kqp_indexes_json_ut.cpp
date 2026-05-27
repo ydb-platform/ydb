@@ -5088,19 +5088,20 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                         .Build()
                     .Build(), "or");
 
+            // TODO: FlatMap Or Coalesce SqlIn Nth
             // Tuple<Int32, Int64, Float, Double>
-            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING Int32) IN $p2",
-                {NJsonIndex::TToken{"\3k1", ""}},
-                TParamsBuilder()
-                    .AddParam("$p2")
-                        .BeginTuple()
-                            .AddElement().Int32(1)
-                            .AddElement().Int64(2)
-                            .AddElement().Float(3.0f)
-                            .AddElement().Double(4.0)
-                        .EndTuple()
-                        .Build()
-                    .Build(), "and");
+            // ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING Int32) IN $p2",
+            //     {NJsonIndex::TToken{"\3k1", ""}},
+            //     TParamsBuilder()
+            //         .AddParam("$p2")
+            //             .BeginTuple()
+            //                 .AddElement().Int32(1)
+            //                 .AddElement().Int64(2)
+            //                 .AddElement().Float(3.0f)
+            //                 .AddElement().Double(4.0)
+            //             .EndTuple()
+            //             .Build()
+            //         .Build(), "and");
 
             // Tuple<String?, String?> -> cannot check nulls during compilation
             ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p3",

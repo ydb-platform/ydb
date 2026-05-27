@@ -536,7 +536,7 @@ public:
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
 
-        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId << "; OperationState = " << operationInfo.OperationState.GetStringValue());
+        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId << "; OperationState = " << ToString(operationInfo.OperationState));
 
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {

@@ -629,6 +629,16 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
             AppendMKQLValueToToken(currentToken, tupleType->GetElementType(i), value.GetElement(i));
             result.emplace_back(std::move(currentToken));
         }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Dict) {
+        auto* dictType = static_cast<NKikimr::NMiniKQL::TDictType*>(type);
+        auto* keyType = dictType->GetKeyType();
+        NUdf::TUnboxedValue key;
+        auto iter = value.GetKeysIterator();
+        while (iter.Next(key)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, keyType, std::move(key));
+            result.emplace_back(std::move(currentToken));
+        }
     } else {
         return {ResolveFullTextQueryToken(token, stageInfo)};
     }

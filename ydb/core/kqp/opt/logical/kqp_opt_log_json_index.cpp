@@ -575,6 +575,12 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
                         "Tuple parameter item type is not supported for JSON index");
                 }
             }
+        } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Dict) {
+            const auto* keyType = paramTypeAnn->Cast<TDictExprType>()->GetKeyType();
+            if (!IsSupportedJsonParamType(keyType)) {
+                return MakeCollectError(ctx, param.Pos(),
+                    "Dict parameter key type is not supported for JSON index");
+            }
         } else {
             return MakeCollectError(ctx, param.Pos(), "Unsupported parameter type in SQL IN");
         }
@@ -607,6 +613,15 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
         auto asList = collection.Cast<TCoAsList>();
         for (size_t i = 0; i < asList.ArgCount(); ++i) {
             items.push_back(TExprBase(asList.Arg(i)));
+        }
+    } else if (collection.Maybe<TCoAsDict>()) {
+        auto asDict = collection.Cast<TCoAsDict>();
+        for (const auto& pair : asDict.Args()) {
+            const auto& pairRef = pair.Ref();
+            if (pairRef.ChildrenSize() < 1) {
+                return MakeCollectError(ctx, pair.Pos(), "Malformed dict literal in SQL IN");
+            }
+            items.push_back(TExprBase(pairRef.ChildPtr(0)));
         }
     } else if (collection.Maybe<TExprList>()) {
         auto list = collection.Cast<TExprList>();

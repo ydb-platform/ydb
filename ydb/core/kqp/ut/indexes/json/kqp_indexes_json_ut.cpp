@@ -5141,6 +5141,148 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
         });
     }
 
+    Y_UNIT_TEST(SqlIn_Dict_Literal) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Dict<String, Int32>
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {'1': 10, '2': 20})",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+
+            // Dict<Int32, String>
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN {1: 'a', 2: 'b'})",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // Dict<Int32?, String> -> optional literal keys are OK
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN {Just(1): 'a', Just(2): 'b'})",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // Just(Dict<...>) -> outer optional unwraps
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN Just({1: 'a', 2: 'b'}))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // AsDict
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(1, 'a'), AsTuple(2, 'b')))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(Just(1), 'a'), AsTuple(Just(2), 'b')))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN Just(AsDict(AsTuple(Just(1), 'a'), AsTuple(Just(2), 'b'))))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // Different integer key types
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(1t, 'a'), AsTuple(2s, 'b'), AsTuple(3, 'c'), AsTuple(4l, 'd')))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k1" + numSuffix(3), "\3k1" + numSuffix(4)}, "or");
+
+            // NULL key in dict -> negation
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(1, 'a'), AsTuple(Nothing(Optional<Int32>), 'b')))");
+
+            // NULL value in dict is allowed (we only care about keys)
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(1, Just('a')), AsTuple(2, Nothing(Optional<String>))))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // Parameters as keys
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN AsDict(AsTuple($p1, 'a'), AsTuple($p2, 'b')))",
+                {NJsonIndex::TToken{"\3k1", "$p1"}, NJsonIndex::TToken{"\3k1", "$p2"}},
+                TParamsBuilder()
+                    .AddParam("$p1").String("1").Build()
+                    .AddParam("$p2").String("2").Build()
+                    .Build(), "or");
+
+            // Optional parameters as keys -> cannot check nulls during compilation
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN AsDict(AsTuple($p1, 'a'), AsTuple($p2, 'b')))",
+                TParamsBuilder()
+                    .AddParam("$p1").OptionalString("1").Build()
+                    .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
+                    .Build());
+        });
+    }
+
+    Y_UNIT_TEST(SqlIn_Dict_Parameter) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Dict<String, Int32>
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p1",
+                {NJsonIndex::TToken{"\3k1", "$p1"}},
+                TParamsBuilder()
+                    .AddParam("$p1")
+                        .BeginDict()
+                            .AddDictItem().DictKey().String("1").DictPayload().Int32(10)
+                            .AddDictItem().DictKey().String("2").DictPayload().Int32(20)
+                        .EndDict()
+                        .Build()
+                    .Build(), "or");
+
+            // Dict<Int32, String>
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING Int32) IN $p1",
+                {NJsonIndex::TToken{"\3k1", "$p1"}},
+                TParamsBuilder()
+                    .AddParam("$p1")
+                        .BeginDict()
+                            .AddDictItem().DictKey().Int32(1).DictPayload().String("a")
+                            .AddDictItem().DictKey().Int32(2).DictPayload().String("b")
+                        .EndDict()
+                        .Build()
+                    .Build(), "or");
+
+            // Dict<String?, Int32> -> cannot check nulls during compilation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p2",
+                TParamsBuilder()
+                    .AddParam("$p2")
+                        .BeginDict()
+                            .AddDictItem().DictKey().OptionalString("1").DictPayload().Int32(10)
+                            .AddDictItem().DictKey().OptionalString("2").DictPayload().Int32(20)
+                        .EndDict()
+                        .Build()
+                    .Build());
+
+            // Dict<String, Int32>? -> cannot check nulls during compilation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p3",
+                TParamsBuilder()
+                    .AddParam("$p3")
+                        .BeginOptional()
+                            .BeginDict()
+                                .AddDictItem().DictKey().String("1").DictPayload().Int32(10)
+                                .AddDictItem().DictKey().String("2").DictPayload().Int32(20)
+                            .EndDict()
+                        .EndOptional()
+                        .Build()
+                    .Build());
+
+            // Dict<String?, Int32>? -> cannot check nulls during compilation
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p4",
+                TParamsBuilder()
+                    .AddParam("$p4")
+                        .BeginOptional()
+                            .BeginDict()
+                                .AddDictItem().DictKey().OptionalString("1").DictPayload().Int32(10)
+                                .AddDictItem().DictKey().OptionalString("2").DictPayload().Int32(20)
+                            .EndDict()
+                        .EndOptional()
+                        .Build()
+                    .Build());
+
+            // Empty dict
+            ValidateTokens(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN $p5",
+                {NJsonIndex::TToken{"\3k1", "$p5"}},
+                TParamsBuilder()
+                    .AddParam("$p5")
+                        .EmptyDict(
+                            TTypeBuilder().Primitive(EPrimitiveType::String).Build(),
+                            TTypeBuilder().Primitive(EPrimitiveType::Int32).Build())
+                        .Build()
+                    .Build(), "or");
+        });
+    }
+
     Y_UNIT_TEST(JsonFunctionsMisc) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // PASSING with RETURNING Bool combined with outer comparison

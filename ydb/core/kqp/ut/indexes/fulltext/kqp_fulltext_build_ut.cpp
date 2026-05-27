@@ -3374,6 +3374,63 @@ Y_UNIT_TEST(FulltextIndexBuildCustomParallel) {
     UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
 }
 
+Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
+    // BulkUpsert must hard-reject requests that try to set __rowId explicitly on a table whose
+    // fulltext index uses UseRowIdAsDocId. The value is generated server-side; client-supplied
+    // values would break the unique-index invariant.
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableUniqConstraint(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    auto kikimr = Kikimr(std::move(featureFlags));
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/RowIdTexts` (
+                Pk Utf8 NOT NULL,
+                Text Utf8,
+                __rowId Uint64 NOT NULL,
+                PRIMARY KEY (Pk)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/RowIdTexts` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__rowId);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/RowIdTexts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    NYdb::TValueBuilder rows;
+    rows.BeginList();
+    rows.AddListItem()
+        .BeginStruct()
+        .AddMember("Pk").Utf8("pk-1")
+        .AddMember("Text").OptionalUtf8("hello")
+        .AddMember("__rowId").Uint64(42)
+        .EndStruct();
+    rows.EndList();
+
+    auto result = kikimr.GetTableClient().BulkUpsert("/Root/RowIdTexts", rows.Build()).GetValueSync();
+    UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+        "__rowId is generated server-side for tables with fulltext indexes");
+}
+
 }
 
 } // namespace NKikimr::NKqp

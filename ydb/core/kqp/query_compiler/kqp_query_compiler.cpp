@@ -2389,6 +2389,20 @@ private:
                 autoIncrementColumns.insert(column.StringValue());
             }
 
+            bool hasFulltextRowIdMode = false;
+            for (const auto& idx : tableMeta->Indexes) {
+                if (idx.Type != TIndexDescription::EType::GlobalFulltextPlain
+                    && idx.Type != TIndexDescription::EType::GlobalFulltextRelevance)
+                {
+                    continue;
+                }
+                const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&idx.SpecializedIndexDescription);
+                if (ftDesc && ftDesc->GetUseRowIdAsDocId()) {
+                    hasFulltextRowIdMode = true;
+                    break;
+                }
+            }
+
             YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Struct);
             for(const auto* column: resultItemType->Cast<TStructExprType>()->GetItems()) {
                 auto columnMeta = tableMeta->Columns.FindPtr(TString(column->GetName()));
@@ -2411,6 +2425,9 @@ private:
                     } else if (columnMeta->IsDefaultFromSequence()) {
                         columnProto->SetDefaultFromSequence(columnMeta->DefaultFromSequence);
                         columnMeta->DefaultFromSequencePathId.ToMessage(columnProto->MutableDefaultFromSequencePathId());
+                        if (hasFulltextRowIdMode && columnMeta->Name == NKikimr::NTableIndex::NFulltext::RowIdColumn) {
+                            columnProto->SetBitReverseSequenceValue(true);
+                        }
                     }
                 }
 

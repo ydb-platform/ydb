@@ -3099,6 +3099,104 @@ Y_UNIT_TEST(SelectWithFulltextRelevance_RowIdOptIn_TopK) {
     }
 }
 
+Y_UNIT_TEST(InsertWithFulltextRowIdSequenceBitReversed) {
+    // When __rowId is fed from the auto-bound sequence on a table with a fulltext UseRowIdAsDocId
+    // index, the sequencer actor must bit-reverse the monotonic sequence value before placing it
+    // in the row. This keeps consecutive INSERTs from concentrating on the same posting impl-shard.
+    // We verify the salting by inserting a few rows without specifying __rowId and asserting that
+    // adjacent rows do not get adjacent __rowId values (the hallmark of bit-reversal).
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    AddFulltextIndexPlain(db);
+
+    {
+        TString query = R"sql(
+            INSERT INTO `/Root/RowIdTexts` (Pk, Text, Data) VALUES
+                ("pk-a"u, "alpha alpha"u, "data a"u),
+                ("pk-b"u, "beta beta"u,   "data b"u),
+                ("pk-c"u, "gamma gamma"u, "data c"u),
+                ("pk-d"u, "delta delta"u, "data d"u);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            SELECT Pk, __rowId FROM `/Root/RowIdTexts` ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+
+        NYdb::TResultSetParser parser(resultSet);
+        TVector<ui64> rowIds;
+        while (parser.TryNextRow()) {
+            rowIds.push_back(parser.ColumnParser("__rowId").GetUint64());
+        }
+        // Bit-reversed values of consecutive small ints land in the high bits — they all become
+        // very large numbers and no two are adjacent. Plain monotonic 1,2,3,4 would fail this.
+        for (ui64 v : rowIds) {
+            UNIT_ASSERT_C(v > (ui64{1} << 60),
+                "Expected bit-reversed __rowId, got " << v << " — sequence value was not salted");
+        }
+    }
+
+    {
+        // Fulltext search must still surface the rows by their resolved PKs.
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "alpha")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(TString{parser.ColumnParser("Pk").GetUtf8()}, "pk-a");
+    }
+}
+
+Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
+    // Edge case: explicit __rowId in INSERT/UPSERT must NOT be bit-reversed — the salting only
+    // applies inside the sequencer path. A user who writes __rowId = 100 must see 100 back.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    CreateRowIdTable(db);
+    AddUniqueRowIdIndex(db);
+    UpsertRowIdData(db);
+    AddFulltextIndexPlain(db);
+
+    TString query = R"sql(
+        SELECT Pk, __rowId FROM `/Root/RowIdTexts` ORDER BY __rowId;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto resultSet = result.GetResultSet(0);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+
+    NYdb::TResultSetParser parser(resultSet);
+    TVector<ui64> rowIds;
+    while (parser.TryNextRow()) {
+        rowIds.push_back(parser.ColumnParser("__rowId").GetUint64());
+    }
+    // UpsertRowIdData() writes 100, 200, 300, 400 — values must come back unchanged.
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[0], 100u);
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[1], 200u);
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[2], 300u);
+    UNIT_ASSERT_VALUES_EQUAL(rowIds[3], 400u);
+}
+
 }
 
 } // namespace NKikimr::NKqp

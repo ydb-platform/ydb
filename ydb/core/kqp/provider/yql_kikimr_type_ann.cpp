@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
@@ -46,6 +47,19 @@ static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
     }
     return result;
 }();
+
+void MaybeAutoBindRowIdSequence(NYql::TKikimrTableMetadata& meta) {
+    auto it = meta.Columns.find(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+    if (it == meta.Columns.end()) {
+        return;
+    }
+    auto& col = it->second;
+    if (col.Type != "Uint64" || !col.NotNull || col.IsDefaultKindDefined()) {
+        return;
+    }
+    col.DefaultFromSequence = TString("_serial_column_") + NKikimr::NTableIndex::NFulltext::RowIdColumn;
+    col.SetDefaultFromSequence();
+}
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
@@ -651,6 +665,8 @@ private:
             return TStatus::Error;
         }
 
+        MaybeAutoBindRowIdSequence(*table->Metadata);
+
         auto pos = ctx.GetPosition(node.Pos());
         if (auto maybeTuple = node.Input().Maybe<TExprList>()) {
             auto tuple = maybeTuple.Cast();
@@ -922,6 +938,8 @@ private:
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
         }
+
+        MaybeAutoBindRowIdSequence(*table->Metadata);
 
         auto rowType = table->SchemeNode;
         auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
@@ -1200,6 +1218,8 @@ private:
                 return TStatus::Error;
             }
         }
+
+        MaybeAutoBindRowIdSequence(*meta);
 
         if (meta->TableType == ETableType::Table) {
             for (auto&& setting : create.TableSettings()) {

@@ -623,6 +623,10 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
             }
             items.push_back(TExprBase(pairRef.ChildPtr(0)));
         }
+    } else if (collection.Ref().IsCallable("AsSet")) {
+        for (size_t i = 0; i < collection.Ref().ChildrenSize(); ++i) {
+            items.push_back(TExprBase(collection.Ref().ChildPtr(i)));
+        }
     } else if (collection.Maybe<TExprList>()) {
         auto list = collection.Cast<TExprList>();
         for (const auto& item : list) {

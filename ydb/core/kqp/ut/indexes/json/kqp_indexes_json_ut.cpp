@@ -5168,6 +5168,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(1, 'a'), AsTuple(2, 'b')))",
                 {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
             ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDictStrict(AsTuple(1, 'a'), AsTuple(2, 'b')))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(Just(1), 'a'), AsTuple(Just(2), 'b')))",
                 {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
             ValidateTokens(db,
@@ -5178,6 +5181,10 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db,
                 R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsDict(AsTuple(1t, 'a'), AsTuple(2s, 'b'), AsTuple(3, 'c'), AsTuple(4l, 'd')))",
                 {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k1" + numSuffix(3), "\3k1" + numSuffix(4)}, "or");
+
+            // Empty dict -> always false, index not applicable
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN DictCreate(String, String)");
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN Just(DictCreate(String, String))");
 
             // NULL key in dict -> negation
             ValidateError(db,
@@ -5280,6 +5287,80 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                             TTypeBuilder().Primitive(EPrimitiveType::Int32).Build())
                         .Build()
                     .Build(), "or");
+        });
+    }
+
+    Y_UNIT_TEST(SqlIn_Set_Literal) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            // Set<String> via {} syntax
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN {'1', '2'})",
+                {"\3k1" + strSuffix("1"), "\3k1" + strSuffix("2")}, "or");
+
+            // Set<Int32>
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN {1, 2})",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // Set<Int32?> -> optional literal keys are OK
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN {Just(1), Just(2)})",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // Just(Set<...>) -> outer optional unwraps
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN Just({1, 2}))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // AsSet
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsSet(1, 2))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsSetStrict(1, 2))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsSet(Just(1), Just(2)))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN Just(AsSet(1, 2)))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN Just(AsSet(Just(1), Just(2))))",
+                {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2)}, "or");
+
+            // TODO: IsCallable("Convert")
+            // Different integer types
+            // ValidateTokens(db,
+            //     R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsSet(1t, 2s, 3, 4l, 5u, 6.0f, 7.0))",
+            //     {"\3k1" + numSuffix(1), "\3k1" + numSuffix(2), "\3k1" + numSuffix(3),
+            //      "\3k1" + numSuffix(4), "\3k1" + numSuffix(5), "\3k1" + numSuffix(6), "\3k1" + numSuffix(7)}, "or");
+
+            // Empty set -> always false, index not applicable
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN SetCreate(String)");
+            ValidateError(db, "JSON_VALUE(Text, '$.k1' RETURNING String) IN Just(SetCreate(String))");
+
+            // NULL in set -> negation
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsSet(1, NULL))");
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING Int32) IN AsSet(Just(1), Nothing(Optional<Int32>)))");
+
+            // Parameters as keys
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN AsSet($p1, $p2))",
+                {NJsonIndex::TToken{"\3k1", "$p1"}, NJsonIndex::TToken{"\3k1", "$p2"}},
+                TParamsBuilder()
+                    .AddParam("$p1").String("1").Build()
+                    .AddParam("$p2").String("2").Build()
+                    .Build(), "or");
+
+            // Optional parameters as keys -> cannot check nulls during compilation
+            ValidateError(db,
+                R"(JSON_VALUE(Text, '$.k1' RETURNING String) IN AsSet($p1, $p2))",
+                TParamsBuilder()
+                    .AddParam("$p1").OptionalString("1").Build()
+                    .AddParam("$p2").EmptyOptional(TTypeBuilder().Primitive(EPrimitiveType::String).Build()).Build()
+                    .Build());
         });
     }
 

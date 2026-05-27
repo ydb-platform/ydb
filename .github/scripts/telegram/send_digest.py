@@ -9,8 +9,9 @@ Issues are placed into ``digest_queue`` at the moment they are created
 (sent_at IS NULL), sends per-team Telegram messages, then marks rows
 as sent by writing sent_at = NOW().
 
-There are no timing assumptions, no cursors, no historical-data floods.
-The queue is the single source of truth for "what still needs to be sent".
+At send time ``routing_team`` comes from ``muted_tests_with_issue_and_area.owner_team``
+(``Coalesce(tests_monitor.effective_owner_team, owner slug)``), falling back to the
+queued ``owner_team`` when the mart row is not ready yet.
 
 Scheduled by ``.github/workflows/telegram_scheduled_notifications.yml`` (job **Mute digest to Telegram**).
 
@@ -142,12 +143,31 @@ def _mark_closed_as_sent(w: YDBWrapper, profile_id: str) -> None:
 
 
 def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
-    """Return unsent digest_queue rows, excluding issues that have been closed since enqueue."""
+    """Return unsent digest_queue rows with ``routing_team`` resolved in SQL."""
     _validate_profile_id(profile_id)
     queue_path = w.get_table_path("digest_queue")
     issues_path = w.get_table_path("issues")
+    mart_path = w.get_table_path("muted_tests_with_issue_and_area")
     return w.execute_scan_query(
         f"""
+        $issue_team = (
+            SELECT github_issue_number, branch, build_type, owner_team
+            FROM (
+                SELECT
+                    github_issue_number,
+                    branch,
+                    build_type,
+                    owner_team,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY github_issue_number, branch, build_type
+                        ORDER BY date_window DESC
+                    ) AS rn
+                FROM `{mart_path}`
+                WHERE github_issue_number IS NOT NULL
+            )
+            WHERE rn = 1
+        );
+
         SELECT
             q.github_issue_number AS github_issue_number,
             q.github_issue_url AS github_issue_url,
@@ -155,14 +175,19 @@ def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
             q.owner_team AS owner_team,
             q.branch AS branch,
             q.build_type AS build_type,
-            q.enqueued_at AS enqueued_at
+            q.enqueued_at AS enqueued_at,
+            Coalesce(it.owner_team, q.owner_team) AS routing_team
         FROM `{queue_path}` AS q
         LEFT JOIN `{issues_path}` AS i
             ON q.github_issue_number = i.issue_number
+        LEFT JOIN $issue_team AS it
+            ON q.github_issue_number = it.github_issue_number
+            AND Coalesce(q.branch, 'main') = it.branch
+            AND Coalesce(q.build_type, 'relwithdebinfo') = it.build_type
         WHERE q.profile_id = '{_sql_escape_literal(profile_id)}'
           AND q.sent_at IS NULL
           AND (i.state IS NULL OR i.state != 'CLOSED')
-        ORDER BY q.owner_team, q.github_issue_number
+        ORDER BY routing_team, q.github_issue_number
         """,
         query_name="digest_fetch_unsent",
     )
@@ -211,11 +236,22 @@ def _mark_sent(w: YDBWrapper, profile_id: str, unsent_rows: list, sent_at: datet
 
 # ── Digest logic ──────────────────────────────────────────────────────────────
 
+def _log_routing_reroutes(rows: list) -> None:
+    for row in rows:
+        queued = canonical_team_slug(row.get("owner_team"))
+        routing = canonical_team_slug(row.get("routing_team") or row.get("owner_team"))
+        if routing != queued:
+            print(
+                f"Routing issue #{row['github_issue_number']} to {routing!r} "
+                f"(queued as {queued!r})"
+            )
+
+
 def _group_by_team(rows: list) -> dict:
     """Return {team_name: [{url, title}, ...]}."""
     teams: dict = {}
     for row in rows:
-        team = canonical_team_slug(row.get("owner_team"))
+        team = canonical_team_slug(row.get("routing_team") or row.get("owner_team"))
         teams.setdefault(team, []).append(
             {
                 "url":   row.get("github_issue_url") or "",
@@ -255,6 +291,7 @@ def run_digest(
             print("Nothing to send.")
             return True
 
+        _log_routing_reroutes(unsent)
         teams = _group_by_team(unsent)
         print(f"Teams: {sorted(teams)}")
 

@@ -20,6 +20,10 @@ DEFAULT_CONFIG = {
     "limited_mode_when_pr_check_queue_above": 13,
     "reserved_postcommit_runners_in_limited_mode": 5,
 }
+POSTCOMMIT_BUILD_PRESETS = (
+    "build-preset-relwithdebinfo",
+    "build-preset-release-asan",
+)
 
 YC_ACTIVE_RUNNERS_URL = (
     "https://console.yandex.cloud/folders/b1grf3mpoatgflnlavjd/compute/operations"
@@ -176,6 +180,40 @@ def _runner_name_link(runner_name: str, now_ts: float) -> str:
     )
 
 
+def runner_primary_build_preset(labels: list[str]) -> str | None:
+    presets = [label for label in labels if label.startswith("build-preset-")]
+    if not presets:
+        return None
+    return min(presets, key=_build_preset_sort_key)
+
+
+def format_reserved_summary(reserved_by_preset: dict[str, int]) -> str:
+    if not reserved_by_preset:
+        return "0 runners"
+    parts = []
+    for preset, count in reserved_by_preset.items():
+        short = preset.removeprefix("build-preset-")
+        parts.append(f"{count}×{short}")
+    return " + ".join(parts)
+
+
+def parse_reserved_by_preset(config: dict[str, Any]) -> dict[str, int]:
+    raw = (
+        config.get("reserved_postcommit_runners_in_limited_mode")
+        or config.get("reserved_postcommit_runners")
+        or config.get("postcommit_runners_on_high_queue")
+        or config.get("partial_slots", 5)
+    )
+    if isinstance(raw, dict):
+        return {
+            str(preset): int(count)
+            for preset, count in raw.items()
+            if int(count) > 0
+        }
+    count = int(raw)
+    return {preset: count for preset in POSTCOMMIT_BUILD_PRESETS}
+
+
 def load_config(config_raw: str, legacy_threshold: str) -> tuple[str, dict[str, Any]]:
     if not config_raw.strip():
         config_raw = json.dumps(DEFAULT_CONFIG, separators=(",", ":"))
@@ -186,21 +224,19 @@ def load_config(config_raw: str, legacy_threshold: str) -> tuple[str, dict[str, 
     if limited_when_above is None:
         limited_when_above = config.get("limit_gate_when_pr_check_queue_above", legacy_threshold or "13")
     limited_when_above = int(limited_when_above)
-    reserved_in_limited = int(
-        config.get("reserved_postcommit_runners_in_limited_mode")
-        or config.get("reserved_postcommit_runners")
-        or config.get("postcommit_runners_on_high_queue")
-        or config.get("partial_slots", 5)
-    )
+    reserved_by_preset = parse_reserved_by_preset(config)
+    reserved_summary = format_reserved_summary(reserved_by_preset)
     parsed = {
         "ignore_pr_check_older_than_hours": ignore_hours,
         "limited_mode_when_pr_check_queue_above": limited_when_above,
-        "reserved_postcommit_runners_in_limited_mode": reserved_in_limited,
+        "reserved_postcommit_by_preset": reserved_by_preset,
+        "reserved_postcommit_slots_total": sum(reserved_by_preset.values()),
+        "reserved_postcommit_summary": reserved_summary,
         "rules_summary": (
             f"Count PR-check queued (1m..{ignore_hours}h). "
             f"If count<={limited_when_above} → OPEN (postcommit on all ghrun). "
             f"If count>{limited_when_above} → LIMITED "
-            f"(postcommit on {reserved_in_limited} runners only)."
+            f"(postcommit per build-preset: {reserved_summary})."
         ),
     }
     return config_raw, parsed
@@ -244,12 +280,12 @@ def classify_queue(runs_payload: dict, ignore_hours: int, now_ts: float) -> dict
 
 def decide_mode(queue_size: int, cfg: dict[str, Any]) -> tuple[str, str]:
     threshold = cfg["limited_mode_when_pr_check_queue_above"]
-    reserved = cfg["reserved_postcommit_runners_in_limited_mode"]
+    reserved_summary = cfg["reserved_postcommit_summary"]
     if queue_size > threshold:
         return (
             "limited",
             f"PR-check queue ({queue_size}) > {threshold}. "
-            f"LIMITED: postcommit on {reserved} runner(s) only.",
+            f"LIMITED: postcommit {reserved_summary}.",
         )
     return (
         "open",
@@ -422,11 +458,30 @@ def ghrun_runners(runners: list[dict]) -> list[dict]:
     return sorted(result, key=lambda r: r["id"])
 
 
-def plan_runner_actions(ghrun: list[dict], gate_mode: str, reserved: int) -> tuple[list[str], list[dict]]:
-    keep_ids = [str(r["id"]) for r in ghrun[:reserved]]
+def plan_runner_actions(
+    ghrun: list[dict],
+    gate_mode: str,
+    reserved_by_preset: dict[str, int],
+) -> tuple[list[str], dict[str, list[str]], list[dict]]:
+    keep_by_preset: dict[str, list[str]] = {}
+    if gate_mode == "open":
+        keep_ids = [str(runner["id"]) for runner in ghrun]
+    else:
+        grouped: dict[str, list[dict]] = {preset: [] for preset in reserved_by_preset}
+        for runner in ghrun:
+            preset = runner_primary_build_preset(runner["labels"])
+            if preset and preset in grouped:
+                grouped[preset].append(runner)
+        keep_ids = []
+        for preset, limit in reserved_by_preset.items():
+            selected = sorted(grouped.get(preset, []), key=lambda runner: runner["id"])[:limit]
+            preset_ids = [str(runner["id"]) for runner in selected]
+            keep_by_preset[preset] = preset_ids
+            keep_ids.extend(preset_ids)
+    keep_id_set = set(keep_ids)
     actions = []
     for runner in ghrun:
-        should = gate_mode == "open" or str(runner["id"]) in keep_ids
+        should = gate_mode == "open" or str(runner["id"]) in keep_id_set
         had = runner["has_postcommit"]
         if should and not had:
             action = "add_postcommit"
@@ -440,9 +495,10 @@ def plan_runner_actions(ghrun: list[dict], gate_mode: str, reserved: int) -> tup
                 "action": action,
                 "should_have_postcommit": should,
                 "had_postcommit": had,
+                "primary_build_preset": runner_primary_build_preset(runner["labels"]) or "—",
             }
         )
-    return keep_ids, actions
+    return keep_ids, keep_by_preset, actions
 
 
 def apply_runner_actions(repo: str, token: str, actions: list[dict], dry_run: bool) -> None:
@@ -615,12 +671,13 @@ def _runner_changes_table(actions: list[dict]) -> str:
             f'<tr class="{action_cls}">'
             f'<td><strong>{esc(item["name"] or item["id"])}</strong></td>'
             f'<td>{esc(item["id"])}</td>'
+            f'<td>{esc(item.get("primary_build_preset", "—"))}</td>'
             f'<td><span class="pill {action_cls}">{esc(action_label)}</span></td>'
             f"</tr>"
         )
     return (
         '<table class="queue-table">'
-        "<thead><tr><th>Runner</th><th>ID</th><th>Действие</th></tr></thead>"
+        "<thead><tr><th>Runner</th><th>ID</th><th>Build preset</th><th>Действие</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>"
     )
 
@@ -636,7 +693,8 @@ def build_html(
     mode = meta["gate_mode"]
     threshold = meta["limited_mode_when_pr_check_queue_above"]
     queue_size = meta["queue_size"]
-    reserved = meta["reserved_postcommit_runners_in_limited_mode"]
+    reserved_summary = meta["reserved_postcommit_summary"]
+    reserved_by_preset = meta["reserved_postcommit_by_preset"]
     ignore_h = meta["ignore_pr_check_older_than_hours"]
     workflow_url = f"https://github.com/{meta['repository']}/actions/runs/{meta['workflow_run']}"
 
@@ -646,10 +704,22 @@ def build_html(
         mode_effect = f"Label <code>postcommit</code> на всех {meta['ghrun_count']} ghrun runner'ах."
     else:
         mode_title = "Gate ограничен"
-        mode_hint = f"Очередь PR-check высокая ({queue_size} &gt; {threshold}). Postcommit только на части runner'ов."
+        mode_hint = (
+            f"Очередь PR-check высокая ({queue_size} &gt; {threshold}). "
+            f"Postcommit: {esc(reserved_summary)} (по build-preset)."
+        )
+        keep_details = meta.get("keep_runner_ids_by_preset") or {}
+        if keep_details:
+            preset_lines = [
+                f"{esc(preset.removeprefix('build-preset-'))}: {esc(', '.join(ids) or '—')}"
+                for preset, ids in keep_details.items()
+            ]
+            ids_block = "; ".join(preset_lines)
+        else:
+            ids_block = esc(meta["keep_runner_ids"] or "—")
         mode_effect = (
-            f"Label <code>postcommit</code> только на {reserved} из {meta['ghrun_count']} ghrun runner'ах "
-            f"(IDs: {esc(meta['keep_runner_ids'] or '—')})."
+            f"Label <code>postcommit</code> на {meta['keep_runner_count']} runner'ах "
+            f"({esc(reserved_summary)}): {ids_block}."
         )
 
     bar_pct = min(100, int(queue_size / max(threshold, 1) * 100)) if threshold else 0
@@ -662,7 +732,7 @@ def build_html(
     flow_runners_text = (
         "Все ghrun runner'ы с label postcommit."
         if mode == "open"
-        else f"Только {reserved} runner'ов с label postcommit."
+        else f"Postcommit по preset: {reserved_summary}."
     )
     runners_empty_text = "Нет данных по runner'ам."
     report_url = os.environ.get("GATE_REPORT_URL", "").strip()
@@ -1062,11 +1132,14 @@ def write_step_summary(meta: dict, summary_path: str | None) -> None:
         f"| Gate mode | `{meta['gate_mode']}` |",
         f"| PR-check counted | {meta['queue_size']} |",
         f"| limited_mode_when_pr_check_queue_above | {meta['limited_mode_when_pr_check_queue_above']} |",
-        f"| reserved_postcommit_runners_in_limited_mode | {meta['reserved_postcommit_runners_in_limited_mode']} |",
+        f"| reserved_postcommit (LIMITED) | {meta['reserved_postcommit_summary']} |",
         f"| ghrun / postcommit before | {meta['ghrun_count']} / {meta['postcommit_count_before']} |",
     ]
     if meta["gate_mode"] == "limited":
-        lines.append(f"| Runner IDs with postcommit | {meta['keep_runner_ids'] or '—'} |")
+        for preset, ids in (meta.get("keep_runner_ids_by_preset") or {}).items():
+            lines.append(f"| kept {preset} | {', '.join(ids) or '—'} |")
+        if not meta.get("keep_runner_ids_by_preset"):
+            lines.append(f"| Runner IDs with postcommit | {meta['keep_runner_ids'] or '—'} |")
     with open(summary_path, "a", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
 
@@ -1104,6 +1177,7 @@ def run(args: argparse.Namespace) -> int:
     runners_note = ""
     total_runners = ghrun_count = postcommit_count = 0
     keep_ids: list[str] = []
+    keep_by_preset: dict[str, list[str]] = {}
     actions: list[dict] = []
     runner_label_view: dict[str, list[dict]] = {}
     runner_jobs, hosted_jobs = fetch_active_jobs(repo, queue_token, now_ts)
@@ -1114,10 +1188,10 @@ def run(args: argparse.Namespace) -> int:
         ghrun = ghrun_runners(all_runners)
         ghrun_count = len(ghrun)
         postcommit_count = sum(1 for r in ghrun if r["has_postcommit"])
-        keep_ids, actions = plan_runner_actions(
+        keep_ids, keep_by_preset, actions = plan_runner_actions(
             ghrun,
             gate_mode,
-            cfg["reserved_postcommit_runners_in_limited_mode"],
+            cfg["reserved_postcommit_by_preset"],
         )
         apply_runner_actions(repo, runners_token, actions, args.dry_run)
     except urllib.error.HTTPError as exc:
@@ -1160,6 +1234,8 @@ def run(args: argparse.Namespace) -> int:
         "ghrun_count": ghrun_count,
         "postcommit_count_before": postcommit_count,
         "keep_runner_ids": ",".join(keep_ids),
+        "keep_runner_ids_by_preset": keep_by_preset,
+        "keep_runner_count": len(keep_ids),
         "workflow_run": os.environ.get("GITHUB_RUN_ID", "local-dry-run"),
         "repository": repo,
         "report_ts": now_ts,

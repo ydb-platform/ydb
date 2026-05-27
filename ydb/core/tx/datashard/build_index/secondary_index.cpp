@@ -479,10 +479,19 @@ class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivit
     // When Feed cannot make progress because the sequence buffer is empty, we copy
     // the current row's key here and return EScan::Sleep. The flat-scan framework
     // calls Iter->Next() before each Feed, so on resume the iterator has already
-    // advanced past this row. We drain PendingKey from HandleNextVal (or below in
-    // Feed if it is still set) so the row is not lost.
-    TSerializedCellVec PendingKey;
-    bool HasPendingKey = false;
+    // advanced past this row. We drain PendingKeys from HandleNextVal (or below in
+    // Feed if values are now available) so the row is not lost.
+    //
+    // Multiple keys can pile up if the scan is woken from a non-sequence source
+    // (e.g. TEvUploadRowsResponse) while the sequence buffer is still empty: every
+    // such wake-up advances Iter past another row, and each must be remembered.
+    std::deque<TSerializedCellVec> PendingKeys;
+
+    // True iff Exhausted() was called while PendingKeys was non-empty. We returned
+    // Sleep instead of Reset so the scan would not finalize before those rows had
+    // a chance to be written. Cleared and the driver re-touched once the queue is
+    // drained.
+    bool ExhaustedWaitingForDrain = false;
 
     static constexpr ui32 SequenceBatchTarget = 256;
 
@@ -534,21 +543,29 @@ public:
         return {EScan::Sleep, {}};
     }
 
+    EScan Exhausted() override {
+        // If Feed had to defer rows because the sequence buffer was empty, the
+        // iterator may exhaust before those rows are written. Returning Reset
+        // here (the default) would land in Seek(seq > 0) → Final and lose them.
+        // Wait until HandleNextVal drains the queue.
+        if (!PendingKeys.empty()) {
+            ExhaustedWaitingForDrain = true;
+            ScanWaitingForSequences = true;
+            return EScan::Sleep;
+        }
+        return TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR>::Exhausted();
+    }
+
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         if (!SequenceColumns.empty()) {
-            // A pending row from a prior Sleep should have been drained in HandleNextVal,
-            // but if HandleNextVal woke us with only one row's worth of values, that drain
-            // may have run before the wake-up. Belt-and-suspenders drain here too.
-            if (HasPendingKey) {
-                DrainPendingIfReady();
-            }
+            // Drain any keys deferred from earlier sleeps before processing this row.
+            DrainPendingIfReady();
 
             for (auto& s : SequenceColumns) {
                 if (s.Buffer.empty()) {
-                    // Save the current key so we can process it on the next wake-up.
-                    // Iter will advance past this row before Feed is called again.
-                    PendingKey = TSerializedCellVec(key);
-                    HasPendingKey = true;
+                    // Buffer is empty — Iter will advance past this row before
+                    // Feed is called again, so queue the key for later processing.
+                    PendingKeys.emplace_back(key);
                     ScanWaitingForSequences = true;
                     return EScan::Sleep;
                 }
@@ -587,33 +604,32 @@ private:
         }
     }
 
-    // If a row was deferred via PendingKey when Feed had to sleep, consume sequence
-    // values for it now and add it to ReadBuf. Called from HandleNextVal when a new
-    // value arrives, and defensively from Feed on resume.
+    // If rows were deferred via PendingKeys when Feed had to sleep, consume sequence
+    // values for them now and add them to ReadBuf. Drains greedily until either the
+    // queue is empty or any sequence column's buffer runs out.
     void DrainPendingIfReady() {
-        if (!HasPendingKey) {
-            return;
-        }
-        for (auto& s : SequenceColumns) {
-            if (s.Buffer.empty()) {
-                return;
+        while (!PendingKeys.empty()) {
+            for (auto& s : SequenceColumns) {
+                if (s.Buffer.empty()) {
+                    return;
+                }
             }
+            for (auto& s : SequenceColumns) {
+                s.LastValue = s.Buffer.front();
+                s.Buffer.pop_front();
+                Value[s.ColumnIdx] = TCell::Make<ui64>(s.LastValue);
+            }
+            TopUpSequenceRequests();
+            auto pendingKey = std::move(PendingKeys.front());
+            PendingKeys.pop_front();
+            TConstArrayRef<TCell> pendingKeyCells = pendingKey.GetCells();
+            TString pendingSerialized = TSerializedCellVec::Serialize(Value);
+            ReadBuf.AddRow(
+                pendingKeyCells,
+                Value,
+                std::move(pendingSerialized),
+                pendingKeyCells);
         }
-        for (auto& s : SequenceColumns) {
-            s.LastValue = s.Buffer.front();
-            s.Buffer.pop_front();
-            Value[s.ColumnIdx] = TCell::Make<ui64>(s.LastValue);
-        }
-        TopUpSequenceRequests();
-        TConstArrayRef<TCell> pendingKeyCells = PendingKey.GetCells();
-        TString pendingSerialized = TSerializedCellVec::Serialize(Value);
-        ReadBuf.AddRow(
-            pendingKeyCells,
-            Value,
-            std::move(pendingSerialized),
-            pendingKeyCells);
-        HasPendingKey = false;
-        PendingKey = {};
     }
 
     void TopUpSequenceRequests() {
@@ -660,14 +676,24 @@ private:
         DrainPendingIfReady();
 
         if (ScanWaitingForSequences) {
-            bool allReady = true;
-            for (auto& s : SequenceColumns) {
-                if (s.Buffer.empty()) {
-                    allReady = false;
-                    break;
+            bool shouldWake = false;
+            if (ExhaustedWaitingForDrain && PendingKeys.empty()) {
+                // We held the scan in Exhausted-Sleep because rows were queued;
+                // now that the queue is empty, let the scan finalize via
+                // Seek(seq > 0) which will flush ReadBuf and upload.
+                ExhaustedWaitingForDrain = false;
+                shouldWake = true;
+            } else if (!ExhaustedWaitingForDrain) {
+                bool allReady = true;
+                for (auto& s : SequenceColumns) {
+                    if (s.Buffer.empty()) {
+                        allReady = false;
+                        break;
+                    }
                 }
+                shouldWake = allReady;
             }
-            if (allReady) {
+            if (shouldWake) {
                 ScanWaitingForSequences = false;
                 if (Driver) {
                     Driver->Touch(EScan::Feed);

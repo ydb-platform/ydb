@@ -205,10 +205,10 @@ TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
             .Variable()
                 .Value(colName.GetFullName())
             .Build()
+            .Lambda(expr)
             .ForceOptional()
                 .Value(forceOptional ? "True" : "False")
             .Build()
-            .Lambda(expr)
         .Done().Ptr());
         // clang-format on
     }
@@ -222,6 +222,7 @@ TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
                 .Value(colName.GetFullName())
             .Build()
             .Lambda(expr)
+            .ForceOptional().Value("False").Build()
         .Done().Ptr());
         // clang-format on
     }
@@ -1578,6 +1579,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                         .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
                     .Build()
                 .Build()
+                .ForceOptional().Value("False").Build()
             .Done().Ptr());
             // clang-format on
             

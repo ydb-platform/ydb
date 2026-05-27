@@ -157,6 +157,10 @@ NThreading::TFuture<IYtGateway::TDownloadTableResult> TYtForwardingGatewayBase::
     return Slave_->DownloadTable(std::move(options));
 }
 
+NThreading::TFuture<IYtGateway::TUploadFilesToCacheResult> TYtForwardingGatewayBase::UploadFilesToCache(TUploadFilesToCacheOptions&& options) {
+    return Slave_->UploadFilesToCache(std::move(options));
+}
+
 IYtTokenResolver::TPtr TYtForwardingGatewayBase::GetYtTokenResolver() const {
     return Slave_->GetYtTokenResolver();
 }

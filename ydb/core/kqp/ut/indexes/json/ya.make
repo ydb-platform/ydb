@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
     ydb/public/sdk/cpp/adapters/issue
+    ydb/library/json_index
 )
 
 YQL_LAST_ABI_VERSION()

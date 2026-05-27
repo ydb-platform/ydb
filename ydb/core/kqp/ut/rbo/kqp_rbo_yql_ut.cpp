@@ -4232,6 +4232,9 @@ PRAGMA ydb.OptShuffleElimination = "true";
 
     // General mixed case: both hash domains and transitions in one plan.
     Y_UNIT_TEST(ShuffleEliminationMixedHashFuncCompatibility) {
+        // When both final join inputs are already shuffled, DPHyp still
+        // has to shuffle one due to runtime limitations and tie breaks
+        // based on statistics - so we pin those too.
         const auto plan = ExplainHashCompatibilityQuery({"a", "b", "c", "i", "d", "e", "f", "g", "h"}, R"(
             PRAGMA ydb.CostBasedOptimizationLevel = "4";
             PRAGMA ydb.OptShuffleElimination = "true";
@@ -4244,6 +4247,8 @@ PRAGMA ydb.OptShuffleElimination = "true";
                 JoinType(e f g Shuffle)
                 JoinType(e f g h Shuffle)
                 JoinType(a b c i d e f g h Shuffle)
+                Rows(a b c i d # 10000000)
+                Bytes(a b c i d # 10000000)
                 JoinOrder(((((a b) c) i) d) (((e f) g) h))
             ';
 
@@ -4787,6 +4792,92 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             .ExtractValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(UnionAll) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t3` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        std::vector<std::pair<std::string, int>> tables{{"/Root/t1", 4}, {"/Root/t2", 3}, {"/Root/t3", 2}};
+        for (const auto &[table, rowsNum] : tables) {
+            InsertIntoSchema0(db, table, rowsNum);
+        }
+
+        const std::vector<std::string> queries = {
+            R"(
+                SELECT t1.a as a FROM `/Root/t1` as t1
+                UNION ALL
+                SELECT t2.a as a FROM `/Root/t2` as t2
+                ORDER BY a;
+            )",
+            R"(
+                SELECT t1.a as a FROM `/Root/t1` as t1
+                UNION ALL
+                SELECT t2.a as a FROM `/Root/t2` as t2
+                UNION ALL
+                SELECT t3.a as a FROM `/Root/t3` as t3
+                ORDER BY a;
+            )",
+             R"(
+                SELECT t1.a as a, t1.c as c FROM `/Root/t1` as t1
+                UNION ALL
+                SELECT t2.a as a, Cast(99 as Int64) as c FROM `/Root/t2` as t2
+                ORDER BY a, c;
+            )",
+        };
+
+        const std::vector<std::string> results = {
+            R"([[0];[0];[1];[1];[2];[2];[3]])",
+            R"([[0];[0];[0];[1];[1];[1];[2];[2];[3]])",
+            R"([[0;[1]];[0;[99]];[1;[2]];[1;[99]];[2;[3]];[2;[99]];[3;[4]]])",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),  NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        }
     }
 }
 

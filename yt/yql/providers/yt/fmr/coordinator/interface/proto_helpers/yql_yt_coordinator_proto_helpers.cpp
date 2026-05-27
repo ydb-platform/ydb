@@ -93,6 +93,10 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
         auto protoFmrResourceOperationInfo = FmrResourceOperationInfoToProto(fmrResourceInfo);
         protoStartOperationRequest.AddFmrResources()->Swap(&protoFmrResourceOperationInfo);
     }
+    if (startOperationRequest.FmrJob) {
+        auto protoFmrJob = YtResourceInfoToProto(*startOperationRequest.FmrJob);
+        protoStartOperationRequest.MutableFmrJob()->Swap(&protoFmrJob);
+    }
     return protoStartOperationRequest;
 }
 
@@ -174,6 +178,9 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
     }
     for (ui64 i = 0; i < protoStartOperationRequest.FmrResourcesSize(); ++i) {
         startOperationRequest.FmrResources.emplace_back(FmrResourceOperationInfoFromProto(protoStartOperationRequest.GetFmrResources(i)));
+    }
+    if (protoStartOperationRequest.HasFmrJob()) {
+        startOperationRequest.FmrJob = YtResourceInfoFromProto(protoStartOperationRequest.GetFmrJob());
     }
     return startOperationRequest;
 }

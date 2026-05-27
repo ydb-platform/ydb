@@ -186,7 +186,7 @@ message TSortedUploadOperationParams {
     TFmrTableRef Input = 1;
     TYtTableRef Output = 2;
     string SessionId = 3;
-    repeated string Cookies = 4;
+    repeated bytes Cookies = 4;
     uint32 SessionType = 5;
     string PartitionId = 6;
     bool IsOrdered = 7;
@@ -195,7 +195,7 @@ message TSortedUploadOperationParams {
 message TSortedUploadTaskParams {
     TFmrTableInputRef Input = 1;
     TYtTableRef Output = 2;
-    string CookieYson = 3;
+    bytes CookieYson = 3;
     uint32 SessionType = 4;
     uint64 Order = 5;
     optional TSortingColumns SortingColumns = 6;
@@ -364,7 +364,7 @@ message TTask {
     string SessionId = 4;
     optional uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
-    optional string JobSettings = 7;
+    optional bytes JobSettings = 7;
     repeated TFileInfo Files = 8;
     repeated TYtResourceInfo YtResources = 9;
     repeated TFmrResourceTaskInfo FmrResources = 10;
@@ -384,12 +384,12 @@ message TTaskMapResult {
 }
 
 message TTaskSortedUploadResult {
-    string FragmentResult = 1;
+    bytes FragmentResult = 1;
     uint64 FragmentOrder = 2;
 }
 
 message TTaskPullResult {
-    string Data = 1;
+    bytes Data = 1;
 }
 
 message TTaskResult {

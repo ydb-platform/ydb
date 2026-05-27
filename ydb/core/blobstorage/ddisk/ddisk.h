@@ -41,6 +41,8 @@ namespace NKikimr::NDDisk {
             EvReadThenWritePersistentBuffers,
             EvGetPersistentBufferInfo,
             EvPersistentBufferInfo,
+            EvDeleteTabletChunks,
+            EvDeleteTabletChunksResult,
         };
     };
 
@@ -208,6 +210,8 @@ struct TPersistentBufferFormat {
     struct TEvReadThenWritePersistentBuffers;
     struct TEvGetPersistentBufferInfo;
     struct TEvPersistentBufferInfo;
+    struct TEvDeleteTabletChunks;
+    struct TEvDeleteTabletChunksResult;
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -652,6 +656,28 @@ struct TPersistentBufferFormat {
             result->SetStatus(status);
             if (errorReason) {
                 result->SetErrorReason(errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(DeleteTabletChunks) {
+        using TResult = TEvDeleteTabletChunksResult;
+
+        TEvDeleteTabletChunks() = default;
+
+        TEvDeleteTabletChunks(const TQueryCredentials& creds) {
+            creds.Serialize(Record.MutableCredentials());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(DeleteTabletChunksResult) {
+        TEvDeleteTabletChunksResult() = default;
+
+        TEvDeleteTabletChunksResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
             }
         }
     };

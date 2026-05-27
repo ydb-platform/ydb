@@ -21,7 +21,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_hive import (
 from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_node import (
     ClusterKillNodeDaemonNemesis,
     ClusterKillSlotDaemonNemesis,
-    ClusterRollingUpdateNemesis,
+    ClusterRollingRestartNemesis,
     ClusterSerialKillNodeNemesis,
     ClusterSerialKillSlotsNemesis,
     ClusterStopStartNodeNemesis,
@@ -70,7 +70,7 @@ __all__ = [
     # cluster_node
     "ClusterKillNodeDaemonNemesis",
     "ClusterKillSlotDaemonNemesis",
-    "ClusterRollingUpdateNemesis",
+    "ClusterRollingRestartNemesis",
     "ClusterSerialKillNodeNemesis",
     "ClusterSerialKillSlotsNemesis",
     "ClusterStopStartNodeNemesis",

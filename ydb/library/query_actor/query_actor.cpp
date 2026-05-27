@@ -307,6 +307,10 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
         return;
     }
 
+    if (!ev->Get()->Issues.Empty()) {
+        AccumulatedStreamIssues.AddIssues(ev->Get()->Issues);
+    }
+
     if (ev->Get()->ResultSet.rows_size()) {
         try {
             (this->*StreamResultHandler)(std::move(ev->Get()->ResultSet));
@@ -354,7 +358,7 @@ void TQueryBase::FinishStreamRequest() {
 //// TQueryBase finish operations
 
 void TQueryBase::Finish() {
-    Finish(StatusIds::SUCCESS, TIssues());
+    Finish(StatusIds::SUCCESS, std::move(AccumulatedStreamIssues));
 }
 
 void TQueryBase::Finish(StatusIds::StatusCode status, const TString& message, bool rollbackOnError) {

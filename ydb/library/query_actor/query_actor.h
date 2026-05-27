@@ -226,6 +226,7 @@ protected:
     TInstant RequestStartTime;
     TDuration AmountRequestsTime;
     ui32 NumberRequests = 0;
+    NYql::TIssues AccumulatedStreamIssues;
 
 private:
     TQueryResultHandler QueryResultHandler = &TQueryBase::CallOnQueryResult;

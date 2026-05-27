@@ -53,6 +53,7 @@ struct TEvPrivate {
     struct TEvFetchCacheResult : public NActors::TEventLocal<TEvFetchCacheResult, EvFetchCacheResult> {
         bool Success;
         TString Error;
+        TString Warnings;
         std::deque<TQueryToCompile> Queries;
 
         TEvFetchCacheResult(bool success, TString error = {})
@@ -153,6 +154,8 @@ public:
         if (status != Ydb::StatusIds::SUCCESS) {
             Result->Success = false;
             Result->Error = issues.ToString();
+        } else if (!issues.Empty()) {
+            Result->Warnings = issues.ToOneLineString();
         }
         Send(Owner, Result.release());
     }
@@ -477,9 +480,13 @@ private:
         auto* result = ev->Get();
 
         if (!result->Success) {
-            LOG_W("Fetch failed, skipping warmup: " << result->Error);
+            LOG_W("Fetch failed (no compile cache nodes responded), skipping warmup: " << result->Error);
             Complete(false, "Fetch failed: " + result->Error);
             return;
+        }
+
+        if (!result->Warnings.empty()) {
+            LOG_W("Fetch completed with warnings: " << result->Warnings);
         }
 
         QueriesToCompile = std::move(result->Queries);

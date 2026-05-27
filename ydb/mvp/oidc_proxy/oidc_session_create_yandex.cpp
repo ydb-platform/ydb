@@ -73,7 +73,7 @@ void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessi
     auto response = event->Get()->Response;
     NHttp::THeadersBuilder responseHeaders;
     for (const auto& cookie : response.Getset_cookie_header()) {
-        responseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
+        responseHeaders.Add("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
     }
     RetryRequestToProtectedResourceAndDie(&responseHeaders);
 }
@@ -87,6 +87,7 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
         SetRequestIdHeader(responseHeaders, GetRequestId());
+        AddAuthFlowCookieCleanupHeader(&responseHeaders);
         ReplyAndPassAway(Request->CreateResponse(event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }

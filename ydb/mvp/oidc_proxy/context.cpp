@@ -1,14 +1,11 @@
 #include "context.h"
+#include "oidc_cookie.h"
 #include "oidc_settings.h"
 #include "openid_connect.h"
 
 #include <ydb/library/actors/http/http.h>
 
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/string_utils/base64/base64.h>
-
 #include <util/generic/string.h>
-#include <util/string/builder.h>
 
 namespace NMVP::NOIDC {
 
@@ -27,10 +24,8 @@ TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
 TString TContext::GetState(const TString& key) const {
     TState payload;
     payload.AntiForgeryToken = State;
+    payload.RequestedAddress = RequestedAddress;
     payload.ExpirationTime = TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME;
-    if (!NavigationRequest) {
-        payload.CookieSuffix = TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX);
-    }
     return EncodeState(payload, key);
 }
 
@@ -43,24 +38,12 @@ TString TContext::GetRequestedAddress() const {
 }
 
 TString TContext::CreateYdbOidcCookie(const TString& secret) const {
-    return TStringBuilder() << CreateNameYdbOidcCookie(NavigationRequest ? TStringBuf() : TOpenIdConnectSettings::YDB_OIDC_COOKIE_BACKGROUND_SUFFIX) << "="
-                            << GenerateCookie(secret) << ";"
-                            " Path=" << GetAuthCallbackUrl() << ";"
-                            " Max-Age=" << TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME.Seconds() << ";"
-                            " SameSite=None; Secure";
+    return CreateYdbOidcCookie(secret, "");
 }
 
-TString TContext::GenerateCookie(const TString& key) const {
-    NJson::TJsonValue json(NJson::JSON_MAP);
-    json["requested_address"] = RequestedAddress;
-    const TString requestedAddressContext = NJson::WriteJson(json, false);
-
-    TString digest = HmacSHA256(key, requestedAddressContext);
-
-    NJson::TJsonValue root(NJson::JSON_MAP);
-    root["requested_address_context"] = Base64Encode(requestedAddressContext);
-    root["digest"] = Base64Encode(digest);
-    return Base64Encode(NJson::WriteJson(root, false));
+TString TContext::CreateYdbOidcCookie(const TString& secret, TStringBuf currentCookieValue) const {
+    const TString updatedCookieValue = UpdateAuthFlowCookieValue(currentCookieValue, secret, State);
+    return CreateAuthFlowCookie(updatedCookieValue);
 }
 
 bool TContext::IsPageNavigationRequest(const NHttp::THttpIncomingRequestPtr& request) {

@@ -25,6 +25,7 @@ protected:
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     TContext Context;
+    TString MatchedAuthFlowNonce;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,
@@ -39,6 +40,7 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
 protected:
+    void AddAuthFlowCookieCleanupHeader(NHttp::THeadersBuilder* responseHeaders);
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
     void RetryRequestToProtectedResourceAndDie();
     void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders);

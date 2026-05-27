@@ -3,7 +3,9 @@ LIBRARY()
 PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/hulldb
+    ydb/core/control
     ydb/core/protos
 )
 

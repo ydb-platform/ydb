@@ -557,6 +557,11 @@ config:
                 ADD_ICB_CONTROL("VDiskControls.MaxChunksToDefragInflight", 10, 1, 50, 10);
                 ADD_ICB_CONTROL("VDiskControls.DefaultHugeGarbagePerMille", 300, 0, 1000, 300);
                 ADD_ICB_CONTROL("VDiskControls.GarbageThresholdToRunFullCompactionPerMille", 0, 0, 300, 0);
+                ADD_ICB_CONTROL("VDiskControls.MaxInProgressStartupDataSyncCount", 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL("VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount", 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL("VDiskControls.MaxInProgressLocalRecoveryCount", 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL("VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount", 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL("VDiskControls.MaxInProgressSyncCount", 0, 0, 1'000, 0);
 #undef ADD_ICB_CONTROL
 
                 {

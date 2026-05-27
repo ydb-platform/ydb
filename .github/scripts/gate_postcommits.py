@@ -83,26 +83,37 @@ def load_config(config_raw: str, legacy_threshold: str) -> tuple[str, dict[str, 
 
 def classify_queue(runs_payload: dict, ignore_hours: int, now_ts: float) -> dict[str, list[dict]]:
     max_age = ignore_hours * 3600
-    all_pr = []
+    all_runs = []
     for run in runs_payload.get("workflow_runs", []):
-        if run.get("name") != "PR-check":
-            continue
         updated = run["updated_at"].replace("Z", "+00:00")
         waiting = now_ts - datetime.fromisoformat(updated).timestamp()
-        all_pr.append(
+        name = run.get("name", "Unknown")
+        if name == "PR-check":
+            if waiting <= 60:
+                gate_status = "ignored_fresh"
+            elif waiting > max_age:
+                gate_status = "ignored_old"
+            else:
+                gate_status = "counted"
+        else:
+            gate_status = "not_counted"
+        all_runs.append(
             {
                 "id": run["id"],
-                "name": run["name"],
+                "name": name,
                 "updated_at": run["updated_at"],
                 "html_url": run["html_url"],
                 "waiting_seconds": waiting,
                 "waiting_human": fmt_wait(waiting),
+                "gate_status": gate_status,
             }
         )
+    all_runs.sort(key=lambda r: r["waiting_seconds"])
     return {
-        "counted": [r for r in all_pr if 60 < r["waiting_seconds"] <= max_age],
-        "ignored_too_old": [r for r in all_pr if r["waiting_seconds"] > max_age],
-        "ignored_too_fresh": [r for r in all_pr if r["waiting_seconds"] <= 60],
+        "all": all_runs,
+        "counted": [r for r in all_runs if r["gate_status"] == "counted"],
+        "ignored_too_old": [r for r in all_runs if r["gate_status"] == "ignored_old"],
+        "ignored_too_fresh": [r for r in all_runs if r["gate_status"] == "ignored_fresh"],
     }
 
 
@@ -188,41 +199,81 @@ def _action_stats(actions: list[dict]) -> dict[str, int]:
     return stats
 
 
-def _runs_list(runs: list[dict], empty_text: str) -> str:
+GATE_STATUS_LABELS = {
+    "counted": ("counted", "считается"),
+    "ignored_old": ("ignored-old", "игнор (zombie)"),
+    "ignored_fresh": ("ignored-fresh", "игнор (≤60s)"),
+    "not_counted": ("not-counted", "—"),
+}
+
+
+def _queue_table(runs: list[dict], empty_text: str) -> str:
     if not runs:
         return f'<p class="empty">{esc(empty_text)}</p>'
-    items = []
+
+    by_wf: dict[str, list[dict]] = {}
     for run in runs:
-        items.append(
-            f'<li><a href="{esc(run["html_url"])}">{esc(run["id"])}</a>'
-            f'<span class="pill wait">{esc(run["waiting_human"])}</span></li>'
-        )
-    return f'<ul class="run-list">{"".join(items)}</ul>'
+        by_wf.setdefault(run["name"], []).append(run)
+    for wf_runs in by_wf.values():
+        wf_runs.sort(key=lambda r: r["waiting_seconds"])
+
+    wf_names = sorted(by_wf.keys(), key=lambda name: (name != "PR-check", name.lower()))
+    max_rows = max(len(by_wf[name]) for name in wf_names)
+
+    header = "".join(
+        f'<th><span class="wf-name">{esc(name)}</span>'
+        f'<span class="wf-count">{len(by_wf[name])}</span></th>'
+        for name in wf_names
+    )
+
+    body_rows = []
+    for row_idx in range(max_rows):
+        cells = []
+        for name in wf_names:
+            wf_runs = by_wf[name]
+            if row_idx >= len(wf_runs):
+                cells.append('<td class="empty-cell"></td>')
+                continue
+            run = wf_runs[row_idx]
+            status_cls, status_label = GATE_STATUS_LABELS[run["gate_status"]]
+            cells.append(
+                f'<td class="{status_cls}">'
+                f'<div class="cell-wait">{esc(run["waiting_human"])}</div>'
+                f'<div class="cell-run"><a href="{esc(run["html_url"])}">{esc(run["id"])}</a></div>'
+                f'<div class="cell-gate"><span class="pill {status_cls}">{esc(status_label)}</span></div>'
+                f"</td>"
+            )
+        body_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+    return (
+        '<table class="queue-matrix">'
+        f"<thead><tr>{header}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>"
+    )
 
 
-def _runner_cards(actions: list[dict]) -> str:
-    if not actions:
-        return '<p class="empty">Нет данных по runner\'ам.</p>'
-    cards = []
-    for item in actions:
-        action = item["action"]
-        if action == "add_postcommit":
-            icon, label, cls = "+", "добавили postcommit", "changed add"
-        elif action == "remove_postcommit":
-            icon, label, cls = "−", "сняли postcommit", "changed remove"
+def _runner_changes_table(actions: list[dict]) -> str:
+    changed = [item for item in actions if item["action"] != "no_change"]
+    if not changed:
+        return '<p class="empty">Label postcommit не меняли — все runner\'ы уже в нужном состоянии.</p>'
+    rows = []
+    for item in changed:
+        if item["action"] == "add_postcommit":
+            action_cls, action_label = "add", "+ postcommit"
         else:
-            icon, label, cls = "=", "без изменений", "unchanged"
-        postcommit_now = "да" if item["should_have_postcommit"] else "нет"
-        cards.append(
-            f'<div class="runner-card {cls}">'
-            f'<div class="runner-icon">{icon}</div>'
-            f'<div class="runner-body">'
-            f'<div class="runner-title">{esc(item["name"] or item["id"])}</div>'
-            f'<div class="runner-sub">ID {esc(item["id"])} · postcommit: <strong>{postcommit_now}</strong></div>'
-            f'<div class="runner-action">{esc(label)}</div>'
-            f"</div></div>"
+            action_cls, action_label = "remove", "− postcommit"
+        rows.append(
+            f'<tr class="{action_cls}">'
+            f'<td><strong>{esc(item["name"] or item["id"])}</strong></td>'
+            f'<td>{esc(item["id"])}</td>'
+            f'<td><span class="pill {action_cls}">{esc(action_label)}</span></td>'
+            f"</tr>"
         )
-    return f'<div class="runner-grid">{"".join(cards)}</div>'
+    return (
+        '<table class="queue-table">'
+        "<thead><tr><th>Runner</th><th>ID</th><th>Действие</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
 
 
 def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runners_note: str) -> str:
@@ -336,38 +387,68 @@ def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runn
     .alert {{
       background: #fff8c5; border: 1px solid #d4a72c; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
     }}
-    .runner-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }}
-    .runner-card {{
-      display: flex; gap: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #fafbfc;
-    }}
-    .runner-card.changed.add {{ border-color: #86efac; }}
-    .runner-card.changed.remove {{ border-color: #fecaca; }}
-    .runner-icon {{
-      width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-      font-weight: 700; background: #eaeef2; flex-shrink: 0;
-    }}
-    .changed.add .runner-icon {{ background: #dcfce7; color: var(--add); }}
-    .changed.remove .runner-icon {{ background: #fee2e2; color: var(--remove); }}
-    .runner-title {{ font-weight: 600; font-size: .9rem; }}
-    .runner-sub {{ font-size: .78rem; color: var(--muted); }}
-    .runner-action {{ font-size: .78rem; margin-top: 4px; }}
     .summary-row {{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }}
     .chip {{ font-size: .82rem; padding: 6px 10px; border-radius: 999px; background: #f1f5f9; }}
     .chip.add {{ background: #dcfce7; color: var(--add); }}
     .chip.remove {{ background: #fee2e2; color: var(--remove); }}
+    .queue-table {{
+      width: 100%; border-collapse: collapse; font-size: .88rem;
+    }}
+    .queue-table th {{
+      text-align: left; padding: 10px 12px; background: #f8fafc;
+      border-bottom: 1px solid var(--border); font-size: .78rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }}
+    .queue-table td {{
+      padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle;
+    }}
+    .queue-table tr:last-child td {{ border-bottom: none; }}
+    .queue-table tr.add {{ background: #f0fdf4; }}
+    .queue-table tr.remove {{ background: #fef2f2; }}
+    .queue-matrix {{
+      width: 100%; border-collapse: separate; border-spacing: 0; font-size: .85rem;
+      table-layout: fixed;
+    }}
+    .queue-matrix th {{
+      text-align: left; padding: 12px 14px; background: #f8fafc;
+      border: 1px solid var(--border); border-left: none; vertical-align: top;
+    }}
+    .queue-matrix th:first-child {{ border-left: 1px solid var(--border); border-radius: 10px 0 0 0; }}
+    .queue-matrix th:last-child {{ border-radius: 0 10px 0 0; }}
+    .wf-name {{ display: block; font-size: .9rem; font-weight: 600; color: var(--text); }}
+    .wf-count {{
+      display: inline-block; margin-top: 4px; font-size: .72rem; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; background: #eef2f7; color: var(--muted);
+    }}
+    .queue-matrix td {{
+      padding: 10px 14px; border: 1px solid var(--border); border-top: none; border-left: none;
+      vertical-align: top;
+    }}
+    .queue-matrix td:first-child {{ border-left: 1px solid var(--border); }}
+    .queue-matrix tr:last-child td:first-child {{ border-radius: 0 0 0 10px; }}
+    .queue-matrix tr:last-child td:last-child {{ border-radius: 0 0 10px 0; }}
+    .queue-matrix td.counted {{ background: #eef6ff; }}
+    .queue-matrix td.ignored-old {{ background: #fffbeb; }}
+    .queue-matrix td.empty-cell {{ background: #fafbfc; }}
+    .cell-wait {{
+      font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 4px;
+    }}
+    .cell-run {{ margin-bottom: 6px; }}
+    .cell-run a {{ color: var(--accent); text-decoration: none; }}
+    .cell-run a:hover {{ text-decoration: underline; }}
+    .cell-gate {{ margin-top: 2px; }}
     details {{ border: 1px solid var(--border); border-radius: 10px; padding: 0; overflow: hidden; margin-top: 10px; }}
     summary {{
       cursor: pointer; padding: 12px 14px; background: #f8fafc; font-weight: 600; list-style: none;
     }}
     summary::-webkit-details-marker {{ display: none; }}
     .details-body {{ padding: 12px 14px 14px; }}
-    .run-list {{ list-style: none; padding: 0; margin: 0; }}
-    .run-list li {{
-      display: flex; justify-content: space-between; gap: 12px; padding: 8px 0;
-      border-bottom: 1px solid var(--border); font-size: .88rem;
-    }}
-    .run-list li:last-child {{ border-bottom: none; }}
     .pill {{ font-size: .75rem; padding: 2px 8px; border-radius: 999px; background: #eef2f7; color: var(--muted); }}
+    .pill.counted {{ background: #dbeafe; color: #1e40af; }}
+    .pill.ignored-old {{ background: #fef3c7; color: #92400e; }}
+    .pill.ignored-fresh {{ background: #f1f5f9; color: var(--muted); }}
+    .pill.add {{ background: #dcfce7; color: var(--add); }}
+    .pill.remove {{ background: #fee2e2; color: var(--remove); }}
     .empty {{ color: var(--muted); font-size: .9rem; margin: 0; }}
     code {{ background: #eef2f7; padding: 2px 6px; border-radius: 4px; font-size: .85em; }}
   </style>
@@ -433,7 +514,13 @@ def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runn
     </div>
 
     <div class="section">
-      <h2>Runner'ы</h2>
+      <h2>Очередь workflow runs</h2>
+      <p class="empty" style="margin-bottom:12px">Каждый workflow — отдельный столбец. Внутри столбца сортировка по queue time ↑ (меньше ждёт — выше). Gate считает только PR-check «считается».</p>
+      {_queue_table(queue['all'], 'Очередь пуста.')}
+    </div>
+
+    <div class="section">
+      <h2>Runner sync</h2>
       <div class="summary-row">
         <span class="chip">всего ghrun: {meta['ghrun_count']}</span>
         <span class="chip">postcommit до sync: {meta['postcommit_count_before']}</span>
@@ -441,26 +528,7 @@ def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runn
         <span class="chip remove">− postcommit: {stats['remove_postcommit']}</span>
         <span class="chip">без изменений: {stats['no_change']}</span>
       </div>
-      {_runner_cards(actions)}
-    </div>
-
-    <div class="section">
-      <h2>Очередь PR-check</h2>
-      <details open>
-        <summary>Считаются в gate ({len(queue['counted'])})</summary>
-        <div class="details-body">{_runs_list(queue['counted'], 'Нет — gate видит пустую очередь.')}</div>
-      </details>
-      <details>
-        <summary>Игнор: слишком старые (&gt; {ignore_h}h) — {len(queue['ignored_too_old'])}</summary>
-        <div class="details-body">
-          <p class="empty" style="margin-bottom:8px">Обычно broken re-run / zombie. На gate не влияют.</p>
-          {_runs_list(queue['ignored_too_old'], 'Нет.')}
-        </div>
-      </details>
-      <details>
-        <summary>Игнор: слишком свежие (≤ 60s) — {len(queue['ignored_too_fresh'])}</summary>
-        <div class="details-body">{_runs_list(queue['ignored_too_fresh'], 'Нет.')}</div>
-      </details>
+      {_runner_changes_table(actions)}
     </div>
 
     <div class="section">
@@ -519,7 +587,7 @@ def run(args: argparse.Namespace) -> int:
     print("Gate config:", cfg["rules_summary"])
     queue_payload = api_request(
         "GET",
-        f"https://api.github.com/repos/{repo}/actions/runs?per_page=1000&page=1&status=queued&event=pull_request_target",
+        f"https://api.github.com/repos/{repo}/actions/runs?per_page=1000&page=1&status=queued",
         queue_token,
     )
     queue = classify_queue(queue_payload, cfg["ignore_pr_check_older_than_hours"], now_ts)

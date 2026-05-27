@@ -94,6 +94,26 @@ class S3:
             if code not in {'BucketAlreadyOwnedByYou', 'BucketAlreadyExists'}:
                 raise
 
+    def recreate_bucket(self, bucket_config: ObjectStorageParams):
+        s3 = self._make_s3_resource(
+            bucket_config.access_key,
+            bucket_config.secret_key,
+            bucket_config.endpoint,
+        )
+        bucket = s3.Bucket(bucket_config.bucket)
+
+        try:
+            # Remove all object versions first to support versioned buckets.
+            bucket.object_versions.delete()
+            bucket.objects.all().delete()
+            bucket.delete()
+        except ClientError as e:
+            code = e.response.get('Error', {}).get('Code', '')
+            if code not in {'NoSuchBucket', '404'}:
+                raise
+
+        self.create_bucket(bucket_config)
+
     def count_objects(self, bucket_config: ObjectStorageParams):
         s3 = self._make_s3_resource(
             bucket_config.access_key,
@@ -183,7 +203,7 @@ class TieringTestBase(BaseTestSet):
         ]
 
         for config in self.s3_configs:
-            self.s3.create_bucket(config)
+            self.s3.recreate_bucket(config)
 
         self.sources: list[str] = []
         for i, s3_config in enumerate(self.s3_configs):

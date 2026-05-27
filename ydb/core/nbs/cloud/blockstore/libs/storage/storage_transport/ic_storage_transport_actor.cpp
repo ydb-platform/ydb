@@ -85,13 +85,13 @@ TICStorageTransportActor::~TICStorageTransportActor()
     RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
         ListPBufferEntriesRequests);
 
-    for (auto& [id, request]: WriteToManyPBuffersRequests) {
+    for (auto& [id, requestInfo]: WriteToManyPBuffersRequests) {
         auto response = MakeWritePersistentBuffersResult(
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
             DestroyErrorMessage,
-            request->PersistentBufferIds);
-        if (request->Callback) {
-            request->Callback(std::move(response->Record));
+            requestInfo.Request->PersistentBufferIds);
+        if (requestInfo.Request->Callback) {
+            requestInfo.Request->Callback(std::move(response->Record));
         }
     }
 }
@@ -250,8 +250,19 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        WriteToManyPBuffersRequests.emplace(requestId, ev->Release().Release());
+    TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> waitingReplies;
+    for (const auto& diskId: msg->PersistentBufferIds) {
+        waitingReplies.emplace(diskId);
+    }
+
+    auto [it, inserted] = WriteToManyPBuffersRequests.emplace(
+        requestId,
+        TWriteToManyPBuffersReqInfo{
+            .Request =
+                std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>(
+                    ev->Release().Release()),
+            .WaitingReplies = std::move(waitingReplies),
+        });
     Y_ABORT_UNLESS(inserted);
 
     LOG_DEBUG(
@@ -322,14 +333,19 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         requestId);
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
-        auto& request = **r;
-        if (request.Callback) {
-            const EWriteStatus status = request.Callback(ev->Get()->Record);
-            if (status == EWriteStatus::FINISHED) {
-                WriteToManyPBuffersRequests.erase(requestId);
-            }
-            // If status is IN_PROGRESS, do NOT erase from map: the callback
-            // may be called again when the next response arrives.
+        auto& requestInfo = *r;
+        auto& request = *requestInfo.Request;
+        auto& waitingReplies = requestInfo.WaitingReplies;
+
+        Y_ABORT_UNLESS(request.Callback);
+        request.Callback(ev->Get()->Record);
+
+        for (const auto& singlePBufferResponse: ev->Get()->Record.GetResult()) {
+            waitingReplies.erase(singlePBufferResponse.GetPersistentBufferId());
+        }
+
+        if (waitingReplies.empty()) {
+            WriteToManyPBuffersRequests.erase(requestId);
         }
     } else {
         LOG_WARN(

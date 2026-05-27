@@ -40,7 +40,7 @@ TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
 
 TBaseWriteRequestExecutor::~TBaseWriteRequestExecutor()
 {
-    if (!IsReplied) {
+    if (!IsAlreadyReplied()) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -68,9 +68,9 @@ bool TBaseWriteRequestExecutor::IsAlreadyReplied() const
 
 TString TBaseWriteRequestExecutor::ExtendedDebugState() const
 {
-    TString result; // TODO
-    result += "RequestedWrites: " + RequestedWrites.Print();
-    result += "CompletedWrites: " + CompletedWrites.Print();
+    TStringBuilder result;
+    result << "RequestedWrites: " << RequestedWrites.Print() << ";";
+    result << "CompletedWrites: " << CompletedWrites.Print() << ";";
 
     return result;
 }
@@ -92,6 +92,7 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
         ReplyCallback,
         "TBaseWriteRequestExecutor::Reply called without callback set");
     Y_ABORT_IF(IsReplied, "TBaseWriteRequestExecutor::Reply called twice");
+    IsReplied = true;
 
     if (HasError(error)) {
         LOG_ERROR(
@@ -115,8 +116,6 @@ void TBaseWriteRequestExecutor::Reply(NProto::TError error)
         .Lsn = Lsn,
         .RequestedWrites = RequestedWrites,
         .CompletedWrites = CompletedWrites});
-
-    IsReplied = true;
 }
 
 void TBaseWriteRequestExecutor::Notify(THostMask completedOnCurrentResponse)
@@ -139,7 +138,7 @@ void TBaseWriteRequestExecutor::Notify(THostMask completedOnCurrentResponse)
 
 void TBaseWriteRequestExecutor::SendWriteRequest(THostIndex host)
 {
-    if (IsReplied) {
+    if (IsAlreadyReplied()) {
         return;
     }
 
@@ -178,10 +177,6 @@ void TBaseWriteRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    if (IsReplied) {
-        return;
-    }
-
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

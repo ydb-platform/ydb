@@ -562,14 +562,15 @@ void TBlocksDirtyMap::UpdateAdditionalEraseQueue(
     auto item = Inflight.GetValue(lsn);
     if (item) {
         auto& inflight = item->Value;
-        needToRegister = inflight.GetState() == TInflightInfo::EState::PBufferErasing ||
+        needToRegister =
+            inflight.GetState() == TInflightInfo::EState::PBufferErasing ||
             inflight.GetState() == TInflightInfo::EState::PBufferErased;
     }
 
     if (!needToRegister) {
         return;
     }
-    // TODO use Register() method
+
     ReadyToEraseHanging.emplace(TInfoEraseHanging{
         .Lsn = lsn,
         .Hosts = completedWrites,

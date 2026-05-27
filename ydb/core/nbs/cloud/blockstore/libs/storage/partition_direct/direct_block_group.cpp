@@ -15,27 +15,13 @@ using namespace NThreading;
 ////////////////////////////////////////////////////////////////////////////////
 
 TDBGWriteBlocksToManyPBuffersResponse
-TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+TDBGWriteBlocksToManyPBuffersResponse::MakeDirectBlockGroupError(
     EWellKnownResultCodes code,
     TString reason)
 {
     TDBGWriteBlocksToManyPBuffersResponse result;
-    result.OverallError = MakeError(code, std::move(reason));
+    result.DirectBlockGroupError = MakeError(code, std::move(reason));
     return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool TDDiskIdLess::operator()(const TDDiskId& lh, const TDDiskId& rh) const
-{
-    auto makeTuple = [](const TDDiskId& item)
-    {
-        return std::make_tuple(
-            item.GetNodeId(),
-            item.GetPDiskId(),
-            item.GetDDiskSlotId());
-    };
-    return makeTuple(lh) < makeTuple(rh);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

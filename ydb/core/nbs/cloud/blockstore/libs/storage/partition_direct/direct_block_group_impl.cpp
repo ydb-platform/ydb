@@ -507,23 +507,19 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds;
     disksIds.reserve(hostIndexes.size());
 
-    // TODO вынести в actor?
-    std::shared_ptr<TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess>>
-        waitingReplies = std::make_shared<
-            TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess>>();
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
             PBufferConnections[hostIndex].HostConnection.DDiskId;
 
         disksIds.push_back({});
         ddiskId.Serialize(&disksIds.back());
-        waitingReplies->emplace(disksIds.back());
     }
 
     if (!Initialized) {
-        callback(TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError( // TODO удалить этот OverallError?
-            E_REJECTED,
-            "Connections are not established"));
+        callback(
+            TDBGWriteBlocksToManyPBuffersResponse::MakeDirectBlockGroupError(
+                E_REJECTED,
+                "Connections are not established"));
         return;
     }
 
@@ -546,25 +542,12 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          callback = std::move(callback),
-         waitingReplies,
          weakSelf = weak_from_this()](
             NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult
                 result,
             std::shared_ptr<NWilson::TSpan> span) mutable
         {
             // ActorSystem thread
-
-            for (const auto& singlePBufferResponse: result.GetResult()) {
-                auto it = waitingReplies->find(
-                    singlePBufferResponse.GetPersistentBufferId());
-                if (it != waitingReplies->end()) {
-                    waitingReplies->erase(it);
-                }
-            }
-
-            NTransport::EWriteStatus status =
-                waitingReplies->empty() ? NTransport::EWriteStatus::FINISHED
-                                        : NTransport::EWriteStatus::IN_PROGRESS;
 
             auto responseSpan =
                 span ? std::make_shared<NWilson::TSpan>(span->CreateChild(
@@ -595,12 +578,12 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
                         return;
                     }
                     callback(
-                        TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
-                            E_FAIL,
-                            "WriteBlocksToManyPBuffersResponse: DBG is "
-                            "destroyed already."));
+                        TDBGWriteBlocksToManyPBuffersResponse::
+                            MakeDirectBlockGroupError(
+                                E_FAIL,
+                                "WriteBlocksToManyPBuffersResponse: DBG is "
+                                "destroyed already."));
                 });
-            return status;
         });
 }
 

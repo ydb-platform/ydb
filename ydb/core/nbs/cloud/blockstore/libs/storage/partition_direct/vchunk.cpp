@@ -271,7 +271,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     DirtyMapRestored = true;
 
     DoFlush(false);
-    DoErase(false, TBlocksDirtyMap::EEraseType::USUAL);
+    DoErase(false, TBlocksDirtyMap::EEraseType::STANDARD);
 }
 
 void TVChunk::DoStart()
@@ -595,7 +595,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
 
     UpdatePendingCounters();
 
-    DoErase(false, TBlocksDirtyMap::EEraseType::USUAL);
+    DoErase(false, TBlocksDirtyMap::EEraseType::STANDARD);
     ScheduleCleaningUp();
 }
 
@@ -609,12 +609,13 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
 
     TEraseHints hints;
     switch (eraseType) {
-        case TBlocksDirtyMap::EEraseType::USUAL:
+        case TBlocksDirtyMap::EEraseType::STANDARD:
             hints =
                 BlocksDirtyMap.MakeEraseHint(force ? 1 : SyncRequestsBatchSize);
             break;
         case TBlocksDirtyMap::EEraseType::HANGING:
-            hints = BlocksDirtyMap.MakeEraseHangingHint(force ? 1 : SyncRequestsBatchSize);
+            hints = BlocksDirtyMap.MakeEraseHangingHint(
+                force ? 1 : SyncRequestsBatchSize);
             break;
     };
 
@@ -643,7 +644,7 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
                 // Executor thread
                 if (auto self = weakSelf.lock()) {
                     switch (eraseType) {
-                        case TBlocksDirtyMap::EEraseType::USUAL:
+                        case TBlocksDirtyMap::EEraseType::STANDARD:
                             self->OnEraseResponse(f.GetValue());
                             break;
                         case TBlocksDirtyMap::EEraseType::HANGING:
@@ -747,7 +748,7 @@ void TVChunk::CleaningUp()
         BlocksDirtyMap.NeedErase() ? "NeedErase" : "");
 
     DoFlush(true);
-    DoErase(true, TBlocksDirtyMap::EEraseType::USUAL);
+    DoErase(true, TBlocksDirtyMap::EEraseType::STANDARD);
 }
 
 void TVChunk::UpdatePendingCounters()

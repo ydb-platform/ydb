@@ -43,12 +43,12 @@ struct TDBGWriteBlocksToManyPBuffersResponse
         NProto::TError Error;
     };
 
-    static TDBGWriteBlocksToManyPBuffersResponse MakeOverallError(
+    static TDBGWriteBlocksToManyPBuffersResponse MakeDirectBlockGroupError(
         EWellKnownResultCodes code,
         TString reason);
 
     TVector<TSinglePersistentBufferResult> Responses;
-    NProto::TError OverallError;
+    NProto::TError DirectBlockGroupError;
 };
 
 struct TDBGFlushResponse
@@ -93,12 +93,6 @@ struct TAggregatedListPBufferResponse
 {
     NProto::TError Error;
     TMap<THostIndex, TListPBufferMetaVector> Meta;
-};
-
-struct TDDiskIdLess
-{
-    using TDDiskId = NKikimrBlobStorage::NDDisk::TDDiskId;
-    bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
 };
 
 struct TDBGDumpResponse

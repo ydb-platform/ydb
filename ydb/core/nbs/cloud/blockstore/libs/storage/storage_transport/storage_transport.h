@@ -12,15 +12,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class EWriteStatus: ui32
-{
-    UNDEFINED,
-    FINISHED,
-    IN_PROGRESS,
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 struct THostConnection
 {
     enum class EConnectionType
@@ -61,10 +52,7 @@ public:
     // Callback type for WriteToManyPBuffers: called once per response received.
     // May be called multiple times if the underlying transport delivers more
     // than one response for the same request.
-    // Returns EWriteStatus::FINISHED when the caller no longer needs further
-    // responses (the transport layer will then clean up the request).
-    // Returns EWriteStatus::IN_PROGRESS to keep receiving further responses.
-    using TWriteToManyPBuffersCallback = std::function<EWriteStatus(
+    using TWriteToManyPBuffersCallback = std::function<void(
         TEvWriteToManyPersistentBuffersResult,
         std::shared_ptr<NWilson::TSpan>)>;
 

@@ -132,15 +132,15 @@ void TWriteWithPbReplicationRequestExecutor::SendWriteRequestToManyPBuffers(
 void TWriteWithPbReplicationRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    if (HasError(response.OverallError)) {
+    if (HasError(response.DirectBlockGroupError)) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "OnWriteToManyPBuffersResponse fatal error %s %s %s",
-            FormatError(response.OverallError).c_str(),
+            FormatError(response.DirectBlockGroupError).c_str(),
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
-        TryToSendDirectWrites(false);
+        ReplyOrNotify(response.DirectBlockGroupError, {});
         return;
     }
 
@@ -319,11 +319,11 @@ void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
 
 TString TWriteWithPbReplicationRequestExecutor::ExtendedDebugState() const
 {
-    // TODO TStringBuilder
-    TString result = TBaseWriteRequestExecutor::ExtendedDebugState();
-    result += "AvailableHostsForDirectSending: " +
-              AvailableHostsForDirectSending.Print();
-    result += "ActiveDirectWrites" + ActiveDirectWrites.Print();
+    TStringBuilder result;
+    result << TBaseWriteRequestExecutor::ExtendedDebugState();
+    result << "AvailableHostsForDirectSending: "
+           << AvailableHostsForDirectSending.Print() << ";";
+    result << "ActiveDirectWrites" << ActiveDirectWrites.Print() << ";";
 
     return result;
 }

@@ -690,6 +690,31 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPbReplicationTest)
         // there were sent requests all locations
         UNIT_ASSERT_EQUAL(MakeAllHostsMask(), response.RequestedWrites);
     }
+
+    Y_UNIT_TEST_F(ShouldFailWriteOnDBGError, TWriteWithPbTestFixture)
+    {
+        // make main request ok reply
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            GetManyPBuffersHandlerHanging();
+
+        // prepare and call main request
+        auto writeRequest =
+            CreateRequest(MakeWriteTestRequestHeaders(Range, BlockSize));
+
+        writeRequest->Run();
+
+        ManyPBufferCallback(CreateDBGErrorResponse());
+        UNIT_ASSERT_VALUES_EQUAL(true, CallbackResult.has_value());
+        const auto& response = *CallbackResult;
+        UNIT_ASSERT_VALUES_EQUAL(E_FAIL, response.Error.GetCode());
+
+        UNIT_ASSERT_EQUAL(
+            VChunkConfig.PBufferHosts.GetPrimary(),
+            response.RequestedWrites);
+        UNIT_ASSERT_EQUAL(
+            true,
+            response.CompletedWrites.Empty());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

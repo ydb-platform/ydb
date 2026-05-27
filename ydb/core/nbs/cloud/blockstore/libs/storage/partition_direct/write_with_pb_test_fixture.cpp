@@ -157,11 +157,12 @@ TWriteWithPbTestFixture::CreateRequest(TRequestHeaders headers)
     return request;
 }
 
+// static
 TDBGWriteBlocksToManyPBuffersResponse
 TWriteWithPbTestFixture::CreateOkResponse()
 {
     TDBGWriteBlocksToManyPBuffersResponse okResponse;
-    okResponse.OverallError = MakeError(S_OK);
+    okResponse.DirectBlockGroupError = MakeError(S_OK);
     okResponse.Responses.push_back(
         {.HostIndex = THostIndex{0}, .Error = MakeError(S_OK)});
     okResponse.Responses.push_back(
@@ -172,15 +173,26 @@ TWriteWithPbTestFixture::CreateOkResponse()
     return okResponse;
 }
 
+// static
 TDBGWriteBlocksToManyPBuffersResponse
 TWriteWithPbTestFixture::CreateOneOkResponse(THostIndex hostIndex)
 {
     TDBGWriteBlocksToManyPBuffersResponse partiallyOkResponse;
-    partiallyOkResponse.OverallError = MakeError(S_OK);
+    partiallyOkResponse.DirectBlockGroupError = MakeError(S_OK);
     partiallyOkResponse.Responses.push_back(
         {.HostIndex = hostIndex, .Error = MakeError(S_OK)});
 
     return partiallyOkResponse;
+}
+
+// static
+TDBGWriteBlocksToManyPBuffersResponse
+TWriteWithPbTestFixture::CreateDBGErrorResponse()
+{
+    TDBGWriteBlocksToManyPBuffersResponse dbgErrorResponse;
+    dbgErrorResponse.DirectBlockGroupError = MakeError(E_FAIL);
+
+    return dbgErrorResponse;
 }
 
 void TWriteWithPbTestFixture::RunScheduledHedge()

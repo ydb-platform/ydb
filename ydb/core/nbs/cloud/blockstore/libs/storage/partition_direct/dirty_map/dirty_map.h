@@ -192,7 +192,7 @@ class TBlocksDirtyMap
 public:
     enum class EEraseType: ui32
     {
-        USUAL, // TODO rename?
+        STANDARD,
         HANGING
     };
     TBlocksDirtyMap(

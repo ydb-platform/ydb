@@ -265,7 +265,7 @@ struct TEvTransportPrivate
     struct TWriteToManyPBuffers: TDisableCopyMove
     {
         using TResult = TProtoEvWriteToManyPersistentBuffersResult;
-        using TCallback = std::function<EWriteStatus(TResult)>;
+        using TCallback = std::function<void(TResult)>;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;

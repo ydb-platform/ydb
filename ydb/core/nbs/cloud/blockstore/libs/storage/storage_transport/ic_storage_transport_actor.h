@@ -2,6 +2,8 @@
 
 #include "ic_storage_transport_events.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
+
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -38,8 +40,14 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
-    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>>
-        WriteToManyPBuffersRequests;
+    struct TWriteToManyPBuffersReqInfo
+    {
+        // TWriteToManyPBuffersReqInfo();
+        std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers> Request;
+        TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess> WaitingReplies;
+    };
+
+    THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
 public:
     TICStorageTransportActor() = default;

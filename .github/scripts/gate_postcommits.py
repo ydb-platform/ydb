@@ -31,11 +31,38 @@ HOSTED_COLUMN = "GitHub-hosted"
 GENERIC_RUNNER_LABELS = frozenset(
     {"self-hosted", "Linux", "Windows", "macOS", "X64", "ARM", "ARM64", "auto-provisioned", "ghrun"}
 )
-MATRIX_LABEL_PRIORITY = { "postcommit": 1, "tiny-worker": 2, HOSTED_COLUMN: 1000}
+MATRIX_LABEL_PRIORITY = {"postcommit": 1, "tiny-worker": 2, HOSTED_COLUMN: 1000}
+BUILD_PRESET_PRIORITY = ("release-asan", "release-msan", "release-tsan", "relwithdebinfo")
 
 
 def is_matrix_label(label: str) -> bool:
     return not label.startswith("instance:") and label not in GENERIC_RUNNER_LABELS
+
+
+def _build_preset_sort_key(label: str) -> tuple[int, str]:
+    lower = label.lower()
+    for idx, token in enumerate(BUILD_PRESET_PRIORITY):
+        if token in lower:
+            return (idx, lower)
+    return (len(BUILD_PRESET_PRIORITY), lower)
+
+
+def matrix_column_labels(all_runner_labels: list[str]) -> list[str]:
+    """One build-preset column per runner; release presets prefer asan→msan→tsan→relwith."""
+    matrix = [label for label in all_runner_labels if is_matrix_label(label)]
+    presets = [label for label in matrix if label.startswith("build-preset-")]
+    if len(presets) <= 1:
+        return matrix
+    primary = min(presets, key=_build_preset_sort_key)
+    return [label for label in matrix if not label.startswith("build-preset-") or label == primary]
+
+
+def _labels_tooltip(all_labels: list[str], job: dict | None) -> str:
+    lines = [f"Runner labels: {', '.join(all_labels)}"]
+    job_labels = (job or {}).get("job_labels") or []
+    if job_labels:
+        lines.append(f"Job runs-on: {', '.join(job_labels)}")
+    return "\n".join(lines)
 
 
 def api_request(method: str, url: str, token: str, data: dict | None = None) -> Any:
@@ -232,6 +259,7 @@ def _job_info(run: dict, job: dict, now_ts: float) -> dict:
         "elapsed_human": fmt_wait(elapsed),
         "host_label": ", ".join(job_labels) if job_labels else "hosted",
         "runner_name": job.get("runner_name") or "",
+        "job_labels": list(job_labels),
     }
 
 
@@ -281,14 +309,16 @@ def build_runner_label_view(
     label_priority = MATRIX_LABEL_PRIORITY
     parsed = []
     for runner in raw_runners:
-        labels = [lb["name"] for lb in runner.get("labels", []) if is_matrix_label(lb["name"])]
-        if not labels:
+        all_labels = sorted({lb["name"] for lb in runner.get("labels", [])})
+        column_labels = matrix_column_labels(all_labels)
+        if not column_labels:
             continue
         parsed.append(
             {
                 "name": runner.get("name", str(runner["id"])),
                 "id": runner["id"],
-                "labels": labels,
+                "labels": column_labels,
+                "all_labels": all_labels,
                 "status": runner.get("status", "unknown"),
             }
         )
@@ -304,12 +334,14 @@ def build_runner_label_view(
         for runner in parsed:
             if label not in runner["labels"]:
                 continue
+            job = runner_jobs.get(runner["name"])
             entries.append(
                 {
                     "runner_name": runner["name"],
                     "runner_id": runner["id"],
                     "status": runner["status"],
-                    "job": runner_jobs.get(runner["name"]),
+                    "job": job,
+                    "all_labels": runner["all_labels"],
                 }
             )
         entries.sort(
@@ -485,13 +517,14 @@ def _runner_label_matrix_table(by_label: dict[str, list[dict]], empty_text: str,
             entry = entries[row_idx]
             job = entry["job"]
             runner_name = entry["runner_name"]
+            tooltip = esc(_labels_tooltip(entry.get("all_labels") or [], job))
             if label == HOSTED_COLUMN or entry.get("hosted"):
                 runner_line = f'<div class="cell-runner">{esc(runner_name)}</div>'
             else:
                 runner_line = f'<div class="cell-runner">{_runner_name_link(runner_name, now_ts)}</div>'
             if job:
                 cells.append(
-                    f'<td class="busy">'
+                    f'<td class="busy" title="{tooltip}">'
                     f"{runner_line}"
                     f'<div class="cell-wf" title="{esc(job["workflow"])}">'
                     f'<strong>{esc(job["workflow"])}</strong></div>'
@@ -501,14 +534,14 @@ def _runner_label_matrix_table(by_label: dict[str, list[dict]], empty_text: str,
                 )
             elif entry["status"] == "offline":
                 cells.append(
-                    f'<td class="offline">'
+                    f'<td class="offline" title="{tooltip}">'
                     f"{runner_line}"
                     f'<div class="cell-idle">offline</div>'
                     f"</td>"
                 )
             else:
                 cells.append(
-                    f'<td class="idle">'
+                    f'<td class="idle" title="{tooltip}">'
                     f"{runner_line}"
                     f'<div class="cell-idle">idle</div>'
                     f"</td>"
@@ -733,6 +766,7 @@ def build_html(
     .queue-matrix.runner-matrix td {{
       min-width: 168px; max-width: 200px;
     }}
+    .queue-matrix.runner-matrix td[title] {{ cursor: help; }}
     .queue-matrix th {{
       text-align: left; padding: 12px 14px; background: #f8fafc;
       border: 1px solid var(--border); border-left: none; vertical-align: top;
@@ -839,7 +873,7 @@ def build_html(
         <h1>Runner labels</h1>
         <span class="status-muted">{busy_runners} busy · {matrix_runners} runners · {label_count} labels</span>
       </div>
-      <p class="hero-lead">Self-hosted runner'ы по labels + столбец <strong>{esc(HOSTED_COLUMN)}</strong> (jobs на <code>ubuntu-latest</code> и т.п.). Generic labels скрыты.</p>
+      <p class="hero-lead">Self-hosted runner'ы по labels + столбец <strong>{esc(HOSTED_COLUMN)}</strong>. Наведи на ячейку — все labels runner'а и runs-on job'а. Несколько build-preset → один столбец (asan &gt; msan &gt; tsan &gt; relwith).</p>
       <p class="hero-effect"><strong>YC:</strong> <a href="{esc(YC_ACTIVE_RUNNERS_URL)}" target="_blank" rel="noopener">Active runners</a> · имя runner'а → мониторинг 24h · run ID → GitHub</p>
       <div class="meta-line">{esc(meta['check_time'])} · всего в репо: {meta['total_runners']} runner'ов</div>
     </div>

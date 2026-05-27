@@ -579,7 +579,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         const NKikimrScheme::TEvModifySchemeTransactionResult* shardResult,
         const NYql::TIssue* issue,
         const TActorContext& ctx,
-        TString path = {})
+        const TString& path = {})
     {
         auto *result = new TEvTxUserProxy::TEvProposeTransactionStatus(status);
         if (issue) {

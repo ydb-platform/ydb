@@ -988,7 +988,22 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 }
                 break;
             }
+            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex: {
+                const auto& min_max = olapIndex.GetMinMaxIndex();
+                auto* ydbIndex = out.add_indexes();
+                ydbIndex->set_name(olapIndex.GetName());
+                if (min_max.HasColumnId()) {
+                    const auto it = idToName.find(min_max.GetColumnId());
+                    if (it != idToName.end()) {
+                        ydbIndex->add_index_columns(it->second);
+                    }
+                }
+
+                ydbIndex->mutable_local_min_max_index();
+                break;
+            }
             default:
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::SCHEMESHARD_DESCRIBE, "FillColumnTableIndexDescription: unsupported olap index kind:" << olapIndex.GetClassName());
                 break;
         }
     }

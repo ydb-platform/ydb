@@ -37,6 +37,7 @@ static double DurationToSeconds(TDuration duration) {
 }
 
 struct TCacheStats {
+    TString Id;
     TString Host;
     TString Url;
     ui64 Hits = 0;
@@ -55,6 +56,9 @@ static void FillCacheStatsJson(NJson::TJsonValue& result, const THashMap<TString
         hits += item.Hits;
         misses += item.Misses;
         NJson::TJsonValue& itemJson = statsJson.AppendValue({});
+        if (item.Id) {
+            itemJson["Id"] = item.Id;
+        }
         if (item.Host) {
             itemJson["Host"] = item.Host;
         }
@@ -222,11 +226,12 @@ public:
     }
 
     static TString GetCacheStatsKey(const TCacheKey& key) {
-        return TStringBuilder() << key.Host << '\n' << key.URL;
+        return key.GetId();
     }
 
     TCacheStats& GetCacheStats(const TCacheKey& key) {
         TCacheStats& stats = CacheStats[GetCacheStatsKey(key)];
+        stats.Id = key.GetId();
         stats.Host = key.Host;
         stats.Url = key.URL;
         return stats;
@@ -435,7 +440,7 @@ public:
             recordJson["Id"] = key.GetId();
             recordJson["Host"] = key.Host;
             recordJson["Url"] = key.URL;
-            const TString statsKey = TStringBuilder() << key.Host << '\n' << key.URL;
+            const TString statsKey = GetCacheStatsKey(key);
             auto statsIt = CacheStats.find(statsKey);
             recordJson["Hits"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Hits) : 0;
             recordJson["Misses"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Misses) : 0;
@@ -492,6 +497,7 @@ public:
                     if (it->second.OutgoingRequest) {
                         OutgoingRequests.erase(it->second.OutgoingRequest.Get());
                     }
+                    CacheStats.erase(GetCacheStatsKey(it->first));
                     Cache.erase(it);
                 }
             }
@@ -647,6 +653,17 @@ public:
         return {ToString(request->URL), GetCacheHeadersKey(request, policy)};
     }
 
+    static TString GetCacheStatsKey(const TCacheKey& key) {
+        return key.GetId();
+    }
+
+    TCacheStats& GetCacheStats(const TCacheKey& key) {
+        TCacheStats& stats = CacheStats[GetCacheStatsKey(key)];
+        stats.Id = key.GetId();
+        stats.Url = key.URL;
+        return stats;
+    }
+
     TString GetRequestHandlerPath(TStringBuf requestUrl) {
         TStringBuf url = requestUrl.Before('?');
         THashMap<TString, TActorId>::iterator it;
@@ -670,8 +687,7 @@ public:
     }
 
     void RecordCacheHit(const TCacheKey& key) {
-        TCacheStats& stats = CacheStats[key.URL];
-        stats.Url = key.URL;
+        TCacheStats& stats = GetCacheStats(key);
         ++stats.Hits;
 
         TString handlerPath = GetRequestHandlerPath(key.URL);
@@ -683,8 +699,7 @@ public:
     }
 
     void RecordCacheMiss(const TCacheKey& key) {
-        TCacheStats& stats = CacheStats[key.URL];
-        stats.Url = key.URL;
+        TCacheStats& stats = GetCacheStats(key);
         ++stats.Misses;
 
         TString handlerPath = GetRequestHandlerPath(key.URL);
@@ -696,8 +711,7 @@ public:
     }
 
     void RecordCacheFetchDuration(const TCacheKey& key, TDuration duration) {
-        TCacheStats& stats = CacheStats[key.URL];
-        stats.Url = key.URL;
+        TCacheStats& stats = GetCacheStats(key);
         stats.LastFetchDuration = duration;
         stats.HasLastFetchDuration = true;
 
@@ -757,6 +771,7 @@ public:
             }
             Send(waiter.Request->Sender, new TEvHttpProxy::TEvHttpOutgoingResponse(response));
         }
+        CacheStats.erase(GetCacheStatsKey(it->first));
         Cache.erase(it);
     }
 
@@ -999,7 +1014,7 @@ public:
             recordJson["Id"] = key.GetId();
             recordJson["CacheId"] = record.CacheId;
             recordJson["Url"] = key.URL;
-            auto statsIt = CacheStats.find(key.URL);
+            auto statsIt = CacheStats.find(GetCacheStatsKey(key));
             recordJson["Hits"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Hits) : 0;
             recordJson["Misses"] = statsIt != CacheStats.end() ? static_cast<i64>(statsIt->second.Misses) : 0;
             if (record.HasLastFetchDuration) {

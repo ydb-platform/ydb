@@ -164,11 +164,10 @@ namespace NKikimr::NHttpProxy {
                 const auto& token = ev->Get()->Token;
                 if (ev->Get()->HasError() || !token) {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement) {
-                        ReplyWithYdbError(
+                        return ReplyWithYdbError(
                             ctx,
                             ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
                             TString{ev->Get()->Error.Message});
-                        ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
                     }
                 } else {
                     HttpContext.SerializedUserToken = token->GetSerializedToken();
@@ -222,7 +221,9 @@ namespace NKikimr::NHttpProxy {
                     })
                 }, errorText.size(), errorText);
 
-                ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                if (AuthActor) {
+                    ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                }
 
                 TBase::Die(ctx);
             }
@@ -251,7 +252,9 @@ namespace NKikimr::NHttpProxy {
                     })
                 }, errorText.size(), errorText);
 
-                ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                if (AuthActor) {
+                    ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+                }
 
                 TBase::Die(ctx);
             }

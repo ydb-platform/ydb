@@ -9,8 +9,8 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
-from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +20,12 @@ DEFAULT_CONFIG = {
     "limited_mode_when_pr_check_queue_above": 13,
     "reserved_postcommit_runners_in_limited_mode": 5,
 }
+
+YC_ACTIVE_RUNNERS_URL = (
+    "https://console.yandex.cloud/folders/b1grf3mpoatgflnlavjd/compute/operations"
+)
+YC_MONITORING_FOLDER = "b1grf3mpoatgflnlavjd"
+YC_RUNNER_DASHBOARD = "runner-summary"
 
 
 def api_request(method: str, url: str, token: str, data: dict | None = None) -> Any:
@@ -50,6 +56,28 @@ def fmt_wait(seconds: float) -> str:
 
 def esc(value: Any) -> str:
     return html.escape(str(value))
+
+
+def runner_monitoring_url(runner_name: str, now_ts: float) -> str:
+    params = urllib.parse.urlencode(
+        {
+            "from": int((now_ts - 86400) * 1000),
+            "to": int(now_ts * 1000),
+            "refresh": 60000,
+            "p[host]": runner_name,
+        }
+    )
+    return (
+        f"https://monitoring.yandex.cloud/folders/{YC_MONITORING_FOLDER}"
+        f"/dashboards/{YC_RUNNER_DASHBOARD}?{params}"
+    )
+
+
+def _runner_name_link(runner_name: str, now_ts: float) -> str:
+    return (
+        f'<a href="{esc(runner_monitoring_url(runner_name, now_ts))}" '
+        f'target="_blank" rel="noopener">{esc(runner_name)}</a>'
+    )
 
 
 def load_config(config_raw: str, legacy_threshold: str) -> tuple[str, dict[str, Any]]:
@@ -153,25 +181,97 @@ def fetch_all_runners(repo: str, token: str) -> tuple[list[dict], int]:
     return all_runners, total
 
 
-def count_runners_by_label(runners: list[dict]) -> list[dict]:
-    counter: Counter[str] = Counter()
-    for runner in runners:
-        for label in {lb["name"] for lb in runner.get("labels", [])}:
-            counter[label] += 1
-    if not counter:
-        return []
-    max_count = max(counter.values())
-    total = len(runners)
-    return [
-        {
-            "label": label,
-            "count": count,
-            "pct_of_runners": round(count / total * 100, 1) if total else 0,
-            "bar_pct": int(count / max_count * 100),
-            "highlight": label in ("ghrun", "postcommit"),
-        }
-        for label, count in sorted(counter.items(), key=lambda item: (-item[1], item[0].lower()))
-    ]
+def fetch_active_runner_jobs(repo: str, token: str, now_ts: float) -> dict[str, dict]:
+    """Map runner_name -> currently running workflow job."""
+    result: dict[str, dict] = {}
+    page = 1
+    while True:
+        payload = api_request(
+            "GET",
+            f"https://api.github.com/repos/{repo}/actions/runs?per_page=100&page={page}&status=in_progress",
+            token,
+        )
+        runs = payload.get("workflow_runs", [])
+        if not runs:
+            break
+        for run in runs:
+            jobs_payload = api_request(
+                "GET",
+                f"https://api.github.com/repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100",
+                token,
+            )
+            for job in jobs_payload.get("jobs", []):
+                if job.get("status") != "in_progress":
+                    continue
+                runner_name = job.get("runner_name")
+                if not runner_name:
+                    continue
+                started_raw = job.get("started_at") or run.get("run_started_at") or run.get("created_at")
+                started_ts = datetime.fromisoformat(started_raw.replace("Z", "+00:00")).timestamp()
+                elapsed = max(0.0, now_ts - started_ts)
+                result[runner_name] = {
+                    "workflow": run.get("name", "Unknown"),
+                    "job_name": job.get("name", ""),
+                    "run_id": run["id"],
+                    "run_url": run["html_url"],
+                    "elapsed_seconds": elapsed,
+                    "elapsed_human": fmt_wait(elapsed),
+                }
+        if len(runs) < 100:
+            break
+        page += 1
+    return result
+
+
+def build_runner_label_view(raw_runners: list[dict], runner_jobs: dict[str, dict]) -> dict[str, list[dict]]:
+    label_priority = {"ghrun": 0, "postcommit": 1}
+    parsed = []
+    for runner in raw_runners:
+        labels = [
+            lb["name"]
+            for lb in runner.get("labels", [])
+            if not lb["name"].startswith("instance:")
+        ]
+        if not labels:
+            continue
+        parsed.append(
+            {
+                "name": runner.get("name", str(runner["id"])),
+                "id": runner["id"],
+                "labels": labels,
+                "status": runner.get("status", "unknown"),
+            }
+        )
+
+    all_labels = sorted(
+        {label for runner in parsed for label in runner["labels"]},
+        key=lambda name: (label_priority.get(name, 99), name.lower()),
+    )
+
+    by_label: dict[str, list[dict]] = {}
+    for label in all_labels:
+        entries = []
+        for runner in parsed:
+            if label not in runner["labels"]:
+                continue
+            entries.append(
+                {
+                    "runner_name": runner["name"],
+                    "runner_id": runner["id"],
+                    "status": runner["status"],
+                    "job": runner_jobs.get(runner["name"]),
+                }
+            )
+        entries.sort(
+            key=lambda entry: (
+                0 if entry["job"] else 1,
+                0 if entry["status"] == "online" else 1,
+                entry["job"]["elapsed_seconds"] if entry["job"] else 0,
+                entry["runner_name"].lower(),
+            )
+        )
+        by_label[label] = entries
+    return by_label
 
 
 def ghrun_runners(runners: list[dict]) -> list[dict]:
@@ -293,6 +393,66 @@ def _queue_table(runs: list[dict], empty_text: str) -> str:
     )
 
 
+def _runner_label_matrix_table(by_label: dict[str, list[dict]], empty_text: str, now_ts: float) -> str:
+    if not by_label:
+        return f'<p class="empty">{esc(empty_text)}</p>'
+
+    labels = list(by_label.keys())
+    max_rows = max(len(by_label[label]) for label in labels)
+
+    header = "".join(
+        f'<th><span class="wf-name">{esc(label)}</span>'
+        f'<span class="wf-count">{len(by_label[label])} · '
+        f'{sum(1 for entry in by_label[label] if entry["job"])} busy</span></th>'
+        for label in labels
+    )
+
+    body_rows = []
+    for row_idx in range(max_rows):
+        cells = []
+        for label in labels:
+            entries = by_label[label]
+            if row_idx >= len(entries):
+                cells.append('<td class="empty-cell"></td>')
+                continue
+            entry = entries[row_idx]
+            job = entry["job"]
+            runner_name = entry["runner_name"]
+            runner_link = _runner_name_link(runner_name, now_ts)
+            if job:
+                cells.append(
+                    f'<td class="busy">'
+                    f'<div class="cell-runner">{runner_link}</div>'
+                    f'<div class="cell-wf"><strong>{esc(job["workflow"])}</strong></div>'
+                    f'<div class="cell-wait">{esc(job["elapsed_human"])}</div>'
+                    f'<div class="cell-run"><a href="{esc(job["run_url"])}">{esc(job["run_id"])}</a></div>'
+                    f"</td>"
+                )
+            elif entry["status"] == "offline":
+                cells.append(
+                    f'<td class="offline">'
+                    f'<div class="cell-runner">{runner_link}</div>'
+                    f'<div class="cell-idle">offline</div>'
+                    f"</td>"
+                )
+            else:
+                cells.append(
+                    f'<td class="idle">'
+                    f'<div class="cell-runner">{runner_link}</div>'
+                    f'<div class="cell-idle">idle</div>'
+                    f"</td>"
+                )
+        body_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+    return (
+        '<div class="matrix-scroll">'
+        '<table class="queue-matrix">'
+        f"<thead><tr>{header}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody></table>"
+        "</div>"
+    )
+
+
 def _runner_changes_table(actions: list[dict]) -> str:
     changed = [item for item in actions if item["action"] != "no_change"]
     if not changed:
@@ -317,35 +477,11 @@ def _runner_changes_table(actions: list[dict]) -> str:
     )
 
 
-def _label_counts_table(label_counts: list[dict], total_runners: int) -> str:
-    if not label_counts:
-        return '<p class="empty">Нет данных по runner\'ам.</p>'
-    rows = []
-    for item in label_counts:
-        row_cls = "label-row highlight" if item["highlight"] else "label-row"
-        rows.append(
-            f'<tr class="{row_cls}">'
-            f'<td><code>{esc(item["label"])}</code></td>'
-            f'<td class="num"><strong>{item["count"]}</strong></td>'
-            f'<td class="num">{item["pct_of_runners"]}%</td>'
-            f'<td class="bar-cell">'
-            f'<div class="label-bar"><div class="label-bar-fill" style="width:{item["bar_pct"]}%"></div></div>'
-            f"</td></tr>"
-        )
-    return (
-        f'<p class="empty" style="margin-bottom:12px">Всего runner\'ов: <strong>{total_runners}</strong>. '
-        f"Считаем каждый label отдельно — у runner'а может быть несколько labels.</p>"
-        '<table class="queue-table label-table">'
-        "<thead><tr><th>Label</th><th>Runners</th><th>% от всех</th><th></th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
-    )
-
-
 def build_html(
     meta: dict,
     queue: dict,
     actions: list[dict],
-    label_counts: list[dict],
+    runner_label_view: dict[str, list[dict]],
     dry_run: bool,
     runners_note: str,
 ) -> str:
@@ -380,6 +516,7 @@ def build_html(
         if mode == "open"
         else f"Только {reserved} runner'ов с label postcommit."
     )
+    runners_empty_text = "Нет данных по runner'ам."
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -406,7 +543,7 @@ def build_html(
       margin: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg); color: var(--text); line-height: 1.5;
     }}
-    .wrap {{ max-width: 980px; margin: 0 auto; padding: 24px 20px 48px; }}
+    .wrap {{ max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }}
     .hero {{
       background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
       padding: 28px 28px 24px; margin-bottom: 20px;
@@ -426,6 +563,9 @@ def build_html(
     .hero-effect {{ color: var(--muted); margin: 0; }}
     .meta-line {{ margin-top: 16px; font-size: .85rem; color: var(--muted); }}
     .meta-line a {{ color: var(--accent); }}
+    .section-head-links {{ font-size: .88rem; font-weight: 500; margin-left: 8px; }}
+    .section-head-links a {{ color: var(--accent); text-decoration: none; }}
+    .section-head-links a:hover {{ text-decoration: underline; }}
     .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }}
     .metric {{
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
@@ -501,7 +641,16 @@ def build_html(
     .queue-matrix tr:last-child td:last-child {{ border-radius: 0 0 10px 0; }}
     .queue-matrix td.counted {{ background: #eef6ff; }}
     .queue-matrix td.ignored-old {{ background: #fffbeb; }}
+    .queue-matrix td.busy {{ background: #eef6ff; }}
+    .queue-matrix td.idle {{ background: #fafbfc; }}
+    .queue-matrix td.offline {{ background: #f1f5f9; color: var(--muted); }}
     .queue-matrix td.empty-cell {{ background: #fafbfc; }}
+    .cell-runner {{ font-size: .78rem; color: var(--muted); margin-bottom: 4px; word-break: break-all; }}
+    .cell-runner a {{ color: var(--accent); text-decoration: none; }}
+    .cell-runner a:hover {{ text-decoration: underline; }}
+    .cell-wf {{ margin-bottom: 4px; }}
+    .cell-idle {{ font-size: .85rem; color: var(--muted); font-style: italic; }}
+    .matrix-scroll {{ overflow-x: auto; margin: 0 -4px; padding: 0 4px; }}
     .cell-wait {{
       font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 4px;
     }}
@@ -536,19 +685,6 @@ def build_html(
     .tab.active {{ color: var(--accent); border-bottom-color: var(--accent); }}
     .tab-panel {{ display: none; }}
     .tab-panel.active {{ display: block; }}
-    .label-table .num {{ white-space: nowrap; width: 1%; text-align: right; }}
-    .label-table .bar-cell {{ width: 40%; }}
-    .label-row.highlight {{ background: #eef6ff; }}
-    .label-row.highlight code {{ background: #dbeafe; color: #1e40af; }}
-    .label-bar {{
-      height: 8px; background: #eaeef2; border-radius: 999px; overflow: hidden;
-    }}
-    .label-bar-fill {{
-      height: 100%; background: linear-gradient(90deg, #60a5fa, #0969da); border-radius: 999px;
-    }}
-    .label-row.highlight .label-bar-fill {{
-      background: linear-gradient(90deg, #34d399, #059669);
-    }}
   </style>
 </head>
 <body>
@@ -568,7 +704,7 @@ def build_html(
 
     <div class="tabs">
       <button type="button" class="tab active" data-tab="gate">Gate</button>
-      <button type="button" class="tab" data-tab="runners">Runners by label</button>
+      <button type="button" class="tab" data-tab="runners">Runner labels</button>
     </div>
 
     <div id="tab-gate" class="tab-panel active">
@@ -646,8 +782,9 @@ def build_html(
 
     <div id="tab-runners" class="tab-panel">
       <div class="section">
-        <h2>Runners по labels</h2>
-        {_label_counts_table(label_counts, meta['total_runners'])}
+        <h2>Runners по labels<span class="section-head-links">· <a href="{esc(YC_ACTIVE_RUNNERS_URL)}" target="_blank" rel="noopener">Active runners</a></span></h2>
+        <p class="empty" style="margin-bottom:12px">Каждый label — отдельный столбец. Имя runner'а → мониторинг за 24h. WF run ID → GitHub. Сортировка: busy ↑ по runtime, затем idle.</p>
+        {_runner_label_matrix_table(runner_label_view, runners_empty_text, meta["report_ts"])}
       </div>
     </div>
   </div>
@@ -727,11 +864,12 @@ def run(args: argparse.Namespace) -> int:
     total_runners = ghrun_count = postcommit_count = 0
     keep_ids: list[str] = []
     actions: list[dict] = []
-    label_counts: list[dict] = []
+    runner_label_view: dict[str, list[dict]] = {}
+    runner_jobs = fetch_active_runner_jobs(repo, queue_token, now_ts)
 
     try:
         all_runners, total_runners = fetch_all_runners(repo, runners_token)
-        label_counts = count_runners_by_label(all_runners)
+        runner_label_view = build_runner_label_view(all_runners, runner_jobs)
         ghrun = ghrun_runners(all_runners)
         ghrun_count = len(ghrun)
         postcommit_count = sum(1 for r in ghrun if r["has_postcommit"])
@@ -764,13 +902,17 @@ def run(args: argparse.Namespace) -> int:
         "keep_runner_ids": ",".join(keep_ids),
         "workflow_run": os.environ.get("GITHUB_RUN_ID", "local-dry-run"),
         "repository": repo,
+        "report_ts": now_ts,
     }
 
     (report_dir / "queue.json").write_text(json.dumps(queue, indent=2), encoding="utf-8")
-    (report_dir / "runners-by-label.json").write_text(json.dumps(label_counts, indent=2), encoding="utf-8")
+    (report_dir / "runner-label-matrix.json").write_text(
+        json.dumps({"jobs": runner_jobs, "by_label": runner_label_view}, indent=2),
+        encoding="utf-8",
+    )
     (report_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     (report_dir / "index.html").write_text(
-        build_html(meta, queue, actions, label_counts, args.dry_run, runners_note),
+        build_html(meta, queue, actions, runner_label_view, args.dry_run, runners_note),
         encoding="utf-8",
     )
     write_step_summary(meta, os.environ.get("GITHUB_STEP_SUMMARY"))

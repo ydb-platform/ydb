@@ -3197,6 +3197,109 @@ Y_UNIT_TEST(InsertWithFulltextRowIdExplicitValueNotReversed) {
     UNIT_ASSERT_VALUES_EQUAL(rowIds[3], 400u);
 }
 
+Y_UNIT_TEST(AlterTableAddRowIdAutoBindsSequence) {
+    // ALTER TABLE t ADD COLUMN __rowId Uint64 NOT NULL on a table without a sequence default
+    // must be accepted: schemeshard creates a sequence, the column-build scan backfills every
+    // existing row from that sequence, and each value is bit-reversed for hot-shard mitigation.
+    auto kikimr = KikimrRowIdOptIn();
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Articles` (
+                Pk Utf8 NOT NULL,
+                Text Utf8,
+                PRIMARY KEY (Pk)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Articles` (Pk, Text) VALUES
+                ("pk-a"u, "alpha alpha"u),
+                ("pk-b"u, "beta beta"u),
+                ("pk-c"u, "gamma gamma"u),
+                ("pk-d"u, "delta delta"u);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        // Without an explicit DEFAULT this would normally fail with "Cannot add not null column
+        // without default value". The autobind for __rowId Uint64 NOT NULL must accept it.
+        TString query = R"sql(
+            ALTER TABLE `/Root/Articles` ADD COLUMN __rowId Uint64 NOT NULL;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            SELECT Pk, __rowId FROM `/Root/Articles` ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 4);
+
+        NYdb::TResultSetParser parser(resultSet);
+        TVector<ui64> rowIds;
+        while (parser.TryNextRow()) {
+            rowIds.push_back(parser.ColumnParser("__rowId").GetUint64());
+        }
+        // Bit-reversal of small monotonic counter values produces values dominated by the high
+        // bits — plain 1,2,3,4 would all land below 1<<60, the salted versions land above it.
+        for (ui64 v : rowIds) {
+            UNIT_ASSERT_C(v > (ui64{1} << 60),
+                "Backfilled __rowId must be bit-reversed; saw raw value " << v);
+        }
+        std::sort(rowIds.begin(), rowIds.end());
+        for (size_t i = 1; i < rowIds.size(); ++i) {
+            UNIT_ASSERT_C(rowIds[i] != rowIds[i - 1],
+                "Backfilled __rowId values must be unique across rows");
+        }
+    }
+
+    {
+        // The unique index + fulltext index over the now-populated __rowId column must work.
+        TString query = R"sql(
+            ALTER TABLE `/Root/Articles` ADD INDEX uniq_rowid GLOBAL UNIQUE ON (__rowId);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Articles` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    {
+        TString query = R"sql(
+            SELECT Pk FROM `/Root/Articles` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "alpha")
+            ORDER BY Pk;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(TString{parser.ColumnParser("Pk").GetUtf8()}, "pk-a");
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

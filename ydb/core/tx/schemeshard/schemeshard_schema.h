@@ -1471,6 +1471,10 @@ struct Schema : NIceDb::Schema {
         struct DropColumnsTxStatus : Column<47, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
         struct DropColumnsTxDone : Column<48, NScheme::NTypeIds::Bool> {};
 
+        struct CreateBuildSequenceTxId : Column<50, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct CreateBuildSequenceTxStatus : Column<51, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
+        struct CreateBuildSequenceTxDone : Column<52, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1521,7 +1525,10 @@ struct Schema : NIceDb::Schema {
             DropColumnsTxId,
             DropColumnsTxStatus,
             DropColumnsTxDone,
-            SubState
+            SubState,
+            CreateBuildSequenceTxId,
+            CreateBuildSequenceTxStatus,
+            CreateBuildSequenceTxDone
         >;
     };
 
@@ -2019,6 +2026,8 @@ struct Schema : NIceDb::Schema {
         struct DefaultFromLiteral : Column<4, NScheme::NTypeIds::String> {};
         struct NotNull : Column<5, NScheme::NTypeIds::Bool> {};
         struct FamilyName : Column<6, NScheme::NTypeIds::String> {};
+        struct DefaultFromSequence : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct BitReverseSequenceValue : Column<8, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id, ColumnNo>;
         using TColumns = TableColumns<
@@ -2027,7 +2036,9 @@ struct Schema : NIceDb::Schema {
             ColumnName,
             DefaultFromLiteral,
             NotNull,
-            FamilyName
+            FamilyName,
+            DefaultFromSequence,
+            BitReverseSequenceValue
         >;
     };
 

@@ -200,7 +200,14 @@ public:
                 }
             }
         } else if (settings.has_column_build_operation()) {
-            if (!Self->EnableAddColumsWithDefaults) {
+            bool allFromSequence = settings.column_build_operation().column_size() > 0;
+            for (int i = 0; i < settings.column_build_operation().column_size(); i++) {
+                if (settings.column_build_operation().column(i).default_from_sequence().empty()) {
+                    allFromSequence = false;
+                    break;
+                }
+            }
+            if (!Self->EnableAddColumsWithDefaults && !allFromSequence) {
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
             }
 
@@ -212,9 +219,21 @@ public:
                 const auto& colInfo = settings.column_build_operation().column(i);
                 bool notNull = colInfo.HasNotNull() && colInfo.GetNotNull();
                 TString familyName = colInfo.HasFamily() ? colInfo.GetFamily() : "";
-                buildInfo->BuildColumns.push_back(
-                    TIndexBuildInfo::TColumnBuildInfo(
-                        colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                if (!colInfo.default_from_sequence().empty()) {
+                    buildInfo->BuildColumns.push_back(
+                        TIndexBuildInfo::TColumnBuildInfo(
+                            TIndexBuildInfo::TColumnBuildInfo::FromSequenceTag{},
+                            colInfo.GetColumnName(),
+                            colInfo.default_from_literal().type(),
+                            colInfo.default_from_sequence(),
+                            colInfo.bit_reverse_sequence_value(),
+                            notNull,
+                            familyName));
+                } else {
+                    buildInfo->BuildColumns.push_back(
+                        TIndexBuildInfo::TColumnBuildInfo(
+                            colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                }
             }
         } else {
             return makeReply("missing index or column to build");

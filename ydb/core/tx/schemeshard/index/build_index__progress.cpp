@@ -391,6 +391,36 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     return propose;
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateBuildSequencePropose");
+    Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
+
+    auto tablePath = TPath::Init(buildInfo.TablePathId, ss);
+
+    for (const auto& colInfo : buildInfo.BuildColumns) {
+        if (!colInfo.IsFromSequence()) {
+            continue;
+        }
+        // DefaultFromSequence holds only the sequence leaf name; the sequence lives under the table.
+        auto& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSequence);
+        modifyScheme.SetInternal(true);
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        modifyScheme.SetWorkingDir(tablePath.PathString());
+        auto seq = modifyScheme.MutableSequence();
+        seq->SetName(colInfo.DefaultFromSequence);
+    }
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateBuildSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -421,7 +451,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
         col->SetType(NScheme::TypeName(typeInfo, typeMod));
         col->SetName(colInfo.ColumnName);
-        col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+        if (colInfo.IsFromSequence()) {
+            // DefaultFromSequence stores the sequence leaf; full path is <tablePath>/<leaf>.
+            *col->MutableDefaultFromSequence() = JoinPath({path.PathString(), colInfo.DefaultFromSequence});
+        } else {
+            col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+        }
         col->SetIsBuildInProgress(true);
 
         if (!colInfo.FamilyName.empty()) {
@@ -2273,7 +2308,18 @@ private:
     }
 
     bool CanProgressBuilding(const TIndexBuildInfo& buildInfo) const {
-        return !buildInfo.IsBuildColumns() || Self->EnableAddColumsWithDefaults;
+        if (!buildInfo.IsBuildColumns()) {
+            return true;
+        }
+        if (Self->EnableAddColumsWithDefaults) {
+            return true;
+        }
+        for (const auto& col : buildInfo.BuildColumns) {
+            if (!col.IsFromSequence()) {
+                return false;
+            }
+        }
+        return true;
     }
 
 public:
@@ -2306,10 +2352,28 @@ public:
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
             } else {
                 if (buildInfo.IsBuildColumns()) {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                    if (buildInfo.HasFromSequenceBuildColumn()) {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuildSequence);
+                    } else {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                    }
                 } else {
                     ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
                 }
+                Progress(BuildId);
+            }
+            break;
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+            Y_ENSURE(buildInfo.IsBuildColumns());
+            Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
+            if (buildInfo.CreateBuildSequenceTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.CreateBuildSequenceTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), CreateBuildSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.CreateBuildSequenceTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.CreateBuildSequenceTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
                 Progress(BuildId);
             }
             break;
@@ -2348,13 +2412,19 @@ public:
 
             break;
         case TIndexBuildInfo::EState::Filling: {
-            if (!CanProgressBuilding(buildInfo) || buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
+            bool canProgress = CanProgressBuilding(buildInfo);
+            bool cancel = buildInfo.IsCancellationRequested();
+            bool fillRes = false;
+            if (canProgress && !cancel) {
+                fillRes = FillIndex(txc, buildInfo);
+            }
+            if (!canProgress || cancel || fillRes) {
                 auto nextState = TIndexBuildInfo::EState::Applying;
-                if (!CanProgressBuilding(buildInfo)) {
+                if (!canProgress) {
                     Y_ENSURE(buildInfo.IsBuildColumns());
                     buildInfo.AddIssue(TStringBuilder() << "Adding columns with defaults is disabled");
                     nextState = TIndexBuildInfo::EState::Rejection_DroppingColumns;
-                } else if (buildInfo.IsCancellationRequested()) {
+                } else if (cancel) {
                     nextState = buildInfo.IsBuildColumns()
                         ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
                         : TIndexBuildInfo::EState::Cancellation_Applying;
@@ -3450,6 +3520,14 @@ public:
             Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
             break;
         }
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+        {
+            Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
+
+            buildInfo.CreateBuildSequenceTxDone = true;
+            Self->PersistBuildIndexCreateBuildSequenceTxDone(db, buildInfo);
+            break;
+        }
         case TIndexBuildInfo::EState::Initiating:
         {
             Y_ENSURE(txId == buildInfo.InitiateTxId);
@@ -3622,6 +3700,16 @@ public:
 
             buildInfo.AlterMainTableTxStatus = record.GetStatus();
             Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
+
+            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            break;
+        }
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+        {
+            Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
+
+            buildInfo.CreateBuildSequenceTxStatus = record.GetStatus();
+            Self->PersistBuildIndexCreateBuildSequenceTxStatus(db, buildInfo);
 
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
@@ -3806,6 +3894,12 @@ public:
             if (!buildInfo.AlterMainTableTxId) {
                 buildInfo.AlterMainTableTxId = txId;
                 Self->PersistBuildIndexAlterMainTableTxId(db, buildInfo);
+            }
+            break;
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+            if (!buildInfo.CreateBuildSequenceTxId) {
+                buildInfo.CreateBuildSequenceTxId = txId;
+                Self->PersistBuildIndexCreateBuildSequenceTxId(db, buildInfo);
             }
             break;
         case TIndexBuildInfo::EState::Locking:

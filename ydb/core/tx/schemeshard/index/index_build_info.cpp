@@ -55,12 +55,13 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
     }
 }
 
-void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
+void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
     Y_ENSURE(IsBuildColumns());
     Y_ASSERT(!TargetName.empty());
     result->SetTable(TargetName);
+    const TString tablePath = TPath::Init(TablePathId, ss).PathString();
     for(const auto& column : BuildColumns) {
-        column.SerializeToProto(result->add_column());
+        column.SerializeToProto(result->add_column(), tablePath);
     }
 }
 
@@ -309,6 +310,7 @@ bool TIndexBuildInfo::IsValidState(EState value)
     switch (value) {
         case EState::Invalid:
         case EState::AlterMainTable:
+        case EState::CreateBuildSequence:
         case EState::Locking:
         case EState::GatheringStatistics:
         case EState::Initiating:

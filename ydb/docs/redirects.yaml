@@ -82,7 +82,7 @@ common:
   - from: /deploy/index.md
     to: /devops/index.md
   - from: /deploy/manual/deploy-ydb-on-premises.md
-    to: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /deploy/configuration/config.md
     to: /reference/configuration/index.md
   - from: /deploy/manual/connector.md
@@ -514,6 +514,11 @@ ru:
     to: /devops/backup-and-recovery/index.md
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
+
+  - from: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+  - from: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
 
 en:
   - from: /cluster/system-requirements.md

@@ -739,10 +739,7 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
 }
 
 void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
-    if (!config.EnableSsl && config.CaCerts) {
-        config.CaCerts.clear();
-        config.CaCertsFile.clear();
-    }
+    TClientCommandRootBase::ParseCaCerts(config);
 }
 
 void TClientCommandRootCommon::ParseClientCert(TConfig& config) {

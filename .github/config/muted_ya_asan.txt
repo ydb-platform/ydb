@@ -345,6 +345,7 @@ ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-true
 ydb/core/tx/tx_proxy/ut_ext_tenant unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/ut Viewer.PutRecordViewer
 ydb/core/viewer/ut Viewer.QueryExecuteScript
@@ -377,6 +378,7 @@ ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.SelectDatabase
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.SimpleHandlers
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.WriteSessionNoAvailableDatabase
 ydb/public/sdk/cpp/src/client/federated_topic/ut SimpleBlockingFederatedWriteSession.BasicWriteAndClose
+ydb/public/sdk/cpp/src/client/federated_topic/ut SimpleBlockingFederatedWriteSession.IsAliveAfterClose
 ydb/public/sdk/cpp/src/client/federated_topic/ut SimpleBlockingFederatedWriteSession.WriteLargeMessages
 ydb/public/sdk/cpp/src/client/federated_topic/ut SimpleBlockingFederatedWriteSession.WriteWithTWriteMessage
 ydb/public/sdk/cpp/src/client/persqueue_public/ut BasicUsage.CreateTopicWithCustomAdvancedMonitoringSettings
@@ -412,6 +414,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestUnavailableWithoutNetClassifier
 ydb/services/persqueue_v1/ut/describes_ut TIcNodeCache.GetNodesInfoTest
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.CheckGrpcReadNoDC
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI

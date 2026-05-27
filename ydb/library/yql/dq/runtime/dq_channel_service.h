@@ -92,6 +92,7 @@ public:
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V1;
     bool Leading = false;
     bool Finished = false;
+    bool ConfirmFinish = false;
     TInstant Timestamp;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     TMaybe<NDqProto::TWatermark> Watermark;
@@ -119,7 +120,7 @@ public:
 
     void SendFinish();
     bool GetLeading();
-    bool Leading = true;
+    std::atomic<bool> Leading = true;
 };
 
 // Channel usually created with unknown peer id which may be local or remote etc.

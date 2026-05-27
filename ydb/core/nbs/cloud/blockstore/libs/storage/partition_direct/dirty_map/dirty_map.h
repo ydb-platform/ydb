@@ -192,7 +192,7 @@ class TBlocksDirtyMap
 public:
     enum class EEraseType: ui32
     {
-        USUAL,
+        USUAL, // TODO rename?
         HANGING
     };
     TBlocksDirtyMap(
@@ -216,11 +216,6 @@ public:
     [[nodiscard]] TEraseHints MakeEraseHangingHint(size_t batchSize);
 
     void WriteFinished(
-        ui64 lsn,
-        TBlockRange64 range,
-        THostMask requested,
-        THostMask confirmed);
-    void UpdateWriteFinished(
         ui64 lsn,
         TBlockRange64 range,
         THostMask requested,

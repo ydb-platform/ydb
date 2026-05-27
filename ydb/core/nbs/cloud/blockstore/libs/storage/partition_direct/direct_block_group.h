@@ -167,9 +167,6 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
-    // Callback type for WriteBlocksToManyPBuffers: called once per response
-    // received from the transport layer. May be called more than once for the
-    // same request (e.g. when a second response arrives after the first one).
     using TWriteBlocksToManyPBuffersCallback =
         std::function<void(TDBGWriteBlocksToManyPBuffersResponse)>;
 

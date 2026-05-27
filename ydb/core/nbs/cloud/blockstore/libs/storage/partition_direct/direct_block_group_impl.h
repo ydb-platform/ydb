@@ -38,7 +38,7 @@ public:
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
 
-    ~TDirectBlockGroup() override;
+    ~TDirectBlockGroup() override = default;
 
     // IDirectBlockGroup implementation
 

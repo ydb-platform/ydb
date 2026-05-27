@@ -251,7 +251,7 @@ void TWriteWithPbReplicationRequestExecutor::OnWriteResponse(
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
 {
-    LOG_INFO(
+    LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "OnWriteToManyPBuffersResponse DirectResponse on %d host %s %s",
@@ -319,6 +319,7 @@ void TWriteWithPbReplicationRequestExecutor::SendDirectWriteRequest(
 
 TString TWriteWithPbReplicationRequestExecutor::ExtendedDebugState() const
 {
+    // TODO TStringBuilder
     TString result = TBaseWriteRequestExecutor::ExtendedDebugState();
     result += "AvailableHostsForDirectSending: " +
               AvailableHostsForDirectSending.Print();

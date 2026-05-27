@@ -16,11 +16,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <execinfo.h>
-
-#include <cstdlib>
-#include <iostream>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -128,14 +123,6 @@ TDirectBlockGroup::TDirectBlockGroup(
         pbufferIds,
         PBufferConnections,
         EConnectionType::PBuffer);
-}
-
-TDirectBlockGroup::~TDirectBlockGroup()
-{
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "ololo TDirectBlockGroup is destroying.");
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr vChunk)
@@ -519,6 +506,8 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds;
     disksIds.reserve(hostIndexes.size());
+
+    // TODO вынести в actor?
     std::shared_ptr<TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess>>
         waitingReplies = std::make_shared<
             TSet<NKikimrBlobStorage::NDDisk::TDDiskId, TDDiskIdLess>>();
@@ -532,7 +521,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     }
 
     if (!Initialized) {
-        callback(TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+        callback(TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError( // TODO удалить этот OverallError?
             E_REJECTED,
             "Connections are not established"));
         return;
@@ -563,6 +552,8 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
                 result,
             std::shared_ptr<NWilson::TSpan> span) mutable
         {
+            // ActorSystem thread
+
             for (const auto& singlePBufferResponse: result.GetResult()) {
                 auto it = waitingReplies->find(
                     singlePBufferResponse.GetPersistentBufferId());

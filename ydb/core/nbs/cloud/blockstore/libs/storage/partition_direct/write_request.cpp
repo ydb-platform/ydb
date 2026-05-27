@@ -68,32 +68,11 @@ bool TBaseWriteRequestExecutor::IsAlreadyReplied() const
 
 TString TBaseWriteRequestExecutor::ExtendedDebugState() const
 {
-    TString result;
+    TString result; // TODO
     result += "RequestedWrites: " + RequestedWrites.Print();
     result += "CompletedWrites: " + CompletedWrites.Print();
 
     return result;
-}
-
-void TBaseWriteRequestExecutor::LogOnReply(const NProto::TError& error) const
-{
-    if (HasError(error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor::Reply %s, %s, error: %s, state: %s",
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str(),
-            FormatError(error).c_str(),
-            ExtendedDebugState().c_str());
-    } else {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TBaseWriteRequestExecutor::Reply %s, %s",
-            Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Headers.Range.Print().c_str());
-    }
 }
 
 void TBaseWriteRequestExecutor::ReplyOrNotify(

@@ -614,12 +614,7 @@ void TVChunk::DoErase(bool force, TBlocksDirtyMap::EEraseType eraseType)
                 BlocksDirtyMap.MakeEraseHint(force ? 1 : SyncRequestsBatchSize);
             break;
         case TBlocksDirtyMap::EEraseType::HANGING:
-            hints = BlocksDirtyMap.MakeEraseHangingHint(SyncRequestsBatchSize);
-            LOG_DEBUG(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "TVChunk::DoErase HANGING count: %d",
-                hints.GetAllHints().size());
+            hints = BlocksDirtyMap.MakeEraseHangingHint(force ? 1 : SyncRequestsBatchSize);
             break;
     };
 

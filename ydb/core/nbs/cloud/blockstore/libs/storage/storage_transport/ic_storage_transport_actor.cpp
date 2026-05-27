@@ -91,7 +91,6 @@ TICStorageTransportActor::~TICStorageTransportActor()
             DestroyErrorMessage,
             request->PersistentBufferIds);
         if (request->Callback) {
-            // Ignore the return value on destruction.
             request->Callback(std::move(response->Record));
         }
     }
@@ -333,7 +332,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
             // may be called again when the next response arrives.
         }
     } else {
-        LOG_ERROR(
+        LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "

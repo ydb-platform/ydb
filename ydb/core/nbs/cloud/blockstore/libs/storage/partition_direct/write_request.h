@@ -58,7 +58,6 @@ public:
     virtual void Run() = 0;
 
 protected:
-    void LogOnReply(const NProto::TError& error) const;
     void ReplyOrNotify(
         NProto::TError error,
         THostMask completedOnCurrentResponse);

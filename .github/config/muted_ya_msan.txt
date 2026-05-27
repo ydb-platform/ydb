@@ -24,7 +24,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestTwoDeadSom
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk BSCReadOnlyPDisk.ReadOnlyOneByOne
 ydb/core/blobstorage/ut_blobstorage/ut_read_only_pdisk unittest.[*/*] chunk
-ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
 ydb/core/kqp/ut/indexes KqpIndexes.OnlineDuplicatesStage4
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactPublicApi
 ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql+UseQueryService
@@ -32,7 +31,6 @@ ydb/core/kqp/ut/scheme KqpScheme.AlterTableCompactSql-UseQueryService
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldScheduleCleanup
 ydb/core/transfer/ut/functional Transfer.AlterBatchSize
 ydb/core/transfer/ut/functional Transfer.AlterFlushInterval
 ydb/core/transfer/ut/functional Transfer.AlterLambdaOnWork
@@ -117,7 +115,6 @@ ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/tests/compatibility py3test.[test_topic.py */*] chunk
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_stable-26-2-1_to_prestable-26-3]
-ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]
 ydb/tests/compatibility test_compact.py.TestCompactMixedCluster.test_compact_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1]
 ydb/tests/compatibility test_compact.py.TestCompactRolling.test_compact_rolling[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-26-2-1_to_prestable-26-3]

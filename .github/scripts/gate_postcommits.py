@@ -10,6 +10,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -133,9 +134,49 @@ def decide_mode(queue_size: int, cfg: dict[str, Any]) -> tuple[str, str]:
     )
 
 
-def ghrun_runners(runners_payload: dict) -> list[dict]:
+def fetch_all_runners(repo: str, token: str) -> tuple[list[dict], int]:
+    all_runners: list[dict] = []
+    page = 1
+    total = 0
+    while True:
+        payload = api_request(
+            "GET",
+            f"https://api.github.com/repos/{repo}/actions/runners?per_page=100&page={page}",
+            token,
+        )
+        batch = payload.get("runners", [])
+        total = int(payload.get("total_count", len(batch)))
+        all_runners.extend(batch)
+        if len(all_runners) >= total or not batch:
+            break
+        page += 1
+    return all_runners, total
+
+
+def count_runners_by_label(runners: list[dict]) -> list[dict]:
+    counter: Counter[str] = Counter()
+    for runner in runners:
+        for label in {lb["name"] for lb in runner.get("labels", [])}:
+            counter[label] += 1
+    if not counter:
+        return []
+    max_count = max(counter.values())
+    total = len(runners)
+    return [
+        {
+            "label": label,
+            "count": count,
+            "pct_of_runners": round(count / total * 100, 1) if total else 0,
+            "bar_pct": int(count / max_count * 100),
+            "highlight": label in ("ghrun", "postcommit"),
+        }
+        for label, count in sorted(counter.items(), key=lambda item: (-item[1], item[0].lower()))
+    ]
+
+
+def ghrun_runners(runners: list[dict]) -> list[dict]:
     result = []
-    for runner in runners_payload.get("runners", []):
+    for runner in runners:
         labels = [lb["name"] for lb in runner.get("labels", [])]
         if "ghrun" not in labels:
             continue
@@ -276,7 +317,38 @@ def _runner_changes_table(actions: list[dict]) -> str:
     )
 
 
-def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runners_note: str) -> str:
+def _label_counts_table(label_counts: list[dict], total_runners: int) -> str:
+    if not label_counts:
+        return '<p class="empty">Нет данных по runner\'ам.</p>'
+    rows = []
+    for item in label_counts:
+        row_cls = "label-row highlight" if item["highlight"] else "label-row"
+        rows.append(
+            f'<tr class="{row_cls}">'
+            f'<td><code>{esc(item["label"])}</code></td>'
+            f'<td class="num"><strong>{item["count"]}</strong></td>'
+            f'<td class="num">{item["pct_of_runners"]}%</td>'
+            f'<td class="bar-cell">'
+            f'<div class="label-bar"><div class="label-bar-fill" style="width:{item["bar_pct"]}%"></div></div>'
+            f"</td></tr>"
+        )
+    return (
+        f'<p class="empty" style="margin-bottom:12px">Всего runner\'ов: <strong>{total_runners}</strong>. '
+        f"Считаем каждый label отдельно — у runner'а может быть несколько labels.</p>"
+        '<table class="queue-table label-table">'
+        "<thead><tr><th>Label</th><th>Runners</th><th>% от всех</th><th></th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def build_html(
+    meta: dict,
+    queue: dict,
+    actions: list[dict],
+    label_counts: list[dict],
+    dry_run: bool,
+    runners_note: str,
+) -> str:
     mode = meta["gate_mode"]
     threshold = meta["limited_mode_when_pr_check_queue_above"]
     queue_size = meta["queue_size"]
@@ -451,6 +523,32 @@ def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runn
     .pill.remove {{ background: #fee2e2; color: var(--remove); }}
     .empty {{ color: var(--muted); font-size: .9rem; margin: 0; }}
     code {{ background: #eef2f7; padding: 2px 6px; border-radius: 4px; font-size: .85em; }}
+    .tabs {{
+      display: flex; gap: 4px; margin: 20px 0 16px;
+      border-bottom: 1px solid var(--border); padding-bottom: 0;
+    }}
+    .tab {{
+      padding: 10px 18px; border: none; background: none; cursor: pointer;
+      font-size: .92rem; font-weight: 600; color: var(--muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }}
+    .tab:hover {{ color: var(--text); }}
+    .tab.active {{ color: var(--accent); border-bottom-color: var(--accent); }}
+    .tab-panel {{ display: none; }}
+    .tab-panel.active {{ display: block; }}
+    .label-table .num {{ white-space: nowrap; width: 1%; text-align: right; }}
+    .label-table .bar-cell {{ width: 40%; }}
+    .label-row.highlight {{ background: #eef6ff; }}
+    .label-row.highlight code {{ background: #dbeafe; color: #1e40af; }}
+    .label-bar {{
+      height: 8px; background: #eaeef2; border-radius: 999px; overflow: hidden;
+    }}
+    .label-bar-fill {{
+      height: 100%; background: linear-gradient(90deg, #60a5fa, #0969da); border-radius: 999px;
+    }}
+    .label-row.highlight .label-bar-fill {{
+      background: linear-gradient(90deg, #34d399, #059669);
+    }}
   </style>
 </head>
 <body>
@@ -468,6 +566,12 @@ def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runn
 
     {warn}
 
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="gate">Gate</button>
+      <button type="button" class="tab" data-tab="runners">Runners by label</button>
+    </div>
+
+    <div id="tab-gate" class="tab-panel active">
     <div class="grid">
       <div class="metric">
         <div class="metric-val">{queue_size}</div>
@@ -538,7 +642,24 @@ def build_html(meta: dict, queue: dict, actions: list[dict], dry_run: bool, runn
         <div class="details-body"><code>{esc(meta['config_raw'])}</code></div>
       </details>
     </div>
+    </div>
+
+    <div id="tab-runners" class="tab-panel">
+      <div class="section">
+        <h2>Runners по labels</h2>
+        {_label_counts_table(label_counts, meta['total_runners'])}
+      </div>
+    </div>
   </div>
+  <script>
+    document.querySelectorAll('.tab').forEach((btn) => {{
+      btn.addEventListener('click', () => {{
+        document.querySelectorAll('.tab, .tab-panel').forEach((el) => el.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      }});
+    }});
+  </script>
 </body>
 </html>"""
 
@@ -601,15 +722,12 @@ def run(args: argparse.Namespace) -> int:
     total_runners = ghrun_count = postcommit_count = 0
     keep_ids: list[str] = []
     actions: list[dict] = []
+    label_counts: list[dict] = []
 
     try:
-        runners_payload = api_request(
-            "GET",
-            f"https://api.github.com/repos/{repo}/actions/runners?per_page=100&page=1",
-            runners_token,
-        )
-        ghrun = ghrun_runners(runners_payload)
-        total_runners = runners_payload.get("total_count", 0)
+        all_runners, total_runners = fetch_all_runners(repo, runners_token)
+        label_counts = count_runners_by_label(all_runners)
+        ghrun = ghrun_runners(all_runners)
         ghrun_count = len(ghrun)
         postcommit_count = sum(1 for r in ghrun if r["has_postcommit"])
         keep_ids, actions = plan_runner_actions(
@@ -644,9 +762,10 @@ def run(args: argparse.Namespace) -> int:
     }
 
     (report_dir / "queue.json").write_text(json.dumps(queue, indent=2), encoding="utf-8")
+    (report_dir / "runners-by-label.json").write_text(json.dumps(label_counts, indent=2), encoding="utf-8")
     (report_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     (report_dir / "index.html").write_text(
-        build_html(meta, queue, actions, args.dry_run, runners_note),
+        build_html(meta, queue, actions, label_counts, args.dry_run, runners_note),
         encoding="utf-8",
     )
     write_step_summary(meta, os.environ.get("GITHUB_STEP_SUMMARY"))

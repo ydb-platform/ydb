@@ -1197,7 +1197,7 @@ private:
                 op.Properties["UpdateIndexes"] = updateIndexes;
             }
 
-            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;

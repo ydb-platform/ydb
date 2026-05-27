@@ -133,6 +133,7 @@ public:
     }
 
     bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isOptional) const {
+        Y_ENSURE(HolderFactory); // should be already verified by ParseNestedType
         simdjson::builtin::ondemand::json_type cellType;
         CHECK_JSON_ERROR(jsonValue.type().get(cellType)) {
             SetParsingError(error, jsonValue, "determine json value type", status);
@@ -374,6 +375,9 @@ public:
 
 private:
     TStatus ParseNestedType(const NKikimr::NMiniKQL::TType* type, bool isOptional = false) {
+        if (!HolderFactory) {
+            return TStatus::Fail(EStatusId::UNSUPPORTED, "Structured Json Parsing is disabled. Please contact your system administrator to enable it");
+        }
         switch (type->GetKind()) {
             case NKikimr::NMiniKQL::TTypeBase::EKind::Data: {
                 auto dataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
@@ -704,7 +708,7 @@ public:
                 return TStatus(typeStatus).AddParentIssue(TStringBuilder() << "Failed to parse column '" << name << "' type " << typeYson);
             }
 
-            if (auto status = Columns[i].InitParser(name, typeYson, parsedRowsIdxSpan.subspan(i * MaxNumberRows, MaxNumberRows), typeStatus.DetachResult(), Config.SkipErrors, HolderFactory.get()); status.IsFail()) {
+            if (auto status = Columns[i].InitParser(name, typeYson, parsedRowsIdxSpan.subspan(i * MaxNumberRows, MaxNumberRows), typeStatus.DetachResult(), Config.SkipErrors, Config.StructuredParsing ? HolderFactory.get() : nullptr); status.IsFail()) {
                 return status.AddParentIssue(TStringBuilder() << "Failed to create parser for column '" << name << "' with type " << typeYson);
             }
             if (!Columns[i].GetIsOptional()) {
@@ -1082,7 +1086,8 @@ TJsonParserConfig CreateJsonParserConfig(const TRowDispatcherSettings::TJsonPars
         .BatchSize = parserConfig.GetBatchSizeBytes(),
         .LatencyLimit = parserConfig.GetBatchCreationTimeout(),
         .BufferCellCount = parserConfig.GetBufferCellCount(),
-        .SkipErrors = skipErrors
+        .SkipErrors = skipErrors,
+        .StructuredParsing = parserConfig.GetStructuredParsing(),
     };
 }
 

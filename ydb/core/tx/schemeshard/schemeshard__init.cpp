@@ -5955,12 +5955,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             TPath resolvedPath = TPath::Resolve(tablePath, Self);
             if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
                 auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
+                Y_VERIFY_S(!targetPathElement->Dropped(),
+                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                    << ", pathId: " << resolvedPath.Base()->PathId
+                    << ", StepDropped: " << targetPathElement->StepDropped);
                 targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
             }
         }
 
         if (Self->PathsById.contains(backupCollectionPathId)) {
             auto sourcePath = Self->PathsById.at(backupCollectionPathId);
+            Y_VERIFY_S(!sourcePath->Dropped(),
+                "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                << ", pathId: " << backupCollectionPathId
+                << ", StepDropped: " << sourcePath->StepDropped);
             sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
 
             TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
@@ -5980,6 +5988,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
                             if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
                                 auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
+                                Y_VERIFY_S(!backupTablePathElement->Dropped(),
+                                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                                    << ", pathId: " << fullBackupTableResolvedPath.Base()->PathId
+                                    << ", StepDropped: " << backupTablePathElement->StepDropped);
                                 backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
                             }
                         }
@@ -5999,6 +6011,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
                             if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
                                 auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
+                                Y_VERIFY_S(!backupTablePathElement->Dropped(),
+                                    "RestoreIncrementalRestoreOpPathStates: path is dropped but data restore is in-flight"
+                                    << ", pathId: " << incrBackupTableResolvedPath.Base()->PathId
+                                    << ", StepDropped: " << backupTablePathElement->StepDropped);
                                 backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
                             }
                         }
@@ -6036,6 +6052,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
                 backupNames.push_back(name);
             }
+            RestoreIncrementalRestoreOpPathStates(op);
             onComplete.Send(Self->SelfId(),
                 new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, opId, backupNames));
         }

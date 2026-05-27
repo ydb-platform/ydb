@@ -955,6 +955,12 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
 
             Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
             TPathElement::TPtr path = ss->PathsById.at(pathId);
+            Y_VERIFY_S(!path->Dropped() || state == NKikimrSchemeOp::EPathStateNotExist,
+                "ReleasePathAtDone: dropped path with non-NotExist state"
+                << ": pathId=" << pathId
+                << " StepDropped=" << path->StepDropped
+                << " currentPathState=" << static_cast<ui32>(path->PathState)
+                << " newPathState=" << static_cast<ui32>(state));
             path->PathState = state;
         }
 

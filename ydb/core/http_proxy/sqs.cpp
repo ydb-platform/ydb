@@ -9,6 +9,8 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/ticket_parser.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
@@ -100,6 +102,7 @@ namespace NKikimr::NHttpProxy {
                     HFunc(TEvServerlessProxy::TEvErrorWithIssue, HandleErrorWithIssue);
                     HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
                     HFunc(TEvServerlessProxy::TEvToken, HandleToken);
+                    HFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleSecurityTokenAuth);
                     default:
                         HandleUnexpectedEvent(ev);
                         break;
@@ -155,6 +158,21 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.CloudId = db.CloudId;
                     HttpContext.FolderId = db.FolderId;
                 }
+            }
+
+            void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
+                if (ev->Get()->HasError()) {
+                    if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement) {
+                        return ReplyWithYdbError(
+                            ctx,
+                            ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                            TString{ev->Get()->Error.Message});
+                    }
+                } else {
+                    HttpContext.SerializedUserToken = ev->Get()->Token->GetSerializedToken();
+                    UserSid_ = ev->Get()->Token->GetUserSID();
+                }
+                SendGrpcRequestNoDriver(ctx);
             }
 
             void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
@@ -412,8 +430,11 @@ namespace NKikimr::NHttpProxy {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
                 } else if (!HttpContext.SecurityToken.empty()) {
-                    HttpContext.SerializedUserToken = HttpContext.SecurityToken;
-                    SendGrpcRequestNoDriver(ctx);
+                    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+                        .Ticket = HttpContext.SecurityToken,
+                        .Database = HttpContext.DatabasePath,
+                        .PeerName = HttpContext.SourceAddress,
+                    }));
                 } else {
                     if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                         return ReplyWithMessageQueueError(

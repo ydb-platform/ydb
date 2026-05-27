@@ -85,17 +85,19 @@ val db = Database.connect(
 - `useNestedTransactions = false` — это настройка на стороне Exposed, она запрещает Exposed эмулировать вложенные транзакции. YDB вложенные транзакции не поддерживает, поэтому такая эмуляция приводила бы к ошибкам;
 - регистрацию `YdbDialect` через `registerYdbDialect(...)` до открытия `Database`.
 
-## Использование {#using}
+## Особенности DDL в {{ ydb-short-name }} {#ddl}
 
-### Определение таблиц {#tables}
+Базовое использование Exposed — определение таблиц, DSL/DAO-запросы, транзакции и т.д. — описано в [официальной документации JetBrains Exposed](https://www.jetbrains.com/help/exposed/home.html). В этом разделе собраны только {{ ydb-short-name }}-специфичные особенности генерации DDL диалектом.
 
-В YDB `CREATE TABLE` должен содержать табличный `PRIMARY KEY (...)`. Стандартный DDL-путь Exposed 1.3.0 для таблиц с одноколоночным PK может сгенерировать inline-форму:
+### Создание таблиц {#tables}
+
+В {{ ydb-short-name }} `CREATE TABLE` должен содержать табличный `PRIMARY KEY (...)`. Стандартный DDL-путь Exposed 1.3.0 для таблиц с одноколоночным PK может сгенерировать inline-форму:
 
 ```sql
 id Int32 PRIMARY KEY
 ```
 
-YDB такую форму не принимает. Поэтому для таблиц, которые должны создаваться через Exposed DDL, необходимо переопределять `createStatement()` и вызывать `createYdbStatement()`:
+{{ ydb-short-name }} такую форму не принимает. Поэтому для таблиц, которые должны создаваться через Exposed DDL, необходимо переопределять `createStatement()` и вызывать `createYdbStatement()`:
 
 ```kotlin
 import org.jetbrains.exposed.v1.core.PrimaryKey

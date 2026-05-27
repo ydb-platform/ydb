@@ -1901,7 +1901,7 @@ private:
 
                     indexSettings->SetIsUniq(
                         indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
-                        && settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                        && settings.Mode().StringValue() != "delete"
                         && affectedKeysIndexes.contains(index));
 
                     for (const auto& columnName : implTable->KeyColumnNames) {

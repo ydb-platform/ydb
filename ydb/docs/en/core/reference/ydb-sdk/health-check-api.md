@@ -6,10 +6,6 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 {% list tabs group=lang %}
 
-- Go
-
-  This functionality is not currently supported in the Go SDK.
-
 - C++
 
   App code snippet for creating a client:
@@ -26,6 +22,17 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
+<<<<<<< HEAD
+=======
+- Go
+
+  This functionality is not currently supported.
+
+- Java
+
+  This functionality is not currently supported.
+
+>>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 - Python
 
   This functionality is not currently supported.
@@ -62,10 +69,6 @@ The complete list of extra parameters is presented below:
 
 {% list tabs group=lang %}
 
-- Go
-
-  This functionality is not currently supported in the Go SDK.
-
 - C++
 
   ```c++
@@ -76,6 +79,17 @@ The complete list of extra parameters is presented below:
   };
   ```
 
+<<<<<<< HEAD
+=======
+- Go
+
+  This functionality is not currently supported.
+
+- Java
+
+  This functionality is not currently supported.
+
+>>>>>>> b6312d8df64 (DOCSUP-127175: [YDBDOCS-1980] dev: update java snippets перевод. https://github.com/ydb-platform/ydb/pull/36547 (#38048))
 - Python
 
   This functionality is not currently supported.

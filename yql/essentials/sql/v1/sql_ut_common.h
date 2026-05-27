@@ -15260,4 +15260,34 @@ Y_UNIT_TEST(CreateDropViewWithBind) {
 
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)
 
+Y_UNIT_TEST_SUITE(NullAsTypeName) {
+
+Y_UNIT_TEST(ListOfNull) {
+    NYql::TAstParseResult res = SqlToYql("select List<NULL>;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive stat = {"ListType", "NullType"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["ListType"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["NullType"], 1);
+}
+
+Y_UNIT_TEST(CastAsNull) {
+    NYql::TAstParseResult res = SqlToYql("select cast(1 as NULL);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive stat = {"NullType"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["NullType"], 1);
+}
+
+Y_UNIT_TEST(OptionalNull) {
+    NYql::TAstParseResult res = SqlToYql("select cast(1 as NULL?);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive stat = {"NullType", "OptionalType"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["NullType"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["OptionalType"], 1);
+}
+
+} // Y_UNIT_TEST_SUITE(NullAsTypeName)
+
 // NOLINTEND(misc-definitions-in-headers)

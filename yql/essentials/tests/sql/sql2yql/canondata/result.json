@@ -10739,9 +10739,9 @@
     ],
     "test_sql2yql.test[type_literal-evaluate]": [
         {
-            "checksum": "710dafde8986d41d985bd47be65641ab",
-            "size": 1442,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_type_literal-evaluate_/sql.yql"
+            "checksum": "c87846b52c8479dc0df724bdd3e8f2af",
+            "size": 1464,
+            "uri": "https://{canondata_backend}/1917492/b9a2e5de60b9978fc200b56527dc71fc19e482de/resource.tar.gz#test_sql2yql.test_type_literal-evaluate_/sql.yql"
         }
     ],
     "test_sql2yql.test[udf-automap_null]": [

@@ -3457,7 +3457,7 @@ TNodePtr TSqlTranslation::TypeNodeOrBind(const TRule_type_name_or_bind& node) {
 TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
     // type_name:
     //     type_name_composite
-    //   | (type_name_decimal | type_name_simple) QUESTION*;
+    //   | (type_name_decimal | type_name_simple | type_name_null) QUESTION*;
     if (node.Alt_case() == TRule_type_name::kAltTypeName1) {
         return TypeNode(node.GetAlt_type_name1().GetRule_type_name_composite1());
     }
@@ -3476,6 +3476,10 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
         case TRule_type_name::TAlt2::TBlock1::kAlt2: {
             auto& simpleType = block.GetAlt2().GetRule_type_name_simple1();
             result = TypeSimple(simpleType, false);
+            break;
+        }
+        case TRule_type_name::TAlt2::TBlock1::kAlt3: {
+            result = new TCallNodeImpl(pos, "NullType", {});
             break;
         }
         case TRule_type_name::TAlt2::TBlock1::ALT_NOT_SET:

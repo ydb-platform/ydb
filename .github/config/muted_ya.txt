@@ -35,6 +35,7 @@ ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
+ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps

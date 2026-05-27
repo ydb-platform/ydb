@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 SRCS(
     mvp_config_validation_ut.cpp
+    oidc_cookie_ut.cpp
     oidc_proxy_ut.cpp
     openid_connect.cpp
     tokenator_integration_ut.cpp

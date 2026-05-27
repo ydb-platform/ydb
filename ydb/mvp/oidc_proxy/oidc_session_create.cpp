@@ -1,4 +1,5 @@
 #include "oidc_session_create.h"
+#include "oidc_cookie.h"
 #include "oidc_settings.h"
 #include "openid_connect.h"
 
@@ -24,42 +25,59 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
 void THandlerSessionCreate::Bootstrap() {
     BLOG_D("Restore oidc session");
     NHttp::TUrlParameters urlParameters(Request->URL);
-    TString code = urlParameters["code"];
-    TString state = urlParameters["state"];
-
-    TCheckStateResult checkStateResult = CheckState(state, Settings.ClientSecret);
+    const TString code = urlParameters["code"];
+    const TString signedState = urlParameters["state"];
+    const TDecodeStateResult decodedState = DecodeState(signedState);
+    const TCheckStateResult checkStateResult = decodedState.Check(Settings.ClientSecret);
 
     NHttp::THeaders headers(Request->Headers);
     NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret, checkStateResult.CookieSuffix);
-    Context = restoreContextResult.Context;
+    const TString cookieName = CreateNameYdbOidcCookie();
+    const TStringBuf authFlowCookieValue = GetCookie(cookies, cookieName);
 
-    if (checkStateResult.Ok) {
-        if (restoreContextResult.IsSuccess()) {
-            if (code.empty()) {
-                BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
-                RetryRequestToProtectedResourceAndDie();
-            } else {
-                RequestSessionToken(code);
-            }
-        } else {
-            const auto& restoreSessionStatus = restoreContextResult.Status;
-            BLOG_D(restoreSessionStatus.ErrorMessage);
-            if (restoreSessionStatus.IsErrorRetryable) {
-                RetryRequestToProtectedResourceAndDie();
-            } else {
-                SendUnknownErrorResponseAndDie();
-            }
-        }
-    } else {
+    TString requestedAddress = decodedState.Payload.RequestedAddress;
+    if (requestedAddress.empty()) {
+        requestedAddress = RestoreRequestedAddressFromAuthFlowCookie(authFlowCookieValue, Settings.ClientSecret);
+    }
+
+    if (requestedAddress.empty()) {
+        BLOG_D("Restore oidc session failed: requested address is missing in state and auth flow cookie");
+        SendUnknownErrorResponseAndDie();
+        return;
+    }
+    Context = TContext({.RequestedAddress = requestedAddress});
+
+    const bool isSameBrowser = HasAuthFlowCookieNonce(
+        authFlowCookieValue,
+        Settings.ClientSecret,
+        decodedState.Payload.AntiForgeryToken
+    );
+
+    if (!checkStateResult.Ok) {
         BLOG_D(checkStateResult.ErrorMessage);
-        if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
+        if (checkStateResult.PayloadTrusted) {
             RetryRequestToProtectedResourceAndDie();
         } else {
             SendUnknownErrorResponseAndDie();
         }
+        return;
     }
 
+    if (!isSameBrowser) {
+        BLOG_D("Restore oidc session failed: auth flow cookie does not match state");
+        RetryRequestToProtectedResourceAndDie();
+        return;
+    }
+
+    MatchedAuthFlowNonce = decodedState.Payload.AntiForgeryToken;
+
+    if (code.empty()) {
+        BLOG_D("Restore oidc session failed: receive empty 'code' parameter");
+        RetryRequestToProtectedResourceAndDie();
+        return;
+    }
+
+    RequestSessionToken(code);
 }
 
 void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
@@ -67,6 +85,7 @@ void THandlerSessionCreate::ReplyBadRequestAndPassAway(TString errorMessage) {
     SetCORS(Request, &responseHeaders);
     SetRequestIdHeader(responseHeaders, GetRequestId());
     responseHeaders.Set("Content-Type", "text/plain");
+    AddAuthFlowCookieCleanupHeader(&responseHeaders);
     return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage));
 }
 
@@ -85,11 +104,33 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Parse(response->Headers);
             SetRequestIdHeader(responseHeaders, GetRequestId());
+            AddAuthFlowCookieCleanupHeader(&responseHeaders);
             return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
         }
     }
 
     return ReplyBadRequestAndPassAway(event->Get()->Error);
+}
+
+void THandlerSessionCreate::AddAuthFlowCookieCleanupHeader(NHttp::THeadersBuilder* responseHeaders) {
+    if (MatchedAuthFlowNonce.empty()) {
+        return;
+    }
+
+    NHttp::THeaders headers(Request->Headers);
+    NHttp::TCookies cookies(headers.Get("cookie"));
+    const TString updatedCookieValue = RemoveAuthFlowCookieNonce(
+        GetCookie(cookies, CreateNameYdbOidcCookie()),
+        Settings.ClientSecret,
+        MatchedAuthFlowNonce
+    );
+
+    if (updatedCookieValue.empty()) {
+        responseHeaders->Add("Set-Cookie", ClearAuthFlowCookie());
+        return;
+    }
+
+    responseHeaders->Add("Set-Cookie", CreateAuthFlowCookie(updatedCookieValue));
 }
 
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
@@ -114,6 +155,7 @@ void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeader
     SetCORS(Request, responseHeaders);
     SetRequestIdHeader(*responseHeaders, GetRequestId());
     responseHeaders->Set("Location", Context.GetRequestedAddress());
+    AddAuthFlowCookieCleanupHeader(responseHeaders);
     ReplyAndPassAway(Request->CreateResponse("302", "Found", *responseHeaders));
 }
 
@@ -122,6 +164,7 @@ void THandlerSessionCreate::SendUnknownErrorResponseAndDie() {
     responseHeaders.Set("Content-Type", "text/html");
     SetCORS(Request, &responseHeaders);
     SetRequestIdHeader(responseHeaders, GetRequestId());
+    AddAuthFlowCookieCleanupHeader(&responseHeaders);
     const static TStringBuf BAD_REQUEST_HTML_PAGE = "<html>"
                                                         "<head>"
                                                             "<title>"

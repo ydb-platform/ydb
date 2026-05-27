@@ -1,4 +1,5 @@
 #include "oidc_client.h"
+#include "oidc_auth_start_handler.h"
 #include "oidc_protected_page_handler.h"
 #include "oidc_session_create_handler.h"
 #include "oidc_cleanup_page.h"
@@ -10,6 +11,12 @@ namespace NMVP::NOIDC {
 void InitOIDC(NActors::TActorSystem& actorSystem,
               const NActors::TActorId& httpProxyId,
               const TOpenIdConnectSettings& settings) {
+    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/auth/start",
+                         actorSystem.Register(new TAuthStartHandler(httpProxyId, settings))
+                         )
+                     );
+
     actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/auth/callback",
                          actorSystem.Register(new TSessionCreateHandler(httpProxyId, settings))

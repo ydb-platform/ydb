@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>
 
@@ -30,17 +31,16 @@ public:
     TContext(const TInitializer& initializer);
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
-    TString GetState(const TString& key) const;
+    TString GetState(const TString& key, bool includeRequestedAddress = true) const;
     bool IsNavigationRequest() const;
     TString GetRequestedAddress() const;
 
     TString CreateYdbOidcCookie(const TString& secret) const;
+    TString CreateYdbOidcCookie(const TString& secret, TStringBuf currentCookieValue) const;
 
 private:
     static bool IsPageNavigationRequest(const NHttp::THttpIncomingRequestPtr& request);
     static TStringBuf GetRequestedUrl(const NHttp::THttpIncomingRequestPtr& request, bool isNavigationRequest);
-
-    TString GenerateCookie(const TString& key) const;
 };
 
 } // NMVP::NOIDC

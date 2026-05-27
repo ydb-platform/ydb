@@ -1019,6 +1019,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(StoreStatsQuota) {
         TTestBasicRuntime runtime;
+        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);

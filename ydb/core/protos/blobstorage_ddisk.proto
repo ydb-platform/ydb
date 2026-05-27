@@ -316,6 +316,7 @@ message TEvListPersistentBufferResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     repeated TPersistentBufferRecord Records = 3;
+    uint64 BarrierLsn = 4;
 }
 
 message TDirectBlockGroupAllocation {

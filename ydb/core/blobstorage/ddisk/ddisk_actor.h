@@ -722,6 +722,7 @@ namespace NKikimr::NDDisk {
             ui32 OffsetInBytes;
             ui32 Size;
             std::vector<TPersistentBufferSectorInfo> Sectors;
+            std::vector<std::tuple<ui64, ui32>> Erases;
             std::map<ui64, TRope> DataParts;
             ui32 PartsCount;
 
@@ -770,6 +771,8 @@ namespace NKikimr::NDDisk {
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases);
         void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, ui64 lsn);
+        void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, const TFastErase& fastErase);
+        void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight);
 
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);

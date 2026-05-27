@@ -179,6 +179,7 @@ struct TPersistentBufferFormat {
     ui64 PerTabletStorageLimit = 4096_MB;
     ui32 MaxBarriersLimit = 64;
     ui32 MaxPendingEventsQueueSize = 1024;
+    bool EnableFastErases = true;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -506,6 +507,7 @@ struct TPersistentBufferFormat {
             TInstant LastLsnTimestamp;
             ui32 LsnsCount;
             ui64 Size;
+            ui32 FastErasesCount;
         };
 
         struct TOpStats {

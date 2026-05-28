@@ -32,7 +32,7 @@ jobs:
       matrix_include: ${{ steps.set-mute-matrix.outputs.matrix_include }}
     steps:
       - name: Checkout branch list and mute files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           path: config-repo
@@ -56,7 +56,7 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
 
@@ -95,7 +95,7 @@ jobs:
         include: ${{ fromJson(needs.setup.outputs.matrix_include) }}
     steps:
       - name: Checkout workflow branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
@@ -246,7 +246,7 @@ jobs:
 
       - name: Upload all generated files as artifacts
         if: steps.changes_check.outputs.changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: muted-tests-all-files-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
           path: |
@@ -318,7 +318,7 @@ jobs:
 
       - name: Add comment, reviewers and labels
         if: steps.changes_check.outputs.changes == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           LABELS: ${{ env.LABELS }}
           REVIEWERS: ${{ env.REVIEWERS }}
@@ -385,7 +385,7 @@ jobs:
           
       - name: Enable auto-merge (squash)
         if: steps.changes_check.outputs.changes == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |

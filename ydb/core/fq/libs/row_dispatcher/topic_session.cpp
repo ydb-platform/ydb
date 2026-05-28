@@ -701,6 +701,8 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     if (minOffset) {
         // ensure we restart session if new client wants earlier offset
         Self.LastMessageOffset = std::max(*minOffset, ui64{1}) - 1;
+        // max() is for corner case of zero offset; in this case, every new client
+        // with offset 0 will just (unnecessarily) restart session
     }
 }
 

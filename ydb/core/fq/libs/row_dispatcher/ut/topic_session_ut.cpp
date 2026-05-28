@@ -484,6 +484,33 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
+    Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffsetConfirmStartRace, TRealTopicFixture) {
+        const TString topicName = "topic6001";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source = BuildSource();
+
+        PQWrite({ Json1, Json2, Json3 }); // offset 0, 1, 2
+        StartSession(ReadActorId1, source, 3);
+        ExpectStatistics({{ReadActorId1, Nothing()}});
+        // We should better wait till Confirm; sadly, on unpatched rd confirm changes nothing visible (no new event is sent, statistics is not changed); so, just try to wait it out (test is safe - "unlucky" case (could've been) false positive: local runs with fix reverted shows that 3s delay is unsufficient, and 5s is sufficient)
+        Sleep(TDuration::Seconds(10));
+
+
+        // Restart topic session.
+        StartSession(ReadActorId2, source, 1);
+        ExpectNewDataArrived({ReadActorId2});
+
+        PQWrite({ Json4 }); // offset 3
+        ExpectNewDataArrived({ReadActorId1});
+
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(4) }, false);
+        ExpectMessageBatch(ReadActorId2, { JsonMessage(2), JsonMessage(3), JsonMessage(4) }, false);
+
+        StopSession(ReadActorId1, source);
+        StopSession(ReadActorId2, source);
+    }
+
     Y_UNIT_TEST_F(ReadNonExistentTopic, TRealTopicFixture) {
         const TString topicName = "topic7";
         Init(topicName);

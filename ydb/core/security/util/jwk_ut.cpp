@@ -253,7 +253,8 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
     // Values are base64-encoded and decoded during parsing.
 
     Y_UNIT_TEST(X5C) {
-        // "cert-data-1" -> base64 "Y2VydC1kYXRhLTE=" and "cert-data-2" -> base64 "Y2VydC1kYXRhLTI="
+        // "cert-data-1" -> base64 "Y2VydC1kYXRhLTE="
+        // "cert-data-2" -> base64 "Y2VydC1kYXRhLTI="
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5c": ["Y2VydC1kYXRhLTE=", "Y2VydC1kYXRhLTI="]})"));
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Chain.size(), 2);
@@ -273,57 +274,79 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
         UNIT_ASSERT(jwk->X509Chain.empty());
     }
 
-    Y_UNIT_TEST(X5CNonStringElementReturnsStringsOnly) {
+    Y_UNIT_TEST(X5CNonStringElementFailsParsing) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5c": ["Y2VydC1kYXRhLTE=", 123]})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk->X509Chain.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(jwk->X509Chain[0], "cert-data-1");
+        UNIT_ASSERT(!jwk.has_value());
     }
 
-    Y_UNIT_TEST(X5CNotArray) {
+    Y_UNIT_TEST(X5CNotArrayFailsParsing) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5c": "Y2VydC1kYXRhLTE="})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->X509Chain.empty());
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(X5CInvalidBase64FailsParsing) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5c": ["not-base64!"]})"));
+        UNIT_ASSERT(!jwk.has_value());
     }
 
     // RFC 7517 Section 4.8 — "x5t" (X.509 Certificate SHA-1 Thumbprint) Parameter
     // Value is base64url-encoded and decoded during parsing.
 
     Y_UNIT_TEST(X5T) {
-        // "thumbprint" -> base64 "dGh1bWJwcmludA=="
-        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t": "dGh1bWJwcmludA=="})"));
+        // "12345678901234567890" -> base64url "MTIzNDU2Nzg5MDEyMzQ1Njc4OTA"
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTA"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha1Thumbprint, "thumbprint");
+        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha1ThumbprintBytes, "12345678901234567890");
     }
 
     Y_UNIT_TEST(X5TMissing) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->X509CertificateSha1Thumbprint.empty());
+        UNIT_ASSERT(jwk->X509CertificateSha1ThumbprintBytes.empty());
+    }
+
+    Y_UNIT_TEST(X5TInvalidBase64FailsParsing) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t": "not-base64!"})"));
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(X5TWrongLengthFailsParsing) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t": "d3Jvbmc"})"));
+        UNIT_ASSERT(!jwk.has_value());
     }
 
     // RFC 7517 Section 4.9 — "x5t#S256" (X.509 Certificate SHA-256 Thumbprint) Parameter
     // Value is base64url-encoded and decoded during parsing.
 
     Y_UNIT_TEST(X5TS256) {
-        // "sha256-thumbprint" -> base64 "c2hhMjU2LXRodW1icHJpbnQ="
-        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t#S256": "c2hhMjU2LXRodW1icHJpbnQ="})"));
+        // "12345678901234567890123456789012" -> base64url "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t#S256": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha256Thumbprint, "sha256-thumbprint");
+        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha256ThumbprintBytes, "12345678901234567890123456789012");
     }
 
     Y_UNIT_TEST(X5TS256Missing) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->X509CertificateSha256Thumbprint.empty());
+        UNIT_ASSERT(jwk->X509CertificateSha256ThumbprintBytes.empty());
+    }
+
+    Y_UNIT_TEST(X5TS256InvalidBase64FailsParsing) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t#S256": "not-base64!"})"));
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(X5TS256WrongLengthFailsParsing) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "x5t#S256": "d3Jvbmc"})"));
+        UNIT_ASSERT(!jwk.has_value());
     }
 
     // Full JWK with all parameters
 
     Y_UNIT_TEST(AllParameters) {
         // x5c: "cert-data" -> base64 "Y2VydC1kYXRh"
-        // x5t: "sha1-tp" -> base64 "c2hhMS10cA=="
-        // x5t#S256: "sha256-tp" -> base64 "c2hhMjU2LXRw"
+        // x5t: "12345678901234567890" -> base64url "MTIzNDU2Nzg5MDEyMzQ1Njc4OTA"
+        // x5t#S256: "12345678901234567890123456789012" -> base64url "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"
         const auto jwk = ParseJWK(ParseJson(R"({
             "kty": "RSA",
             "use": "sig",
@@ -332,8 +355,8 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
             "kid": "my-key-id",
             "x5u": "https://example.com/cert",
             "x5c": ["Y2VydC1kYXRh"],
-            "x5t": "c2hhMS10cA==",
-            "x5t#S256": "c2hhMjU2LXRw"
+            "x5t": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTA",
+            "x5t#S256": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"
         })"));
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT_EQUAL(jwk->Type, TKeyType::RSA);
@@ -344,8 +367,8 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Url, "https://example.com/cert");
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Chain.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Chain[0], "cert-data");
-        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha1Thumbprint, "sha1-tp");
-        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha256Thumbprint, "sha256-tp");
+        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha1ThumbprintBytes, "12345678901234567890");
+        UNIT_ASSERT_VALUES_EQUAL(jwk->X509CertificateSha256ThumbprintBytes, "12345678901234567890123456789012");
     }
 }
 
@@ -395,7 +418,7 @@ Y_UNIT_TEST_SUITE(TParseJWKSetTest) {
         UNIT_ASSERT(!jwkSet.has_value());
     }
 
-    Y_UNIT_TEST(InvalidKeysSkipped) {
+    Y_UNIT_TEST(InvalidKeyFailsParsing) {
         const auto jwkSet = ParseJWKSet(ParseJson(R"({
             "keys": [
                 {"kty": "RSA", "kid": "valid"},
@@ -403,21 +426,7 @@ Y_UNIT_TEST_SUITE(TParseJWKSetTest) {
                 {"kty": "EC", "kid": "also-valid"}
             ]
         })"));
-        UNIT_ASSERT(jwkSet.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[0].KeyId, "valid");
-        UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[1].KeyId, "also-valid");
-    }
-
-    Y_UNIT_TEST(AllInvalidKeysResultsInEmptySet) {
-        const auto jwkSet = ParseJWKSet(ParseJson(R"({
-            "keys": [
-                {"kty": "unknown"},
-                {"no_kty": "RSA"}
-            ]
-        })"));
-        UNIT_ASSERT(jwkSet.has_value());
-        UNIT_ASSERT(jwkSet->Keys.empty());
+        UNIT_ASSERT(!jwkSet.has_value());
     }
 
 }
@@ -451,9 +460,10 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
 
         UNIT_ASSERT(jwkSet.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 2);
-        UNIT_ASSERT(jwkSet->Keys[0].CalculatePublicKey().has_value());
+        const auto firstPublicKey = jwkSet->Keys[0].CalculatePublicKey();
+        UNIT_ASSERT(firstPublicKey.has_value());
         UNIT_ASSERT_STRINGS_EQUAL(
-            jwkSet->Keys[0].CalculatePublicKey().value(),
+            firstPublicKey.value(),
             "-----BEGIN PUBLIC KEY-----\n"
             "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8Yf9rF5OR4eDSxSr8zq6\n"
             "35igobZXvujwX42rQ9ZA74RAvOby/+EZUmGLNQtBgd9UGE8jLN6MtgO9xS01ZfBr\n"
@@ -463,9 +473,10 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
             "HKAh2/UVZ+8Gcyudgo+6ZxhFOxHEFAGVxtIISC++SMncNNPGhUgA46BvOwU2Nmbe\n"
             "6wIDAQAB\n"
             "-----END PUBLIC KEY-----\n");
-        UNIT_ASSERT(jwkSet->Keys[1].CalculatePublicKey().has_value());
+        const auto secondPublicKey = jwkSet->Keys[1].CalculatePublicKey();
+        UNIT_ASSERT(secondPublicKey.has_value());
         UNIT_ASSERT_VALUES_EQUAL(
-            jwkSet->Keys[1].CalculatePublicKey().value(),
+            secondPublicKey.value(),
             "-----BEGIN PUBLIC KEY-----\n"
             "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzib6/S/YkMstKH07kSUb\n"
             "3AV9vePmAX4ABXdg3O15TwOwcHGfkjOVXsZSenCwN7sqraNCXpHOZbw3g+5lE4+F\n"
@@ -487,9 +498,10 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
         })"));
 
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->CalculatePublicKey().has_value());
+        const auto publicKey = jwk->CalculatePublicKey();
+        UNIT_ASSERT(publicKey.has_value());
         UNIT_ASSERT_STRINGS_EQUAL(
-            jwk->CalculatePublicKey().value(),
+            publicKey.value(),
             "-----BEGIN PUBLIC KEY-----\n"
             "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8Yf9rF5OR4eDSxSr8zq6\n"
             "35igobZXvujwX42rQ9ZA74RAvOby/+EZUmGLNQtBgd9UGE8jLN6MtgO9xS01ZfBr\n"
@@ -531,7 +543,7 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
             "x5c": [
                 "MIICozCCAYsCBgGeOZ43AjANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPGH/axeTkeHg0sUq/M6ut+YoKG2V77o8F+Nq0PWQO+EQLzm8v/hGVJhizULQYHfVBhPIyzejLYDvcUtNWXwa5Mos2vVcA5SrtZWsikjKOJOhpNo0l3qYvq6xGltyLX+yB4slIT6SYSm1/rOzW2XjYP0GI8eJYGw+kVxZvB3I15Q29EaShULNCUnDltaOEPVI6gV8h7i0Okjhosc5G/rij2z29xwqpFYs+DnzWMiJHvdLValnuWy/8fDNraaBIopxE3sDOMTMkqBzM/wxPbDpRygIdv1FWfvBnMrnYKPumcYRTsRxBQBlcbSCEgvvkjJ3DTTxoVIAOOgbzsFNjZm3usCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAoeb91xEPgnBtSmOuVKUCGER0hXJlT1iRCMyxzb2uA/IoT//GGGOCUhlt2wKkOHR8NZS6QFzBO0/tB1t9/AXORjJyme8H1Xg6+1EwpzwBO2+Om6iJsNnga0eLL0xh9UvIciQzwVF6rSS6wSqxvVaozjMHD7b0CfI7Kezdz3sJKT1TmYA9xVcdVyTyxRU4JjGrLtvKGqjgywXlzCKKkPpcoUtMSKVzNIgN92U/v/47Y+cFAGVZ7k4mIuGbCRe4gxgK39tYuyAoAKNxDzp5qAQ3Pbs41pojRNEtetsOuR57sN/7GIlLkjhoOFzgpZ/ZZ6bdtYsqbPEKzS/sVz6JEhFsvA=="
             ],
-            "x5t": "d3Jvbmc"
+            "x5t": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTA"
         })"));
 
         UNIT_ASSERT(jwk.has_value());
@@ -545,7 +557,7 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
             "x5c": [
                 "MIICozCCAYsCBgGeOZ43AjANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPGH/axeTkeHg0sUq/M6ut+YoKG2V77o8F+Nq0PWQO+EQLzm8v/hGVJhizULQYHfVBhPIyzejLYDvcUtNWXwa5Mos2vVcA5SrtZWsikjKOJOhpNo0l3qYvq6xGltyLX+yB4slIT6SYSm1/rOzW2XjYP0GI8eJYGw+kVxZvB3I15Q29EaShULNCUnDltaOEPVI6gV8h7i0Okjhosc5G/rij2z29xwqpFYs+DnzWMiJHvdLValnuWy/8fDNraaBIopxE3sDOMTMkqBzM/wxPbDpRygIdv1FWfvBnMrnYKPumcYRTsRxBQBlcbSCEgvvkjJ3DTTxoVIAOOgbzsFNjZm3usCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAoeb91xEPgnBtSmOuVKUCGER0hXJlT1iRCMyxzb2uA/IoT//GGGOCUhlt2wKkOHR8NZS6QFzBO0/tB1t9/AXORjJyme8H1Xg6+1EwpzwBO2+Om6iJsNnga0eLL0xh9UvIciQzwVF6rSS6wSqxvVaozjMHD7b0CfI7Kezdz3sJKT1TmYA9xVcdVyTyxRU4JjGrLtvKGqjgywXlzCKKkPpcoUtMSKVzNIgN92U/v/47Y+cFAGVZ7k4mIuGbCRe4gxgK39tYuyAoAKNxDzp5qAQ3Pbs41pojRNEtetsOuR57sN/7GIlLkjhoOFzgpZ/ZZ6bdtYsqbPEKzS/sVz6JEhFsvA=="
             ],
-            "x5t#S256": "d3Jvbmc"
+            "x5t#S256": "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"
         })"));
 
         UNIT_ASSERT(jwk.has_value());

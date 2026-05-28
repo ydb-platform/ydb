@@ -31,6 +31,8 @@ enum class TKeyOps : ui8 {
     DERIVE_BITS,
 };
 
+// Use for JWS: https://datatracker.ietf.org/doc/html/rfc7518#section-3
+// TODO(vlad-serikov): Also implement for JWE: https://datatracker.ietf.org/doc/html/rfc7518#section-4
 enum class TAlg : ui8 {
     NONE,
     HS256,
@@ -56,14 +58,14 @@ struct TJWK {
     std::optional<TAlg> Algorithm; // `alg`
     std::string KeyId; // `kid`
     std::string X509Url; // `x5u`
-    std::vector<std::string> X509Chain; // `x5c` (in DER format)
-    std::string X509CertificateSha1Thumbprint; // `x5t`
-    std::string X509CertificateSha256Thumbprint; // `x5t#S256`
+    std::vector<std::string> X509Chain; // decoded `x5c` (in DER format)
+    std::string X509CertificateSha1ThumbprintBytes; // decoded `x5t`
+    std::string X509CertificateSha256ThumbprintBytes; // decoded `x5t#S256`
 
     explicit TJWK(TKeyType type);
 
-    // If parameters are missing or an error occurred in validation/parsing process, std::nullopt is returned.
-    // Otherwise, the publicKey is returned, which may be empty if the certificate did not contain the public key.
+    // Returns std::nullopt if parameters are missing or if validation/parsing failed.
+    // Otherwise, returns the extracted public key.
     std::optional<std::string> CalculatePublicKey() const;
 };
 

@@ -134,22 +134,27 @@ std::string ParseX5U(const NJson::TJsonValue& jwk) {
     return x5u.has_value() ? x5u.value() : "";
 }
 
-std::vector<std::string> ParseX5C(const NJson::TJsonValue& jwk) {
+// Return std::nullopt if x5c is present but malformed.
+std::optional<std::vector<std::string>> ParseX5C(const NJson::TJsonValue& jwk) {
     static constexpr TStringBuf X5C = "x5c";
 
-    if (!jwk.Has(X5C) || !jwk[X5C].IsArray()) {
-        return {};
+    if (!jwk.Has(X5C)) {
+        return std::vector<std::string>{};
+    }
+
+    if (!jwk[X5C].IsArray()) {
+        return std::nullopt;
     }
 
     std::vector<std::string> x5c;
     for (const auto& cert : jwk[X5C].GetArray()) {
         if (!cert.IsString()) {
-            continue;
+            return std::nullopt;
         }
         try {
             x5c.push_back(Base64StrictDecode(cert.GetString()));
         } catch (const std::exception&) {
-            continue;
+            return std::nullopt;
         }
     }
 
@@ -165,27 +170,25 @@ TString Base64StrictDecodeUneven(const TStringBuf s) {
     return Base64StrictDecode(TString(s) + TString(4 - tail, '='));
 }
 
-std::string ParseX5T(const NJson::TJsonValue& jwk) {
-    const auto x5t = ParseStr(jwk, "x5t");
-    if (!x5t.has_value()) {
+// Return std::nullopt if the thumbprint is present but malformed.
+std::optional<std::string> ParseThumbprint(const NJson::TJsonValue& jwk, const std::string& name, size_t expectedLength) {
+    if (!jwk.Has(name)) {
         return "";
     }
-    try {
-        return Base64StrictDecodeUneven(x5t.value());
-    } catch (const std::exception&) {
-        return "";
-    }
-}
 
-std::string ParseX5TS256(const NJson::TJsonValue& jwk) {
-    const auto x5ts256 = ParseStr(jwk, "x5t#S256");
-    if (!x5ts256.has_value()) {
-        return  "";
+    const auto thumbprint = ParseStr(jwk, name);
+    if (!thumbprint.has_value()) {
+        return std::nullopt;
     }
+
     try {
-        return Base64StrictDecodeUneven(x5ts256.value());
+        auto decoded = Base64StrictDecodeUneven(thumbprint.value());
+        if (decoded.size() != expectedLength) {
+            return std::nullopt;
+        }
+        return decoded;
     } catch (const std::exception&) {
-        return "";
+        return std::nullopt;
     }
 }
 
@@ -201,9 +204,24 @@ std::optional<TJWK> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
     res->Algorithm = ParseAlg(jwk);
     res->KeyId = ParseKid(jwk);
     res->X509Url = ParseX5U(jwk);
-    res->X509Chain = ParseX5C(jwk);
-    res->X509CertificateSha1Thumbprint = ParseX5T(jwk);
-    res->X509CertificateSha256Thumbprint = ParseX5TS256(jwk);
+
+    if (auto x5c = ParseX5C(jwk); !x5c.has_value()) {
+        return std::nullopt;
+    } else {
+        res->X509Chain = std::move(x5c.value());
+    }
+
+    if (auto x5t = ParseThumbprint(jwk, "x5t", SHA_DIGEST_LENGTH); !x5t.has_value()) {
+        return std::nullopt;
+    } else {
+        res->X509CertificateSha1ThumbprintBytes = std::move(x5t.value());
+    }
+
+    if (auto x5ts256 = ParseThumbprint(jwk, "x5t#S256", SHA256_DIGEST_LENGTH); !x5ts256.has_value()) {
+        return std::nullopt;
+    } else {
+        res->X509CertificateSha256ThumbprintBytes = std::move(x5ts256.value());
+    }
 
     return res;
 }
@@ -216,14 +234,14 @@ std::string CalculateThumbprint(const std::string& cert) {
 }
 
 bool CheckCertificateThumbprints(const TJWK& jwk, const std::string& cert) {
-    if (!jwk.X509CertificateSha1Thumbprint.empty()
-        && jwk.X509CertificateSha1Thumbprint != CalculateThumbprint<SHA1, SHA_DIGEST_LENGTH>(cert))
+    if (!jwk.X509CertificateSha1ThumbprintBytes.empty()
+        && jwk.X509CertificateSha1ThumbprintBytes != CalculateThumbprint<SHA1, SHA_DIGEST_LENGTH>(cert))
     {
         return false;
     }
 
-    if (!jwk.X509CertificateSha256Thumbprint.empty()
-        && jwk.X509CertificateSha256Thumbprint != CalculateThumbprint<SHA256, SHA256_DIGEST_LENGTH>(cert))
+    if (!jwk.X509CertificateSha256ThumbprintBytes.empty()
+        && jwk.X509CertificateSha256ThumbprintBytes != CalculateThumbprint<SHA256, SHA256_DIGEST_LENGTH>(cert))
     {
         return false;
     }
@@ -257,6 +275,9 @@ TJWK::TJWK(TKeyType type)
     : Type(type)
 {}
 
+// Currently this implementation is x5c-only: a public key can be derived
+// only from the first certificate in the X.509 chain. RFC 7518 RSA/EC
+// parameter-based key construction is not implemented here yet.
 std::optional<std::string> TJWK::CalculatePublicKey() const {
     // TODO(vlad-serikov): write code to generate public key from RSA/EC parameters
     // TODO(vlad-serikov): validate cert key matches key from RSA/EC parameters
@@ -277,9 +298,10 @@ std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet) {
     TJWKSet res;
     for (const auto& key : jwkSet[KEYS].GetArray()) {
         auto jwk = ParseJWK(key);
-        if (jwk.has_value()) {
-            res.Keys.push_back(std::move(jwk.value()));
+        if (!jwk.has_value()) {
+            return std::nullopt;
         }
+        res.Keys.push_back(std::move(jwk.value()));
     }
     return res;
 }

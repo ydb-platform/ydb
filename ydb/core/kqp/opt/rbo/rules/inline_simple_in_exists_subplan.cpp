@@ -92,7 +92,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-        auto planIUs = uncorrSubplan->GetOutputIUs();
+        auto planIUs = GetSubplanResultIUs(uncorrSubplan);
 
         for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
             joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));

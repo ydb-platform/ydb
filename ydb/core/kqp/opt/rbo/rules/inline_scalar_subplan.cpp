@@ -41,7 +41,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     auto scalarIU = scalarIUs[0];
     auto subplanEntry = props.Subplans.PlanMap.at(scalarIU);
     auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
-    auto subplanResIU = subplan->GetOutputIUs()[0];
+    auto subplanResIU = GetSubplanResultIUs(subplan)[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
 
     Y_ENSURE(MatchOperator<IUnaryOperator>(input));
@@ -52,8 +52,8 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     // Check whether this is a correlated subplan with filter pushed up
     // FIXME: if the filter got stuck we will crash later in the optimizer
     if (subplan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplan)->GetInput()->Kind == EOperator::AddDependencies) {
-        auto filter = CastOperator<TOpFilter>(subplan);
-        auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
+        auto subplanFilter = CastOperator<TOpFilter>(subplan);
+        auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         auto uncorrSubplan = addDeps->GetInput();
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
@@ -62,7 +62,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         auto leftIUs = child->GetOutputIUs();
 
-        auto conjuncts = filter->FilterExpr.SplitConjunct();
+        auto conjuncts = subplanFilter->FilterExpr.SplitConjunct();
 
         for (const auto & conj : conjuncts) {
             if (!conj.MaybeEquiJoinCondition()) {
@@ -106,10 +106,16 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         auto leftJoin = MakeIntrusive<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys, joinFilters);
 
-        TVector<TMapElement> renameElements;
-        renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
-        auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements);
-        unaryOp->SetInput(rename);
+        if (input->Kind == EOperator::Filter) {
+            auto outerFilter = CastOperator<TOpFilter>(input);
+            outerFilter->FilterExpr = outerFilter->FilterExpr.ApplyRenames({{scalarIU, subplanResIU}});
+            outerFilter->SetInput(leftJoin);
+        } else {
+            TVector<TMapElement> renameElements;
+            renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
+            auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements);
+            unaryOp->SetInput(rename);
+        }
     }
 
     // If its a correlated subplan where filter pull up didn't succeed, throw an exception

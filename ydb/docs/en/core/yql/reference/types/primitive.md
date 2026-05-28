@@ -3,6 +3,7 @@
 <!-- markdownlint-disable blanks-around-fences -->
 
 The terms "simple", "primitive", and "elementary" data types are used as synonyms.
+
 ## Numeric types {#numeric}
 
 #|
@@ -66,6 +67,7 @@ Compatible with the `Number` type of AWS DynamoDB. Not recommended for use in {{
 |#
 
 {% include [x](../_includes/type_literals_examples.md) %}
+
 ## String types {#string}
 
 #|
@@ -91,7 +93,7 @@ Does not support comparison{% if feature_map_tables %}, cannot be used in the pr
 Does not support comparison{% if feature_map_tables %}, cannot be used in the primary key and in the columns that form the secondary index key{% endif %}
     ||
 || `Yson` |
-[YSON](yson.md) in text or binary representation |
+[YSON](../udf/list/yson.md) in text or binary representation |
 Does not support comparison{% if feature_map_tables %}, cannot be used in the primary key and in the columns that form the secondary index key{% endif %}
     ||
 || `Uuid` |
@@ -113,6 +115,7 @@ Due to the added redundancy, `JsonDocument` is less efficient in terms of storag
 The Double type is used to store numbers (JSON Number) in JsonDocument and for arithmetic operations on them in the [JSON API](../builtins/json.md). Loss of precision is possible when using non-standard number representations in the original JSON document.
 
 {% endnote %}
+
 ## Date and time {#datetime}
 
 #|
@@ -288,6 +291,7 @@ from 00:00 January 1, 144169 BC to 00:00 January 1, 148107 AD
 |#
 
 <sup>1</sup> Midnight is understood as the moment when all _time_ components are equal to zero.
+
 ### Interval type behavior and limitations {#interval-type-behavior-and-limitations}
 
 The `Interval` type uses syntax based on the [ISO 8601 standard](https://en.wikipedia.org/wiki/ISO_8601), with several specifics:
@@ -299,12 +303,14 @@ The `Interval` type uses syntax based on the [ISO 8601 standard](https://en.wiki
 * microseconds can be specified as a fractional part of a second.
 
 #### Interval data examples {#interval-data-examples}
+
 ```yql
 SELECT
     Interval("P1W2DT2H3M4.567890S"), -- interval 1 week 2 days 2 hours 3 minutes 4.567890 seconds
     Interval("P1W"),                 -- interval 1 week (7 days)
     Interval("-P1D");                -- interval in the past 1 day (24 hours)
 ```
+
 ### Time zone label support features
 
 The time zone label for the `TzDate`, `TzDatetime`, `TzTimestamp` types is an attribute that is used:
@@ -321,12 +327,15 @@ SELECT -- these expressions are always true for any time zones: the time zone do
         AddTimezone(CurrentUtcDatetime(), "America/New_York");
 ```
 It is important to understand that when converting between `TzDate` and `TzDatetime` or `TzTimestamp`, the date corresponds not to midnight local time in the timezone, but to midnight UTC for the date in UTC.
+
 ## Casting of primitive data types {#cast}
+
 ### Explicit casting {#explicit-cast}
 
 Explicit casting using [CAST](../syntax/expressions.md#cast):
 
 #### Casting to numeric types
+
 | Type | Bool | Int8 | Int16 | Int32 | Int64 | Uint8 | Uint16 | Uint32 | Uint64 | Float | Double | Decimal |
 | --------------- | -------------- | -------------- | -------------- | -------------- | -------------- | ---------------- | ---------------- | ---------------- | ---------------- | -------------- | -------------- | ------- |
 | **Bool** | — | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | No |
@@ -356,6 +365,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Datetime64** | No | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes | Yes | Yes | No |
 | **Timestamp64** | No | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes | Yes | No |
 | **Interval64** | No | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup> | Yes | Yes | No |
+
 <sup>1</sup> `True` is converted to `1`, `False` is converted to `0`.
 <sup>2</sup> Any value other than `0` is converted to `True`, `0` is converted to `False`.
 <sup>3</sup> Only possible if the value is non-negative.
@@ -363,6 +373,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 <sup>5</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 
 #### Casting to date and time data types
+
 | Type             | Date | Datetime | Timestamp | Interval | Date32 | Datetime64 | Timestamp64 | Interval64 |
 | --------------- | ---- | -------- | --------- | -------- | ------ | ---------- | ----------- | ---------- |
 | **Bool**        | No   | No       | No       | No       | No     | No        | No         | No        |
@@ -392,7 +403,9 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Datetime64**  | Yes  | Yes      | Yes      | No       | Yes    | —         | Yes        | No       |
 | **Timestamp64** | Yes  | Yes      | Yes      | No       | Yes    | Yes       | —         | No       |
 | **Interval64**  | No   | No      | No       | Yes     | No     | No        | No         | —        |
+
 #### Casting to other data types
+
 | Type | String | Bytes | Utf8 | Text | Json | Yson | Uuid |
 | --------------- | -------------- | -------------- | ---- | ---- | ---- | ---- | ---- |
 | **Bool** | Yes | Yes | No | No | No | No | No |
@@ -422,11 +435,13 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Datetime64** | Yes | Yes | Yes | Yes | No | No | No |
 | **Timestamp64** | Yes | Yes | Yes | Yes | No | No | No |
 | **Interval64** | Yes | Yes | Yes | Yes | No | No | No |
+
 <sup>1</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 
 ##### Examples
 
 {% include [x](../_includes/cast_examples.md) %}
+
 ### Implicit casting {#implicit-cast}
 
 Implicit type casting that occurs in basic operations (`+`, `-`, `*`, `/`, `%`) between different data types. The table cells indicate the result type of the operation if it is possible:
@@ -446,7 +461,9 @@ If the numeric types do not match, a [BITCAST](../syntax/expressions.md#bitcast)
 | **Uint64** | `Uint64` | `Uint64` | `Uint64` | `Int64` | `Uint64` | `Uint64` | `Uint64` | — | `Float` | `Double` |
 | **Float** | `Float` | `Float` | `Float` | `Float` | `Float` | `Float` | `Float` | `Float` | — | `Double` |
 | **Double** | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | `Double` | — |
+
 #### Date and time types
+
 | Type | Date | Datetime | Timestamp | Interval | TzDate | TzDatetime | TzTimestamp | Date32 | Datetime64 | Timestamp64 | Interval64 | TzDate32 | TzDatetime64 | TzTimestamp64 |
 | ----------------- | ---- | ---------- | ----------- | -------- | -------- | ------------ | ------------- | -------- | ------------ | ------------- | ---------- | ---------- | -------------- | --------------- |
 | **Date** | — | `DateTime` | `Timestamp` | — | `TzDate` | `TzDatetime` | `TzTimestamp` | `Date32` | `DateTime64` | `Timestamp64` | — | `TzDate32` | `TzDatetime64` | `TzTimestamp64` |

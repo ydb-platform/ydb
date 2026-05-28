@@ -88,6 +88,14 @@ def api_request(method: str, url: str, token: str, data: dict | None = None) -> 
         return json.loads(raw) if raw else {}
 
 
+RUNNER_LABEL_TRANSIENT_HTTP = frozenset({404, 422})
+
+
+def _runner_pick_key(runner: dict) -> tuple[Any, ...]:
+    """Prefer online runners when picking LIMITED slots."""
+    return (runner.get("status") != "online", runner["id"])
+
+
 def fmt_wait(seconds: float) -> str:
     if seconds >= 86400:
         return f"{seconds / 86400:.1f}d"
@@ -453,9 +461,10 @@ def ghrun_runners(runners: list[dict]) -> list[dict]:
                 "name": runner.get("name", ""),
                 "labels": labels,
                 "has_postcommit": "postcommit" in labels,
+                "status": runner.get("status", "unknown"),
             }
         )
-    return sorted(result, key=lambda r: r["id"])
+    return sorted(result, key=_runner_pick_key)
 
 
 def plan_runner_actions(
@@ -474,7 +483,7 @@ def plan_runner_actions(
                 grouped[preset].append(runner)
         keep_ids = []
         for preset, limit in reserved_by_preset.items():
-            selected = sorted(grouped.get(preset, []), key=lambda runner: runner["id"])[:limit]
+            selected = sorted(grouped.get(preset, []), key=_runner_pick_key)[:limit]
             preset_ids = [str(runner["id"]) for runner in selected]
             keep_by_preset[preset] = preset_ids
             keep_ids.extend(preset_ids)
@@ -501,8 +510,11 @@ def plan_runner_actions(
     return keep_ids, keep_by_preset, actions
 
 
-def apply_runner_actions(repo: str, token: str, actions: list[dict], dry_run: bool) -> None:
+def apply_runner_actions(
+    repo: str, token: str, actions: list[dict], dry_run: bool
+) -> list[dict[str, Any]]:
     base = f"https://api.github.com/repos/{repo}/actions/runners"
+    failures: list[dict[str, Any]] = []
     for item in actions:
         runner_id = item["id"]
         name = item["name"]
@@ -513,11 +525,52 @@ def apply_runner_actions(repo: str, token: str, actions: list[dict], dry_run: bo
         if action == "add_postcommit":
             print(f"Runner {runner_id} ({name}): add postcommit")
             if not dry_run:
-                api_request("POST", f"{base}/{runner_id}/labels", token, {"labels": ["postcommit"]})
+                try:
+                    api_request("POST", f"{base}/{runner_id}/labels", token, {"labels": ["postcommit"]})
+                except urllib.error.HTTPError as exc:
+                    if exc.code not in RUNNER_LABEL_TRANSIENT_HTTP:
+                        raise
+                    error_body = exc.read().decode(errors="replace")[:300]
+                    failures.append(
+                        {
+                            "runner_id": runner_id,
+                            "runner_name": name,
+                            "action": action,
+                            "http_code": exc.code,
+                            "error": error_body,
+                        }
+                    )
+                    item["apply_error"] = f"HTTP {exc.code}"
+                    print(
+                        f"WARN: Runner {runner_id} ({name}): add postcommit skipped "
+                        f"(HTTP {exc.code}, runner likely gone)",
+                        file=sys.stderr,
+                    )
         elif action == "remove_postcommit":
             print(f"Runner {runner_id} ({name}): remove postcommit")
             if not dry_run:
-                api_request("DELETE", f"{base}/{runner_id}/labels/postcommit", token)
+                try:
+                    api_request("DELETE", f"{base}/{runner_id}/labels/postcommit", token)
+                except urllib.error.HTTPError as exc:
+                    if exc.code not in RUNNER_LABEL_TRANSIENT_HTTP:
+                        raise
+                    error_body = exc.read().decode(errors="replace")[:300]
+                    failures.append(
+                        {
+                            "runner_id": runner_id,
+                            "runner_name": name,
+                            "action": action,
+                            "http_code": exc.code,
+                            "error": error_body,
+                        }
+                    )
+                    item["apply_error"] = f"HTTP {exc.code}"
+                    print(
+                        f"WARN: Runner {runner_id} ({name}): remove postcommit skipped "
+                        f"(HTTP {exc.code}, runner likely gone)",
+                        file=sys.stderr,
+                    )
+    return failures
 
 
 def _action_stats(actions: list[dict]) -> dict[str, int]:
@@ -667,6 +720,8 @@ def _runner_changes_table(actions: list[dict]) -> str:
             action_cls, action_label = "add", "+ postcommit"
         else:
             action_cls, action_label = "remove", "− postcommit"
+        if item.get("apply_error"):
+            action_label = f"{action_label} ({item['apply_error']})"
         rows.append(
             f'<tr class="{action_cls}">'
             f'<td><strong>{esc(item["name"] or item["id"])}</strong></td>'
@@ -1140,6 +1195,15 @@ def write_step_summary(meta: dict, summary_path: str | None) -> None:
             lines.append(f"| kept {preset} | {', '.join(ids) or '—'} |")
         if not meta.get("keep_runner_ids_by_preset"):
             lines.append(f"| Runner IDs with postcommit | {meta['keep_runner_ids'] or '—'} |")
+    failures = meta.get("label_action_failures") or []
+    if failures:
+        lines.append("")
+        lines.append(f"**Label update warnings:** {len(failures)} runner(s) skipped (gone/deprovisioned)")
+        for failure in failures[:10]:
+            lines.append(
+                f"- {failure.get('runner_name', '?')} ({failure.get('runner_id')}): "
+                f"{failure.get('action')} HTTP {failure.get('http_code')}"
+            )
     with open(summary_path, "a", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
 
@@ -1175,6 +1239,7 @@ def run(args: argparse.Namespace) -> int:
     print(f"Gate {gate_mode.upper()}: {decision}")
 
     runners_note = ""
+    label_failures: list[dict[str, Any]] = []
     total_runners = ghrun_count = postcommit_count = 0
     keep_ids: list[str] = []
     keep_by_preset: dict[str, list[str]] = {}
@@ -1193,7 +1258,13 @@ def run(args: argparse.Namespace) -> int:
             gate_mode,
             cfg["reserved_postcommit_by_preset"],
         )
-        apply_runner_actions(repo, runners_token, actions, args.dry_run)
+        label_failures = apply_runner_actions(repo, runners_token, actions, args.dry_run)
+        if label_failures:
+            fail_note = (
+                f"{len(label_failures)} runner label update(s) failed "
+                f"(HTTP 404/422 — runner likely deprovisioned)."
+            )
+            runners_note = f"{runners_note} {fail_note}".strip() if runners_note else fail_note
     except urllib.error.HTTPError as exc:
         if exc.code == 403:
             runners_note = "Runners API unavailable (403). Queue stats are still real."
@@ -1242,6 +1313,7 @@ def run(args: argparse.Namespace) -> int:
         "refresh_trigger_url": refresh_url or "",
         "open_gate_trigger_url": open_gate_url or "",
         "close_gate_trigger_url": close_gate_url or "",
+        "label_action_failures": label_failures,
     }
 
     (report_dir / "queue.json").write_text(json.dumps(queue, indent=2), encoding="utf-8")

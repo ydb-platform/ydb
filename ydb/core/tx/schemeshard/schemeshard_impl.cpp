@@ -4188,7 +4188,7 @@ void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, con
     }
 }
 
-void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx)
+void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx, bool skipStatsUpdate)
 {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     auto tablePtr = ColumnTables.at(pathId);
@@ -4209,7 +4209,9 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         storeInfo->ColumnTables.erase(pathId);
     }
 
-    UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
+    if (!skipStatsUpdate) {
+        UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
+    }
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);

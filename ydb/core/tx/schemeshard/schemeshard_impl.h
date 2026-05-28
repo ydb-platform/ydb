@@ -930,7 +930,7 @@ public:
 
     // ColumnTable
     void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
-    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx);
+    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx, bool skipStatsUpdate = false);
     void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
     void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 

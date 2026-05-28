@@ -13,6 +13,7 @@ from textual.widgets import Footer, Header, Input, ListView, TabbedContent, TabP
 from ydb.tools.mnc.viewer.commands import TabCommands, ViewerCommands
 from ydb.tools.mnc.viewer.widgets import (
     ConfigFieldItem,
+    InvalidPathModal,
     MncConfigForm,
     OpenTabListItem,
     OverviewPane,
@@ -110,8 +111,25 @@ class Viewer(App):
         with open(MNC_CONFIG_PATH, "w") as file:
             yaml.safe_dump(self._mnc_config, file)
 
+    def _is_valid_git_ydb_root(self, path: str) -> bool:
+        return bool(path) and os.path.isdir(path)
+
     def _mnc_config_ok(self) -> bool:
-        return os.path.isfile(MNC_CONFIG_PATH) and bool(self._mnc_config.get("git_ydb_root"))
+        return (
+            os.path.isfile(MNC_CONFIG_PATH)
+            and self._is_valid_git_ydb_root(self._mnc_config.get("git_ydb_root", ""))
+        )
+
+    def _show_invalid_path(self, path: str) -> None:
+        self.push_screen(
+            InvalidPathModal(path),
+            lambda _: self.call_after_refresh(self._focus_mnc_config_fields),
+        )
+
+    def _validate_config_field(self, field_name: str, value: str) -> bool:
+        if field_name == "git_ydb_root":
+            return self._is_valid_git_ydb_root(value)
+        return True
 
     def _tab_choices(self, opened_only: bool = False) -> list[tuple[str, str, str]]:
         tab_order = self._opened_tab_order if opened_only else self._available_tab_order
@@ -210,6 +228,10 @@ class Viewer(App):
                 return
 
             normalized_path = self._normalize_config_path(path)
+            if not self._validate_config_field(field.field_name, normalized_path):
+                self._show_invalid_path(normalized_path)
+                return
+
             field.input.value = normalized_path
             field.save_edit()
             self._mnc_config[field.field_name] = normalized_path
@@ -232,6 +254,10 @@ class Viewer(App):
             return
 
         field = self._editing_config_field
+        if not self._validate_config_field(field.field_name, field.value):
+            self._show_invalid_path(field.value)
+            return
+
         field.save_edit()
         self._mnc_config[field.field_name] = field.value
         self._save_mnc_config()

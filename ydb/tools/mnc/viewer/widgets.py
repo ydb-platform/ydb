@@ -7,7 +7,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Key
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label, ListItem, ListView, Static
+from textual.widgets import Button, Input, Label, ListItem, ListView, Static
 
 
 class OpenTabListItem(ListItem):
@@ -206,6 +206,78 @@ class PathSuggestionItem(ListItem):
     def __init__(self, path: str) -> None:
         self.path = path
         super().__init__(Label(path))
+
+
+class InvalidPathModal(ModalScreen[None]):
+    CSS = """
+    InvalidPathModal {
+        color: $foreground;
+        background: $background 60%;
+        align: center middle;
+    }
+
+    #invalid-path-dialog {
+        width: 72;
+        height: auto;
+        padding: 1 2;
+        border: hkey $error;
+        background: $surface;
+    }
+
+    #invalid-path-dialog:dark {
+        background: $panel-darken-1;
+    }
+
+    #invalid-path-title {
+        height: auto;
+        text-style: bold;
+        color: $error;
+        margin-bottom: 1;
+    }
+
+    #invalid-path-message {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #invalid-path-actions {
+        height: auto;
+        align-horizontal: right;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "close", "Close"),
+    ]
+
+    def __init__(self, path: str) -> None:
+        super().__init__()
+        self._path = path
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("Invalid path", id="invalid-path-title"),
+            Static(
+                f"Path is not suitable for git_ydb_root:\n{self._path}\n\nSelect an existing directory.",
+                id="invalid-path-message",
+            ),
+            Horizontal(
+                Button("OK", id="invalid-path-ok", variant="primary"),
+                id="invalid-path-actions",
+            ),
+            id="invalid-path-dialog",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#invalid-path-ok", Button).focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "invalid-path-ok":
+            event.stop()
+            self.dismiss(None)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
 
 
 class PathPickerScreen(ModalScreen[Optional[str]]):

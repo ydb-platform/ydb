@@ -690,14 +690,20 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
     Y_UNIT_TEST_F(MetadataFields, TFixture) {
         TReadValueParser<TMessage> metadataUVParser = [](const NUdf::TUnboxedValue& item) -> std::vector<TMessage> {
-            UNIT_ASSERT_VALUES_EQUAL(item.GetListLength(), 3);
-            auto stringElement = item.GetElement(2);
-            return { {item.GetElement(1).Get<ui64>(), TString(stringElement.AsStringRef())} };
+            UNIT_ASSERT_VALUES_EQUAL(item.GetListLength(), 4);
+            // FIXME validate current status: SystemMetadata is unimplemented
+            UNIT_ASSERT(item.GetElement(0).IsEmbedded());
+            UNIT_ASSERT_EQUAL(item.GetElement(0).Get<ui64>(), 0);
+            UNIT_ASSERT(item.GetElement(1).IsBoxed());
+            UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).GetDictLength(), 0);
+            auto stringElement = item.GetElement(3);
+            return { {item.GetElement(2).Get<ui64>(), TString(stringElement.AsStringRef())} };
         };
 
         auto source = Settings;
         source.AddMetadataFields("_yql_sys_create_time");
-        source.SetRowType("[StructType; [[_yql_sys_create_time; [DataType; Uint32]]; [dt; [DataType; Uint64]]; [value; [DataType; String]]]]");
+        source.AddMetadataFields("_yql_sys_user_attributes");
+        source.SetRowType("[StructType; [[_yql_sys_create_time; [DataType; Uint32]]; [_yql_sys_user_attributes; [DictType; [DataType; String]; [DataType; String]]]; [dt; [DataType; Uint64]]; [value; [DataType; String]]]]");
         StartSession(source);
 
         auto messages = std::vector{Message1};

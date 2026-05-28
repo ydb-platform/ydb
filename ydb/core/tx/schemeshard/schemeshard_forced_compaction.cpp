@@ -221,7 +221,7 @@ void TSchemeShard::TryEnqueueOneShard(
 {
     auto* shards = ForcedCompactionShardsByTable.FindPtr(tablePathId);
     if (shards && !shards->Empty() && compaction.MaxShardsInFlight > compaction.ShardsInFlight.size()) {
-        const auto& shardIdx = shards->Front();
+        const auto shardIdx = shards->Front();
         shards->PopFront();
         --ForcedCompactionTotalInQueues;
         compaction.ShardsInFlight.insert(shardIdx);

@@ -463,7 +463,7 @@ message TTableServiceConfig {
     optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216]; // deprecated
     optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864]; // deprecated
 
-    optional uint32 DqChannelVersion = 114 [ default = 2, (InvalidateCompileCache) = true];
+    optional uint32 DqChannelVersion = 114 [ default = 1, (InvalidateCompileCache) = true];
 
     optional bool EnableDiscardSelect = 115 [default = true, (InvalidateCompileCache) = true];
 

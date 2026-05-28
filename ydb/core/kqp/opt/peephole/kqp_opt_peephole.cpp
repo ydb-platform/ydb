@@ -301,6 +301,70 @@ private:
     const bool WithFinalStageRules;
 };
 
+// Validate that infinite sources handled only by supported functions
+bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<bool>& visitedNodes, bool& hasErrors, TExprContext& ctx) {
+    const auto [it, inserted] = visitedNodes.emplace(node.Get(), false);
+    if (!inserted || hasErrors) {
+        return it->second;
+    }
+
+    const bool isStreaming = node->GetConstraint<TStreamingConstraintNode>();
+    it->second = isStreaming;
+
+    // Validate that all sub-nodes are not streaming
+    for (const auto& child : node->Children()) {
+        if (ValidateStreamingConstraintsInternal(child, visitedNodes, hasErrors, ctx)) {
+            it->second = true;
+        }
+        if (hasErrors) {
+            break;
+        }
+    }
+
+    if (node->IsCallable() && !isStreaming && it->second && !hasErrors) {
+        hasErrors = true;
+        YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing: '" << node->Content() << "'"));
+    }
+
+    return it->second;
+}
+
+bool ValidateStreamingConstraints(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, TExprContext& ctx) {
+    TNodeMap<bool> visitedNodes;
+    bool hasErrors = false;
+    ValidateStreamingConstraintsInternal(tx.Stages().Ptr(), visitedNodes, hasErrors, ctx);
+    ValidateStreamingConstraintsInternal(tx.Results().Ptr(), visitedNodes, hasErrors, ctx);
+
+    if (hasErrors) {
+        return false;
+    }
+
+    for (size_t i = 0; i < tx.Results().Size(); ++i) {
+        const auto it = visitedNodes.find(tx.Results().Item(i).Raw());
+        YQL_ENSURE(it != visitedNodes.end(), "Result " << i << " of tx " << txIdx << " is not visited during streaming constraints validation");
+        if (it->second) {
+            YQL_ENSURE(streamingTxResults.emplace(txIdx, i).second);
+        }
+    }
+
+    // Validate that streaming result bindings are not materializing into tx precomputes
+    for (const auto& binding : tx.ParamBindings()) {
+        const auto maybeTxBinding = binding.Binding().Maybe<TKqpTxResultBinding>();
+        if (!maybeTxBinding) {
+            continue;
+        }
+
+        const auto txBinding = maybeTxBinding.Cast();
+        if (streamingTxResults.contains(std::make_pair(FromString<ui64>(txBinding.TxIndex().Value()), FromString<ui64>(txBinding.ResultIndex().Value())))) {
+            ctx.AddError(TIssue(ctx.GetPosition(binding.Pos()), TStringBuilder() << "Streaming result binding " << binding.Name().Value() << " is materializing into tx precompute for transaction " << txIdx));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
 TVector<TDqPhyStage> TopSortStages(const TDqPhyStageList& stages) {
     TVector<TDqPhyStage> topSortedStages;
@@ -639,10 +703,14 @@ public:
         TKqpPhysicalQuery query(input);
 
         TVector<TKqpPhysicalTx> txs;
+        THashSet<std::pair<ui64, ui64>> streamingTxResults; // (tx idx, result index)
         txs.reserve(query.Transactions().Size());
-        for (const auto& tx : query.Transactions()) {
-            auto expr = TransformTx(tx, ctx);
-            txs.push_back(expr.Cast());
+        for (size_t txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            if (const auto expr = TransformTx(txIdx, query.Transactions().Item(txIdx), streamingTxResults, ctx)) {
+                txs.push_back(expr.Cast());
+            } else {
+                return TStatus::Error;
+            }
         }
 
         auto phyQuery = Build<TKqpPhysicalQuery>(ctx, query.Pos())
@@ -662,7 +730,7 @@ public:
     }
 
 private:
-    TMaybeNode<TKqpPhysicalTx> TransformTx(const TKqpPhysicalTx& tx, TExprContext& ctx) {
+    TMaybeNode<TKqpPhysicalTx> TransformTx(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, TExprContext& ctx) {
         TxTransformer->Rewind();
 
         auto expr = tx.Ptr();
@@ -676,7 +744,13 @@ private:
                 break;
             }
         }
-        return TKqpPhysicalTx(expr);
+
+        TKqpPhysicalTx physicalTx(expr);
+        if (!ValidateStreamingConstraints(txIdx, physicalTx, streamingTxResults, ctx)) {
+            return {};
+        }
+
+        return physicalTx;
     }
 
     TAutoPtr<IGraphTransformer> TxTransformer;

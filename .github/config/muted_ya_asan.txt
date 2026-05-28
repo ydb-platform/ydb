@@ -238,6 +238,7 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_Gro
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_NoneCommittedBeforeSplit
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_NoneCommittedBeforeSplit_RestartChildPartition
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_NoneCommittedBeforeSplit_RestartParentPartition
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_SingleGroupAvailableEventually
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_SingleGroup_Uncommitted
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_TwoGroups_Minimal
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplit.Order_UnrelatedGroup_Committed

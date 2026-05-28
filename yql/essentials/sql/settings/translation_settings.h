@@ -135,6 +135,8 @@ struct TTranslationSettings {
     bool AlwaysAllowExports = false;
     bool IsReplay = false;
     TVector<TString> ExtraSystemColumnPrefixes;
+
+    bool ValidateViewStatement = true;
 };
 
 struct TParsedSettings {

@@ -1,6 +1,4 @@
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
-<<<<<<< HEAD
-=======
 
 
 def generate_certificates(certs_tmp_dir):
@@ -187,4 +185,3 @@ def ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag(certif
     cluster.start()
     yield cluster
     cluster.stop()
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))

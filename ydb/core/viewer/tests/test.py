@@ -21,11 +21,8 @@ class TestViewer(object):
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
-<<<<<<< HEAD
             'enable_resource_pools': True,  # just for canonized data - .metadata table
-=======
             'enable_extra_sids_control_for_http_viewer': True,
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
@@ -1522,8 +1519,6 @@ class TestViewer(object):
         return result
 
     @classmethod
-<<<<<<< HEAD
-=======
     def test_viewer_external_http_access_controls(cls):
         result = {}
 
@@ -1607,7 +1602,6 @@ class TestViewer(object):
         return result
 
     @classmethod
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))
     def test_security(cls):
         result = {}
         result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
@@ -1763,8 +1757,6 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
-<<<<<<< HEAD
-=======
 
         result['status_pdisk_monitoring_force'] = cls.post_viewer("/pdisk/status", body={
             'pdisk_id': '1-1',
@@ -1777,7 +1769,6 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))
         return result
 
     @classmethod

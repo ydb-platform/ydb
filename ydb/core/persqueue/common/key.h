@@ -252,7 +252,6 @@ public:
     }
 
     bool IsHead() const;
-    bool IsFastWrite() const;
 
     static constexpr ui32 KeySize() {
         return UnmarkedSize() + 1 + 20 + 1 + 5 + 1 + 10 + 1 + 5;

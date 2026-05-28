@@ -90,7 +90,6 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 TTabletInfo info;
                 info.Owner = tabletsRowset.GetValue<Schema::Tablets::Owner>();
                 info.Idx = tabletsRowset.GetValue<Schema::Tablets::Idx>();
-                Self->MaxIdx = Max(Self->MaxIdx, info.Idx);
 
                 Self->TabletsInfo[tabletId] = info;
                 if (!tabletsRowset.Next())

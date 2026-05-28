@@ -157,16 +157,6 @@ ui64 TPartition::GetCompactedBlobSizeLowerBound() const
     return Config.GetPartitionConfig().GetLowWatermark();
 }
 
-void TPartition::DumpKeysForBlobsCompaction() const
-{
-    LOG_D("==== keys for blobs compaction ====");
-    for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
-        const auto& k = BlobEncoder.DataKeysBody[i];
-        LOG_D(((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size);
-    }
-    LOG_D("===================================");
-}
-
 void TPartition::TryRunCompaction(bool force)
 {
     if (StopCompaction) {
@@ -183,8 +173,6 @@ void TPartition::TryRunCompaction(bool force)
         LOG_D("No data for blobs compaction");
         return;
     }
-
-    //DumpKeysForBlobsCompaction();
 
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
@@ -769,33 +757,6 @@ TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
     return BlobEncoder.DataKeysBody[GetBodyKeysCountLimit()].Timestamp;
 }
 
-
-void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
-    TInstant prev = TInstant::Zero();
-    size_t pos = 0;
-    auto check = [&](const auto& seq, TStringBuf zoneName) {
-        size_t in_zone_pos = 0;
-        for (const TDataKey& k : seq) {
-            const auto curr = k.Timestamp;
-            const bool disorder = (curr < prev);
-            PQ_ENSURE(!disorder)
-                ("prev_tmestamp", prev.MicroSeconds())
-                ("curr_timestamp", curr.MicroSeconds())
-                ("zone", zoneName)
-                ("offset", k.Key.GetOffset())
-                ("part_no", k.Key.GetPartNo())
-                ("pos", pos)
-                ("in_zone_pos", in_zone_pos)
-                ("validate_reason", validateReason);
-           prev = curr;
-            ++pos;
-            ++in_zone_pos;
-        }
-    };
-    check(CompactionBlobEncoder.DataKeysBody, "compacted_body");
-    check(CompactionBlobEncoder.HeadKeys, "compacted_head");
-    check(BlobEncoder.DataKeysBody, "fastwrite_body");
-}
 
 void TPartition::InitFirstCompactionPart()
 {

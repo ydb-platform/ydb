@@ -13,19 +13,6 @@ namespace NKikimr::NPQ {
 
 class TPartition;
 
-struct TBlobInfo {
-    TKey Key;
-    ui64 LastOffset;
-    bool HasDanglingParts;
-    bool HasTrailingParts;
-    THashMap<ui64, ui64> OffsetToPartNo;
-    THashSet<ui64> OffsetsToKeep;
-
-    void DropMessage(ui64 offset);
-    bool CanDelete(const TMaybe<TBlobInfo>& previous, const TMaybe<TBlobInfo>& next) const;
-
-};
-
 struct TKeyCompactionCounters {
     ui64 UncompactedSize = 0;
     ui64 CompactedSize = 0;
@@ -76,7 +63,6 @@ public:
         EStep ContinueIfPossible(ui64 nextRequestCookie);
         THashMap<TString, ui64>&& GetData();
         ui64 GetLastOffset();
-        void UpdateConfig(ui64 maxBurst, ui64 readQuota); //ToDo;
     };
 
     struct TCompactState {

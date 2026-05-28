@@ -49,7 +49,6 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         }
     }
-    std::pair<TString, TString> SplitPath(const TString& path);
     void SendProposeRequest(const NActors::TActorContext &ctx);
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
 

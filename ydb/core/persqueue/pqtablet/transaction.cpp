@@ -89,11 +89,6 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
 }
 
-TString TDistributedTransaction::LogPrefix() const
-{
-    return TStringBuilder() << "[TxId: " << TxId << "] ";
-}
-
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
 {
     InitPartitions(tx.GetOperations());

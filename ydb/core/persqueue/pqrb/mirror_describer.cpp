@@ -168,15 +168,6 @@ TString TMirrorDescriber::BuildLogPrefix() const {
     return TStringBuilder() << "[MirrorDescriber][" << TopicName << "] ";
 }
 
-TString TMirrorDescriber::GetCurrentState() const {
-    if (CurrentStateFunc() == &TThis::StateInit) {
-        return "StateInitConsumer";
-    } else if (CurrentStateFunc() == &TThis::StateWork) {
-        return "StateWork";
-    }
-    return "UNKNOWN";
-}
-
 NActors::IActor* CreateMirrorDescriber(
     const ui64 tabletId,
     const NActors::TActorId& readBalancerActorId,

@@ -41,17 +41,8 @@ TPartitionSourceManager::TModificationBatch TPartitionSourceManager::CreateModif
     return TModificationBatch(*this, format);
 }
 
-const TPartitionSourceManager::TPartitionNode* TPartitionSourceManager::GetPartitionNode() const {
-    return Partition.PartitionGraph.GetPartition(Partition.Partition.OriginalPartitionId);
-}
-
 TSourceIdStorage& TPartitionSourceManager::GetSourceIdStorage() const {
     return Partition.SourceIdStorage;
-}
-
-bool TPartitionSourceManager::HasParents() const {
-    auto node = GetPartitionNode();
-    return node && !node->DirectParents.empty();
 }
 
 
@@ -61,7 +52,6 @@ bool TPartitionSourceManager::HasParents() const {
 
 TPartitionSourceManager::TModificationBatch::TModificationBatch(TPartitionSourceManager& manager, ESourceIdFormat format)
     : Manager(manager)
-    , Node(Manager.GetPartitionNode())
     , SourceIdWriter(format)
     , HeartbeatEmitter(Manager.Partition.SourceIdStorage) {
 }
@@ -106,7 +96,6 @@ TPartitionSourceManager& TPartitionSourceManager::TModificationBatch::GetManager
 TPartitionSourceManager::TSourceInfo Convert(TSourceIdInfo value) {
     TPartitionSourceManager::TSourceInfo result(value.State);
     result.SeqNo = value.SeqNo;
-    result.MinSeqNo = value.MinSeqNo;
     result.Offset = value.Offset;
     result.Explicit = value.Explicit;
     result.WriteTimestamp = value.WriteTimestamp;

@@ -130,7 +130,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void GetStat(const TActorContext&);
     TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
-    void AnswerWaitingRequests(const TActorContext& ctx);
 
     void BroadcastPartitionError(const TString& message, NKikimrServices::EServiceKikimr service, const TActorContext& ctx);
 
@@ -188,7 +187,6 @@ private:
     };
 
     std::unordered_map<ui64, TTabletInfo> TabletsInfo;
-    ui64 MaxIdx;
 
     ui32 NextPartitionId;
     ui32 NextPartitionIdForWrite;

@@ -195,7 +195,6 @@ private:
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, NWilson::TSpan& span);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                       NKikimrPQ::TError::EKind kind, const TString& reason);
-    void ReplyErrorForStoredWrites(const TActorContext& ctx);
 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset, const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits, const std::optional<TString>& committedMetadata);
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
@@ -311,7 +310,6 @@ private:
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
     void CheckHeadConsistency() const;
-    void CheckTimestampsOrderInZones(TStringBuf validateReason = {}) const;
     void HandlePendingRequests(const TActorContext& ctx);
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
@@ -510,7 +508,6 @@ private:
     void SendReadPreparedProxyResponse(const TReadAnswer& answer, const TReadInfo& readInfo, TUserInfo& user);
 
     void CheckIfSessionExists(TUserInfoBase& userInfo, const TActorId& newPipe);
-    // void DestroyReadSession(const TReadSessionKey& key);
 
     void Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev);
@@ -1233,8 +1230,6 @@ private:
                              TEvKeyValue::TEvRequest* compactionRequest);
 
     bool WasTheLastBlobBig = true;
-
-    void DumpKeysForBlobsCompaction() const;
 
     void TryProcessGetWriteInfoRequest(const TActorContext& ctx);
 

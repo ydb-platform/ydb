@@ -12,9 +12,6 @@ namespace NKikimr::NPQ {
 class TPartition;
 
 class TPartitionSourceManager {
-private:
-    using TPartitionNode = TPartitionGraph::Node;
-
 public:
     using TPartitionId = ui32;
     using TSourceIds = std::unordered_set<TString>;
@@ -26,7 +23,6 @@ public:
 
         TSourceIdInfo::EState State;
         ui64 SeqNo = 0;
-        ui64 MinSeqNo = 0;
         ui64 Offset = 0;
         bool Explicit = false;
         TInstant WriteTimestamp;
@@ -36,11 +32,6 @@ public:
     class TSourceManager {
     public:
         TSourceManager(TModificationBatch& batch, const TString& id);
-
-        // Checks whether a message with the specified Sourceid can be processed.
-        // The message can be processed if it is not required to receive information
-        // about it in the parent partitions, or this information has already been received.
-        bool CanProcess() const;
 
         std::optional<ui64> SeqNo() const;
         std::optional<TMaybe<i16>> ProducerEpoch() const;
@@ -65,7 +56,6 @@ public:
 
         TSourceIdMap::const_iterator InMemory;
         TSourceIdMap::const_iterator InWriter;
-        std::unordered_map<TString, TSourceInfo>::const_iterator InSources;
     };
 
     // Encapsulates the logic of SourceId operation during modification
@@ -94,7 +84,6 @@ public:
     private:
         TPartitionSourceManager& Manager;
 
-        const TPartitionNode* Node;
         TSourceIdWriter SourceIdWriter;
         THeartbeatEmitter HeartbeatEmitter;
     };
@@ -106,12 +95,7 @@ public:
     TModificationBatch CreateModificationBatch(const TActorContext& ctx);
 
 private:
-    const TPartitionNode* GetPartitionNode() const;
     TSourceIdStorage& GetSourceIdStorage() const;
-    bool HasParents() const;
-
-
-private:
     TPartition& Partition;
 };
 

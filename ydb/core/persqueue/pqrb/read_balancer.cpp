@@ -42,7 +42,6 @@ TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletSt
         , SchemeShardId(0)
         , TxId(0)
         , NumActiveParts(0)
-        , MaxIdx(0)
         , NextPartitionId(0)
         , NextPartitionIdForWrite(0)
         , StartPartitionIdForWrite(0)

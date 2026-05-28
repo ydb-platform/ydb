@@ -562,8 +562,6 @@ private:
                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
                                                   const TActorContext& ctx);
 
-    void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
-
     //
     // list of supporive partitions created before writing
     //
@@ -640,8 +638,6 @@ private:
     void BeginDeleteTransaction(const TActorContext& ctx,
                                 TDistributedTransaction& tx,
                                 NKikimrPQ::TTransaction::EState state);
-
-    void ResendSplitMergeRequests(const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext& ctx);
 

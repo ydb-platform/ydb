@@ -52,11 +52,6 @@ TKey TKey::ForFastWrite(EType type,
     return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::FastWrite};
 }
 
-bool TKey::IsFastWrite() const
-{
-    return GetSuffix() == ESuffix::FastWrite;
-}
-
 void TKey::SetFastWrite()
 {
     SetSuffix(ESuffix::FastWrite);

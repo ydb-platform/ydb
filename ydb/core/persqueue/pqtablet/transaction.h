@@ -102,8 +102,6 @@ struct TDistributedTransaction {
     template<class E>
     void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
 
-    TString LogPrefix() const;
-
     THashMap<ui64, TVector<NKikimrTx::TEvReadSet>> OutputMsgs;
 
     void BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event);

@@ -62,7 +62,6 @@ private:
     void DescribeTopic(const TActorContext& ctx);
 
     TString BuildLogPrefix() const override;
-    TString GetCurrentState() const;
 
 public:
     TMirrorDescriber(

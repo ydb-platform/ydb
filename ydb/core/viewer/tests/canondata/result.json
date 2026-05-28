@@ -697,13 +697,10 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
-<<<<<<< HEAD
-=======
         "evict_vdisk_monitoring_force": {
             "status_code": 403,
             "text": "Administration access required when force=true"
         },
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))
         "restart_pdisk_database": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
@@ -752,8 +749,6 @@
             "status_code": 403,
             "text": "Access denied"
         },
-<<<<<<< HEAD
-=======
         "status_pdisk_empty_pdisk_id_root": {
             "status_code": 400,
             "text": "Unable to parse the 'pdisk_id' parameter"
@@ -766,7 +761,6 @@
             "status_code": 400,
             "text": "Unable to parse the 'pdisk_id' parameter"
         },
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))
         "storage_nodes_database": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
             "FieldsRequired": "0000000000000000000000000000000000011",
@@ -4081,8 +4075,6 @@
             "Status": "StatusSuccess"
         }
     },
-<<<<<<< HEAD
-=======
     "test.TestViewer.test_viewer_domain_peers": {
         "FieldsAvailable": "0000011110111010000000000110101000011",
         "FieldsRequired": "0000000000010000000000000000001000001",
@@ -7402,7 +7394,6 @@
             "text": "1\n"
         }
     },
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
             "FieldsAvailable": "111110111111011111011110001",

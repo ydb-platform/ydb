@@ -404,13 +404,43 @@ runs:
             GRAPH_OPTS=""
           fi
 
+          TOTAL_MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+          # Allocate 95% of total memory to ya make cgroup.
+          YA_MAKE_MEM_MAX_KB=$(( TOTAL_MEM_KB * 95 / 100 ))
+          YA_MAKE_MEM_MAX="${YA_MAKE_MEM_MAX_KB}K"
+          YA_MAKE_SCOPE_NAME="ya-make-${GITHUB_RUN_ID:-local}-${RETRY}-$$.scope"
+
+          echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
+
+          YA_MAKE_CMD=(
+            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
+            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
+            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
+          )
+
+          # Timestamp for filtering dmesg to this try only.
+          DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+
           set +e
-          (./ya make ${params[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
-            --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+          (sudo -n -E systemd-run --scope \
+             --unit="${YA_MAKE_SCOPE_NAME}" \
+             -p MemoryMax="${YA_MAKE_MEM_MAX}" \
+             -p MemorySwapMax=0 \
+             --uid=$(id -u) --gid=$(id -g) \
+             -- \
+             "${YA_MAKE_CMD[@]}"
+           echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+
+          # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
+          OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
+          OOM_DMESG_LOG_URL="$CURRENT_PUBLIC_DIR_URL/oom_dmesg.txt"
+          sudo dmesg -T --since="$DMESG_SINCE" 2>/dev/null | grep -i -E "out of memory|oom-killer|Killed process|Memory cgroup out of memory" | tail -n 200 > "$OOM_DMESG_LOG" || true
+          if [ -s "$OOM_DMESG_LOG" ]; then
+            echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
+          fi
 
           kill $MONITOR_PID
 
@@ -502,6 +532,7 @@ runs:
               --comment_text_file summary_text.txt \
               $PR_ARG \
               --workflow_run_id "${{ github.run_id }}" \
+              --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
           fi
 

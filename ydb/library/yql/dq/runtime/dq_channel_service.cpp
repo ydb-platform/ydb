@@ -47,7 +47,6 @@ void BufferToData(TDataChunk& data, TBuffer&& buffer) {
     data.Rows = ReadNumber<ui32>(source);
     data.TransportVersion = static_cast<NDqProto::EDataTransportVersion>(ReadNumber<ui32>(source));
     data.PackerVersion = static_cast<NKikimr::NMiniKQL::EValuePackerVersion>(ReadNumber<ui32>(source));
-    data.Leading = ReadNumber<bool>(source);
     data.Finished = ReadNumber<bool>(source);
     data.Timestamp = TInstant::MicroSeconds(ReadNumber<ui64>(source));
 
@@ -76,7 +75,6 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     AppendNumber<ui32>(result, data.Rows);
     AppendNumber<ui32>(result, static_cast<ui32>(data.TransportVersion));
     AppendNumber<ui32>(result, static_cast<ui32>(data.PackerVersion));
-    AppendNumber<bool>(result, data.Leading);
     AppendNumber<bool>(result, data.Finished);
     AppendNumber<ui64>(result, data.Timestamp.MicroSeconds());
     AppendNumber<bool>(result, !data.Checkpoint.Empty());
@@ -115,12 +113,8 @@ THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildTempUnavailableError(TChannelF
         );
 }
 
-bool IChannelBuffer::GetLeading() {
-    return Leading.exchange(false);
-}
-
 void IChannelBuffer::SendFinish() {
-    Push(TDataChunk(GetLeading(), true));
+    Push(TDataChunk(true));
 }
 
 EDqFillLevel TLocalBuffer::GetFillLevel() const {
@@ -625,7 +619,7 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finis
     if (!IsTerminatedOrAborted()) {
         if (earlyFinish) {
             EarlyFinished.store(true);
-            PushDataChunk(TDataChunk(false, true), nodeState, self);
+            PushDataChunk(TDataChunk(true), nodeState, self);
         }
         if (popBytes) {
             UpdatePopBytes(popBytes, nodeState, self);
@@ -1028,6 +1022,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 descriptor->AddPopChunk(bytes, rows);
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
                 item->SeqNo = ++SeqNo;
+                item->Leading = descriptor->Leading.exchange(false);
                 Queue.push_back(item);
                 SendMessage(item);
                 InflightBytes += bytes;
@@ -1087,7 +1082,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     }
     ev->Record.SetRows(item->Data.Rows);
     ev->Record.SetBytes(item->Data.Bytes);
-    if (item->Data.Leading) {
+    if (item->Leading) {
         ev->Record.SetLeading(true);
     }
     if (item->Data.Finished) {
@@ -1096,6 +1091,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     if (item->Data.ConfirmFinish) {
         ev->Record.SetConfirmFinish(true);
     }
+    Y_ABORT_UNLESS(!item->Descriptor->Leading.load());
     ev->Record.SetConfirmedPopBytes(item->Descriptor->RemotePopBytes.load());
 
     if (item->Data.Checkpoint) {
@@ -1121,7 +1117,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
             ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev2.Release(), flags, item->SeqNo));
         }
 #endif
-        LOG_T(LogPrefix << "SEND MSG, G=" << GenMajor << '.' << GenMinor << ", item->SeqNo=" << item->SeqNo << ", ChannelId=" << item->Descriptor->Info.ChannelId << ", Leading=" << item->Data.Leading);
+        LOG_T(LogPrefix << "SEND MSG, G=" << GenMajor << '.' << GenMinor << ", item->SeqNo=" << item->SeqNo << ", ChannelId=" << item->Descriptor->Info.ChannelId << ", Leading=" << item->Leading);
         ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
 #if !defined(NDEBUG)
     }
@@ -1236,7 +1232,8 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     }
 
     TDataChunk data(TChunkedBuffer(), record.GetRows(), record.GetTransportVersion(),
-      FromProto(record.GetValuePackerVersion()), record.GetLeading(), record.GetFinished());
+      FromProto(record.GetValuePackerVersion()), record.GetFinished());
+
     if (ev->Get()->GetPayloadCount() > 0) {
         data.Buffer = MakeChunkedBuffer(ev->Get()->GetPayload(record.GetPayloadId()));
         // data.Timestamp = TInstant::MicroSeconds(record.GetSendTime());
@@ -1531,6 +1528,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 }
 
                 item->SeqNo = ++SeqNo;
+                item->Leading = waiter->Leading.exchange(false);
                 Queue.push_back(item);
                 SendMessage(item);
                 inflightBytes += bytes;
@@ -1987,7 +1985,7 @@ void TNodeState::DoReconciliation() {
 
         auto& item = Queue.front();
 
-        if (item->Data.Leading) {
+        if (item->Leading) {
             auto prevGenMajor = item->Descriptor->GenMajor.exchange(GenMajor);
             if (prevGenMajor != GenMajor) {
                 LOG_W(LogPrefix << "CHANGE OG G=" << prevGenMajor << " to " << GenMajor << " by RECONCILIATION"

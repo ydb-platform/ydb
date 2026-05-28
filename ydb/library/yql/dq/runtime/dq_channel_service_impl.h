@@ -327,7 +327,7 @@ public:
     std::atomic<bool> Aborted = false;
     std::atomic<bool> Finished = false;
     std::atomic<bool> FinishPushed = false;
-    std::atomic<bool> Leading = false;
+    std::atomic<bool> Leading = true;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
@@ -362,6 +362,7 @@ public:
     std::shared_ptr<TOutputDescriptor> Descriptor;
     std::atomic<EState> State;
     ui64 SeqNo;
+    bool Leading;
 };
 
 class TOutputBuffer : public IChannelBuffer {

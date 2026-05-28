@@ -1067,13 +1067,18 @@ public:
             const ui32 duration    = FromStringWithDefault<ui32>(params.Get("duration_seconds"), 0);
             const ui32 delayBefore = FromStringWithDefault<ui32>(params.Get("delay_before_seconds"), 15);
             const ui32 maxInFlight = FromStringWithDefault<ui32>(params.Get("max_in_flight"), 32);
-            const ui32 readRatio   = FromStringWithDefault<ui32>(params.Get("read_ratio_pct"), 0);
-            const ui32 sizeKib     = FromStringWithDefault<ui32>(params.Get("read_write_size_kib"), 4);
-            const bool sequential  = params.Get("sequential") == "1";
-            const ui32 numDbg      = FromStringWithDefault<ui32>(params.Get("num_dbg_to_use"), 0);
+            const ui32 readRatio          = FromStringWithDefault<ui32>(params.Get("read_ratio_pct"), 0);
+            const ui32 sizeKib            = FromStringWithDefault<ui32>(params.Get("read_write_size_kib"), 4);
+            const bool sequential         = params.Get("sequential") == "1";
+            const ui32 numDbg             = FromStringWithDefault<ui32>(params.Get("num_dbg_to_use"), 0);
+            const bool disableReplication = params.Get("disable_replication") == "1";
 
             if (!tabletId) {
                 GenerateJsonTagInfoRes(id, 0, "", "tablet_id is required");
+                return;
+            }
+            if (disableReplication && readRatio > 0) {
+                GenerateJsonTagInfoRes(id, 0, "", "DisableReplication requires ReadRatioPct=0");
                 return;
             }
 
@@ -1094,6 +1099,9 @@ public:
             wc->SetSequential(sequential);
             if (numDbg) {
                 wc->SetNumDirectBlockGroupsToUse(numDbg);
+            }
+            if (disableReplication) {
+                wc->MutableTabletConfig()->SetDisableReplication(true);
             }
 
             TString errorMsg = "ok";

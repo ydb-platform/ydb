@@ -459,6 +459,14 @@ message TEvLoadTestRequest {
             // 0 = uninitialised (worker stays idle until the first
             // TConfigureTablet with a nonzero value arrives).
             optional uint32 IoSizeBytes = 7 [default = 0];
+
+            // Skip multi-PB replication and DDisk flush. Writes go to only the
+            // coordinator PB; the reply is sent as soon as that single PB confirms.
+            // LSNs bypass PBufferWritten/PBufferFlushing and jump directly to
+            // PBufferFlushed so DoErase can still reclaim PB space.
+            // Enables benchmarking raw single-PB write latency.
+            // Reads are not supported when this flag is set; ReadRatio must be 0.
+            optional bool DisableReplication = 8 [default = false];
         }
 
         // Load-actor -> worker: "write SizeBytes at this flat address".

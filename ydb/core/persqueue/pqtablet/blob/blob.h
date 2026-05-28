@@ -64,6 +64,12 @@ struct TClientBlob {
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
 
+struct TCursor {
+    ui32 BlobIdx;
+    ui64 Offset;
+    ui16 PartNo;
+};
+
 //TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs)
 //or packed(PackedData)
 //on disk representation:
@@ -94,6 +100,10 @@ struct TBatch {
     ui32 GetUnpackedSize() const;
     ui32 GetCount() const;
     ui16 GetInternalPartsCount() const;
+    ui64 GetOffsetDelta() const;
+    bool HasOffsetDelta() const;
+    void SetOffsetDelta(ui64 offsetDelta);
+    void ClearOffsetDelta();
 
     bool IsGreaterThan(ui64 offset, ui16 partNo) const;
 
@@ -107,8 +117,7 @@ struct TBatch {
 
     void SerializeTo(TString& res) const;
 
-    ui32 FindPos(const ui64 offset, const ui16 partNo) const;
-
+    TCursor FindPos(const ui64 offset, const ui16 partNo) const;
 };
 
 void Serialize(const TClientBlob& blob, TBuffer& res);
@@ -180,6 +189,8 @@ public:
 
     ui32 GetCount() const;
 
+    ui64 GetOffsetDelta() const;
+
     ui16 GetInternalPartsCount() const;
 
     //return Max<ui32> if not such pos in head
@@ -227,6 +238,7 @@ public:
 
     ui64 GetOffset() const;
     ui16 GetHeadPartNo() const;
+    ui64 GetOffsetDelta() const;
 
     bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 

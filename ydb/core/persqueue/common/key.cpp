@@ -28,9 +28,10 @@ TKey TKey::ForBody(EType type,
                    const ui64 offset,
                    const ui16 partNo,
                    const ui32 count,
-                   const ui16 internalPartsCount)
+                   const ui16 internalPartsCount,
+                   const TMaybe<ui64>& offsetDelta)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, Nothing()};
+    return {type, partition, offset, partNo, count, internalPartsCount, Nothing(), offsetDelta};
 }
 
 TKey TKey::ForHead(EType type,
@@ -38,9 +39,10 @@ TKey TKey::ForHead(EType type,
                    const ui64 offset,
                    const ui16 partNo,
                    const ui32 count,
-                   const ui16 internalPartsCount)
+                   const ui16 internalPartsCount,
+                   const TMaybe<ui64>& offsetDelta)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::Head};
+    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::Head, offsetDelta};
 }
 
 TKey TKey::ForFastWrite(EType type,
@@ -48,9 +50,10 @@ TKey TKey::ForFastWrite(EType type,
                         const ui64 offset,
                         const ui16 partNo,
                         const ui32 count,
-                        const ui16 internalPartsCount)
+                        const ui16 internalPartsCount,
+                        const TMaybe<ui64>& offsetDelta)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::FastWrite};
+    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::FastWrite, offsetDelta};
 }
 
 bool TKey::IsFastWrite() const

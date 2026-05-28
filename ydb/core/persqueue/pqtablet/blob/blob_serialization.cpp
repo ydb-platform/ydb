@@ -119,12 +119,17 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     Batch.PackedData.Clear();
     bool hasUncompressed = false;
     bool hasKinesis = false;
+    bool hasBatch = false;
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
         if (Batch.Blobs[i].UncompressedSize > 0)
             hasUncompressed = true;
 
         if (!Batch.Blobs[i].PartitionKey.empty() || !Batch.Blobs[i].ExplicitHashKey.empty()) {
             hasKinesis = true;
+        }
+
+        if (Batch.Blobs[i].BatchMessageCount >= 1) {
+            hasBatch = true;
         }
     }
 
@@ -283,7 +288,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     }
 
     //output Uncompressed
-    if (hasUncompressed) {
+    if (hasUncompressed || hasBatch) {
         ui32 sizeOffset = WriteTemporaryChunkSize(Batch.PackedData);
         auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(Batch.PackedData);
         for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
@@ -291,14 +296,6 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
         }
         chunk->Seal();
         WriteActualChunkSize(Batch.PackedData, sizeOffset);
-    }
-
-    bool hasBatch = false;
-    for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
-        if (Batch.Blobs[i].BatchMessageCount >= 1) {
-            hasBatch = true;
-            break;
-        }
     }
 
     if (hasBatch) {

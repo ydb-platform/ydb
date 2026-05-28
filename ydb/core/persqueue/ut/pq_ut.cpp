@@ -153,6 +153,113 @@ Y_UNIT_TEST(BatchedMessagesWriteRead) {
     CmdReadAndAssertBatched(readSettings, tc, writes, dataSize);
 }
 
+Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_batch_read_middle";
+    const TString sessionId = "session_batch_read_middle";
+    const TString user = "user1";
+    constexpr size_t dataSize = 16;
+    constexpr ui64 batchCount = 5;
+    constexpr i64 readFromOffset = 3;
+
+    CmdWriteBatched(0, sourceId, 1, TString(dataSize, 'a'), batchCount, tc);
+    CmdWriteBatched(0, sourceId, 2, TString(dataSize, 'b'), 0, tc);
+
+    PQGetPartInfo(0, batchCount + 1, tc);
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    TPQCmdReadSettings readSettings{sessionId, 0, readFromOffset, 1, 16_MB, 0};
+    readSettings.User = user;
+    readSettings.Pipe = pipe;
+    readSettings.PartitionSessionId = 1;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    AssertBatchedReadResults(
+        readResult,
+        {{.SeqNo = 1, .BatchMessageCount = batchCount, .Offset = 0, .Fill = 'a'}},
+        dataSize);
+
+    readSettings.Offset = batchCount;
+    readSettings.Count = 1;
+    const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
+    AssertBatchedReadResults(
+        readResult2,
+        {{.SeqNo = 2, .BatchMessageCount = 0, .Offset = batchCount, .Fill = 'b'}},
+        dataSize);
+}
+
+Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicMessagesBatching(true);
+
+    // Make the written data blobs smaller than the low watermark so forced compaction reads
+    // and rewrites them instead of just renaming already compacted blobs.
+    PQTabletPrepare({.partitions = 1, .lowWatermark = 10_MB, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_batch_read_middle_compact";
+    const TString sessionId = "session_batch_read_middle_compact";
+    const TString user = "user1";
+    constexpr size_t dataSize = 7000_KB;
+    constexpr ui64 batchCount = 5;
+    constexpr i64 readFromOffset = 2;
+
+    CmdWriteBatched(0, sourceId, 1, TString(dataSize, 'a'), batchCount, tc, static_cast<i64>(0));
+    CmdWriteBatched(0, sourceId, 2, TString(dataSize, 'b'), 3, tc, static_cast<i64>(batchCount));
+    CmdWriteBatched(0, sourceId, 3, TString(dataSize, 'c'), 0, tc, static_cast<i64>(batchCount + 3));
+
+    PQGetPartInfo(0, 9, tc);
+
+    CmdRunCompaction(0, tc);
+    PQTabletRestart(tc);
+    PQGetPartInfo(0, 9, tc);
+
+    TPQCmdSettings sessionSettings{0, user, sessionId};
+    sessionSettings.PartitionSessionId = 1;
+    sessionSettings.KeepPipe = true;
+    auto pipe = CmdCreateSession(sessionSettings, tc);
+
+    TPQCmdReadSettings readSettings{sessionId, 0, readFromOffset, 1, 64_MB, 0};
+    readSettings.User = user;
+    readSettings.Pipe = pipe;
+    readSettings.PartitionSessionId = 1;
+
+    const auto readResult = CmdReadAndGetResult(readSettings, tc);
+    AssertBatchedReadResults(
+        readResult,
+        {{.SeqNo = 1, .BatchMessageCount = batchCount, .Offset = 0, .Fill = 'a'}},
+        dataSize);
+
+    readSettings.Offset = batchCount;
+    readSettings.Count = 1;
+    const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
+    AssertBatchedReadResults(
+        readResult2,
+        {{.SeqNo = 2, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
+        dataSize);
+
+    readSettings.Offset = batchCount + 3;
+    readSettings.Count = 1;
+    const auto readResult3 = CmdReadAndGetResult(readSettings, tc);
+    AssertBatchedReadResults(
+        readResult3,
+        {{.SeqNo = 3, .BatchMessageCount = 0, .Offset = batchCount + 3, .Fill = 'c'}},
+        dataSize);
+}
+
 Y_UNIT_TEST(BatchedMessagesFullDuplicateIsNotPartialOverlap) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

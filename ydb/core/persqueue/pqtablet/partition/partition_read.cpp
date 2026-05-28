@@ -490,7 +490,12 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 batchStartIdx = 0;
             } else {
                 const ui64 trueSearchOffset = Offset - blobs[blobIdx].Key.GetOffset() + firstHeaderOffset;
-                batchStartIdx = batch.FindPos(trueSearchOffset, PartNo);
+                const auto& cursor = batch.FindPos(trueSearchOffset, PartNo);
+                batchStartIdx = cursor.BlobIdx;
+                if (batchStartIdx != Max<ui32>()) {
+                    Offset = cursor.Offset;
+                    PartNo = cursor.PartNo;
+                }
             }
             offset += header.GetCount();
 

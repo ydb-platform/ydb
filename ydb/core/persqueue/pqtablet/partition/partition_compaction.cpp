@@ -661,6 +661,16 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
                                 CompactionBlobEncoder.Head.PartNo,
                                 CompactionBlobEncoder.NewHead.GetCount() + CompactionBlobEncoder.Head.GetCount(),
                                 CompactionBlobEncoder.Head.GetInternalPartsCount() +  CompactionBlobEncoder.NewHead.GetInternalPartsCount());
+            TMaybe<ui64> offsetDelta;
+            if (!CompactionBlobEncoder.Head.GetBatches().empty() && CompactionBlobEncoder.Head.GetLastBatch().HasOffsetDelta()) {
+                offsetDelta = CompactionBlobEncoder.Head.GetOffsetDelta();
+            }
+            if (!CompactionBlobEncoder.NewHead.GetBatches().empty() && CompactionBlobEncoder.NewHead.GetLastBatch().HasOffsetDelta()) {
+                offsetDelta = (offsetDelta.GetOrElse(0)) + CompactionBlobEncoder.NewHead.GetOffsetDelta();
+            }
+            if (offsetDelta) {
+                key.SetOffsetDelta(*offsetDelta);
+            }
         } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead
         res = std::make_pair(key, headSize + CompactionBlobEncoder.NewHead.PackedSize);
     } else {

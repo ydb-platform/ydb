@@ -1,5 +1,6 @@
 #include "blob_int.h"
 #include "blob.h"
+#include "header.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -88,6 +89,50 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].BatchMessageCount, 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
+    }
+
+    Y_UNIT_TEST(BatchSizePackUnpackWithoutUncompressedSize) {
+        TBatch batch(100, 0);
+        auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString(8_KB, 'a'), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", 5
+        ));
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].UncompressedSize, 0u);
+
+        batch.Pack();
+        batch.Unpack();
+
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].UncompressedSize, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].BatchMessageCount, 5u);
+    }
+
+    Y_UNIT_TEST(BatchHeaderOffsetDeltaRoundtrip) {
+        TBatch batch(100, 0);
+        const auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString("data"), TMaybe<TPartData>(),
+            ts, ts, 0, "", "", 5
+        ));
+        batch.SetOffsetDelta(42);
+
+        UNIT_ASSERT(batch.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetOffsetDelta(), 42u);
+
+        batch.Pack();
+        TString serialized;
+        batch.SerializeTo(serialized);
+
+        const auto header = ExtractHeader(serialized.data(), serialized.size());
+        UNIT_ASSERT(header.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(header.GetOffsetDelta(), 42u);
+
+        batch.Unpack();
+        UNIT_ASSERT(batch.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetOffsetDelta(), 42u);
+        UNIT_ASSERT(!batch.Header.HasClientBlobCount() || batch.Header.GetClientBlobCount() == 1u);
     }
 
     Y_UNIT_TEST(BatchFindPosWithBatchSize) {

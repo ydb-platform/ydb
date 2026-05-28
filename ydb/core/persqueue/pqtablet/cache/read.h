@@ -299,7 +299,11 @@ namespace NPQ {
                 const auto& cmd = srcRequest.GetCmdWrite(i);
                 const TString& strKey = cmd.GetKey();
                 if (IsDataKey(strKey)) {
-                    AFL_ENSURE((strKey.size() >= TKey::KeySize()) && (strKey.size() - TKey::KeySize() <= 1))
+                    const bool validKeySize = strKey.size() == TKey::KeySize()
+                        || strKey.size() == TKey::KeySize() + 1
+                        || strKey.size() == TKey::KeySizeWithOffsetDelta()
+                        || strKey.size() == TKey::KeySizeWithOffsetDelta() + 1;
+                    AFL_ENSURE(validKeySize)
                         ("Unexpected key size", strKey.size())("key", strKey);
                     auto key = TKey::FromString(strKey);
 

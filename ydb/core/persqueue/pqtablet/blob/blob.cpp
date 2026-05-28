@@ -139,8 +139,14 @@ TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
 
 void TBatch::AddBlob(const TClientBlob &b) {
     ui32 count = GetCount();
+    ui64 offsetDelta = GetOffsetDelta();
     ui32 unpackedSize = GetUnpackedSize();
     ui32 i = Blobs.size();
+
+    if (!b.PartData || b.PartData->PartNo == 0 || Blobs.empty()) {
+        offsetDelta += b.GetLogicalOffsetSpan();
+    }
+
     Blobs.push_back(b);
     unpackedSize += b.GetSerializedSize();
     if (b.IsLastPart()) {
@@ -149,6 +155,7 @@ void TBatch::AddBlob(const TClientBlob &b) {
         InternalPartsPos.push_back(i);
     }
 
+    Header.SetOffsetDelta(offsetDelta);
     Header.SetUnpackedSize(unpackedSize);
     Header.SetCount(count);
     Header.SetInternalPartsCount(InternalPartsPos.size());
@@ -181,7 +188,27 @@ ui16 TBatch::GetInternalPartsCount() const {
     return Header.GetInternalPartsCount();
 }
 
+ui64 TBatch::GetOffsetDelta() const {
+    return Header.HasOffsetDelta() ? Header.GetOffsetDelta() : 0;
+}
+
+bool TBatch::HasOffsetDelta() const {
+    return Header.HasOffsetDelta();
+}
+
+void TBatch::SetOffsetDelta(ui64 offsetDelta) {
+    Header.SetOffsetDelta(offsetDelta);
+}
+
+void TBatch::ClearOffsetDelta() {
+    Header.ClearOffsetDelta();
+}
+
 bool TBatch::IsGreaterThan(ui64 offset, ui16 partNo) const {
+    if (HasOffsetDelta()) {
+        return GetOffset() > offset || (offset >= GetOffset() && offset < GetOffset() + GetOffsetDelta() && GetPartNo() > partNo);
+    }
+
     return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
 }
 
@@ -198,17 +225,17 @@ ui32 TBatch::GetPackedSize() const {
     return sizeof(ui16) + PackedData.size() + Header.ByteSize();
 }
 
-ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
+TCursor TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
     AFL_ENSURE(!Packed);
     if (offset < GetOffset() || offset == GetOffset() && partNo < GetPartNo()) {
-        return Max<ui32>();
+        return TCursor{Max<ui32>(), 0, 0};
     }
 
     ui64 curOffset = GetOffset();
     ui16 curPartNo = GetPartNo();
     for (size_t i = 0; i < Blobs.size(); ++i) {
-        if (curOffset == offset && curPartNo == partNo) {
-            return static_cast<ui32>(i);
+        if (curOffset <= offset && curOffset + Blobs[i].GetLogicalOffsetSpan() > offset && curPartNo == partNo) {
+            return TCursor{static_cast<ui32>(i), curOffset, curPartNo};
         }
         if (Blobs[i].IsLastPart()) {
             curOffset += Blobs[i].GetLogicalOffsetSpan();
@@ -217,7 +244,7 @@ ui32 TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
             ++curPartNo;
         }
     }
-    return Max<ui32>();
+    return TCursor{Max<ui32>(), 0, 0};
 }
 
 
@@ -321,6 +348,14 @@ ui32 THead::GetCount() const
         ("offset", Offset);
 
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
+}
+
+ui64 THead::GetOffsetDelta() const
+{
+    if (Batches.empty())
+        return 0;
+
+    return Batches.back().GetOffset() - Offset + Batches.back().GetOffsetDelta();
 }
 
 
@@ -510,6 +545,43 @@ TPartitionedBlob::TCompactHeadResult TPartitionedBlob::CompactHead(bool glueHead
     return {std::move(valueD), endWriteTimestamp};
 }
 
+ui64 TPartitionedBlob::GetOffsetDelta() const {
+    // check the invariant that there is not holes in the glued content
+    if (GlueHead && GlueNewHead) {
+        AFL_ENSURE(NewHead.Offset == Head.GetNextOffset())
+            ("Head.Offset", Head.Offset)
+            ("Head.GetNextOffset()", Head.GetNextOffset())
+            ("NewHead.Offset", NewHead.Offset);
+    }
+
+    // check the invariant that the offset is the end of the glued content
+    if (!Blobs.empty() && (GlueHead || GlueNewHead)) {
+        const ui64 gluedContentEnd = GlueNewHead ? NewHead.GetNextOffset() : Head.GetNextOffset();
+        AFL_ENSURE(Offset == gluedContentEnd)
+            ("Offset", Offset)
+            ("gluedContentEnd", gluedContentEnd)
+            ("GlueHead", GlueHead)
+            ("GlueNewHead", GlueNewHead);
+    }
+
+    ui64 offsetDelta = 0;
+    if (GlueHead) {
+        offsetDelta += Head.GetOffsetDelta();
+    }
+    if (GlueNewHead) {
+        offsetDelta += NewHead.GetOffsetDelta();
+    }
+
+    if (!Blobs.empty()) {
+        for (const auto& blob : Blobs) {
+            if (blob.PartData && blob.PartData->PartNo == 0) {
+                offsetDelta += blob.GetLogicalOffsetSpan();
+            }
+        }
+    }
+    return offsetDelta;
+}
+
 auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optional<TFormedBlobInfo>
 {
     HeadPartNo = NextPartNo;
@@ -519,14 +591,28 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     AFL_ENSURE(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
+    ui64 offsetDelta = GetOffsetDelta();
     TKey tmpKey, dataKey;
-
     if (FastWrite) {
-        tmpKey = TKey::ForFastWrite(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
-        dataKey = TKey::ForFastWrite(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+        tmpKey = TKey::ForFastWrite(
+            TKeyPrefix::TypeTmpData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
+        dataKey = TKey::ForFastWrite(
+            TKeyPrefix::TypeData,
+            Partition,
+            StartOffset,
+            StartPartNo,
+            count,
+            InternalPartsCount,
+            offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
     } else {
-        tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
-        dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+        tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
+        dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, offsetDelta > 0 ? TMaybe<ui64>(offsetDelta) : Nothing());
     }
 
     StartOffset = Offset;

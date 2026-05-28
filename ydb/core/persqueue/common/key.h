@@ -147,7 +147,7 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
 // offset, partNo - index of first rec
 // count - diff of last record offset and first record offset in blob
 // internalPartsCount - number of internal parts
-// offsetDelta - optional extension; absent in legacy keys
+// offsetDelta - optional extension; absent in legacy keys; means that all offsets in this blob are between offset and offset + offsetDelta
 // A4|A5B1B2C1C2C3|D1 - Offset A, partNo 5, count 2, internalPartsCount 3
 // ^    ^   ^ ^
 // internalparts
@@ -164,19 +164,22 @@ public:
                         const ui64 offset,
                         const ui16 partNo,
                         const ui32 count,
-                        const ui16 internalPartsCount);
+                        const ui16 internalPartsCount,
+                        const TMaybe<ui64>& offsetDelta = Nothing());
     static TKey ForHead(EType type,
                         const TPartitionId& partition,
                         const ui64 offset,
                         const ui16 partNo,
                         const ui32 count,
-                        const ui16 internalPartsCount);
+                        const ui16 internalPartsCount,
+                        const TMaybe<ui64>& offsetDelta = Nothing());
     static TKey ForFastWrite(EType type,
                              const TPartitionId& partition,
                              const ui64 offset,
                              const ui16 partNo,
                              const ui32 count,
-                             const ui16 internalPartsCount);
+                             const ui16 internalPartsCount,
+                             const TMaybe<ui64>& offsetDelta = Nothing());
 
     static TKey FromString(const TString& s) { return {s}; }
     static TKey FromString(const TString& s, const TPartitionId& partition);

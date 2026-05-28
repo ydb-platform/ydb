@@ -72,8 +72,11 @@ class TestYdbMinMaxIndex(TestBase):
         "String": lambda i: f"str_{i}",
         "Utf8": lambda i: f"utf8_{i}",
         "Date": lambda i: 10957 + i,  # days since Unix epoch (10957 = 2000-01-01)
+        "Date32": lambda i: 10957 + i,  # days since Unix epoch (10957 = 2000-01-01)
         "Datetime": lambda i: 1000000000 + i * 60,  # seconds since Unix epoch
+        "Datetime64": lambda i: 1000000000 + i * 60,  # seconds since Unix epoch
         "Timestamp": lambda i: 1696200000000000 + i * 100000,
+        "Timestamp64": lambda i: 1696200000000000 + i * 100000,
         # Decimal is FixedSizeBinary-backed, supported via flag
         "Decimal(22, 9)": lambda i: Decimal(str(i)),
     }
@@ -94,8 +97,11 @@ class TestYdbMinMaxIndex(TestBase):
         "String":    '"str_" || CAST($x AS String)',
         "Utf8":      'Utf8("utf8_") || CAST($x AS Utf8)',
         "Date":           "CAST(10957 + $x AS Date)",
+        "Date32":           "CAST(10957 + $x AS Date32)",
         "Datetime":       "CAST(1000000000 + $x * 60 AS Datetime)",
+        "Datetime64":       "CAST(1000000000 + $x * 60 AS Datetime64)",
         "Timestamp":      "CAST(1696200000000000 + $x * 100000 AS Timestamp)",
+        "Timestamp64":      "CAST(1696200000000000 + $x * 100000 AS Timestamp64)",
         # Decimal is FixedSizeBinary-backed, supported via flag
         "Decimal(22, 9)": "CAST($x AS Decimal(22, 9))",
     }

@@ -1,3 +1,4 @@
+import os
 import sys
 import argparse
 import base64
@@ -145,9 +146,10 @@ class _GoToolCover(_GoTool):
 
     def __init__(self, args):
         super().__init__(args)
-        # For GO_TEST_FOR module in cover_module, else moddir is module for coverage
-        self.cover_module = self.args.cover_module if self.args.cover_module else self.args.moddir
+        # For GO_TEST_FOR module in cover_module, else moddir is module for coverage, strip first and last slashes
+        self.cover_module = (self.args.cover_module if self.args.cover_module else self.args.moddir).strip('/')
         self.cover_package = self.args.cover_package
+        self.source_root_for_clear = str(self.source_root) + os.sep
 
     def execute(self) -> int:
         if not self.args.cover_srcs:
@@ -191,6 +193,7 @@ class _GoToolCover(_GoTool):
 
     def _make_empty_cover_go(self, go_file: str, go_pkg: str) -> None:
         with open(self.bindir / Path(go_file).name.replace('.go', self.args.cover_ext), 'wt', encoding="utf-8") as f:
+            f.write(f'// line {go_file.replace(self.source_root_for_clear, '')}:1:1\n')
             f.write(f'package {go_pkg}\n')
 
     def _do_package_coverage(
@@ -205,7 +208,7 @@ class _GoToolCover(_GoTool):
                     "PkgName": go_package,  # package name for generated covervars.go
                     "Granularity": "perblock",  # now always perblock, reserved as future extension point
                     "OutConfig": f'{self.args.cover_outcfg}',  # file with generated coverage config, which must be applied in -coveragecfg <HERE> in compile go-files
-                    "Local": True,  # in coverage report use only basename of files
+                    "Local": False,  # in coverage report use PkgPath / basename for files
                     "ModulePath": f'a.yandex-team.ru/{Path(self.cover_module).parent}',
                 },
                 f,
@@ -235,7 +238,21 @@ class _GoToolCover(_GoTool):
             str(outfileslist_file),
             *[str(Path(self.args.source_root) / go_file) for go_file in go_files],
         ]
-        return _Go.cmd(cmd, self.bindir)
+        r = _Go.cmd(cmd, self.bindir)
+        if r != 0:
+            return r
+        for cover_out in cover_outs:
+            try:
+                with open(cover_out, 'rt', encoding="utf-8") as f:
+                    content = f.read()
+                patched_content = content.replace(self.source_root_for_clear, '').replace('//line', '// line')
+                if patched_content != content:
+                    with open(cover_out, 'wt', encoding="utf-8") as fw:
+                        fw.write(patched_content)
+            except Exception as e:
+                sys.stderr.write(f"Failed patch coverage file '{cover_out}': {str(e)}\n")
+                r = 1
+        return r
 
 
 class _GoToolCovdata(_GoTool):

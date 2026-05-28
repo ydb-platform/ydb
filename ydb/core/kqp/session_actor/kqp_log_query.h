@@ -24,9 +24,6 @@ public:
 
     void Log() const { if (Action) Action(); }
 
-    static TLogQuery Started(const TKqpQueryState& state);
-
-    // responseByteSize: record.ByteSize() from Reply() (same value as ResponseBytes counter).
     static TLogQuery Completed(const TKqpQueryState& state,
                                const NKikimrKqp::TEvQueryResponse& record,
                                ui64 responseByteSize);
@@ -35,18 +32,14 @@ private:
     TAction Action;
 };
 
-// KQP_REQUEST log contract (component NKikimrServices::KQP_REQUEST, tag [REQ_JSON]):
+// KQP_REQUEST [REQ_JSON] log contract:
+//   WARN  — only failed completed envelopes.
+//   DEBUG — successful completed too; SQL truncated to 10 KB.
+//   TRACE — same as DEBUG, full SQL (no truncation).
 //
-//   WARN  — failed completed only (default-friendly: broken queries visible).
-//   DEBUG — started + successful completed; SQL truncated to 10 KB unless TRACE.
-//   TRACE — same events as DEBUG, but full SQL text (no truncation).
-//
-// Macro gate is WARN; lambdas re-check the priority they actually emit at.
-// req_id is ProxyRequestId (proxy cookie), correlates with STLOG proxy_request_id.
-// results_size on completed is TEvQueryResponse::ByteSize() (ResponseBytes counter).
-//
-// UI queries prefixed with /*UI-QUERY-EXCLUDE*/ skip success-path logs; failures
-// still emit at WARN.
+// req_id is the ProxyRequestId, correlates with STLOG proxy_request_id.
+// Queries prefixed with /*UI-QUERY-EXCLUDE*/ skip success-path logs;
+// failures still emit at WARN.
 #define KQP_REQ_LOG(logQuery) \
     do { \
         if (IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::KQP_REQUEST, 0ull)) { \

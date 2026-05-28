@@ -17,16 +17,15 @@ constexpr TStringBuf REQ_JSON_MARKER = "[REQ_JSON]";
 struct TReqJsonEntry {
     TString RawLine;
     NJson::TJsonValue Json;
-    TString Event;     // "started" | "completed"
+    TString Event;
     int Part = 0;
     int Total = 0;
     TString Priority;  // "DEBUG" | "WARN" | ...
 };
 
-// TStreamLogBackend in tests does not separate records with `\n`, so the
-// captured log is one long blob. We scan it for `[REQ_JSON] ` markers and
-// for each one extract the JSON object that follows by tracking the brace
-// balance (taking string escaping into account).
+// The test backend writes records into one continuous blob without `\n`
+// separators, so we extract each [REQ_JSON] object by tracking brace balance
+// with proper string-escape handling.
 size_t FindJsonObjectEnd(TStringBuf data, size_t start) {
     int depth = 0;
     bool inStr = false;
@@ -59,9 +58,7 @@ size_t FindJsonObjectEnd(TStringBuf data, size_t start) {
     return TStringBuf::npos;
 }
 
-// Walk back from `markerPos` to find the priority token in the same record
-// (e.g. ":KQP_REQUEST WARN:"). Records are timestamp-delimited but inline,
-// so we cap the look-back to a reasonable window.
+// Scan back from `markerPos` to the preceding ":KQP_REQUEST <PRIO>:" token.
 TString ExtractPriority(TStringBuf blob, size_t markerPos) {
     constexpr size_t WINDOW = 256;
     const size_t winStart = markerPos > WINDOW ? markerPos - WINDOW : 0;
@@ -117,8 +114,6 @@ void DumpEntries(const char* caseName, const TVector<TReqJsonEntry>& entries, co
     Cerr << "=== " << caseName << " (" << entries.size() << " [REQ_JSON] lines, "
          << fullLog.size() << " total log bytes) ===" << Endl;
     if (entries.empty()) {
-        // Print a head of the captured log so we can see whether the backend
-        // is wired and the level is configured at all.
         Cerr << "--- log head (first 40 lines) ---" << Endl;
         TStringInput in(fullLog);
         TString line;
@@ -144,15 +139,6 @@ const TReqJsonEntry* FindCompleted(const TVector<TReqJsonEntry>& entries) {
     return nullptr;
 }
 
-bool HasStarted(const TVector<TReqJsonEntry>& entries) {
-    for (const auto& e : entries) {
-        if (e.Event == "started") {
-            return true;
-        }
-    }
-    return false;
-}
-
 TKikimrSettings MakeStreamSettings(TStringStream& logStream) {
     TKikimrSettings settings;
     settings.LogStream = &logStream;
@@ -170,11 +156,9 @@ TStringBuf LogSince(const TStringStream& logStream, size_t offset) {
 
 Y_UNIT_TEST_SUITE(KqpQueryEventLogScratch) {
 
-// At KQP_REQUEST=DEBUG we expect both started and completed JSON envelopes
-// for successful queries (full envelope, with extras). Successful completed
-// is emitted at DEBUG; failures are routed to WARN (covered by a separate
-// test below).
-Y_UNIT_TEST(ExecuteSuccessAtDebugLogsStartedAndCompleted) {
+// At KQP_REQUEST=DEBUG a successful query emits one completed envelope at
+// DEBUG with the full per-query field set.
+Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     TStringStream logStream;
     size_t logStart = 0;
     {
@@ -192,42 +176,18 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsStartedAndCompleted) {
     const auto entries = CollectReqJson(LogSince(logStream, logStart));
     DumpEntries("ExecuteSuccessAtDebug", entries, fullLog);
     UNIT_ASSERT_C(!entries.empty(), "expected REQ_JSON entries on DEBUG");
-    UNIT_ASSERT_C(HasStarted(entries), "started envelope must be present at DEBUG");
 
-    // Started must be self-sufficient — when no completed arrives (OOM,
-    // crash, killed node), this envelope is the only post-mortem evidence.
-    const TReqJsonEntry* started = nullptr;
     for (const auto& e : entries) {
-        if (e.Event == "started") {
-            started = &e;
-            break;
-        }
-    }
-    UNIT_ASSERT_C(started, "started envelope must be present");
-    UNIT_ASSERT_VALUES_EQUAL_C(started->Priority, "DEBUG",
-        "started must be emitted at DEBUG");
-    UNIT_ASSERT_C(!started->Json["req_id"].GetStringSafe("").empty(),
-        "req_id must be ProxyRequestId (non-empty)");
-    {
-        const auto& req = started->Json["request"];
-        UNIT_ASSERT_C(req.Has("database"), "started must carry database");
-        UNIT_ASSERT_C(req.Has("trace_id"), "started must carry trace_id");
-        UNIT_ASSERT_C(req.Has("action"), "started must carry action");
-        UNIT_ASSERT_C(req.Has("type"), "started must carry type");
-        UNIT_ASSERT_C(req.Has("query_len"), "started must carry query_len");
-        UNIT_ASSERT_C(req.Has("started_at_us"), "started must carry started_at_us (epoch us)");
-        UNIT_ASSERT_C(!req.Has("query_id"),
-            "started must NOT carry query_id (compile not done yet)");
-        UNIT_ASSERT_C(!req.Has("status"),
-            "started must NOT carry post-execution fields like status");
-        UNIT_ASSERT_C(!req.Has("duration_us"),
-            "started must NOT carry post-execution fields like duration_us");
+        UNIT_ASSERT_VALUES_EQUAL_C(e.Event, "completed",
+            TStringBuilder() << "only completed envelopes are allowed now: " << e.RawLine);
     }
 
     const auto* completed = FindCompleted(entries);
     UNIT_ASSERT_C(completed, "completed envelope (part=1) must be present");
     UNIT_ASSERT_VALUES_EQUAL_C(completed->Priority, "DEBUG",
         "successful completed must be emitted at DEBUG");
+    UNIT_ASSERT_C(!completed->Json["req_id"].GetStringSafe("").empty(),
+        "req_id must be ProxyRequestId (non-empty)");
 
     const auto& req = completed->Json["request"];
     UNIT_ASSERT_VALUES_EQUAL(req["event"].GetStringSafe(""), "completed");
@@ -238,11 +198,12 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsStartedAndCompleted) {
     UNIT_ASSERT_C(req.Has("query_len"), "query_len field");
     UNIT_ASSERT_C(req.Has("results_size"), "results_size field");
     UNIT_ASSERT_C(req.Has("database"), "database field");
+    UNIT_ASSERT_C(req.Has("trace_id"), "trace_id field");
+    UNIT_ASSERT_C(req.Has("started_at_us"), "started_at_us field");
 }
 
-// At KQP_REQUEST=WARN started/successful-completed must be filtered out, but
-// failures must still be surfaced at WARN (full envelope) so that operators
-// who keep the default level still see broken queries.
+// At KQP_REQUEST=WARN successful completed is silent but failures still
+// emit the full envelope at WARN.
 Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
     TStringStream logStream;
     size_t logStart = 0;
@@ -269,11 +230,6 @@ Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
     const auto entries = CollectReqJson(LogSince(logStream, logStart));
     DumpEntries("SuccessSilentAtWarn", entries, fullLog);
 
-    for (const auto& e : entries) {
-        UNIT_ASSERT_C(e.Event != "started",
-            TStringBuilder() << "started must not appear when KQP_REQUEST=WARN: " << e.RawLine);
-    }
-
     bool foundFailure = false;
     for (const auto& e : entries) {
         if (e.Event != "completed" || e.Part != 1) {
@@ -293,9 +249,7 @@ Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
     UNIT_ASSERT_C(foundFailure, "expected failure completed for broken_syntax at WARN");
 }
 
-// Sanity-check the additive contract: extra fields appear only in part=1.
-// Use a long query that forces chunking past SQL_TEXT_MAX_SIZE (4000).
-// At TRACE the SQL must NOT be truncated — operator opted into the firehose.
+// Extra fields appear only in part=1; at TRACE the SQL is not truncated.
 Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
     TStringStream logStream;
     size_t logStart = 0;
@@ -306,8 +260,7 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
 
         auto db = kikimr.GetQueryClient();
 
-        // Build a SELECT longer than SQL_TEXT_MAX_SIZE (4000) by padding with
-        // a comment, so parser still accepts it.
+        // SQL longer than SQL_TEXT_MAX_SIZE (4000), padded inside a comment.
         TStringBuilder sb;
         sb << "/*";
         for (size_t i = 0; i < 5000; ++i) {
@@ -349,10 +302,9 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
     UNIT_ASSERT_C(sawMulti, "long SQL must produce a multi-part envelope");
 }
 
-// At DEBUG (i.e. TRACE is OFF) very long SQL must be truncated to
-// QUERY_TEXT_LIMIT (10240 bytes) so the always-on stream stays bounded.
-// `query_len` keeps the original full length, and `data_truncated: true`
-// flags the truncation in the first chunk.
+// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (10240) bytes; the
+// original length is preserved in `query_len` and the cut is flagged by
+// `data_truncated: true` in part=1.
 Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
     constexpr size_t QUERY_TEXT_LIMIT = 10240;
 
@@ -365,7 +317,7 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
 
         auto db = kikimr.GetQueryClient();
 
-        // ~30 KB of comment-padded SQL — well past the 10 KB cap.
+        // ~30 KB of SQL, well past the 10 KB cap.
         TStringBuilder sb;
         sb << "/*";
         for (size_t i = 0; i < 30000; ++i) {
@@ -443,9 +395,6 @@ Y_UNIT_TEST(UiExcludedSuccessSilentButFailureLogged) {
             || data.Contains("/*UI-QUERY-EXCLUDE*/");
         if (!isExcluded) {
             continue;
-        }
-        if (e.Event == "started") {
-            UNIT_FAIL(TStringBuilder() << "UI-excluded success must not log started: " << e.RawLine);
         }
         if (e.Event == "completed" && e.Part == 1) {
             const auto status = e.Json["request"]["status"].GetStringSafe("");

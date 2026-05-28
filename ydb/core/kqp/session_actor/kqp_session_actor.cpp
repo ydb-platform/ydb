@@ -522,8 +522,6 @@ public:
             (pool_id, QueryState->UserRequestContext->PoolId),
             (trace_id, TraceId()));
 
-        KQP_REQ_LOG(TLogQuery::Started(*QueryState));
-
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             case NKikimrKqp::QUERY_ACTION_EXECUTE:
@@ -3454,7 +3452,9 @@ public:
     void ReplyQueryError(Ydb::StatusIds::StatusCode ydbStatus,
         const TString& message, std::optional<google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>> issues = {})
     {
-        STLOG_W("Create QueryResponse for error on request, msg: " << message,
+        // DEBUG, not WARN: the [REQ_JSON] completed envelope already carries
+        // status/issues/trace_id at WARN on failure (see kqp_log_query.cpp).
+        STLOG_D("Create QueryResponse for error on request, msg: " << message,
             (status, ydbStatus),
             (issues, issues ? Join(", ", *issues) : TString()),
             (trace_id, TraceId()));

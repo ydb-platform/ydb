@@ -35,7 +35,7 @@ TString SafeExtractQueryText(const TKqpQueryState& state) {
     return {};
 }
 
-struct TBaseFields {
+struct TCompletedFields {
     TStringBuf Database;
     TStringBuf DatabaseId;
     TStringBuf TraceId;
@@ -44,9 +44,6 @@ struct TBaseFields {
     TString Type;
     ui64 QueryLen = 0;
     TInstant StartedAt;
-};
-
-struct TCompletedExtras {
     TString Status;
     ui64 DurationUs = 0;
     ui64 ResultsSize = 0;
@@ -56,43 +53,40 @@ struct TCompletedExtras {
     ui64 CompileTimeUs = 0;
 };
 
-void WriteBaseFields(NJsonWriter::TBuf& json, const TBaseFields& base) {
-    if (!base.Database.empty()) {
-        json.WriteKey("database").WriteString(base.Database);
+void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
+    if (!f.Database.empty()) {
+        json.WriteKey("database").WriteString(f.Database);
     }
-    if (!base.DatabaseId.empty()) {
-        json.WriteKey("database_id").WriteString(base.DatabaseId);
+    if (!f.DatabaseId.empty()) {
+        json.WriteKey("database_id").WriteString(f.DatabaseId);
     }
-    if (!base.TraceId.empty()) {
-        json.WriteKey("trace_id").WriteString(base.TraceId);
+    if (!f.TraceId.empty()) {
+        json.WriteKey("trace_id").WriteString(f.TraceId);
     }
-    if (!base.QueryId.empty()) {
-        json.WriteKey("query_id").WriteString(base.QueryId);
+    if (!f.QueryId.empty()) {
+        json.WriteKey("query_id").WriteString(f.QueryId);
     }
-    if (!base.Action.empty()) {
-        json.WriteKey("action").WriteString(TStringBuf(base.Action));
+    if (!f.Action.empty()) {
+        json.WriteKey("action").WriteString(TStringBuf(f.Action));
     }
-    if (!base.Type.empty()) {
-        json.WriteKey("type").WriteString(TStringBuf(base.Type));
+    if (!f.Type.empty()) {
+        json.WriteKey("type").WriteString(TStringBuf(f.Type));
     }
-    json.WriteKey("query_len").WriteULongLong(base.QueryLen);
-    if (base.StartedAt) {
-        json.WriteKey("started_at_us").WriteULongLong(base.StartedAt.MicroSeconds());
+    json.WriteKey("query_len").WriteULongLong(f.QueryLen);
+    if (f.StartedAt) {
+        json.WriteKey("started_at_us").WriteULongLong(f.StartedAt.MicroSeconds());
     }
-}
-
-void WriteCompletedExtras(NJsonWriter::TBuf& json, const TCompletedExtras& extras) {
-    if (!extras.Status.empty()) {
-        json.WriteKey("status").WriteString(TStringBuf(extras.Status));
+    if (!f.Status.empty()) {
+        json.WriteKey("status").WriteString(TStringBuf(f.Status));
     }
-    json.WriteKey("duration_us").WriteULongLong(extras.DurationUs);
-    json.WriteKey("results_size").WriteULongLong(extras.ResultsSize);
-    if (extras.QueuedTimeUs) {
-        json.WriteKey("queued_time_us").WriteULongLong(extras.QueuedTimeUs);
+    json.WriteKey("duration_us").WriteULongLong(f.DurationUs);
+    json.WriteKey("results_size").WriteULongLong(f.ResultsSize);
+    if (f.QueuedTimeUs) {
+        json.WriteKey("queued_time_us").WriteULongLong(f.QueuedTimeUs);
     }
-    if (extras.HasCompileStats) {
-        json.WriteKey("compile_from_cache").WriteBool(extras.CompileFromCache);
-        json.WriteKey("compile_time_us").WriteULongLong(extras.CompileTimeUs);
+    if (f.HasCompileStats) {
+        json.WriteKey("compile_from_cache").WriteBool(f.CompileFromCache);
+        json.WriteKey("compile_time_us").WriteULongLong(f.CompileTimeUs);
     }
 }
 
@@ -101,11 +95,9 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
                      TString reqId,
                      TStringBuf sessionId,
                      TStringBuf userSID,
-                     TStringBuf eventName,
                      TStringBuf requestText,
                      const NYql::TIssues& issues,
-                     const TBaseFields* base,
-                     const TCompletedExtras* completedExtras,
+                     const TCompletedFields& fields,
                      bool truncateText)
 {
     bool wasTruncated = false;
@@ -130,7 +122,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.WriteKey("total").WriteInt(total);
 
         json.WriteKey("request").BeginObject();
-        json.WriteKey("event").WriteString(eventName);
+        json.WriteKey("event").WriteString("completed");
 
         if (!requestText.empty()) {
             json.WriteKey("data").WriteString(requestText.SubStr(i * SQL_TEXT_MAX_SIZE, SQL_TEXT_MAX_SIZE));
@@ -141,12 +133,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         }
 
         if (i == 0) {
-            if (base) {
-                WriteBaseFields(json, *base);
-            }
-            if (completedExtras) {
-                WriteCompletedExtras(json, *completedExtras);
-            }
+            WriteCompletedFields(json, fields);
             if (wasTruncated) {
                 json.WriteKey("data_truncated").WriteBool(true);
             }
@@ -173,63 +160,7 @@ NActors::NLog::EPriority PickCompletedPriority(Ydb::StatusIds::StatusCode status
         : NActors::NLog::PRI_WARN;
 }
 
-void FillBaseFields(TBaseFields& base, const TKqpQueryState& state, ui64 queryLen, bool includeQueryId) {
-    base.Database = state.Database;
-    if (const auto* userCtx = state.UserRequestContext.Get()) {
-        base.DatabaseId = userCtx->DatabaseId;
-        base.TraceId = userCtx->TraceId;
-    }
-    if (includeQueryId && state.CompileResult && !state.CompileResult->Uid.empty()) {
-        base.QueryId = state.CompileResult->Uid;
-    }
-    base.Action = TString{NKikimrKqp::EQueryAction_Name(state.GetAction())};
-    base.Type = TString{NKikimrKqp::EQueryType_Name(state.GetType())};
-    base.QueryLen = queryLen;
-    base.StartedAt = state.StartTime;
-}
-
 } // anonymous namespace
-
-TLogQuery TLogQuery::Started(const TKqpQueryState& state) {
-    return TLogQuery([&state]() {
-        if (!IsLogPriorityEnabled(NActors::NLog::PRI_DEBUG)) {
-            return;
-        }
-
-        const TString query = SafeExtractQueryText(state);
-        if (IsUiExcludedQuery(query)) {
-            return;
-        }
-
-        const auto* userCtx = state.UserRequestContext.Get();
-        TStringBuf poolId = userCtx ? TStringBuf(userCtx->PoolId) : TStringBuf{};
-        TStringBuf sessionId = userCtx ? TStringBuf(userCtx->SessionId) : TStringBuf{};
-
-        TString userSid;
-        if (state.UserToken) {
-            userSid = state.UserToken->GetUserSID();
-        }
-
-        TBaseFields base;
-        FillBaseFields(base, state, query.size(), /*includeQueryId=*/false);
-
-        const bool truncate = !IsLogPriorityEnabled(NActors::NLog::PRI_TRACE);
-
-        WriteJsonChunks(
-            NActors::NLog::PRI_DEBUG,
-            poolId,
-            GetRequestId(state),
-            sessionId,
-            userSid,
-            "started",
-            query,
-            {},
-            &base,
-            nullptr,
-            truncate
-        );
-    });
-}
 
 TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
                                const NKikimrKqp::TEvQueryResponse& record,
@@ -266,19 +197,28 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
             poolId = TStringBuf(userCtx->PoolId);
         }
 
-        TBaseFields base;
-        FillBaseFields(base, state, origQueryLen, /*includeQueryId=*/true);
-
-        TCompletedExtras extras;
-        extras.Status = TString{Ydb::StatusIds::StatusCode_Name(status)};
-        extras.DurationUs = state.QueryStats.DurationUs;
-        extras.ResultsSize = responseByteSize;
-        extras.QueuedTimeUs = state.QueryStats.QueuedTimeUs;
+        TCompletedFields fields;
+        fields.Database = state.Database;
+        if (userCtx) {
+            fields.DatabaseId = userCtx->DatabaseId;
+            fields.TraceId = userCtx->TraceId;
+        }
+        if (state.CompileResult && !state.CompileResult->Uid.empty()) {
+            fields.QueryId = state.CompileResult->Uid;
+        }
+        fields.Action = TString{NKikimrKqp::EQueryAction_Name(state.GetAction())};
+        fields.Type = TString{NKikimrKqp::EQueryType_Name(state.GetType())};
+        fields.QueryLen = origQueryLen;
+        fields.StartedAt = state.StartTime;
+        fields.Status = TString{Ydb::StatusIds::StatusCode_Name(status)};
+        fields.DurationUs = state.QueryStats.DurationUs;
+        fields.ResultsSize = responseByteSize;
+        fields.QueuedTimeUs = state.QueryStats.QueuedTimeUs;
 
         if (state.QueryStats.Compilation) {
-            extras.HasCompileStats = true;
-            extras.CompileFromCache = state.QueryStats.Compilation->FromCache;
-            extras.CompileTimeUs = state.QueryStats.Compilation->DurationUs;
+            fields.HasCompileStats = true;
+            fields.CompileFromCache = state.QueryStats.Compilation->FromCache;
+            fields.CompileTimeUs = state.QueryStats.Compilation->DurationUs;
         }
 
         const bool truncate = !IsLogPriorityEnabled(NActors::NLog::PRI_TRACE);
@@ -289,11 +229,9 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
             GetRequestId(state),
             sessionId,
             userSID,
-            "completed",
             queryText,
             issues,
-            &base,
-            &extras,
+            fields,
             truncate
         );
     });

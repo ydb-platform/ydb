@@ -126,8 +126,7 @@ void IChannelBuffer::SendFinish() {
 }
 
 EDqFillLevel TLocalBuffer::GetFillLevel() const {
-    std::lock_guard lock(Mutex);
-    return FillLevel;
+    return FillLevel.load();
 }
 
 TLocalBuffer::~TLocalBuffer() {
@@ -138,7 +137,7 @@ TLocalBuffer::~TLocalBuffer() {
 void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) {
     std::lock_guard lock(Mutex);
     Aggregator = aggregator;
-    Aggregator->AddCount(FillLevel);
+    Aggregator->AddCount(FillLevel.load());
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
@@ -163,7 +162,8 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         PushStats.Resume();
     }
 
-    EDqFillLevel fillLevel = FillLevel;
+    auto prevFillLevel = FillLevel.load();
+    auto fillLevel = prevFillLevel;
 
     if (Storage) {
         if ((SpilledBytes.load() > 0) || InflightBytes.load() >= MaxInflightBytes) {
@@ -194,14 +194,14 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
 
-    if (FillLevel != fillLevel) {
-        if (FillLevel != EDqFillLevel::NoLimit) {
+    if (prevFillLevel != fillLevel) {
+        if (prevFillLevel != EDqFillLevel::NoLimit) {
             PopStats.TryPause();
         }
         if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, fillLevel);
+            Aggregator->UpdateCount(prevFillLevel, fillLevel);
         }
-        FillLevel = fillLevel;
+        FillLevel.store(fillLevel);
         NeedToNotifyOutput.store(true);
     }
 
@@ -254,7 +254,8 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     }
     *Registry->LocalBufferLatency += (TInstant::Now() - data.Timestamp).MicroSeconds();
 
-    EDqFillLevel fillLevel = FillLevel;
+    auto prevFillLevel = FillLevel.load();
+    auto fillLevel = prevFillLevel;
 
     Y_ENSURE(InflightBytes.load() >= data.Bytes);
     InflightBytes -= data.Bytes;
@@ -294,11 +295,11 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
         }
     }
 
-    if (FillLevel != fillLevel) {
+    if (prevFillLevel != fillLevel) {
         if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, fillLevel);
+            Aggregator->UpdateCount(prevFillLevel, fillLevel);
         }
-        FillLevel = fillLevel;
+        FillLevel.store(fillLevel);
         NotifyOutput(Queue.empty() || Finished.load());
     } else if (Queue.empty() || Finished.load())  {
         NotifyOutput(true);
@@ -315,12 +316,11 @@ void TLocalBuffer::EarlyFinish() {
                 NotifyOutput(true);
                 FinishTime = TInstant::Now();
 
-                std::lock_guard lock(Mutex);
-                if (FillLevel != EDqFillLevel::NoLimit) {
+                auto prevFillLevel = FillLevel.exchange(EDqFillLevel::NoLimit);
+                if (prevFillLevel != EDqFillLevel::NoLimit) {
                     if (Aggregator) {
-                        Aggregator->UpdateCount(FillLevel, EDqFillLevel::NoLimit);
+                        Aggregator->UpdateCount(prevFillLevel, EDqFillLevel::NoLimit);
                     }
-                    FillLevel = EDqFillLevel::NoLimit;
                 }
             }
         }
@@ -330,11 +330,11 @@ void TLocalBuffer::EarlyFinish() {
 void TLocalBuffer::StorageWakeupHandler() {
     std::lock_guard lock(Mutex);
 
-    if (FillLevel == EDqFillLevel::HardLimit && !Storage->IsFull()) {
+    if (FillLevel.load() == EDqFillLevel::HardLimit && !Storage->IsFull()) {
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
-        FillLevel = EDqFillLevel::SoftLimit;
+        FillLevel.store(EDqFillLevel::SoftLimit);
         NotifyOutput(false);
     }
 
@@ -456,7 +456,8 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     {
         std::lock_guard lock(FlowControlMutex);
 
-        auto fillLevel = FillLevel;
+        auto prevFillLevel = FillLevel.load();
+        auto fillLevel = prevFillLevel;
 
         if (Storage) {
             if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes)) {
@@ -480,11 +481,11 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
             }
         }
 
-        if (FillLevel != fillLevel) {
+        if (prevFillLevel != fillLevel) {
             if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, fillLevel);
+                Aggregator->UpdateCount(prevFillLevel, fillLevel);
             }
-            FillLevel = fillLevel;
+            FillLevel.store(fillLevel);
             NeedToNotifyOutput.store(true);
         }
     }
@@ -533,7 +534,8 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             }
         }
 
-        EDqFillLevel fillLevel = FillLevel;
+        auto prevFillLevel = FillLevel.load();
+        auto fillLevel = prevFillLevel;
 
         if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + MinInflightBytes) {
             fillLevel = EDqFillLevel::NoLimit;
@@ -543,15 +545,15 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             fillLevel = EDqFillLevel::HardLimit;
         }
 
-        if (FillLevel == fillLevel) {
+        if (prevFillLevel == fillLevel) {
             if (PushBytes.load() > RemotePopBytes.load()) {
                 return;
             }
         } else {
             if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, fillLevel);
+                Aggregator->UpdateCount(prevFillLevel, fillLevel);
             }
-            FillLevel = fillLevel;
+            FillLevel.store(fillLevel);
         }
     }
 
@@ -639,11 +641,11 @@ void TOutputDescriptor::BindStorage(std::shared_ptr<TOutputDescriptor>& self, st
 void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     std::lock_guard lock(FlowControlMutex);
 
-    if (FillLevel == EDqFillLevel::HardLimit && !Storage->IsFull()) {
+    if (FillLevel.load() == EDqFillLevel::HardLimit && !Storage->IsFull()) {
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
-        FillLevel = EDqFillLevel::SoftLimit;
+        FillLevel.store(EDqFillLevel::SoftLimit);
         if (NeedToNotifyOutput.exchange(false)) {
             ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
@@ -679,14 +681,13 @@ TOutputBuffer::~TOutputBuffer() {
 }
 
 EDqFillLevel TOutputBuffer::GetFillLevel() const {
-    std::lock_guard lock(Descriptor->FlowControlMutex);
-    return Descriptor->FillLevel;
+    return Descriptor->FillLevel.load();
 }
 
 void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) {
     std::lock_guard lock(Descriptor->FlowControlMutex);
     Descriptor->Aggregator = aggregator;
-    Descriptor->Aggregator->AddCount(Descriptor->FillLevel);
+    Descriptor->Aggregator->AddCount(Descriptor->FillLevel.load());
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
@@ -1962,7 +1963,7 @@ TString TNodeState::GetDebugInfo() {
         << Endl;
 
     for (auto& [info, descriptor] : OutputDescriptors) {
-        builder << "  Output " << info.ChannelId << ", FL=" << (ui32)descriptor->FillLevel
+        builder << "  Output " << info.ChannelId << ", FL=" << FillLevelToString(descriptor->FillLevel.load())
             << ", IF:" << descriptor->IsFinished() << ", TA=" << descriptor->IsTerminatedOrAborted()
             << ", EF: " << descriptor->EarlyFinished.load()
             << ", PP:" << descriptor->PushBytes.load() << ':' << descriptor->RemotePopBytes.load() << Endl;

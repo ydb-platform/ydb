@@ -227,10 +227,10 @@ public:
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
 
-    mutable std::mutex Mutex;
-    mutable std::queue<TDataChunk> Queue;
+    std::mutex Mutex;
+    std::queue<TDataChunk> Queue;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
+    std::atomic<EDqFillLevel> FillLevel = EDqFillLevel::NoLimit;
 
     std::queue<ui32> SpilledChunkBytes;
     ui64 HeadBlobId = 0;
@@ -307,15 +307,15 @@ public:
     IDqChannelStorage::TPtr Storage;
     bool IsBound = false;
 
-    mutable std::mutex WaitQueueMutex;
+    std::mutex WaitQueueMutex;
     std::atomic<ui64> WaitQueueBytes = 0;
     std::atomic<ui64> WaitQueueSize = 0;
-    mutable std::queue<TDataChunk> WaitQueue;
-    mutable TInstant WaitTimestamp;
+    std::queue<TDataChunk> WaitQueue;
+    TInstant WaitTimestamp;
 
-    mutable std::mutex FlowControlMutex;
+    std::mutex FlowControlMutex;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    mutable EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
+    std::atomic<EDqFillLevel> FillLevel = EDqFillLevel::NoLimit;
 
     std::atomic<ui64> PushBytes = 0;
     std::atomic<ui64> RemotePopBytes = 0;
@@ -436,10 +436,10 @@ public:
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
 
-    mutable std::mutex QueueMutex;
+    std::mutex QueueMutex;
     std::atomic<ui64> QueueSize = 0;
     std::atomic<ui64> QueueBytes = 0;
-    mutable std::queue<TInputItem> Queue;
+    std::queue<TInputItem> Queue;
     std::atomic<ui64> InflightBytes = 0;
 
     std::atomic<bool> NeedToNotifyInput = false;
@@ -588,15 +588,15 @@ public:
 
     NActors::TActorId NodeActorId;
     TString LogPrefix;
-    mutable std::mutex Mutex;
-    mutable std::deque<std::shared_ptr<TOutputItem>> Queue;
+    std::mutex Mutex;
+    std::deque<std::shared_ptr<TOutputItem>> Queue;
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
-    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
-    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
-    mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
-    mutable std::queue<std::pair<TChannelInfo, TInstant>> UnboundOutputs;
+    std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
+    std::unordered_map<TChannelInfo, std::shared_ptr<TInputDescriptor>> InputDescriptors;
+    std::queue<std::pair<TChannelInfo, TInstant>> UnboundInputs;
+    std::queue<std::pair<TChannelInfo, TInstant>> UnboundOutputs;
     bool Connected = false;
     std::weak_ptr<TNodeState> Self;
     // Sender
@@ -614,7 +614,7 @@ public:
     // ...
     const TDqChannelLimits Limits;
     const ui64 MaxInflightMessages = 8192;
-    mutable std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
+    std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
     std::atomic<ui64> WaitersQueueSize = 0;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconciliation = 1;
@@ -693,8 +693,8 @@ public:
     NActors::TActorSystem* ActorSystem;
     const ui64 MaxInflightBytes;
     const ui64 MinInflightBytes;
-    mutable std::mutex Mutex;
-    mutable std::unordered_map<TChannelInfo, std::weak_ptr<TLocalBuffer>> LocalBuffers;
+    std::mutex Mutex;
+    std::unordered_map<TChannelInfo, std::weak_ptr<TLocalBuffer>> LocalBuffers;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferCount;
@@ -744,8 +744,8 @@ public:
     ui32 PoolId;
     std::weak_ptr<TDqChannelService> Self;
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
-    mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
-    mutable std::mutex Mutex;
+    std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
+    std::mutex Mutex;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<bool> CleanupScheduled = false;
 };

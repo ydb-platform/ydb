@@ -2047,12 +2047,27 @@ private:
 
     std::vector<TString> GetTableColumns(const TOutputInfo& outputTable) {
         std::vector<TString> columns;
+        THashSet<TString> seen;
 
         if (outputTable.Spec.HasKey(YqlRowSpecAttribute)) {
             const auto& rowSpec = outputTable.Spec[YqlRowSpecAttribute];
             if (rowSpec.HasKey(RowSpecAttrType) && rowSpec[RowSpecAttrType].IsList()) {
                 for (const auto& entry : rowSpec[RowSpecAttrType].AsList()[1].AsList()) {
-                    columns.emplace_back(entry[0].AsString());
+                    const auto& name = entry[0].AsString();
+                    if (seen.insert(name).second) {
+                        columns.emplace_back(name);
+                    }
+                }
+            }
+            // Include presort columns synthesized for DESC sort (present in SortedBy but not in Type).
+            // These are real columns in the FMR table data and must be uploaded to YT, since the
+            // target YT schema also requires them.
+            if (rowSpec.HasKey("SortedBy")) {
+                for (const auto& item : rowSpec["SortedBy"].AsList()) {
+                    const auto& name = item.AsString();
+                    if (seen.insert(name).second) {
+                        columns.emplace_back(name);
+                    }
                 }
             }
         }
@@ -2087,7 +2102,7 @@ private:
                     if (sortOrders.size() >= limit) {
                         break;
                     }
-                    sortOrders.emplace_back(item.AsInt64() < 0 ? ESortOrder::Descending : ESortOrder::Ascending);
+                    sortOrders.emplace_back(item.AsInt64() == 0 ? ESortOrder::Descending : ESortOrder::Ascending);
                 }
             }
         }

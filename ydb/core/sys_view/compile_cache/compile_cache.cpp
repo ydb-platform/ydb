@@ -257,15 +257,8 @@ private:
         PartialWarningSent = true;
 
         const ui32 nodesTotal = NodesTotal > 0 ? NodesTotal : (NodesSucceeded + NodesFailed);
-        NYql::TIssues issues;
-        issues.AddIssue(NYql::TIssue(TStringBuilder()
-            << "Compile cache federated scan: skipped " << NodesFailed << " of " << nodesTotal << " nodes")
-            .SetCode(0, NYql::TSeverityIds::S_WARNING));
-
-        auto warning = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
-        warning->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-        NYql::IssuesToMessage(issues, warning->Record.MutableIssues());
-        Send(OwnerActorId, warning.Release());
+        LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "Compile cache scan: skipped " << NodesFailed << " of " << nodesTotal << " nodes");
     }
 
     void FinishScanOrReplyEmpty() {

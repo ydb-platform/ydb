@@ -404,7 +404,13 @@ namespace {
             env.Runtime.DispatchEvents(opts, TDuration::Seconds(1));
         }
 
-        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge, new TEvStartWarmup(env.NodeCount)), env.NodeId);
+        TVector<ui32> nodeIds;
+        nodeIds.reserve(env.NodeCount);
+        for (ui32 i = 0; i < env.NodeCount; ++i) {
+            nodeIds.push_back(env.Runtime.GetNodeId(i));
+        }
+        env.Runtime.Send(new IEventHandle(warmupActorId, warmupEdge,
+            new TEvStartWarmup(env.NodeCount, std::move(nodeIds))), env.NodeId);
         return env.Runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, timeout);
     }
 
@@ -937,6 +943,7 @@ namespace {
                     issues.AddIssue(std::move(issue));
                     NYql::IssuesToMessage(issues, response->Record.MutableIssues());
                     env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    ev.Reset();
                 });
 
             TKqpWarmupConfig warmupActorConfig;
@@ -1006,7 +1013,7 @@ namespace {
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
 
-            const ui32 failNodeId = env.Runtime.GetNodeId(1);
+            const ui32 failNodeId = env.Runtime.GetNodeId(2);
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [failNodeId, &env](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
                     if (ev->Cookie != failNodeId) {
@@ -1026,6 +1033,7 @@ namespace {
             TKqpWarmupConfig warmupActorConfig;
             warmupActorConfig.SoftDeadline = TDuration::Seconds(10);
             warmupActorConfig.HardDeadline = TDuration::Seconds(20);
+            warmupActorConfig.MaxCompilationDurationMs = 60000;
 
             auto warmupComplete = RunWarmup(env, warmupActorConfig,
                 warmupActorConfig.HardDeadline + TDuration::Seconds(1), /*waitBootstrap*/ true);
@@ -1046,7 +1054,7 @@ namespace {
             TKikimrRunner kikimr(MakeWarmupTestSettings(params));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
 
-            const ui32 failNodeId = env.Runtime.GetNodeId(1);
+            const ui32 failNodeId = env.Runtime.GetNodeId(2);
             const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
                 [failNodeId, &env](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
                     if (ev->Cookie != failNodeId) {
@@ -1062,27 +1070,14 @@ namespace {
                     ev.Reset();
                 });
 
-            TDriverConfig driverConfig;
-            driverConfig
-                .SetEndpoint(kikimr.GetEndpoint())
-                .SetDatabase("/Root")
-                .SetAuthToken("root@builtin");
-            auto driver = NYdb::TDriver(driverConfig);
-            auto tableClient = NYdb::NTable::TTableClient(driver);
-
-            auto it = tableClient.StreamExecuteScanQuery(
-                "SELECT COUNT(*) AS cnt FROM `/Root/.sys/compile_cache_queries`").GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-            while (true) {
-                auto part = it.ReadNext().GetValueSync();
-                if (!part.IsSuccess()) {
-                    break;
-                }
-            }
-
-            UNIT_ASSERT_C(it.GetIssues().ToString().find("skipped") != TString::npos,
-                "Expected partial scan warning in issues: " << it.GetIssues().ToString());
+            auto result = kikimr.RunCall([&] {
+                auto tableClient = kikimr.GetTableClient();
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                return session.ExecuteDataQuery(
+                    "SELECT COUNT(*) AS cnt FROM `/Root/.sys/compile_cache_queries`",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         Y_UNIT_TEST(WarmupPgSyntaxQueriesSkipped) {

@@ -315,6 +315,7 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
     , NodeId(runConfig.NodeId)
     , ScopeId(runConfig.ScopeId)
     , TinyMode(runConfig.TinyMode)
+    , ServicesMask(runConfig.ServicesMask)
 {}
 
 // TBasicServicesInitializer
@@ -1999,8 +2000,10 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             }
         }
 
+
         TDuration publishWarmupTimeout = TDuration::Zero();
-        if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
+        if (ServicesMask.EnableKqp && Config.GetTableServiceConfig().GetEnableCompileCacheWarmup()
+                && !appData->TenantName.empty()) {
             publishWarmupTimeout = NKqp::ImportWarmupConfigFromProto(
                 Config.GetTableServiceConfig().GetCompileCacheWarmupConfig()).HardDeadline;
         }

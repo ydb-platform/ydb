@@ -6,7 +6,7 @@ on:
 
 jobs:
   auto-rebase:
-    if: github.event.label.name == 'rebase'
+    if: github.event.label.name == 'rebase-user-branch'
     runs-on: ubuntu-latest
     permissions:
       contents: write

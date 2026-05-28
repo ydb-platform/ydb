@@ -18,7 +18,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/query
-    ydb/public/sdk/cpp/src/client/result_ranges
+    ydb/public/sdk/cpp/src/client/row_ranges
     ydb/public/sdk/cpp/src/client/table
 )
 

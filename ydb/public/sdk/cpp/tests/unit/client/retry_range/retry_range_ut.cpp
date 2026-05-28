@@ -1,8 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/ranges.h>
-#include <ydb/public/sdk/cpp/src/client/result_ranges/ranges_stream_drain.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
+#include <ydb/public/sdk/cpp/src/client/row_ranges/rows_stream_drain.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -39,10 +39,6 @@ TRetryOperationSettings FastRetrySettings() {
             TRetryOperationSettings::DefaultFastBackoffSettings()
                 .SlotDuration(TDuration::MilliSeconds(1))
                 .Ceiling(1));
-}
-
-TRetryOperationSettings CatchYdbExceptionsRetrySettings() {
-    return FastRetrySettings().CatchYdbExceptions(true);
 }
 
 TStatus OkStatus() {
@@ -88,7 +84,7 @@ struct TMockStreamIterator {
 void SimulateScanDrainFailure() {
     TMockStreamIterator<NTable::TScanQueryPart> it;
     it.Push(NTable::TScanQueryPart(UnavailableStatus()));
-    NYdb::NResultRangesDetail::DrainStreamIterator(it);
+    NYdb::NRowRangesDetail::DrainStreamIterator(it);
 }
 
 class TMockTableService : public Ydb::Table::V1::TableService::Service {
@@ -188,8 +184,8 @@ struct TQueryClientFixture {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TTableCatchYdbExceptionsRetryTest) {
-    Y_UNIT_TEST(RetryOperationSyncWithoutSessionRetriesAfterDrainException) {
+Y_UNIT_TEST_SUITE(TTableRangeErrorRetryTest) {
+    Y_UNIT_TEST(RetryOperationSyncWithoutSessionRetriesAfterRangeDrainFailure) {
         TTableClientFixture fixture;
         size_t attempts = 0;
 
@@ -201,26 +197,26 @@ Y_UNIT_TEST_SUITE(TTableCatchYdbExceptionsRetryTest) {
                 }
                 return OkStatus();
             },
-            CatchYdbExceptionsRetrySettings());
+            FastRetrySettings());
 
         UNIT_ASSERT(status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
     }
 
-    Y_UNIT_TEST(RetryOperationSyncWithoutSessionPropagatesDrainException) {
+    Y_UNIT_TEST(RetryOperationSyncWithoutSessionPropagatesYdbErrorException) {
         TTableClientFixture fixture;
 
         UNIT_ASSERT_EXCEPTION(
             fixture.Client->RetryOperationSync(
                 [&](NTable::TTableClient&) -> TStatus {
-                    SimulateScanDrainFailure();
+                    throw TYdbErrorException(UnavailableStatus());
                     return OkStatus();
                 },
                 FastRetrySettings()),
             TYdbErrorException);
     }
 
-    Y_UNIT_TEST(RetryOperationSyncWithSessionRetriesAfterDrainException) {
+    Y_UNIT_TEST(RetryOperationSyncWithSessionRetriesAfterRangeDrainFailure) {
         TTableClientFixture fixture;
         size_t attempts = 0;
 
@@ -232,7 +228,7 @@ Y_UNIT_TEST_SUITE(TTableCatchYdbExceptionsRetryTest) {
                 }
                 return OkStatus();
             },
-            CatchYdbExceptionsRetrySettings());
+            FastRetrySettings());
 
         UNIT_ASSERT(status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
@@ -250,12 +246,12 @@ Y_UNIT_TEST_SUITE(TTableCatchYdbExceptionsRetryTest) {
                     SimulateScanDrainFailure();
                 }
 
-                for (auto& row : TResultSetRange(MakeSingleInt32ResultSet(5))) {
+                for (auto& row : TRowRange(MakeSingleInt32ResultSet(5))) {
                     sum += static_cast<int32_t>(row.ColumnParser("v").GetInt32());
                 }
                 return OkStatus();
             },
-            CatchYdbExceptionsRetrySettings());
+            FastRetrySettings());
 
         UNIT_ASSERT(status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
@@ -263,8 +259,8 @@ Y_UNIT_TEST_SUITE(TTableCatchYdbExceptionsRetryTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TQueryCatchYdbExceptionsRetryTest) {
-    Y_UNIT_TEST(RetryQuerySyncRetriesAfterDrainException) {
+Y_UNIT_TEST_SUITE(TQueryRangeErrorRetryTest) {
+    Y_UNIT_TEST(RetryQuerySyncRetriesAfterRangeDrainFailure) {
         TQueryClientFixture fixture;
         size_t attempts = 0;
 
@@ -276,26 +272,26 @@ Y_UNIT_TEST_SUITE(TQueryCatchYdbExceptionsRetryTest) {
                 }
                 return OkStatus();
             },
-            CatchYdbExceptionsRetrySettings());
+            FastRetrySettings());
 
         UNIT_ASSERT(status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
     }
 
-    Y_UNIT_TEST(RetryQuerySyncPropagatesDrainException) {
+    Y_UNIT_TEST(RetryQuerySyncPropagatesYdbErrorException) {
         TQueryClientFixture fixture;
 
         UNIT_ASSERT_EXCEPTION(
             fixture.Client->RetryQuerySync(
                 [&](NQuery::TSession) -> TStatus {
-                    SimulateScanDrainFailure();
+                    throw TYdbErrorException(UnavailableStatus());
                     return OkStatus();
                 },
                 FastRetrySettings()),
             TYdbErrorException);
     }
 
-    Y_UNIT_TEST(RetryQuerySyncPropagatesNonYdbExceptionWithCatchYdbExceptions) {
+    Y_UNIT_TEST(RetryQuerySyncPropagatesNonYdbException) {
         TQueryClientFixture fixture;
 
         UNIT_ASSERT_EXCEPTION(
@@ -304,7 +300,7 @@ Y_UNIT_TEST_SUITE(TQueryCatchYdbExceptionsRetryTest) {
                     throw std::runtime_error("user bug");
                     return OkStatus();
                 },
-                CatchYdbExceptionsRetrySettings()),
+                FastRetrySettings()),
             std::runtime_error);
     }
 }

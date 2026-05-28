@@ -29,6 +29,15 @@ Y_UNIT_TEST_SUITE(TStatusFromCurrentExceptionTest) {
         }
     }
 
+    Y_UNIT_TEST(YdbRangeErrorExceptionPreservesStatus) {
+        try {
+            throw TYdbRangeErrorException(TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{}));
+        } catch (...) {
+            TStatus status = CatchStatusFromCurrentException();
+            UNIT_ASSERT_VALUES_EQUAL(status.GetStatus(), EStatus::UNAVAILABLE);
+        }
+    }
+
     Y_UNIT_TEST(StdExceptionBecomesClientInternalError) {
         try {
             throw std::runtime_error("test failure");

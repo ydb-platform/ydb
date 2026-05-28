@@ -151,6 +151,8 @@ void ThrowOnErrorOrPrintIssues(TStatus status) {
 TStatus StatusFromCurrentException() {
     try {
         throw;
+    } catch (const TYdbRangeErrorException& e) {
+        return e.GetStatus();
     } catch (const TYdbErrorException& e) {
         return e.GetStatus();
     } catch (const std::exception& e) {

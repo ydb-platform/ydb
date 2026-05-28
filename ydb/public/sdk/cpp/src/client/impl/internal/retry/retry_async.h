@@ -125,25 +125,17 @@ protected:
                     [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
                     try {
                         HandleStatusAsync(self, result.GetValue());
-                    } catch (const NStatusHelpers::TYdbErrorException& e) {
-                        if (self->Settings_.CatchYdbExceptions_) {
-                            TStatus status = e.GetStatus();
-                            HandleStatusAsync(self, TStatusType(std::move(status)));
-                        } else {
-                            HandleExceptionAsync(self, std::current_exception());
-                        }
+                    } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
+                        TStatus status = e.GetStatus();
+                        HandleStatusAsync(self, TStatusType(std::move(status)));
                     } catch (...) {
                         HandleExceptionAsync(self, std::current_exception());
                     }
                 }
             );
-        } catch (const NStatusHelpers::TYdbErrorException& e) {
-            if (self->Settings_.CatchYdbExceptions_) {
-                TStatus status = e.GetStatus();
-                HandleStatusAsync(self, TStatusType(std::move(status)));
-            } else {
-                HandleExceptionAsync(self, std::current_exception());
-            }
+        } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
+            TStatus status = e.GetStatus();
+            HandleStatusAsync(self, TStatusType(std::move(status)));
         } catch (...) {
             HandleExceptionAsync(self, std::current_exception());
         }

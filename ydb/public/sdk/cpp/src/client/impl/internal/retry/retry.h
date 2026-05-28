@@ -137,13 +137,10 @@ protected:
 };
 
 template <typename TStatusType, typename F>
-TStatusType InvokeWithOptionalCatch(bool catchYdbExceptions, F&& f) {
-    if (!catchYdbExceptions) {
-        return f();
-    }
+TStatusType InvokeWithRangeErrorCatch(F&& f) {
     try {
         return f();
-    } catch (const NStatusHelpers::TYdbErrorException& e) {
+    } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
         TStatus status = e.GetStatus();
         return TStatusType(std::move(status));
     }

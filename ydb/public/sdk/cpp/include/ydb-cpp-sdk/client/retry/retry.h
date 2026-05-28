@@ -31,7 +31,6 @@ struct TRetryOperationSettings {
     }
     FLUENT_SETTING_FLAG(Verbose);
     FLUENT_SETTING_FLAG(RetryUndefined);
-    FLUENT_SETTING_FLAG(CatchYdbExceptions);
 
     static TBackoffSettings DefaultFastBackoffSettings() {
         return TBackoffSettings()

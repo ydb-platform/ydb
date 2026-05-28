@@ -1,14 +1,15 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/ranges.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
 
-#include "ranges_stream_drain.h"
+#include "rows_stream_drain.h"
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <util/generic/yexception.h>
+
 #include <memory>
 #include <optional>
 #include <utility>
-#include <vector>
 
 namespace NYdb::inline Dev {
 
@@ -18,24 +19,22 @@ template <typename TStatusCarrier>
 void ThrowIfUnsuccessful(TStatusCarrier&& carrier) {
     if (!carrier.IsSuccess()) {
         TStatus status(std::move(carrier));
-        throw NStatusHelpers::TYdbErrorException(status) << status;
+        throw NStatusHelpers::TYdbRangeErrorException(status) << status;
     }
 }
 
 } // namespace
 
-class TResultSetRange::TImpl {
+class TRowRange::TImpl {
 public:
+    struct TEmptyTag {};
+
+    explicit TImpl(TEmptyTag)
+        : Producer_(std::make_unique<TEmptyProducer>())
+    {}
+
     explicit TImpl(TResultSet&& resultSet)
         : Producer_(std::make_unique<TOneShotProducer>(std::move(resultSet)))
-    {}
-
-    explicit TImpl(std::vector<TResultSet>&& resultSets)
-        : Producer_(std::make_unique<TVectorProducer>(std::move(resultSets)))
-    {}
-
-    explicit TImpl(NTable::TDataQueryResult&& result)
-        : Producer_(std::make_unique<TVectorProducer>(std::move(result).ExtractResultSets()))
     {}
 
     explicit TImpl(NQuery::TExecuteQueryIterator&& iterator)
@@ -109,22 +108,11 @@ private:
         std::optional<TResultSet> ResultSet_;
     };
 
-    class TVectorProducer : public IResultSetProducer {
+    class TEmptyProducer : public IResultSetProducer {
     public:
-        explicit TVectorProducer(std::vector<TResultSet>&& sets)
-            : Sets_(std::move(sets))
-        {}
-
         std::optional<TResultSet> TryGetNextResultSet() override {
-            if (Pos_ >= Sets_.size()) {
-                return std::nullopt;
-            }
-            return std::move(Sets_[Pos_++]);
+            return std::nullopt;
         }
-
-    private:
-        std::vector<TResultSet> Sets_;
-        size_t Pos_ = 0;
     };
 
     class TExecuteQueryStreamProducer : public IResultSetProducer {
@@ -134,7 +122,7 @@ private:
         {}
 
         std::optional<TResultSet> TryGetNextResultSet() override {
-            return NResultRangesDetail::DrainStreamIterator(Iterator_);
+            return NRowRangesDetail::DrainStreamIterator(Iterator_);
         }
 
     private:
@@ -148,7 +136,7 @@ private:
         {}
 
         std::optional<TResultSet> TryGetNextResultSet() override {
-            return NResultRangesDetail::DrainStreamIterator(Iterator_);
+            return NRowRangesDetail::DrainStreamIterator(Iterator_);
         }
 
     private:
@@ -162,7 +150,7 @@ private:
         {}
 
         std::optional<TResultSet> TryGetNextResultSet() override {
-            return NResultRangesDetail::DrainStreamIterator(Iterator_);
+            return NRowRangesDetail::DrainStreamIterator(Iterator_);
         }
 
     private:
@@ -174,132 +162,163 @@ private:
     bool Started_ = false;
 };
 
-TResultRowParser::TResultRowParser(TResultSetParser& parser)
+TRowParser::TRowParser(TResultSetParser& parser)
     : Parser_(parser)
 {}
 
-size_t TResultRowParser::ColumnsCount() const {
+class TRowParserHolder {
+public:
+    explicit TRowParserHolder(TResultSetParser& parser)
+        : Parser_(parser)
+    {}
+
+    TRowParser& Get() {
+        return Parser_;
+    }
+
+private:
+    TRowParser Parser_;
+};
+
+size_t TRowParser::ColumnsCount() const {
     return Parser_.ColumnsCount();
 }
 
-size_t TResultRowParser::RowsCount() const {
+size_t TRowParser::RowsCount() const {
     return Parser_.RowsCount();
 }
 
-ssize_t TResultRowParser::ColumnIndex(const std::string& columnName) {
+ssize_t TRowParser::ColumnIndex(const std::string& columnName) {
     return Parser_.ColumnIndex(columnName);
 }
 
-TValueParser& TResultRowParser::ColumnParser(size_t columnIndex) {
+TValueParser& TRowParser::ColumnParser(size_t columnIndex) {
     return Parser_.ColumnParser(columnIndex);
 }
 
-TValueParser& TResultRowParser::ColumnParser(const std::string& columnName) {
+TValueParser& TRowParser::ColumnParser(const std::string& columnName) {
     return Parser_.ColumnParser(columnName);
 }
 
-TValue TResultRowParser::GetValue(size_t columnIndex) const {
+TValue TRowParser::GetValue(size_t columnIndex) const {
     return Parser_.GetValue(columnIndex);
 }
 
-TValue TResultRowParser::GetValue(const std::string& columnName) const {
+TValue TRowParser::GetValue(const std::string& columnName) const {
     return Parser_.GetValue(columnName);
 }
 
-class TResultIterator::TImpl {
+class TRowIterator::TImpl {
 public:
-    explicit TImpl(TResultSetRange::TImpl& range)
+    explicit TImpl(TRowRange::TImpl& range)
         : Range_(range)
-    {}
+    {
+        ResetRowView();
+    }
 
     bool IsAtEnd() const {
         return !Range_.HasCurrent();
     }
 
     void Advance() {
+        RowView_.reset();
         Range_.Advance();
+        ResetRowView();
     }
 
-    TResultRowParser& Current() {
-        RowView_.reset(new TResultRowParser(Range_.CurrentParser()));
-        return *RowView_;
+    TRowParser& Current() {
+        return RowView_->Get();
     }
 
 private:
-    TResultSetRange::TImpl& Range_;
-    std::unique_ptr<TResultRowParser> RowView_;
+    void ResetRowView() {
+        if (Range_.HasCurrent()) {
+            RowView_.emplace(Range_.CurrentParser());
+        }
+    }
+
+    TRowRange::TImpl& Range_;
+    std::optional<TRowParserHolder> RowView_;
 };
 
-TResultSetRange::TResultSetRange(TResultSet&& resultSet)
+TRowRange::TRowRange(TResultSet&& resultSet)
     : Impl_(std::make_unique<TImpl>(std::move(resultSet)))
 {}
 
-TResultSetRange::TResultSetRange(NTable::TDataQueryResult&& result) {
+TRowRange::TRowRange(NTable::TDataQueryResult&& result) {
     ThrowIfUnsuccessful(result);
-    Impl_ = std::make_unique<TImpl>(std::move(result));
+    auto sets = std::move(result).ExtractResultSets();
+    if (sets.size() > 1) {
+        ythrow yexception() << "multiple queries in one range is not allowed";
+    }
+    if (sets.empty()) {
+        Impl_ = std::make_unique<TImpl>(TRowRange::TImpl::TEmptyTag{});
+    } else {
+        Impl_ = std::make_unique<TImpl>(std::move(sets[0]));
+    }
 }
 
-TResultSetRange::TResultSetRange(NQuery::TExecuteQueryIterator&& iterator) {
+TRowRange::TRowRange(NQuery::TExecuteQueryIterator&& iterator) {
     ThrowIfUnsuccessful(iterator);
     Impl_ = std::make_unique<TImpl>(std::move(iterator));
 }
 
-TResultSetRange::TResultSetRange(NTable::TScanQueryPartIterator&& iterator) {
+TRowRange::TRowRange(NTable::TScanQueryPartIterator&& iterator) {
     ThrowIfUnsuccessful(iterator);
     Impl_ = std::make_unique<TImpl>(std::move(iterator));
 }
 
-TResultSetRange::TResultSetRange(NTable::TTablePartIterator&& iterator) {
+TRowRange::TRowRange(NTable::TTablePartIterator&& iterator) {
     ThrowIfUnsuccessful(iterator);
     Impl_ = std::make_unique<TImpl>(std::move(iterator));
 }
 
-TResultSetRange::TResultSetRange(TResultSetRange&&) noexcept = default;
-TResultSetRange& TResultSetRange::operator=(TResultSetRange&&) noexcept = default;
-TResultSetRange::~TResultSetRange() = default;
+TRowRange::TRowRange(TRowRange&&) noexcept = default;
+TRowRange& TRowRange::operator=(TRowRange&&) noexcept = default;
+TRowRange::~TRowRange() = default;
 
-TResultIterator TResultSetRange::begin() {
+TRowIterator TRowRange::begin() {
     Impl_->Start();
-    return TResultIterator(std::make_unique<TResultIterator::TImpl>(*Impl_));
+    return TRowIterator(std::make_unique<TRowIterator::TImpl>(*Impl_));
 }
 
-TResultIterEnd TResultSetRange::end() {
-    return TResultIterEnd{};
+TRowIterEnd TRowRange::end() {
+    return TRowIterEnd{};
 }
 
-TResultIterator::TResultIterator(std::unique_ptr<TImpl> impl)
+TRowIterator::TRowIterator(std::unique_ptr<TImpl> impl)
     : Impl_(std::move(impl))
 {}
 
-TResultIterator::TResultIterator(TResultIterator&&) noexcept = default;
-TResultIterator& TResultIterator::operator=(TResultIterator&&) noexcept = default;
-TResultIterator::~TResultIterator() = default;
+TRowIterator::TRowIterator(TRowIterator&&) noexcept = default;
+TRowIterator& TRowIterator::operator=(TRowIterator&&) noexcept = default;
+TRowIterator::~TRowIterator() = default;
 
-bool TResultIterator::operator==(const TResultIterator& other) const {
+bool TRowIterator::operator==(const TRowIterator& other) const {
     return Impl_->IsAtEnd() && other.Impl_->IsAtEnd();
 }
 
-bool TResultIterator::operator!=(const TResultIterator& other) const {
+bool TRowIterator::operator!=(const TRowIterator& other) const {
     return !(*this == other);
 }
 
-bool TResultIterator::operator==(const TResultIterEnd&) const {
+bool TRowIterator::operator==(const TRowIterEnd&) const {
     return Impl_->IsAtEnd();
 }
 
-bool TResultIterator::operator!=(const TResultIterEnd& end) const {
+bool TRowIterator::operator!=(const TRowIterEnd& end) const {
     return !(*this == end);
 }
 
-TResultRowParser& TResultIterator::operator*() const {
+TRowParser& TRowIterator::operator*() const {
     return Impl_->Current();
 }
 
-TResultRowParser* TResultIterator::operator->() const {
+TRowParser* TRowIterator::operator->() const {
     return &Impl_->Current();
 }
 
-TResultIterator& TResultIterator::operator++() {
+TRowIterator& TRowIterator::operator++() {
     Impl_->Advance();
     return *this;
 }

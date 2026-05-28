@@ -14,7 +14,8 @@
 
 * Fixed some data races in Producer (concurrent access to `PartitionsIndex`)
 
-* Added `TRetryOperationSettings::CatchYdbExceptions()` — opt-in retry setting that converts `TYdbErrorException` from the operation lambda (e.g. `TResultSetRange` stream drain) into `TStatus` for the retry layer; other exceptions propagate
+* Added `TYdbRangeErrorException` for `TRowRange` open/drain failures; plain `RetryQuerySync` / `RetryOperationSync` automatically convert it to `TStatus` for retry (other exceptions propagate)
+* `TRowRange` rejects multiple logical result sets (`yexception`: `"multiple queries in one range is not allowed"`)
 
 * Added interface for export of metrics and spans, supported plugin for OpenTelemetry
 

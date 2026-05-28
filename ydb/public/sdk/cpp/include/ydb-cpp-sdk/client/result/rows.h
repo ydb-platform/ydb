@@ -18,47 +18,50 @@
 
 namespace NYdb::inline Dev {
 
-class TResultIterEnd {};
+class TRowIterEnd {};
 
-class TResultRowParser;
+class TRowParser;
+
+class TRowParserHolder;
 
 template <class... Args>
-class TRangeColumns;
+class TRowColumns;
 
-class TResultIterator {
-    friend class TResultSetRange;
+class TRowIterator {
+    friend class TRowRange;
 public:
     class TImpl;
 
-    TResultIterator(const TResultIterator&) = delete;
-    TResultIterator(TResultIterator&&) noexcept;
-    ~TResultIterator();
-    TResultIterator& operator=(const TResultIterator&) = delete;
-    TResultIterator& operator=(TResultIterator&&) noexcept;
+    TRowIterator(const TRowIterator&) = delete;
+    TRowIterator(TRowIterator&&) noexcept;
+    ~TRowIterator();
+    TRowIterator& operator=(const TRowIterator&) = delete;
+    TRowIterator& operator=(TRowIterator&&) noexcept;
 
-    bool operator==(const TResultIterator& other) const;
-    bool operator!=(const TResultIterator& other) const;
-    bool operator==(const TResultIterEnd& other) const;
-    bool operator!=(const TResultIterEnd& other) const;
+    bool operator==(const TRowIterator& other) const;
+    bool operator!=(const TRowIterator& other) const;
+    bool operator==(const TRowIterEnd& other) const;
+    bool operator!=(const TRowIterEnd& other) const;
 
-    TResultRowParser& operator*() const;
-    TResultRowParser* operator->() const;
+    TRowParser& operator*() const;
+    TRowParser* operator->() const;
 
-    TResultIterator& operator++();
+    TRowIterator& operator++();
 
 private:
-    explicit TResultIterator(std::unique_ptr<TImpl> impl);
+    explicit TRowIterator(std::unique_ptr<TImpl> impl);
 
     std::unique_ptr<TImpl> Impl_;
 };
 
-class TResultRowParser {
-    friend class TResultIterator::TImpl;
+class TRowParser {
+    friend class TRowIterator::TImpl;
+    friend class TRowParserHolder;
 public:
-    TResultRowParser(const TResultRowParser&) = delete;
-    TResultRowParser(TResultRowParser&&) = delete;
-    TResultRowParser& operator=(const TResultRowParser&) = delete;
-    TResultRowParser& operator=(TResultRowParser&&) = delete;
+    TRowParser(const TRowParser&) = delete;
+    TRowParser(TRowParser&&) = delete;
+    TRowParser& operator=(const TRowParser&) = delete;
+    TRowParser& operator=(TRowParser&&) = delete;
 
     size_t ColumnsCount() const;
     size_t RowsCount() const;
@@ -69,47 +72,47 @@ public:
     TValue GetValue(const std::string& columnName) const;
 
 private:
-    explicit TResultRowParser(TResultSetParser& parser);
+    explicit TRowParser(TResultSetParser& parser);
 
     TResultSetParser& Parser_;
 };
 
-//! Forward, single-pass range over rows of one or more TResultSet's.
-class TResultSetRange {
-    friend class TResultIterator::TImpl;
+//! Forward, single-pass range over rows of a single logical result set.
+class TRowRange {
+    friend class TRowIterator::TImpl;
 public:
-    explicit TResultSetRange(TResultSet&& resultSet);
-    explicit TResultSetRange(NTable::TDataQueryResult&& result);
+    explicit TRowRange(TResultSet&& resultSet);
+    explicit TRowRange(NTable::TDataQueryResult&& result);
 
-    explicit TResultSetRange(NQuery::TExecuteQueryIterator&& iterator);
-    explicit TResultSetRange(NTable::TScanQueryPartIterator&& iterator);
-    explicit TResultSetRange(NTable::TTablePartIterator&& iterator);
+    explicit TRowRange(NQuery::TExecuteQueryIterator&& iterator);
+    explicit TRowRange(NTable::TScanQueryPartIterator&& iterator);
+    explicit TRowRange(NTable::TTablePartIterator&& iterator);
 
-    TResultSetRange(const TResultSetRange&) = delete;
-    TResultSetRange(TResultSetRange&&) noexcept;
-    TResultSetRange& operator=(const TResultSetRange&) = delete;
-    TResultSetRange& operator=(TResultSetRange&&) noexcept;
-    ~TResultSetRange();
+    TRowRange(const TRowRange&) = delete;
+    TRowRange(TRowRange&&) noexcept;
+    TRowRange& operator=(const TRowRange&) = delete;
+    TRowRange& operator=(TRowRange&&) noexcept;
+    ~TRowRange();
 
-    TResultIterator begin();
-    TResultIterEnd end();
+    TRowIterator begin();
+    TRowIterEnd end();
 
     //! Build a typed-tuple view over this range.
     //! Args... are the column C++ types (e.g. int32_t, std::optional<std::string>);
     //! columns is any iterable of names convertible to std::string.
     //! Yields std::tuple<Args...> per row.
     template <class... Args>
-    TRangeColumns<Args...> Get(std::initializer_list<std::string_view> columns);
+    TRowColumns<Args...> Get(std::initializer_list<std::string_view> columns);
 
     template <class... Args, class StringIterable>
-    TRangeColumns<Args...> Get(const StringIterable& columns);
+    TRowColumns<Args...> Get(const StringIterable& columns);
 
 private:
     class TImpl;
     std::unique_ptr<TImpl> Impl_;
 };
 
-namespace NResultRangesDetail {
+namespace NRowRangesDetail {
 
 //! Maps a C++ type to the TValueParser accessor that reads it.
 //! Unspecialised T fails to compile ("incomplete type") — that is the intended
@@ -179,18 +182,18 @@ template <> struct TValueParserGetter<std::optional<TInstant>> {
     }
 };
 
-} // namespace NResultRangesDetail
+} // namespace NRowRangesDetail
 
-//! Lightweight typed view over a TResultSetRange. Holds only a reference to
+//! Lightweight typed view over a TRowRange. Holds only a reference to
 //! the underlying range and the column names; yields std::tuple<Args...> per row.
 template <class... Args>
-class TRangeColumns {
-    friend class TResultSetRange;
+class TRowColumns {
+    friend class TRowRange;
     static constexpr size_t N = sizeof...(Args);
     using TNames = std::array<std::string, N>;
 public:
     class Iterator {
-        friend class TRangeColumns;
+        friend class TRowColumns;
     public:
         using iterator_category = std::input_iterator_tag;
         using value_type = std::tuple<Args...>;
@@ -216,51 +219,51 @@ public:
             ++(*this);
         }
 
-        bool operator==(const TResultIterEnd& end) const { return Inner_ == end; }
-        bool operator!=(const TResultIterEnd& end) const { return Inner_ != end; }
+        bool operator==(const TRowIterEnd& end) const { return Inner_ == end; }
+        bool operator!=(const TRowIterEnd& end) const { return Inner_ != end; }
 
     private:
-        Iterator(TResultIterator&& inner, const TNames& names)
+        Iterator(TRowIterator&& inner, const TNames& names)
             : Inner_(std::move(inner))
             , Names_(&names)
         {}
 
         template <size_t... Is>
         value_type MakeTuple(std::index_sequence<Is...>) const {
-            TResultRowParser& row = *Inner_;
+            TRowParser& row = *Inner_;
             return value_type{
-                NResultRangesDetail::TValueParserGetter<Args>::Get(row.ColumnParser((*Names_)[Is]))...
+                NRowRangesDetail::TValueParserGetter<Args>::Get(row.ColumnParser((*Names_)[Is]))...
             };
         }
 
-        TResultIterator Inner_;
+        TRowIterator Inner_;
         const TNames* Names_;
     };
 
-    TRangeColumns(const TRangeColumns&) = delete;
-    TRangeColumns(TRangeColumns&&) noexcept = default;
-    TRangeColumns& operator=(const TRangeColumns&) = delete;
-    TRangeColumns& operator=(TRangeColumns&&) noexcept = default;
+    TRowColumns(const TRowColumns&) = delete;
+    TRowColumns(TRowColumns&&) noexcept = default;
+    TRowColumns& operator=(const TRowColumns&) = delete;
+    TRowColumns& operator=(TRowColumns&&) noexcept = default;
 
     Iterator begin() {
         return Iterator(Range_.begin(), Names_);
     }
 
-    TResultIterEnd end() const noexcept {
-        return TResultIterEnd{};
+    TRowIterEnd end() const noexcept {
+        return TRowIterEnd{};
     }
 
 private:
-    TRangeColumns(TResultSetRange& range, TNames&& names)
+    TRowColumns(TRowRange& range, TNames&& names)
         : Range_(range)
         , Names_(std::move(names))
     {}
 
-    TResultSetRange& Range_;
+    TRowRange& Range_;
     TNames Names_;
 };
 
-namespace NResultRangesDetail {
+namespace NRowRangesDetail {
 
 template <size_t N, class It>
 std::array<std::string, N> BuildColumnNames(It first, It last) {
@@ -269,31 +272,31 @@ std::array<std::string, N> BuildColumnNames(It first, It last) {
     for (auto it = first; it != last; ++it) {
         if (i >= N) {
             throw std::invalid_argument(
-                "TResultSetRange::Get: too many column names for the requested types");
+                "TRowRange::Get: too many column names for the requested types");
         }
         names[i++] = std::string(*it);
     }
     if (i != N) {
         throw std::invalid_argument(
-            "TResultSetRange::Get: not enough column names for the requested types");
+            "TRowRange::Get: not enough column names for the requested types");
     }
     return names;
 }
 
-} // namespace NResultRangesDetail
+} // namespace NRowRangesDetail
 
 template <class... Args>
-TRangeColumns<Args...> TResultSetRange::Get(std::initializer_list<std::string_view> columns) {
-    return TRangeColumns<Args...>(
+TRowColumns<Args...> TRowRange::Get(std::initializer_list<std::string_view> columns) {
+    return TRowColumns<Args...>(
         *this,
-        NResultRangesDetail::BuildColumnNames<sizeof...(Args)>(columns.begin(), columns.end()));
+        NRowRangesDetail::BuildColumnNames<sizeof...(Args)>(columns.begin(), columns.end()));
 }
 
 template <class... Args, class StringIterable>
-TRangeColumns<Args...> TResultSetRange::Get(const StringIterable& columns) {
-    return TRangeColumns<Args...>(
+TRowColumns<Args...> TRowRange::Get(const StringIterable& columns) {
+    return TRowColumns<Args...>(
         *this,
-        NResultRangesDetail::BuildColumnNames<sizeof...(Args)>(std::begin(columns), std::end(columns)));
+        NRowRangesDetail::BuildColumnNames<sizeof...(Args)>(std::begin(columns), std::end(columns)));
 }
 
 } // namespace NYdb::inline Dev

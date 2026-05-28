@@ -10,12 +10,12 @@ ENDIF()
 FORK_SUBTESTS()
 
 SRCS(
-    ranges_ut.cpp
+    row_ranges_ut.cpp
 )
 
 PEERDIR(
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/client/result_ranges
+    ydb/public/sdk/cpp/src/client/row_ranges
 )
 
 END()

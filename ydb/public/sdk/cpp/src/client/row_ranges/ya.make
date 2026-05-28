@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    ranges.cpp
-    ranges_stream_drain.h
+    rows.cpp
+    rows_stream_drain.h
 )
 
 PEERDIR(

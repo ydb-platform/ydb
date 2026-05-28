@@ -1,11 +1,13 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/ranges.h>
-#include <ydb/public/sdk/cpp/src/client/result_ranges/ranges_stream_drain.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
+#include <ydb/public/sdk/cpp/src/client/row_ranges/rows_stream_drain.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/future.h>
+
+#include <util/generic/yexception.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -89,10 +91,10 @@ NTable::TDataQueryResult MakeDataQueryResult(std::vector<TResultSet>&& sets) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TResultSetRangeTest) {
+Y_UNIT_TEST_SUITE(TRowRangeTest) {
     Y_UNIT_TEST(EmptyDataQueryResultYieldsNoRows) {
         auto data = MakeDataQueryResult({});
-        TResultSetRange range(std::move(data));
+        TRowRange range(std::move(data));
         size_t count = 0;
         for (auto it = range.begin(); it != range.end(); ++it) {
             (void)it;
@@ -103,7 +105,7 @@ Y_UNIT_TEST_SUITE(TResultSetRangeTest) {
 
     Y_UNIT_TEST(SingleResultSetCtorIteratesRows) {
         auto rs = MakeSingleInt32ResultSet(7);
-        TResultSetRange range(std::move(rs));
+        TRowRange range(std::move(rs));
         int sum = 0;
         for (auto it = range.begin(); it != range.end(); ++it) {
             sum += static_cast<int>(it->ColumnParser("v").GetInt32());
@@ -111,18 +113,15 @@ Y_UNIT_TEST_SUITE(TResultSetRangeTest) {
         UNIT_ASSERT_VALUES_EQUAL(sum, 7);
     }
 
-    Y_UNIT_TEST(MultiSetDataQueryResultPreservesOrder) {
+    Y_UNIT_TEST(MultiSetDataQueryResultThrows) {
         std::vector<TResultSet> sets;
         sets.push_back(MakeSingleInt32ResultSet(1));
         sets.push_back(MakeSingleInt32ResultSet(2));
         sets.push_back(MakeSingleInt32ResultSet(3));
         auto data = MakeDataQueryResult(std::move(sets));
-        TResultSetRange range(std::move(data));
-        int sum = 0;
-        for (auto it = range.begin(); it != range.end(); ++it) {
-            sum += static_cast<int>(it->ColumnParser("v").GetInt32());
-        }
-        UNIT_ASSERT_VALUES_EQUAL(sum, 6);
+        UNIT_ASSERT_EXCEPTION(
+            TRowRange(std::move(data)),
+            yexception);
     }
 
     Y_UNIT_TEST(FailedDataQueryResultCtorThrows) {
@@ -134,23 +133,23 @@ Y_UNIT_TEST_SUITE(TResultSetRangeTest) {
             false,
             std::nullopt);
         UNIT_ASSERT_EXCEPTION(
-            TResultSetRange(std::move(data)),
-            TYdbErrorException);
+            TRowRange(std::move(data)),
+            TYdbRangeErrorException);
     }
 }
 
-Y_UNIT_TEST_SUITE(TResultSetRangeStreamDrainTest) {
+Y_UNIT_TEST_SUITE(TRowRangeStreamDrainTest) {
     Y_UNIT_TEST(DrainExecuteQueryIteratorSkipsStatsOnlyParts) {
         TMockStreamIterator<NQuery::TExecuteQueryPart> it;
         it.Push(NQuery::TExecuteQueryPart(OkStatus(), std::nullopt, std::nullopt));
         it.Push(NQuery::TExecuteQueryPart(OkStatus(), MakeSingleInt32ResultSet(11), 0, std::nullopt, std::nullopt));
         it.Push(NQuery::TExecuteQueryPart(EosStatus(), std::nullopt, std::nullopt));
 
-        auto rs = NYdb::NResultRangesDetail::DrainStreamIterator(it);
+        auto rs = NYdb::NRowRangesDetail::DrainStreamIterator(it);
         UNIT_ASSERT(rs.has_value());
         UNIT_ASSERT_VALUES_EQUAL(SumColumnV(*rs), 11);
 
-        auto after = NYdb::NResultRangesDetail::DrainStreamIterator(it);
+        auto after = NYdb::NRowRangesDetail::DrainStreamIterator(it);
         UNIT_ASSERT(!after.has_value());
     }
 
@@ -160,11 +159,11 @@ Y_UNIT_TEST_SUITE(TResultSetRangeStreamDrainTest) {
         it.Push(NTable::TScanQueryPart(OkStatus(), MakeSingleInt32ResultSet(22), std::nullopt, std::nullopt, std::nullopt));
         it.Push(NTable::TScanQueryPart(EosStatus()));
 
-        auto rs = NYdb::NResultRangesDetail::DrainStreamIterator(it);
+        auto rs = NYdb::NRowRangesDetail::DrainStreamIterator(it);
         UNIT_ASSERT(rs.has_value());
         UNIT_ASSERT_VALUES_EQUAL(SumColumnV(*rs), 22);
 
-        UNIT_ASSERT(!NYdb::NResultRangesDetail::DrainStreamIterator(it).has_value());
+        UNIT_ASSERT(!NYdb::NRowRangesDetail::DrainStreamIterator(it).has_value());
     }
 
     Y_UNIT_TEST(DrainReadTableIteratorReturnsPartThenEos) {
@@ -172,11 +171,33 @@ Y_UNIT_TEST_SUITE(TResultSetRangeStreamDrainTest) {
         it.Push(NTable::TReadTableResultPart(MakeSingleInt32ResultSet(33), OkStatus()));
         it.Push(NTable::TReadTableResultPart(MakeEmptyInt32SchemaResultSet(), EosStatus()));
 
-        auto rs = NYdb::NResultRangesDetail::DrainStreamIterator(it);
+        auto rs = NYdb::NRowRangesDetail::DrainStreamIterator(it);
         UNIT_ASSERT(rs.has_value());
         UNIT_ASSERT_VALUES_EQUAL(SumColumnV(*rs), 33);
 
-        UNIT_ASSERT(!NYdb::NResultRangesDetail::DrainStreamIterator(it).has_value());
+        UNIT_ASSERT(!NYdb::NRowRangesDetail::DrainStreamIterator(it).has_value());
+    }
+
+    Y_UNIT_TEST(ExecuteQueryStreamSameIndexPartsOk) {
+        TMockStreamIterator<NQuery::TExecuteQueryPart> it;
+        it.Push(NQuery::TExecuteQueryPart(OkStatus(), MakeSingleInt32ResultSet(1), 0, std::nullopt, std::nullopt));
+        it.Push(NQuery::TExecuteQueryPart(OkStatus(), MakeSingleInt32ResultSet(2), 0, std::nullopt, std::nullopt));
+        it.Push(NQuery::TExecuteQueryPart(EosStatus(), std::nullopt, std::nullopt));
+
+        int32_t sum = 0;
+        while (auto rs = NYdb::NRowRangesDetail::DrainStreamIterator(it)) {
+            sum += SumColumnV(*rs);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(sum, 3);
+    }
+
+    Y_UNIT_TEST(ExecuteQueryStreamNonZeroIndexThrows) {
+        TMockStreamIterator<NQuery::TExecuteQueryPart> it;
+        it.Push(NQuery::TExecuteQueryPart(OkStatus(), MakeSingleInt32ResultSet(1), 1, std::nullopt, std::nullopt));
+
+        UNIT_ASSERT_EXCEPTION(
+            NYdb::NRowRangesDetail::DrainStreamIterator(it),
+            yexception);
     }
 }
 
@@ -293,9 +314,9 @@ TResultSet MakeOptionalDateResultSet(const std::vector<std::optional<uint32_t>>&
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
+Y_UNIT_TEST_SUITE(TRowColumnsTest) {
     Y_UNIT_TEST(GetSingleInt32) {
-        TResultSetRange range(MakeSingleInt32ResultSet(7));
+        TRowRange range(MakeSingleInt32ResultSet(7));
         int32_t sum = 0;
         for (auto [v] : range.Get<int32_t>({"v"})) {
             sum += v;
@@ -305,7 +326,7 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
 
     Y_UNIT_TEST(GetTwoColumnsTuple) {
         auto rs = MakeIdNameResultSet({{1, "foo"}, {2, "bar"}, {3, "baz"}});
-        TResultSetRange range(std::move(rs));
+        TRowRange range(std::move(rs));
         std::vector<std::tuple<int32_t, std::string>> got;
         for (auto row : range.Get<int32_t, std::string>({"id", "name"})) {
             got.push_back(std::move(row));
@@ -321,7 +342,7 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
 
     Y_UNIT_TEST(GetOptional) {
         auto rs = MakeOptionalInt32ResultSet({std::nullopt, 42, std::nullopt, 7});
-        TResultSetRange range(std::move(rs));
+        TRowRange range(std::move(rs));
         std::vector<std::optional<int32_t>> got;
         for (auto [v] : range.Get<std::optional<int32_t>>({"v"})) {
             got.push_back(v);
@@ -335,7 +356,7 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
 
     Y_UNIT_TEST(GetAcceptsVectorOfNames) {
         auto rs = MakeIdNameResultSet({{10, "x"}, {20, "y"}});
-        TResultSetRange range(std::move(rs));
+        TRowRange range(std::move(rs));
         std::vector<std::string> names{"id", "name"};
         int32_t idSum = 0;
         std::string concat;
@@ -348,40 +369,34 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
     }
 
     Y_UNIT_TEST(GetTooFewNamesThrows) {
-        TResultSetRange range(MakeSingleInt32ResultSet(1));
+        TRowRange range(MakeSingleInt32ResultSet(1));
         UNIT_ASSERT_EXCEPTION(
             (range.Get<int32_t, int32_t>({"v"})),
             std::invalid_argument);
     }
 
     Y_UNIT_TEST(GetTooManyNamesThrows) {
-        TResultSetRange range(MakeSingleInt32ResultSet(1));
+        TRowRange range(MakeSingleInt32ResultSet(1));
         UNIT_ASSERT_EXCEPTION(
             (range.Get<int32_t>({"v", "extra"})),
             std::invalid_argument);
     }
 
-    Y_UNIT_TEST(GetIteratesAcrossMultipleResultSets) {
+    Y_UNIT_TEST(GetMultipleResultSetsThrows) {
         std::vector<TResultSet> sets;
         sets.push_back(MakeIdNameResultSet({{1, "a"}}));
         sets.push_back(MakeIdNameResultSet({{2, "b"}, {3, "c"}}));
         sets.push_back(MakeIdNameResultSet({{4, "d"}}));
         auto data = MakeDataQueryResult(std::move(sets));
-        TResultSetRange range(std::move(data));
-        int32_t idSum = 0;
-        std::string concat;
-        for (auto [id, n] : range.Get<int32_t, std::string>({"id", "name"})) {
-            idSum += id;
-            concat += n;
-        }
-        UNIT_ASSERT_VALUES_EQUAL(idSum, 1 + 2 + 3 + 4);
-        UNIT_ASSERT_VALUES_EQUAL(concat, "abcd");
+        UNIT_ASSERT_EXCEPTION(
+            TRowRange(std::move(data)),
+            yexception);
     }
 
     Y_UNIT_TEST(GetTInstantOnDateColumn) {
         // YDB Date is days since epoch; pick 2022-01-01 = 18993 days.
         constexpr uint32_t days = 18993;
-        TResultSetRange range(MakeSingleDateResultSet(days));
+        TRowRange range(MakeSingleDateResultSet(days));
         std::optional<TInstant> got;
         for (auto [d] : range.Get<TInstant>({"d"})) {
             got = d;
@@ -393,7 +408,7 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
     Y_UNIT_TEST(GetTInstantOnDatetimeColumn) {
         // YDB Datetime is seconds since epoch; pick 2022-01-01 00:00:00 UTC.
         constexpr uint32_t secs = 1640995200u;
-        TResultSetRange range(MakeSingleDatetimeResultSet(secs));
+        TRowRange range(MakeSingleDatetimeResultSet(secs));
         std::optional<TInstant> got;
         for (auto [d] : range.Get<TInstant>({"d"})) {
             got = d;
@@ -405,7 +420,7 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
     Y_UNIT_TEST(GetTInstantOnTimestampColumn) {
         // YDB Timestamp is microseconds since epoch.
         constexpr uint64_t micros = 1640995200000123ull;
-        TResultSetRange range(MakeSingleTimestampResultSet(micros));
+        TRowRange range(MakeSingleTimestampResultSet(micros));
         std::optional<TInstant> got;
         for (auto [d] : range.Get<TInstant>({"d"})) {
             got = d;
@@ -417,7 +432,7 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
     Y_UNIT_TEST(GetOptionalTInstantNullAndValue) {
         constexpr uint32_t days = 18993;
         auto rs = MakeOptionalDateResultSet({std::nullopt, days, std::nullopt});
-        TResultSetRange range(std::move(rs));
+        TRowRange range(std::move(rs));
         std::vector<std::optional<TInstant>> got;
         for (auto [d] : range.Get<std::optional<TInstant>>({"d"})) {
             got.push_back(d);
@@ -430,7 +445,7 @@ Y_UNIT_TEST_SUITE(TRangeColumnsTest) {
     }
 
     Y_UNIT_TEST(GetTInstantOnWrongTypeThrows) {
-        TResultSetRange range(MakeSingleInt32ResultSet(1));
+        TRowRange range(MakeSingleInt32ResultSet(1));
         UNIT_ASSERT_EXCEPTION(
             ([&]{
                 for (auto [d] : range.Get<TInstant>({"v"})) {

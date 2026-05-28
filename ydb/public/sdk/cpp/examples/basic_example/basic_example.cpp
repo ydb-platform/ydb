@@ -1,7 +1,7 @@
 #include "basic_example.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/ranges.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
 #include <util/string/cast.h>
 
 
@@ -339,7 +339,7 @@ void MultiStep(TQueryClient client) {
     })); // The end of the retried lambda
 
     std::cout << "> MultiStep:" << std::endl;
-    TResultSetRange range(std::move(*resultSet));
+    TRowRange range(std::move(*resultSet));
     for (auto [episodeId, seasonId, title, airDateDays] : range.Get<
             std::optional<uint64_t>,
             std::optional<uint64_t>,
@@ -423,7 +423,7 @@ void StreamQuerySelect(TQueryClient client) {
                                 .Build()
                                 .Build();
 
-        for (auto& parser : TResultSetRange(
+        for (auto& parser : TRowRange(
                 session.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).ExtractValueSync())) {
             std::cout << "Season" << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
                     << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
@@ -432,7 +432,7 @@ void StreamQuerySelect(TQueryClient client) {
                     << std::endl;
         }
         return TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
-    }, TRetryOperationSettings().CatchYdbExceptions(true)));
+    }));
 }
 
 

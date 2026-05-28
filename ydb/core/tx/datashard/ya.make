@@ -316,6 +316,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
+    physical_backup
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange

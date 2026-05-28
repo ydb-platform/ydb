@@ -105,7 +105,7 @@ jobs:
       pr_number_map: ${{ steps.set-branches.outputs.pr_number_map }}
     steps:
       - name: Checkout ${{ matrix.branch }}
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           sparse-checkout: |
             .github/config
@@ -299,7 +299,7 @@ jobs:
           fi
 
       - name: Checkout ${{ matrix.branch }}
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
 

@@ -698,6 +698,10 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     }
     LOG_ROW_DISPATCHER_DEBUG("Confirm StartPartitionSession with offset " << minOffset);
     event.Confirm(minOffset);
+    if (minOffset) {
+        // ensure we restart session if new client wants earlier offset
+        Self.LastMessageOffset = std::max(*minOffset, ui64{1}) - 1;
+    }
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {

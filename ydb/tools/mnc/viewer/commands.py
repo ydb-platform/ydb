@@ -1,27 +1,44 @@
 from textual.command import DiscoveryHit, Hit, Hits, Provider
 
 
-class ViewerCommands(Provider):
+class CommandProviderBase(Provider):
     def _commands(self) -> list[tuple[str, str, str]]:
-        return [
-            ("Open tab: MNC Config", "Open the MNC Config tab", "open_mnc_config"),
-            ("Close tab", "Close the current tab", "close_tab"),
-        ]
+        return []
+
+    def _get_command_callback(self, action: str):
+        if "(" in action:
+            return lambda: self.app.run_action(action)
+        return getattr(self.app, f"action_{action}")
 
     async def discover(self):
-        app = self.app
         for title, help_text, action in self._commands():
-            yield DiscoveryHit(title, getattr(app, f"action_{action}"), help=help_text)
+            yield DiscoveryHit(title, self._get_command_callback(action), help=help_text)
 
     async def search(self, query: str) -> Hits:
         matcher = self.matcher(query)
-        app = self.app
         for title, help_text, action in self._commands():
             score = matcher.match(title)
             if score > 0:
                 yield Hit(
                     score,
                     matcher.highlight(title),
-                    getattr(app, f"action_{action}"),
+                    self._get_command_callback(action),
                     help=help_text,
                 )
+
+
+class TabCommands(CommandProviderBase):
+    def _commands(self) -> list[tuple[str, str, str]]:
+        return [
+            (f"Open tab: {title}", description, f"show_tab('{tab_id}')")
+            for tab_id, title, description in self.app.tab_choices(opened_only=True)
+        ]
+
+
+class ViewerCommands(CommandProviderBase):
+    def _commands(self) -> list[tuple[str, str, str]]:
+        return [
+            ("Open tab: General", "Overview viewer and cluster state", "show_tab('general')"),
+            ("Open tab: MNC Config", "Read and edit MNC Config", "open_mnc_config"),
+            ("Close tab", "Close the current tab", "close_tab"),
+        ]

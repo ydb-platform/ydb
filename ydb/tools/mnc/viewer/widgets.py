@@ -10,13 +10,6 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, Label, ListItem, ListView, Static
 
 
-class TabListItem(ListItem):
-    def __init__(self, title: str, tab_id: str, active: bool) -> None:
-        self.tab_id = tab_id
-        prefix = "* " if active else "  "
-        super().__init__(Label(f"{prefix}{title}"))
-
-
 class OpenTabListItem(ListItem):
     def __init__(self, title: str, action: str) -> None:
         self.action = action
@@ -242,71 +235,6 @@ class PathPickerScreen(ModalScreen[Optional[str]]):
     async def action_toggle_directories_only(self) -> None:
         self._directories_only = not self._directories_only
         await self._refresh_suggestions()
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-
-class TabPickerScreen(ModalScreen[Optional[str]]):
-    CSS = """
-    TabPickerScreen {
-        align: center middle;
-    }
-
-    #tab-picker {
-        width: 48;
-        max-height: 20;
-        border: thick $background 80%;
-        background: $surface;
-        padding: 1 2;
-    }
-
-    #tab-picker-title {
-        height: 1;
-        margin-bottom: 1;
-        text-style: bold;
-    }
-
-    #tab-list {
-        height: 1fr;
-    }
-    """
-
-    BINDINGS = [
-        ("escape", "cancel", "Cancel"),
-    ]
-
-    def __init__(self, tabs: list[tuple[str, str]], active_tab: Optional[str]) -> None:
-        super().__init__()
-        self._tabs = tabs
-        self._active_tab = active_tab
-
-    def compose(self) -> ComposeResult:
-        initial_index = 0
-        for index, (tab_id, _title) in enumerate(self._tabs):
-            if tab_id == self._active_tab:
-                initial_index = index
-                break
-
-        yield Vertical(
-            Static("Tabs", id="tab-picker-title"),
-            ListView(
-                *[
-                    TabListItem(title, tab_id, tab_id == self._active_tab)
-                    for tab_id, title in self._tabs
-                ],
-                initial_index=initial_index,
-                id="tab-list",
-            ),
-            id="tab-picker",
-        )
-
-    def on_mount(self) -> None:
-        self.query_one("#tab-list", ListView).focus()
-
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if isinstance(event.item, TabListItem):
-            self.dismiss(event.item.tab_id)
 
     def action_cancel(self) -> None:
         self.dismiss(None)

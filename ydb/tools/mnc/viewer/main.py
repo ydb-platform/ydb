@@ -5,23 +5,22 @@ import yaml
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.command import CommandPalette
 from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Input, ListView, TabbedContent, TabPane, Tabs
 
-from ydb.tools.mnc.viewer.commands import ViewerCommands
+from ydb.tools.mnc.viewer.commands import TabCommands, ViewerCommands
 from ydb.tools.mnc.viewer.widgets import (
     ConfigFieldItem,
     MncConfigForm,
     OpenTabListItem,
     PathPickerScreen,
-    TabPickerScreen,
 )
 
 
 MNC_CONFIG_PATH = os.path.join(os.environ.get("HOME", "/"), ".mnc", "mnc.yaml")
 DEFAULT_GIT_YDB_ROOT = os.path.join(os.environ.get("HOME", "/"), "ydbwork", "ydb")
-
 
 class Viewer(App):
     COMMANDS = App.COMMANDS | {ViewerCommands}
@@ -36,9 +35,15 @@ class Viewer(App):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._created_tabs: set[str] = set()
-        self._tab_order = ["general"]
+        self._available_tab_order = ["general", "mnc-config"]
+        self._opened_tab_order = ["general"]
         self._tab_titles = {
-            "general": "General",
+            "general": "Overview",
+            "mnc-config": "MNC Config",
+        }
+        self._tab_descriptions = {
+            "general": "Overview viewer and cluster state",
+            "mnc-config": "Read and edit MNC Config",
         }
         self._editing_config_field: Optional[ConfigFieldItem] = None
         self._mnc_config = self._load_mnc_config()
@@ -106,17 +111,24 @@ class Viewer(App):
         with open(MNC_CONFIG_PATH, "w") as file:
             yaml.safe_dump(self._mnc_config, file)
 
-    def _tab_choices(self) -> list[tuple[str, str]]:
-        return [(tab_id, self._tab_titles[tab_id]) for tab_id in self._tab_order]
+    def _tab_choices(self, opened_only: bool = False) -> list[tuple[str, str, str]]:
+        tab_order = self._opened_tab_order if opened_only else self._available_tab_order
+        return [
+            (tab_id, self._tab_titles[tab_id], self._tab_descriptions[tab_id])
+            for tab_id in tab_order
+        ]
+
+    def tab_choices(self, opened_only: bool = False) -> list[tuple[str, str, str]]:
+        return self._tab_choices(opened_only=opened_only)
 
     def _move_tab(self, step: int) -> None:
         tabs = self.query_one("#tabs", TabbedContent)
-        if not self._tab_order:
+        if not self._opened_tab_order:
             return
 
         active = tabs.active
-        current_index = self._tab_order.index(active) if active in self._tab_order else 0
-        tabs.active = self._tab_order[(current_index + step) % len(self._tab_order)]
+        current_index = self._opened_tab_order.index(active) if active in self._opened_tab_order else 0
+        tabs.active = self._opened_tab_order[(current_index + step) % len(self._opened_tab_order)]
         
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         if self._editing_config_field is not None:
@@ -135,12 +147,14 @@ class Viewer(App):
         self.call_after_refresh(self._focus_active_tab_content)
 
     def action_open_tab_picker(self) -> None:
-        def show_selected_tab(tab_id: Optional[str]) -> None:
-            if tab_id is not None:
-                self.action_show_tab(tab_id)
-
-        tabs = self.query_one("#tabs", TabbedContent)
-        self.push_screen(TabPickerScreen(self._tab_choices(), tabs.active), show_selected_tab)
+        if not CommandPalette.is_open(self):
+            self.push_screen(
+                CommandPalette(
+                    providers={TabCommands},
+                    placeholder="Open tab...",
+                    id="--tab-palette",
+                )
+            )
 
     def action_previous_tab(self) -> None:
         self._move_tab(-1)
@@ -150,13 +164,12 @@ class Viewer(App):
 
     async def _open_tab(self, tab_id: str, title: str, content: Widget) -> None:
         tabs = self.query_one("#tabs", TabbedContent)
-        if tab_id in self._tab_order:
+        if tab_id in self._opened_tab_order:
             tabs.active = tab_id
             return
 
         self._created_tabs.add(tab_id)
-        self._tab_order.append(tab_id)
-        self._tab_titles[tab_id] = title
+        self._opened_tab_order.append(tab_id)
 
         await tabs.add_pane(TabPane(title, content, id=tab_id))
         self._disable_tab_header_focus()
@@ -166,7 +179,7 @@ class Viewer(App):
     async def action_open_mnc_config(self) -> None:
         await self._open_tab(
             "mnc-config",
-            "MNC Config",
+            self._tab_titles["mnc-config"],
             MncConfigForm(self._mnc_config, DEFAULT_GIT_YDB_ROOT),
         )
 
@@ -247,10 +260,13 @@ class Viewer(App):
         tabs = self.query_one("#tabs", TabbedContent)
         if tabs.active in self._created_tabs:
             tab_id = tabs.active
+            tab_index = self._opened_tab_order.index(tab_id)
             self._created_tabs.remove(tab_id)
-            self._tab_order.remove(tab_id)
-            self._tab_titles.pop(tab_id)
+            self._opened_tab_order.remove(tab_id)
             await tabs.remove_pane(tab_id)
+            next_index = min(tab_index, len(self._opened_tab_order) - 1)
+            if next_index >= 0:
+                tabs.active = self._opened_tab_order[next_index]
             self.refresh_bindings()
 
 

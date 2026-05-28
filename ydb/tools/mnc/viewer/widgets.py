@@ -5,7 +5,7 @@ from typing import Optional
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import Key
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, ListItem, ListView, Static
@@ -266,6 +266,27 @@ class ConfigCandidateItem(ListItem):
         )
 
 
+class ClusterConfigDetails(VerticalScroll, inherit_bindings=False):
+    def compose(self) -> ComposeResult:
+        yield Static("", id="cluster-config-details-content", markup=False)
+
+    def update_content(self, content: str) -> None:
+        self.query_one("#cluster-config-details-content", Static).update(content)
+        self.scroll_to(y=0, animate=False, force=True)
+
+    def key_up(self, event: Key) -> None:
+        self.scroll_up(animate=False, force=True)
+        event.stop()
+
+    def key_down(self, event: Key) -> None:
+        self.scroll_down(animate=False, force=True)
+        event.stop()
+
+    def key_left(self, event: Key) -> None:
+        self.screen.query_one("#cluster-configs", ListView).focus()
+        event.stop()
+
+
 class ClusterConfigPane(Horizontal):
     DEFAULT_CSS = """
     ClusterConfigPane {
@@ -333,6 +354,15 @@ class ClusterConfigPane(Horizontal):
     #cluster-config-details:dark {
         background: $panel-darken-1;
     }
+
+    #cluster-config-details:focus {
+        background: $primary-background;
+    }
+
+    #cluster-config-details-content {
+        height: auto;
+        width: 1fr;
+    }
     """
 
     def __init__(self, candidates: list[ConfigCandidate]) -> None:
@@ -343,7 +373,7 @@ class ClusterConfigPane(Horizontal):
     def compose(self) -> ComposeResult:
         with Vertical(id="cluster-config-left"):
             yield ListView(id="cluster-configs")
-        yield Static("", id="cluster-config-details")
+        yield ClusterConfigDetails(id="cluster-config-details")
 
     def on_mount(self) -> None:
         self._refresh()
@@ -360,6 +390,11 @@ class ClusterConfigPane(Horizontal):
             self._selected_candidate = event.item.candidate
             self._show_details(event.item.candidate)
 
+    def on_key(self, event: Key) -> None:
+        if event.key == "right" and self.screen.focused is self.query_one("#cluster-configs", ListView):
+            self.query_one("#cluster-config-details", ClusterConfigDetails).focus()
+            event.stop()
+
     def _refresh(self) -> None:
         list_view = self.query_one("#cluster-configs", ListView)
         list_view.clear()
@@ -368,7 +403,7 @@ class ClusterConfigPane(Horizontal):
         if self._candidates:
             self._show_details(self._candidates[0])
         else:
-            self.query_one("#cluster-config-details", Static).update("No configs found")
+            self.query_one("#cluster-config-details", ClusterConfigDetails).update_content("No configs found")
 
     def _show_details(self, candidate: ConfigCandidate) -> None:
         try:
@@ -377,7 +412,7 @@ class ClusterConfigPane(Horizontal):
         except Exception as error:
             content = f"Failed to read config: {error}"
         selected = " [selected]" if candidate == self._selected_candidate else ""
-        self.query_one("#cluster-config-details", Static).update(
+        self.query_one("#cluster-config-details", ClusterConfigDetails).update_content(
             f"{candidate.name}{selected}\n{candidate.path}\n\n{content}"
         )
 

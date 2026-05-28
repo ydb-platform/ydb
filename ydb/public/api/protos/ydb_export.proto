@@ -155,7 +155,7 @@ message ExportToS3Settings {
     // - Patterns are matched against the object path relative to the export's source_path.
     // - Object is excluded from export operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
-    
+
     message CsvSettings {
     }
 

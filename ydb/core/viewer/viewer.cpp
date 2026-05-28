@@ -1237,6 +1237,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
         flag = NKikimrViewer::EFlag::Yellow;
         break;
     case NKikimrWhiteboard::TTabletStateInfo::Deleted:
+        break;
     case NKikimrWhiteboard::TTabletStateInfo::Active:
         flag = NKikimrViewer::EFlag::Green;
         break;

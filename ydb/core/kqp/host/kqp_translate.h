@@ -164,6 +164,11 @@ public:
         return IsAmbiguityError;
     }
 
+    TKqpTranslationSettingsBuilder& SetValidateViewStatement(bool value) {
+        ValidateViewStatement = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     ui16 KqpYqlSyntaxVersion = 1;
@@ -184,6 +189,7 @@ private:
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;
+    bool ValidateViewStatement = true;
 };
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);

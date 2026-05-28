@@ -320,11 +320,18 @@ namespace NActors {
                 }
             }
         } else if (event.Buffer) {
+            auto skipEmptyRopeChunks = [](auto& iter) {
+                while (iter.Valid() && !iter.ContiguousSize()) {
+                    iter.AdvanceToNextContiguousBlock();
+                }
+            };
+            skipEmptyRopeChunks(Iter);
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
                 addChunk(obuf, numb, true);
                 Iter += numb;
+                skipEmptyRopeChunks(Iter);
             }
             complete = !Iter.Valid();
         } else {

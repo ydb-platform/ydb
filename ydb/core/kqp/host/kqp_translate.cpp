@@ -297,6 +297,8 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     settings.ApplicationName = ApplicationName;
     settings.GUCSettings = GUCSettings;
 
+    settings.ValidateViewStatement = ValidateViewStatement;
+
     return settings;
 }
 

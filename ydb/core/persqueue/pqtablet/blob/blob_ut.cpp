@@ -152,14 +152,14 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 9u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 3u);
 
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(5, 0), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(8, 0), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(5, 0).BlobIdx, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(8, 0).BlobIdx, 2u);
 
         // Offset inside a batched slot is not a valid message boundary.
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(3, 0), Max<ui32>());
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0), Max<ui32>());
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 1), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(3, 0).BlobIdx, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0).BlobIdx, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 1).BlobIdx, Max<ui32>());
     }
 
     Y_UNIT_TEST(BatchFindPosWithBatchSizeNonZeroStart) {
@@ -170,9 +170,9 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             TString("src"), 1, TString("data"), TMaybe<TPartData>(),
             ts, ts, 0, "", "", 5));
 
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0), Max<ui32>());
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(10, 0), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(15, 0), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0).BlobIdx, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(10, 0).BlobIdx, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(15, 0).BlobIdx, Max<ui32>());
     }
 
     Y_UNIT_TEST(BatchFindPosMultipart) {
@@ -194,11 +194,11 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             ts, ts, 0, "", ""));
 
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 1), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 2), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), 3u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 3), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 1).BlobIdx, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 2).BlobIdx, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 3).BlobIdx, Max<ui32>());
     }
 
     Y_UNIT_TEST(BatchFindPosSurvivesPackUnpack) {
@@ -209,15 +209,15 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             TString("src"), 1, TString("a"), TMaybe<TPartData>(),
             ts, ts, 0, "", "", 5));
 
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, Max<ui32>());
 
         batch.Pack();
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].BatchMessageCount, 5u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, Max<ui32>());
     }
 }
 

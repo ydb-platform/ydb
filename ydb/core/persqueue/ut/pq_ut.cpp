@@ -251,6 +251,14 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
         {{.SeqNo = 2, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
         dataSize);
 
+    readSettings.Offset = batchCount + 1;
+    readSettings.Count = 1;
+    const auto readResult2FromMiddle = CmdReadAndGetResult(readSettings, tc);
+    AssertBatchedReadResults(
+        readResult2FromMiddle,
+        {{.SeqNo = 2, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
+        dataSize);
+
     readSettings.Offset = batchCount + 3;
     readSettings.Count = 1;
     const auto readResult3 = CmdReadAndGetResult(readSettings, tc);

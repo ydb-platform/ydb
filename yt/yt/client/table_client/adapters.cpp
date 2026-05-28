@@ -218,31 +218,48 @@ void PipeReaderToWriter(
 void PipeReaderToWriterByBatches(
     const IRowBatchReaderPtr& reader,
     const ISchemalessFormatWriterPtr& writer,
-    TRowBatchReadOptions options,
-    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater,
-    TDuration pipeDelay)
+    const TPipeReaderToWriterByBatchesOptions& options)
 {
+    auto readOptions = options.StartingOptions;
+
+    auto wrapReaderError = [&] (TError error) -> TError {
+        if (options.ReaderErrorWrapper) {
+            return options.ReaderErrorWrapper(std::move(error));
+        }
+        return error;
+    };
+
     try {
         auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
-        for (bool isFirstBatch = true; auto batch = reader->Read(options); isFirstBatch = false) {
+        auto readBatch = [&] {
+            try {
+                return reader->Read(readOptions);
+            } catch (const std::exception& ex) {
+                THROW_ERROR wrapReaderError(TError(ex));
+            }
+        };
+
+        for (bool isFirstBatch = true; auto batch = readBatch(); isFirstBatch = false) {
             yielder.TryYield();
 
             if (batch->IsEmpty()) {
-                WaitFor(reader->GetReadyEvent())
-                    .ThrowOnError();
+                auto error = WaitFor(reader->GetReadyEvent());
+                if (!error.IsOK()) {
+                    THROW_ERROR wrapReaderError(std::move(error));
+                }
                 continue;
             }
 
             auto rowsRead = batch->GetRowCount();
 
-            if (pipeDelay != TDuration::Zero()) {
-                TDelayedExecutor::WaitForDuration(pipeDelay);
+            if (options.PipeDelay != TDuration::Zero()) {
+                TDelayedExecutor::WaitForDuration(options.PipeDelay);
             }
 
             TWallTimer timer(/*start*/ false);
 
-            if (optionsUpdater) {
+            if (options.OptionsUpdater) {
                 timer.Start();
             }
 
@@ -251,9 +268,9 @@ void PipeReaderToWriterByBatches(
                     .ThrowOnError();
             }
 
-            if (optionsUpdater && !isFirstBatch) {
-                options.MaxRowsPerRead = rowsRead;
-                optionsUpdater(&options, timer.GetElapsedTime());
+            if (options.OptionsUpdater && !isFirstBatch) {
+                readOptions.MaxRowsPerRead = rowsRead;
+                options.OptionsUpdater(&readOptions, timer.GetElapsedTime());
             }
         }
 

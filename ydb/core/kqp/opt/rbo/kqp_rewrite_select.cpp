@@ -1117,25 +1117,24 @@ bool HasRollup(const TVector<TVector<TVector<TString>>>& groupBySets) {
 TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, bool pgSyntax) {
 
-    auto sublinks = FindNodes(node, [](const TExprNode::TPtr& node) {
-        if (node->IsCallable("YqlSubLink") || node->IsCallable("PgSubLink")) {
-            return true;
-        } else {
-            return false;
-        }
-    });
+    auto subqueryTypes = SaveSubqueryTypes(node);
+    auto sublinks = FindSublinks(node);
 
     if (sublinks.empty()) {
         return node;
     }
     
     while (sublinks.size()) {
-        auto& sublink = sublinks[0];
+        auto& sublink = sublinks[0].first;
+        auto& subqueryId = sublinks[0].second;
+        auto subqueryType = subqueryTypes.at(subqueryId);
 
         TNodeOnNodeOwnedMap nodeReplacementMap;
         TExprNode::TPtr newSublink;
 
-        auto subquery = RewriteSelect(sublink->ChildPtr(4), ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, pgSyntax, false);
+        auto subquery = sublink->ChildPtr(4);
+        SetAllSubqueryTypes(subquery, subqueryId, subqueryTypes);
+        auto subquery = RewriteSelect(subquery, ctx, typeCtx, kqpCtx, uniqueSourceIdCounter, pgSyntax, false);
 
         if (sublink->Child(0)->Content() == "expr") {
             // clang-format off
@@ -1171,13 +1170,7 @@ TExprNode::TPtr RewriteSublinks(TExprNode::TPtr& node, TExprContext& ctx, const 
         nodes = ctx.ReplaceNodes<true>(std::move(nodes),nodeReplacementMap);
         node = nodes[0];
 
-        sublinks = FindNodes(node, [](const TExprNode::TPtr& node) {
-            if (node->IsCallable("YqlSubLink") || node->IsCallable("PgSubLink")) {
-                return true;
-            } else {
-                return false;
-            }
-        });
+        sublinks = FindSublinks(node);
     }
 
     return node;

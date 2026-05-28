@@ -28,6 +28,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/docapi
+    ydb/core/kqp/expr_nodes
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/query_data
     ydb/core/protos
@@ -36,11 +37,13 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/ydb_issue/proto
+    ydb/library/yql/dq/constraints
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/providers/dq/expr_nodes
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/metadata/optimization
+    yql/essentials/core
     yql/essentials/core/expr_nodes
     yql/essentials/core/services
     yql/essentials/core/peephole_opt

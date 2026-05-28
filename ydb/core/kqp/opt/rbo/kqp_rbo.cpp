@@ -8,6 +8,13 @@ namespace NKqp {
 
 namespace {
 
+bool CanNormalizeAfterStage(const TString& stageName) {
+    return stageName != "Assign physical stages"
+        && stageName != "Optimize physical stages"
+        && stageName != "Narrow by liveness"
+        && stageName != "Hash function propagation";
+}
+
 void ValidateNoDuplicateOutputIUs(TOpRoot& root) {
     for (const auto& iter : root) {
         THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
@@ -139,8 +146,10 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
         stage->RunStage(root, rboCtx);
-        NormalizePlanOutputIUs(root, ctx);
-        root.ComputeParents();
+        if (CanNormalizeAfterStage(stage->StageName)) {
+            NormalizePlanOutputIUs(root, ctx);
+            root.ComputeParents();
+        }
         ValidateNoDuplicateOutputIUs(root);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);

@@ -157,6 +157,30 @@ void NormalizeJoin(const TIntrusivePtr<TOpJoin>& join, TExprContext& ctx, TPlanP
     ValidateUniqueOutputIUs(join, ctx);
 }
 
+void NormalizeUnionAll(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprContext& ctx, TPlanProps& props) {
+    const auto leftOutput = unionAll->GetLeftInput()->GetOutputIUs();
+    const auto rightOutput = unionAll->GetRightInput()->GetOutputIUs();
+    Y_ENSURE(leftOutput.size() == rightOutput.size(),
+        "UnionAll inputs have different column counts: " << leftOutput.size() << " vs " << rightOutput.size());
+
+    if (leftOutput == rightOutput) {
+        ValidateUniqueOutputIUs(unionAll, ctx);
+        return;
+    }
+
+    TVector<TMapElement> mapElements;
+    mapElements.reserve(leftOutput.size());
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
+    rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
+    for (size_t i = 0; i < leftOutput.size(); ++i) {
+        const auto& source = rightOutputSet.contains(leftOutput[i]) ? leftOutput[i] : rightOutput[i];
+        mapElements.emplace_back(leftOutput[i], source, unionAll->Pos, &ctx, &props);
+    }
+
+    unionAll->GetRightInput() = MakeIntrusive<TOpMap>(unionAll->GetRightInput(), unionAll->Pos, mapElements);
+    ValidateUniqueOutputIUs(unionAll, ctx);
+}
+
 /**
  * Computes dependent variables and updates the plan
  */
@@ -244,6 +268,8 @@ void NormalizePlanOutputIUs(TOpRoot& root, TExprContext& ctx) {
             NormalizeMap(CastOperator<TOpMap>(iter.Current), ctx, root.PlanProps);
         } else if (iter.Current->Kind == EOperator::Join) {
             NormalizeJoin(CastOperator<TOpJoin>(iter.Current), ctx, root.PlanProps);
+        } else if (iter.Current->Kind == EOperator::UnionAll) {
+            NormalizeUnionAll(CastOperator<TOpUnionAll>(iter.Current), ctx, root.PlanProps);
         } else {
             ValidateUniqueOutputIUs(iter.Current, ctx);
         }

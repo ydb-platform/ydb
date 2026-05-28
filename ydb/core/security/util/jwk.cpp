@@ -318,6 +318,7 @@ std::optional<std::string> GetPublicKeyFromX5C(const TJWK& jwk) {
     }
 
     // TODO(vlad-serikov): validate certificate chain if possible
+    // TODO(vlad-serikov): validate certificate key algorithm base on kty
 
     const auto publicKey = GetCertificatePublicKey(keyCert, ECertificateFormat::DER);
     if (publicKey.empty()) {

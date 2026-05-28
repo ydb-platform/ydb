@@ -130,29 +130,24 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
 
     // RFC 7517 Section 4.4 — "alg" (Algorithm) Parameter
 
-    Y_UNIT_TEST(AlgNone) {
+    Y_UNIT_TEST(AlgNoneRejected) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "none"})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->Algorithm.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::NONE);
+        UNIT_ASSERT(!jwk.has_value());
     }
 
-    Y_UNIT_TEST(AlgHS256) {
+    Y_UNIT_TEST(AlgHS256Rejected) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "HS256"})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::HS256);
+        UNIT_ASSERT(!jwk.has_value());
     }
 
-    Y_UNIT_TEST(AlgHS384) {
+    Y_UNIT_TEST(AlgHS384Rejected) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "HS384"})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::HS384);
+        UNIT_ASSERT(!jwk.has_value());
     }
 
-    Y_UNIT_TEST(AlgHS512) {
+    Y_UNIT_TEST(AlgHS512Rejected) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "HS512"})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), TAlg::HS512);
+        UNIT_ASSERT(!jwk.has_value());
     }
 
     Y_UNIT_TEST(AlgRS256) {
@@ -215,10 +210,29 @@ Y_UNIT_TEST_SUITE(TParseJWKTest) {
         UNIT_ASSERT(!jwk->Algorithm.has_value());
     }
 
-    Y_UNIT_TEST(AlgUnknown) {
+    Y_UNIT_TEST(AlgUnknownRejected) {
         const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "UNKNOWN"})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(!jwk->Algorithm.has_value());
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(AlgNotStringRejected) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": 123})"));
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(AlgRSAWithECAlgorithmRejected) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "RSA", "alg": "ES256"})"));
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(AlgECWithRSAAlgorithmRejected) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "EC", "alg": "RS256"})"));
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(AlgECWithPSAlgorithmRejected) {
+        const auto jwk = ParseJWK(ParseJson(R"({"kty": "EC", "alg": "PS256"})"));
+        UNIT_ASSERT(!jwk.has_value());
     }
 
     // RFC 7517 Section 4.5 — "kid" (Key ID) Parameter
@@ -418,7 +432,7 @@ Y_UNIT_TEST_SUITE(TParseJWKSetTest) {
         UNIT_ASSERT(!jwkSet.has_value());
     }
 
-    Y_UNIT_TEST(InvalidKeyFailsParsing) {
+    Y_UNIT_TEST(InvalidKeyIgnored) {
         const auto jwkSet = ParseJWKSet(ParseJson(R"({
             "keys": [
                 {"kty": "RSA", "kid": "valid"},
@@ -426,7 +440,12 @@ Y_UNIT_TEST_SUITE(TParseJWKSetTest) {
                 {"kty": "EC", "kid": "also-valid"}
             ]
         })"));
-        UNIT_ASSERT(!jwkSet.has_value());
+        UNIT_ASSERT(jwkSet.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 2);
+        UNIT_ASSERT_EQUAL(jwkSet->Keys[0].Type, TKeyType::RSA);
+        UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[0].KeyId, "valid");
+        UNIT_ASSERT_EQUAL(jwkSet->Keys[1].Type, TKeyType::EC);
+        UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys[1].KeyId, "also-valid");
     }
 
 }
@@ -439,7 +458,6 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
               {
                 "kid": "bDn9Wp5nJoyppnjEWdjhfpK6nCLmBMHZxbVjcxA33tI",
                 "kty": "RSA",
-                "alg": "RS256",
                 "x5c": [
                   "MIICozCCAYsCBgGeOZ43AjANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPGH/axeTkeHg0sUq/M6ut+YoKG2V77o8F+Nq0PWQO+EQLzm8v/hGVJhizULQYHfVBhPIyzejLYDvcUtNWXwa5Mos2vVcA5SrtZWsikjKOJOhpNo0l3qYvq6xGltyLX+yB4slIT6SYSm1/rOzW2XjYP0GI8eJYGw+kVxZvB3I15Q29EaShULNCUnDltaOEPVI6gV8h7i0Okjhosc5G/rij2z29xwqpFYs+DnzWMiJHvdLValnuWy/8fDNraaBIopxE3sDOMTMkqBzM/wxPbDpRygIdv1FWfvBnMrnYKPumcYRTsRxBQBlcbSCEgvvkjJ3DTTxoVIAOOgbzsFNjZm3usCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAoeb91xEPgnBtSmOuVKUCGER0hXJlT1iRCMyxzb2uA/IoT//GGGOCUhlt2wKkOHR8NZS6QFzBO0/tB1t9/AXORjJyme8H1Xg6+1EwpzwBO2+Om6iJsNnga0eLL0xh9UvIciQzwVF6rSS6wSqxvVaozjMHD7b0CfI7Kezdz3sJKT1TmYA9xVcdVyTyxRU4JjGrLtvKGqjgywXlzCKKkPpcoUtMSKVzNIgN92U/v/47Y+cFAGVZ7k4mIuGbCRe4gxgK39tYuyAoAKNxDzp5qAQ3Pbs41pojRNEtetsOuR57sN/7GIlLkjhoOFzgpZ/ZZ6bdtYsqbPEKzS/sVz6JEhFsvA=="
                 ],
@@ -449,7 +467,6 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
               {
                 "kid": "8CZLx-P9fm6B2O1u7y_lYVclluzc0vustvRYtkepOxw",
                 "kty": "RSA",
-                "alg": "RSA-OAEP",
                 "x5c": [
                   "MIICozCCAYsCBgGeOZ43ujANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAM4m+v0v2JDLLSh9O5ElG9wFfb3j5gF+AAV3YNzteU8DsHBxn5IzlV7GUnpwsDe7Kq2jQl6RzmW8N4PuZROPhUSf75Qj+YD94faaFJ62ef4b74ovnU5lh0K6ypoACsSSPegTfeiAE3FDuxs5NQHdoGBu39jDWDLu7ojVk/lxbnjDpRTMwvZ/RxO4JgvUPnq69cza0FZAHQQjBdCrzrlAcruZDnJ9zyPeRTrsQu7w/xXqHmY5FALNDYrp+QIcSpBRbTOIQM9Ml8A9c8EJI6x19oo6aL98eWJUrHnkbyX6hmXSrJHGHzrCIMrQPdWvHV+APe8gJ0eX6UDeAfWI9UuiWPMCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAAMfKVQ9sc3kEKNSKcA6bKCRX1wqSHyHbAM1NnKaYXU7sWJQDhdpoPdLAFyVU9i9EBpP+3GpFkwrkTBQhE6f76ZMmRjz4t33f81FZquv5UbkQA90ULhzCpiUt6DzGrZnciZ1VvLcqn/sc88tjIKimN+12fPRpP9AXs+wvfSeT4NfsfzS7ccUSllFS/28p3Y0Z1S8zr7a/Nikhua2yfmExVzR6AeFBtzhXk516z4Dd6e9nejMcP9Ua13wG1goyduj52E3ddTySoiMWSyfwU1dt1k1THDY/OUneJ8Ah0A85yuzfjXz9ntmeuXOpd3DACf/nP+gwuE/0SzclCgDcjvfDMw=="
                 ],

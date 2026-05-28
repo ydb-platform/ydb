@@ -7,12 +7,45 @@
 #include <openssl/sha.h>
 
 #include <array>
+#include <string_view>
 
 namespace NKikimr::NSecurity {
 
 namespace {
 
-std::optional<std::string> ParseStr(const NJson::TJsonValue& jwk, const std::string& name) {
+static constexpr std::string_view KTY = "kty";
+static constexpr std::string_view KTY_RSA = "RSA";
+static constexpr std::string_view KTY_EC = "EC";
+static constexpr std::string_view USE = "use";
+static constexpr std::string_view USE_SIG = "sig";
+static constexpr std::string_view USE_ENC = "enc";
+static constexpr std::string_view KEY_OPS = "key_ops";
+static constexpr std::string_view KEY_OP_SIGN = "sign";
+static constexpr std::string_view KEY_OP_VERIFY = "verify";
+static constexpr std::string_view KEY_OP_ENCRYPT = "encrypt";
+static constexpr std::string_view KEY_OP_DECRYPT = "decrypt";
+static constexpr std::string_view KEY_OP_WRAP_KEY = "wrapKey";
+static constexpr std::string_view KEY_OP_UNWRAP_KEY = "unwrapKey";
+static constexpr std::string_view KEY_OP_DERIVE_KEY = "deriveKey";
+static constexpr std::string_view KEY_OP_DERIVE_BITS = "deriveBits";
+static constexpr std::string_view ALG = "alg";
+static constexpr std::string_view ALG_RS256 = "RS256";
+static constexpr std::string_view ALG_RS384 = "RS384";
+static constexpr std::string_view ALG_RS512 = "RS512";
+static constexpr std::string_view ALG_ES256 = "ES256";
+static constexpr std::string_view ALG_ES384 = "ES384";
+static constexpr std::string_view ALG_ES512 = "ES512";
+static constexpr std::string_view ALG_PS256 = "PS256";
+static constexpr std::string_view ALG_PS384 = "PS384";
+static constexpr std::string_view ALG_PS512 = "PS512";
+static constexpr std::string_view KID = "kid";
+static constexpr std::string_view X5U = "x5u";
+static constexpr std::string_view X5C = "x5c";
+static constexpr std::string_view X5T = "x5t";
+static constexpr std::string_view X5T_S256 = "x5t#S256";
+static constexpr std::string_view KEYS = "keys";
+
+std::optional<std::string> ParseStr(const NJson::TJsonValue& jwk, const std::string_view name) {
     if (!jwk.Has(name) || !jwk[name].IsString()) {
         return std::nullopt;
     }
@@ -21,14 +54,14 @@ std::optional<std::string> ParseStr(const NJson::TJsonValue& jwk, const std::str
 
 // The only MUST parameter
 std::optional<TJWK> ParseKeyType(const NJson::TJsonValue& jwk) {
-    const auto kty = ParseStr(jwk, "kty");
+    const auto kty = ParseStr(jwk, KTY);
     if (!kty.has_value()) {
         return std::nullopt;
     }
 
-    if (kty.value() == "RSA") {
+    if (kty.value() == KTY_RSA) {
         return TJWK(TKeyType::RSA);
-    } else if (kty.value() == "EC") {
+    } else if (kty.value() == KTY_EC) {
         return TJWK(TKeyType::EC);
     } else {
         return std::nullopt;
@@ -36,14 +69,14 @@ std::optional<TJWK> ParseKeyType(const NJson::TJsonValue& jwk) {
 }
 
 std::optional<TUsage> ParseUsage(const NJson::TJsonValue& jwk) {
-    const auto usage = ParseStr(jwk, "use");
+    const auto usage = ParseStr(jwk, USE);
     if (!usage.has_value()) {
         return std::nullopt;
     }
 
-    if (usage.value() == "sig") {
+    if (usage.value() == USE_SIG) {
         return TUsage::SIG;
-    } else if (usage.value() == "enc") {
+    } else if (usage.value() == USE_ENC) {
         return TUsage::ENC;
     } else {
         return std::nullopt;
@@ -51,8 +84,6 @@ std::optional<TUsage> ParseUsage(const NJson::TJsonValue& jwk) {
 }
 
 std::vector<TKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
-    static constexpr TStringBuf KEY_OPS = "key_ops";
-
     if (!jwk.Has(KEY_OPS) || !jwk[KEY_OPS].IsArray()) {
         return {};
     }
@@ -65,21 +96,21 @@ std::vector<TKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
         }
 
         auto keyOp = op.GetString();
-        if (keyOp == "sign") {
+        if (keyOp == KEY_OP_SIGN) {
             keyOps.push_back(TKeyOps::SIGN);
-        } else if (keyOp == "verify") {
+        } else if (keyOp == KEY_OP_VERIFY) {
             keyOps.push_back(TKeyOps::VERIFY);
-        } else if (keyOp == "encrypt") {
+        } else if (keyOp == KEY_OP_ENCRYPT) {
             keyOps.push_back(TKeyOps::ENCRYPT);
-        } else if (keyOp == "decrypt") {
+        } else if (keyOp == KEY_OP_DECRYPT) {
             keyOps.push_back(TKeyOps::DECRYPT);
-        } else if (keyOp == "wrapKey") {
+        } else if (keyOp == KEY_OP_WRAP_KEY) {
             keyOps.push_back(TKeyOps::WRAP_KEY);
-        } else if (keyOp == "unwrapKey") {
+        } else if (keyOp == KEY_OP_UNWRAP_KEY) {
             keyOps.push_back(TKeyOps::UNWRAP_KEY);
-        } else if (keyOp == "deriveKey") {
+        } else if (keyOp == KEY_OP_DERIVE_KEY) {
             keyOps.push_back(TKeyOps::DERIVE_KEY);
-        } else if (keyOp == "deriveBits") {
+        } else if (keyOp == KEY_OP_DERIVE_BITS) {
             keyOps.push_back(TKeyOps::DERIVE_BITS);
         }
     }
@@ -88,56 +119,73 @@ std::vector<TKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
 }
 
 std::optional<TAlg> ParseAlg(const NJson::TJsonValue& jwk) {
-    const auto alg = ParseStr(jwk, "alg");
+    const auto alg = ParseStr(jwk, ALG);
     if (!alg.has_value()) {
         return std::nullopt;
     }
 
-    if (alg.value() == "none") {
-        return TAlg::NONE;
-    } else if (alg.value() == "HS256") {
-        return TAlg::HS256;
-    } else if (alg.value() == "HS384") {
-        return TAlg::HS384;
-    } else if (alg.value() == "HS512") {
-        return TAlg::HS512;
-    } else if (alg.value() == "RS256") {
+    if (alg.value() == ALG_RS256) {
         return TAlg::RS256;
-    } else if (alg.value() == "RS384") {
+    } else if (alg.value() == ALG_RS384) {
         return TAlg::RS384;
-    } else if (alg.value() == "RS512") {
+    } else if (alg.value() == ALG_RS512) {
         return TAlg::RS512;
-    } else if (alg.value() == "ES256") {
+    } else if (alg.value() == ALG_ES256) {
         return TAlg::ES256;
-    } else if (alg.value() == "ES384") {
+    } else if (alg.value() == ALG_ES384) {
         return TAlg::ES384;
-    } else if (alg.value() == "ES512") {
+    } else if (alg.value() == ALG_ES512) {
         return TAlg::ES512;
-    } else if (alg.value() == "PS256") {
+    } else if (alg.value() == ALG_PS256) {
         return TAlg::PS256;
-    } else if (alg.value() == "PS384") {
+    } else if (alg.value() == ALG_PS384) {
         return TAlg::PS384;
-    } else if (alg.value() == "PS512") {
+    } else if (alg.value() == ALG_PS512) {
         return TAlg::PS512;
     } else {
         return std::nullopt;
     }
 }
 
+bool IsCompatibleAlgorithm(TKeyType keyType, TAlg algorithm) {
+    switch (keyType) {
+        case TKeyType::RSA: {
+            return algorithm == TAlg::RS256
+                || algorithm == TAlg::RS384
+                || algorithm == TAlg::RS512
+                || algorithm == TAlg::PS256
+                || algorithm == TAlg::PS384
+                || algorithm == TAlg::PS512;
+        }
+        case TKeyType::EC: {
+            return algorithm == TAlg::ES256
+                || algorithm == TAlg::ES384
+                || algorithm == TAlg::ES512;
+        }
+        default: Y_UNREACHABLE();
+    }
+}
+
+std::optional<TAlg> ParseCompatibleAlg(const NJson::TJsonValue& jwk, TKeyType keyType) {
+    const auto algorithm = ParseAlg(jwk);
+    if (!algorithm.has_value() || !IsCompatibleAlgorithm(keyType, algorithm.value())) {
+        return std::nullopt;
+    }
+    return algorithm;
+}
+
 std::string ParseKid(const NJson::TJsonValue& jwk) {
-    const auto kid = ParseStr(jwk, "kid");
-    return kid.has_value() ? kid.value() : "";
+    const auto kid = ParseStr(jwk, KID);
+    return kid.has_value() ? kid.value() : std::string{};
 }
 
 std::string ParseX5U(const NJson::TJsonValue& jwk) {
-    const auto x5u = ParseStr(jwk, "x5u");
-    return x5u.has_value() ? x5u.value() : "";
+    const auto x5u = ParseStr(jwk, X5U);
+    return x5u.has_value() ? x5u.value() : std::string{};
 }
 
 // Return std::nullopt if x5c is present but malformed.
 std::optional<std::vector<std::string>> ParseX5C(const NJson::TJsonValue& jwk) {
-    static constexpr TStringBuf X5C = "x5c";
-
     if (!jwk.Has(X5C)) {
         return std::vector<std::string>{};
     }
@@ -171,9 +219,11 @@ TString Base64StrictDecodeUneven(const TStringBuf s) {
 }
 
 // Return std::nullopt if the thumbprint is present but malformed.
-std::optional<std::string> ParseThumbprint(const NJson::TJsonValue& jwk, const std::string& name, size_t expectedLength) {
+std::optional<std::string> ParseThumbprint(
+    const NJson::TJsonValue& jwk, const std::string_view name, size_t expectedLength)
+{
     if (!jwk.Has(name)) {
-        return "";
+        return std::string{};
     }
 
     const auto thumbprint = ParseStr(jwk, name);
@@ -201,7 +251,15 @@ std::optional<TJWK> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
 
     res->Usage = ParseUsage(jwk);
     res->KeyOperations = ParseKeyOps(jwk);
-    res->Algorithm = ParseAlg(jwk);
+
+    if (jwk.Has(ALG)) {
+        auto algorithm = ParseCompatibleAlg(jwk, res->Type);
+        if (!algorithm.has_value()) {
+            return std::nullopt;
+        }
+        res->Algorithm = algorithm;
+    }
+
     res->KeyId = ParseKid(jwk);
     res->X509Url = ParseX5U(jwk);
 
@@ -211,13 +269,13 @@ std::optional<TJWK> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
         res->X509Chain = std::move(x5c.value());
     }
 
-    if (auto x5t = ParseThumbprint(jwk, "x5t", SHA_DIGEST_LENGTH); !x5t.has_value()) {
+    if (auto x5t = ParseThumbprint(jwk, X5T, SHA_DIGEST_LENGTH); !x5t.has_value()) {
         return std::nullopt;
     } else {
         res->X509CertificateSha1ThumbprintBytes = std::move(x5t.value());
     }
 
-    if (auto x5ts256 = ParseThumbprint(jwk, "x5t#S256", SHA256_DIGEST_LENGTH); !x5ts256.has_value()) {
+    if (auto x5ts256 = ParseThumbprint(jwk, X5T_S256, SHA256_DIGEST_LENGTH); !x5ts256.has_value()) {
         return std::nullopt;
     } else {
         res->X509CertificateSha256ThumbprintBytes = std::move(x5ts256.value());
@@ -289,8 +347,6 @@ std::optional<TJWK> ParseJWK(const NJson::TJsonValue& jwk) {
 }
 
 std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet) {
-    static constexpr TStringBuf KEYS = "keys";
-
     if (!jwkSet.Has(KEYS) || !jwkSet[KEYS].IsArray()) {
         return std::nullopt;
     }
@@ -299,7 +355,8 @@ std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet) {
     for (const auto& key : jwkSet[KEYS].GetArray()) {
         auto jwk = ParseJWK(key);
         if (!jwk.has_value()) {
-            return std::nullopt;
+            // Unsupported JWK doesn't mean, that we cannot use other JWK from the current set
+            continue;
         }
         res.Keys.push_back(std::move(jwk.value()));
     }

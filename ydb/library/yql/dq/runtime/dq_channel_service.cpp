@@ -808,7 +808,11 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
 }
 
 bool TInputDescriptor::IsFinished() {
-    return Finished.load();
+    auto result = Finished.load();
+    if (!result) {
+        NeedToNotifyInput.store(true);
+    }
+    return result;
 }
 
 bool TInputDescriptor::IsEarlyFinished() {
@@ -1117,7 +1121,8 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
             ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev2.Release(), flags, item->SeqNo));
         }
 #endif
-        LOG_T(LogPrefix << "SEND MSG, G=" << GenMajor << '.' << GenMinor << ", item->SeqNo=" << item->SeqNo << ", ChannelId=" << item->Descriptor->Info.ChannelId << ", Leading=" << item->Leading);
+        LOG_T(LogPrefix << "SEND MSG, G=" << GenMajor << '.' << GenMinor << ", item->SeqNo=" << item->SeqNo
+            << ", ChannelId=" << item->Descriptor->Info.ChannelId << ", Leading=" << item->Leading << ", Bytes=" << item->Data.Bytes);
         ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
 #if !defined(NDEBUG)
     }
@@ -1371,7 +1376,8 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     LastActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
-    LOG_T(LogPrefix << "RECV MSG, G=" << GenMajor << '.' << GenMinor << ", record.GetSeqNo()=" << record.GetSeqNo() << ", ChannelId=" << record.GetChannelId());
+    LOG_T(LogPrefix << "RECV MSG, G=" << GenMajor << '.' << GenMinor << ", record.GetSeqNo()=" << record.GetSeqNo()
+        << ", ChannelId=" << record.GetChannelId() << ", Bytes=" << record.GetBytes());
 
     auto prevPeerGenMajor = PeerGenMajor.exchange(record.GetGenMajor());
     if (PeerActorId != ev->Sender || (prevPeerGenMajor && prevPeerGenMajor != record.GetGenMajor())) {
@@ -1706,7 +1712,7 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
-        // if (!finishing)
+        if (!finishing)
         {
             // it's OK to miss update to confirm
             LOG_W(LogPrefix << "UPDATE IGNORED/LOST, ChannelId=" << info.ChannelId
@@ -2653,8 +2659,9 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH() {str << "QueueSize";}
                         TABLEH() {str << "QueueBytes";}
                         TABLEH() {str << "PopBytes";}
-                        TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
                         TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
+                        TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
+                        TABLEH_ATTRS({{"title", "Finishing"}}) {str << "Fi";}
                         TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
                         TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
                         TABLEH() {str << "OutputActorId";}
@@ -2673,8 +2680,9 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->QueueSize.load();}
                                 TABLED() {str << descriptor->QueueBytes.load();}
                                 TABLED() {str << descriptor->PopStats.Bytes.load();}
-                                TABLED() {str << descriptor->FinishPushed.load();}
                                 TABLED() {str << descriptor->EarlyFinished.load();}
+                                TABLED() {str << descriptor->FinishPushed.load();}
+                                TABLED() {str << descriptor->Finishing.load();}
                                 TABLED() {str << descriptor->Finished.load();}
                                 TABLED() {str << descriptor->IsBound;}
                                 TABLED() {

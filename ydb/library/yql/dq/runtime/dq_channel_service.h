@@ -82,7 +82,6 @@ public:
     ui64 Bytes = 0;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0;
     NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V1;
-    bool Leading = false;
     bool Finished = false;
     bool ConfirmFinish = false;
     TInstant Timestamp;

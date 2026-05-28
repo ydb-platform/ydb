@@ -64,6 +64,8 @@ items:
   - name: Подключить метрики в Prometheus
     href: debug-prometheus.md
   - name: Трассировка с OpenTelemetry
-    href: debug-otel.md
+    href: debug-otel-tracing.md
+  - name: Метрики с OpenTelemetry
+    href: debug-otel-metrics.md
   - name: Подключить трассировку в Jaeger
     href: debug-jaeger.md

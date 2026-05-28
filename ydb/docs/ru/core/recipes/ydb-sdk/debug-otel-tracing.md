@@ -1,6 +1,6 @@
 # Трассировка с OpenTelemetry
 
-{{ ydb-short-name }} SDK инструментируют операции Query Service спанами [OpenTelemetry](https://opentelemetry.io/), обеспечивая распределённую трассировку от кода приложения до каждого gRPC-вызова к YDB. Спаны экспортируются по стандартному протоколу OTLP и совместимы с Jaeger, Grafana Tempo, Zipkin и любым другим бэкендом, поддерживающим OpenTelemetry.
+{{ ydb-short-name }} SDK инструментируют операции работы с таблицами спанами [OpenTelemetry](https://opentelemetry.io/), обеспечивая распределённую трассировку от кода приложения до каждого gRPC-вызова к YDB. Спаны экспортируются по стандартному протоколу OTLP и совместимы с Jaeger, Grafana Tempo, Zipkin и любым другим бэкендом, поддерживающим OpenTelemetry.
 
 ## Создаваемые спаны {#spans}
 

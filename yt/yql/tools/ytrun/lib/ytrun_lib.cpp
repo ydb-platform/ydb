@@ -13,6 +13,7 @@
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
 #include <yt/yql/providers/yt/fmr/fmr_tool_lib/yql_yt_fmr_initializer.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -136,6 +137,9 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption("fmr-worker-yson-path", "Path to YSON file with worker settings")
             .Optional()
             .StoreResult(&WorkerYsonPath_);
+        opts.AddLongOption("fmr-yt-server-for-upload", "YT server used for uploading files in FMR")
+            .Optional()
+            .StoreResult(&FmrYtServerForUpload_);
         opts.AddLongOption("tvm-cfg", "TVM configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
             TFacadeRunOptions::ParseProtoConfig(file, &TvmConfig_);
         });
@@ -251,19 +255,27 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     fmrServices.FmrOperationSpecFilePath = FmrOperationSpecFilePath_;
     fmrServices.CoordinatorYsonPath = CoordinatorYsonPath_;
     fmrServices.WorkerYsonPath = WorkerYsonPath_;
+    const bool useFmrJobUpload = !FmrYtServerForUpload_.empty();
     fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(NFmr::TFmrUserJobLauncherOptions{
         .RunInSeparateProcess = true,
-        .FmrJobBinaryPath = FmrJobBin_,
+        .FmrJobBinaryPath = useFmrJobUpload ? TString{} : FmrJobBin_,
         .GatewayType = "native",
         .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_
     });
+    if (!FmrJobBin_.empty() && useFmrJobUpload) {
+        fmrServices.FmrJobBinaryPath = FmrJobBin_;
+        fmrServices.FmrJobBinaryMd5 = MD5::File(FmrJobBin_);
+    }
 
     fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;
     fmrServices.FileMetadataService = fmrInitializationOpts.FmrFileMetadataService;
     fmrServices.TvmSettings = fmrInitializationOpts.FmrTvmSettings;
+    if (!FmrYtServerForUpload_.empty()) {
+        fmrServices.YtServerForUpload = FmrYtServerForUpload_;
+    }
 
     if (!DisableLocalFmrWorker_) {
-        auto jobPreparer = NFmr::MakeFmrJobPreparer(GetFileStorage(), TableDataServiceDiscoveryFilePath_);
+        auto jobPreparer = NFmr::MakeFmrJobPreparer(GetFileStorage(), NFmr::MakeFileTableDataServiceDiscovery({.Path = TableDataServiceDiscoveryFilePath_}));
         auto fmrDistCacheSettings = fmrInitializationOpts.FmrDistributedCacheSettings;
         TString distFileCacheBaseUrl = "yt://" + fmrDistCacheSettings.YtServerName + "/" + fmrDistCacheSettings.Path;
         jobPreparer->InitalizeDistributedCache(distFileCacheBaseUrl, fmrDistCacheSettings.YtToken);

@@ -303,6 +303,7 @@ public:
         return ResourceValues;
     }
 
+    void AddRestartTimestamp(TInstant now);
     void ActualizeTabletStatistics(TInstant now);
     ui64 GetRestartsPerPeriod(TInstant barrier) const;
     bool RestartsOften() const;

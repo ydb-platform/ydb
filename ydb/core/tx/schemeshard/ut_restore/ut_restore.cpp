@@ -11,16 +11,17 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -5622,7 +5623,64 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot");
     }
 
-    Y_UNIT_TEST(ViewCreationRetry) {
+    Y_UNIT_TEST(ShouldImportInvalidView) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/table", GenerateTestData(R"(
+            columns {
+                name: "key"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )"));
+        bucketContent.emplace("/view", GenerateTestData(
+            {
+                EPathTypeView,
+                R"(
+                    -- backup root: "/MyRoot"
+                    CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT missing FROM `table`;
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "table"
+                destination_path: "/MyRoot/table"
+              }
+              items {
+                source_prefix: "view"
+                destination_path: "/MyRoot/view"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
+            NLs::Finished,
+            NLs::IsView
+        });
+    }
+
+    Y_UNIT_TEST(ShouldNotRetryViewCreation) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
             .RunFakeConfigDispatcher(true)
@@ -5660,33 +5718,30 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         ui64 tableCreationTxId = 0;
-        TActorId schemeshardActorId;
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> tableCreationBlocker(runtime,
-            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
-                const auto& record = event->Get()->Record;
-                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable) {
-                    tableCreationTxId = record.GetTxId();
-                    schemeshardActorId = event->Recipient;
-                    return true;
-                }
+        ui64 viewCreationTxId = 0;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> tableCreationBlocker(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            switch (record.GetTransaction(0).GetOperationType()) {
+            case ESchemeOpCreateIndexedTable:
+                tableCreationTxId = record.GetTxId();
+                return true;
+            case ESchemeOpCreateView:
+                viewCreationTxId = record.GetTxId();
+                return false;
+            default:
                 return false;
             }
-        );
+        });
 
-        TBlockEvents<TEvPrivate::TEvImportSchemeQueryResult> queryResultBlocker(runtime,
-            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
-                // The test expects the SchemeShard actor ID to be already initialized when we receive the first query result message.
-                // This expectation is valid because we import items in order of their appearance on the import items list.
-                if (!schemeshardActorId || event->Recipient != schemeshardActorId) {
-                    return false;
-                }
-                UNIT_ASSERT_VALUES_EQUAL(event->Get()->Status, Ydb::StatusIds::SCHEME_ERROR);
-                const auto* error = std::get_if<TString>(&event->Get()->Result);
-                UNIT_ASSERT(error);
-                UNIT_ASSERT_STRING_CONTAINS(*error, "Cannot find table");
-                return true;
+        TWaitForFirstEvent<TEvSchemeShard::TEvModifySchemeTransactionResult> viewCreationAccepter(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (!viewCreationTxId || viewCreationTxId != record.GetTxId()) {
+                return false;
             }
-        );
+
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusAccepted);
+            return true;
+        });
 
         const ui64 importId = ++txId;
         TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
@@ -5705,21 +5760,25 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", port));
 
         runtime.WaitFor("table creation attempt", [&]{ return !tableCreationBlocker.empty(); });
-        runtime.WaitFor("query result", [&]{ return !queryResultBlocker.empty(); });
+        viewCreationAccepter.Wait();
+        env.TestWaitNotification(runtime, viewCreationTxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
+            NLs::Finished,
+            NLs::IsView,
+        });
+
         tableCreationBlocker.Unblock().Stop();
-        queryResultBlocker.Unblock().Stop();
         env.TestWaitNotification(runtime, tableCreationTxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/table"), {
+            NLs::Finished,
+            NLs::IsTable,
+        });
 
         env.TestWaitNotification(runtime, importId);
         TestGetImport(runtime, importId, "/MyRoot");
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/view"), {
-            NLs::Finished,
-            NLs::IsView
-        });
     }
 
-    Y_UNIT_TEST(MultipleViewCreationRetries) {
+    Y_UNIT_TEST(ShouldImportMultipleViews) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
             .RunFakeConfigDispatcher(true)
@@ -5751,40 +5810,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TActorId schemeshardActorId;
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> viewCreationBlocker(runtime,
-            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
-                const auto& record = event->Get()->Record;
-                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateView) {
-                    schemeshardActorId = event->Recipient;
-                    return true;
-                }
-                return false;
-            }
-        );
-
-        int missingDependencyFails = 0;
-        auto missingDependencyObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>(
-            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
-                if (!schemeshardActorId
-                    || event->Recipient != schemeshardActorId
-                    || event->Get()->Status != Ydb::StatusIds::SCHEME_ERROR) {
-                    return;
-                }
-                const auto* error = std::get_if<TString>(&event->Get()->Result);
-                if (error && error->Contains("Cannot find table")) {
-                    ++missingDependencyFails;
-                }
-            }
-        );
-
         auto importSettings = TStringBuilder() << std::format(R"(
                 ImportFromS3Settings {{
                     endpoint: "localhost:{}"
                     scheme: HTTP
             )", port
         );
-        for (int i = 0; i < ViewLayers; ++i) {
+        for (int i = ViewLayers - 1; i >= 0; --i) {
             importSettings << std::format(R"(
                     items {{
                         source_prefix: "view{}"
@@ -5797,23 +5829,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const ui64 importId = ++txId;
         TestImport(runtime, importId, "/MyRoot", importSettings);
-
-        int expectedFails = 0;
-        for (int iteration = 1; iteration <= ViewLayers; ++iteration) {
-            runtime.WaitFor("blocked view creation", [&]{ return !viewCreationBlocker.empty(); });
-
-            expectedFails += ViewLayers - iteration;
-            if (iteration > 1) {
-                runtime.WaitFor("query results", [&]{ return missingDependencyFails >= expectedFails; });
-            } else {
-                // the first iteration might miss some query results due to the initially unset schemeshardActorId
-                missingDependencyFails = expectedFails;
-            }
-
-            viewCreationBlocker.Unblock(1);
-        }
-        UNIT_ASSERT(viewCreationBlocker.empty());
-        viewCreationBlocker.Stop();
 
         env.TestWaitNotification(runtime, importId);
         TestGetImport(runtime, importId, "/MyRoot");

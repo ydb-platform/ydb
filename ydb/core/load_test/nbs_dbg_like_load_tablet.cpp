@@ -297,8 +297,8 @@ struct TPerDbgState {
 
     // Per-PB free-space ratio reported by the device, 0..1 (1 = empty).
     std::array<double, kHostsPerDbgMax> LastFreeSpace = {1.0, 1.0, 1.0, 1.0, 1.0};
-    // Used % across the primary PBs (= 100 - free %). The DoErase gate uses
-    // this; the spec-named "AvgPbFreeSpacePct" is exposed as 100 - this.
+    // Used % across the primary PBs (= 100 - free %). Monitoring metric only;
+    // the spec-named "AvgPbFreeSpacePct" is exposed as 100 - this.
     ui32 AvgPbUsedPct = 0;
 
     std::array<ui32, kBufferStateCount> StateCount = {};        // # of LSNs in each state
@@ -1930,7 +1930,7 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const
         if (RootCnt.Lsns.BackpressureHits) {
             RootCnt.Lsns.BackpressureHits->Inc();
         }
-        ReplyWriteErr(origin, cookie, /*status=*/3);
+        ReplyWriteErr(origin, cookie, /*status=*/7); // NOTREADY – LSN backpressure
         return;
     }
 
@@ -2517,11 +2517,6 @@ void TNbsDbgLikeLoadTablet::HandleSyncResult(
 }
 
 void TNbsDbgLikeLoadTablet::DoErase(TPerDbgState& dbg) {
-    if (Phase == ETabletPhase::Ready
-        && dbg.AvgPbUsedPct < TabletConfig.GetFillRatio())
-    {
-        return;
-    }
     const ui32 syncGate = SyncGateThreshold();
     if (Phase == ETabletPhase::Ready && dbg.ReadyToErase.size() < syncGate) {
         if (RootCnt.Lsns.SyncGateEraseBlocked) {
@@ -2898,7 +2893,6 @@ void TNbsDbgLikeLoadTablet::HandleConfigureTablet(
         << " FlushBatchSize# " << cfg.GetFlushBatchSize()
         << " EraseBatchSize# " << cfg.GetEraseBatchSize()
         << " SyncRequestsBatchSize# " << cfg.GetSyncRequestsBatchSize()
-        << " FillRatio# " << cfg.GetFillRatio()
         << " NumDirectBlockGroupsToUse# " << cfg.GetNumDirectBlockGroupsToUse()
         << " IoSizeBytes# " << cfg.GetIoSizeBytes());
 

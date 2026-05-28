@@ -1,7 +1,11 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/tiling.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <random>
@@ -61,6 +65,8 @@ struct TTestPortion {
     NPortion::EProduced GetProduced() const {
         return Produced;
     }
+
+    void AddRuntimeFeature(const TPortionInfo::ERuntimeFeature /*feature*/) {};
 };
 
 using TTestAccumulator = Accumulator<ui64, TTestPortion>;
@@ -68,7 +74,7 @@ using TTestLastLevel = LastLevel<ui64, TTestPortion>;
 using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
 using TTestTiling = Tiling<ui64, TTestPortion>;
 
-TTestPortion::TConstPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
+TTestPortion::TPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);
 }
 
@@ -77,6 +83,12 @@ const auto& NeverLocked() {
         return false;
     };
     return fn;
+}
+
+std::shared_ptr<IOptimizerPlannerConstructor> MakeTilingPlusPlusConstructor() {
+    auto ctor = IOptimizerPlannerConstructor::BuildDefault("tiling++");
+    UNIT_ASSERT(ctor);
+    return ctor;
 }
 
 }   // namespace
@@ -102,6 +114,8 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         accumulator.AddPortion(p3);
 
         const auto tasks = accumulator.GetOptimizationTasks(NeverLocked());
+        const auto nextTask = accumulator.GetNextOptimizationTask(NeverLocked());
+        UNIT_ASSERT(nextTask);
         UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(tasks[0].Portions[0]->GetPortionId(), 1);
@@ -166,6 +180,29 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(ids[0], 1);
         UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
         UNIT_ASSERT_VALUES_EQUAL(ids[2], 3);
+    }
+
+    Y_UNIT_TEST(GetNextOptimizationTaskMatchesGetOptimizationTasksFront) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorSettings.Trigger.Bytes = 100;
+        settings.AccumulatorSettings.Trigger.Portions = 100;
+        settings.AccumulatorSettings.Compaction.Bytes = 150;
+        settings.AccumulatorSettings.Compaction.Portions = 10;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+        tiling.AddPortion(MakePortion(1, 0, 1, 60));
+        tiling.AddPortion(MakePortion(2, 2, 3, 60));
+        tiling.AddPortion(MakePortion(3, 4, 5, 60));
+
+        const auto tasks = tiling.GetOptimizationTasks(NeverLocked());
+        const auto nextTask = tiling.GetNextOptimizationTask(NeverLocked());
+        if (tasks.empty()) {
+            UNIT_ASSERT(!nextTask);
+        } else {
+            UNIT_ASSERT(nextTask);
+            UNIT_ASSERT_VALUES_EQUAL(nextTask->Portions.size(), tasks.front().Portions.size());
+        }
     }
 
     Y_UNIT_TEST(TilingChoosesAccumulatorMiddleAndLastLevelsIndependently) {
@@ -271,7 +308,7 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         TCounters counters;
         TTestTiling tiling(settings, counters);
 
-        TVector<TTestPortion::TConstPtr> portions;
+        TVector<TTestPortion::TPtr> portions;
         portions.reserve(122);
 
         ui64 nextId = 1000;
@@ -409,6 +446,72 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.WidthByPortionId.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Portions.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(tiling.LastLevel.Candidates.size(), 0);
+    }
+
+    Y_UNIT_TEST(TilingGetOptimizationTasksDelegatesToGetNext) {
+        TTestTiling::TilingSettings settings;
+        settings.AccumulatorPortionSizeLimit = 100;
+        settings.AccumulatorSettings.Trigger.Bytes = 1;
+        settings.AccumulatorSettings.Trigger.Portions = 1;
+        settings.AccumulatorSettings.Compaction.Bytes = 1000;
+        settings.AccumulatorSettings.Compaction.Portions = 100;
+
+        TCounters counters;
+        TTestTiling tiling(settings, counters);
+        tiling.AddPortion(MakePortion(1, 0, 1, 50));
+        tiling.AddPortion(MakePortion(2, 2, 3, 50));
+        tiling.AddPortion(MakePortion(3, 4, 5, 50));
+
+        const auto tasks = tiling.GetOptimizationTasks(NeverLocked());
+        const auto nextTask = tiling.GetNextOptimizationTask(NeverLocked());
+        if (!nextTask) {
+            UNIT_ASSERT(tasks.empty());
+            return;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.front().Portions.size(), nextTask->Portions.size());
+        UNIT_ASSERT_VALUES_EQUAL(tasks.front().TargetLevel, nextTask->TargetLevel);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TilingPlusPlusParallelCompaction) {
+    Y_UNIT_TEST(CompactionThreadsRejectsZero) {
+        auto ctor = MakeTilingPlusPlusConstructor();
+        NJson::TJsonValue json;
+        json["compaction_threads"] = 0;
+        const auto status = ctor->DeserializeFromJson(json);
+        UNIT_ASSERT(status.IsFail());
+    }
+
+    Y_UNIT_TEST(CompactionThreadsRoundTripInProtoJson) {
+        auto ctor = MakeTilingPlusPlusConstructor();
+        NJson::TJsonValue json;
+        json["compaction_threads"] = 3;
+        json["k"] = 10;
+        UNIT_ASSERT_C(ctor->DeserializeFromJson(json).IsSuccess(), "deserialize");
+
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer proto;
+        ctor->SerializeToProto(proto);
+        UNIT_ASSERT(proto.HasTiling());
+
+        NJson::TJsonValue restoredJson;
+        UNIT_ASSERT(NJson::ReadJsonFastTree(proto.GetTiling().GetJson(), &restoredJson));
+        UNIT_ASSERT(restoredJson.Has("compaction_threads"));
+        UNIT_ASSERT_VALUES_EQUAL(restoredJson["compaction_threads"].GetUInteger(), 3);
+    }
+
+    Y_UNIT_TEST(CompactionThreadsDefaultOmittedInProtoJson) {
+        auto ctor = MakeTilingPlusPlusConstructor();
+        UNIT_ASSERT_C(ctor->DeserializeFromJson(NJson::TJsonValue(NJson::JSON_MAP)).IsSuccess(), "deserialize");
+
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer proto;
+        ctor->SerializeToProto(proto);
+        UNIT_ASSERT(proto.HasTiling());
+
+        NJson::TJsonValue restoredJson;
+        UNIT_ASSERT(NJson::ReadJsonFastTree(proto.GetTiling().GetJson(), &restoredJson));
+        UNIT_ASSERT(restoredJson.Has("compaction_threads"));
+        UNIT_ASSERT_VALUES_EQUAL(restoredJson["compaction_threads"].GetUInteger(), 1);
     }
 }
 

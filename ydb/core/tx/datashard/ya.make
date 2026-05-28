@@ -262,6 +262,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
+    ydb/library/json_index
     ydb/core/change_exchange
     ydb/core/engine
     ydb/core/engine/minikql

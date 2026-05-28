@@ -91,7 +91,7 @@ by `WriteConfirmed.count() >= 3` for that LSN. Same-host pairs always; no
 cross-host flush.
 - Erase: per-PB `TEvBatchErasePersistentBuffer` for every PB **of the LSN's
 DBG** that received the write (3 PBs in steady state), gated by
-`FillRatio`.
+`SyncRequestsBatchSize`.
 - Optional reads (`ReadRatio > 0`) — random-address reads routed to **PB
 or DDisk** depending on the per-LSN dirty state at the chosen address
 (mirrors `TBlocksDirtyMap::MakeReadHint`,
@@ -216,7 +216,7 @@ pipe, see §3 and §23.5).
 | `Lsns` map                           | per-DBG (`TPerDbgState::Lsns`) | Mirrors per-vChunk dirty map (`TVChunk::BlocksDirtyMap`).                                                                                     |
 | `ReadyToErase` set                   | per-DBG                        | Same.                                                                                                                                         |
 | `InFlightTo[PB[k]]` counters         | per-DBG                        | Coordinator round-robin is per-DBG.                                                                                                           |
-| Last-reported `FreeSpace` per PB     | per-DBG                        | Drives the `FillRatio` erase gate; averaged per DBG, then min/max across DBGs in §14.                                                         |
+| Last-reported `FreeSpace` per PB     | per-DBG                        | Monitoring metric; averaged per DBG, then min/max across DBGs in §14.                                                                        |
 | 10 wire connections (5 PB + 5 DD)    | per-DBG                        | Each DBG has its own peers from BSC.                                                                                                          |
 
 
@@ -239,8 +239,8 @@ reads it from `TEvNbsLoadTabletAllocateGroups.AllocConfig`.
 - `TConfigureTablet` — **worker-only knobs**, sent by the parent tablet
 to the long-lived worker at the start of every Run: `MaxInflightLsns`,
 `FlushBatchSize`, `EraseBatchSize`, `SyncRequestsBatchSize`,
-`PBufferReplyTimeoutMicroseconds`, `FillRatio` (v2: moved here from
-`TWorkloadConfig`), `NumDirectBlockGroupsToUse` (so the worker can
+`PBufferReplyTimeoutMicroseconds`,
+`NumDirectBlockGroupsToUse` (so the worker can
 validate that incoming `TNbsWrite.Address` is in range for the active
 DBG slice), and `IoSizeBytes` (the per-Run I/O size; the worker rejects
 mismatched `TNbsWrite.SizeBytes`).
@@ -357,8 +357,8 @@ message TNbsDbgLikeLoad {
     // every DBG can hold its own steady-state window.
     optional uint32 MaxInflightLsns = 16 [default = 4096];
 
-    optional uint32 FillRatio = 17 [default = 50];   // % PB occupancy that
-                                                     // gates erase startup
+    // Deprecated for TNbsDbgLikeLoadTablet: erase now fires on SyncRequestsBatchSize gate alone.
+    optional uint32 FillRatio = 17 [default = 50];   // retained for wire compatibility
     optional uint32 ReadRatio = 18 [default = 0];    // % reads relative to writes
 
     // SyncRequestsBatchSize mirrors the partition's
@@ -403,7 +403,7 @@ Conscious omissions vs the existing per-PB / per-DDisk load actors:
 - No hand-off / hedging knobs.
 - No `Hosts[5*N]` manual override; the BSC alloc round-trip is the only
 path.
-- No per-DBG override of `ReadWriteSizeKiB` / `FillRatio` / `ReadRatio` — every
+- No per-DBG override of `ReadWriteSizeKiB` / `ReadRatio` — every
 DBG gets the same workload-shaping config; per-DBG load divergence is a
 property of the address sampler (§7), not of separate config blobs.
 
@@ -427,7 +427,7 @@ actor is `TNbsDbgLikeLoadActor`.
    tablet pipe) it first does a best-effort sweep of any residual LSNs
    left over from a prior Run, then updates `MaxInflightLsns`,
    `FlushBatchSize`, `EraseBatchSize`, `SyncRequestsBatchSize`,
-   `PBufferReplyTimeoutMicroseconds`, `FillRatio`,
+   `PBufferReplyTimeoutMicroseconds`,
    `NumDirectBlockGroupsToUse`, `IoSizeBytes`.
 4. **Running (`Phase = WorkerRunning`)**: handles `TNbsWrite` /
    `TNbsRead` from the load actor (or from a tablet-pipe client; tests
@@ -736,8 +736,6 @@ Per `nbs_architecture.md §5.3`. Runs **per-DBG**.
 
 ```text
 DoErase(dbg):
-    if Phase == Running
-       and dbg->AvgPbFreeSpacePct > 100 - FillRatio: return // FillRatio gate
     // SyncRequestsBatchSize gate (mirrors the partition's MakeEraseHint
     // early-return, dirty_map.cpp:433-435). Bypassed during drain so the
     // shutdown sweep can finalize. PHASE_DONE early-returns at the top.
@@ -794,16 +792,6 @@ A failed PB erase clears its bit and re-queues the LSN for retry on the next
 `DoErase(dbg)` tick — same as
 [ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.cpp](ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.cpp)
 lines 467-492.
-
-`FillRatio` gates **starting** to erase **per DBG**: erases do not begin
-on a given DBG until that DBG's PBs are at least `FillRatio`% full. Once
-started, erase keeps up with writes; the gate is read from `FreeSpace`
-reported in `TEvWritePersistentBufferResult` /
-`TEvErasePersistentBufferResult` (same source as
-[ydb/core/load_test/persistent_buffer_write.cpp](ydb/core/load_test/persistent_buffer_write.cpp)
-line 359-360, 415, 431). Each DBG has its own `LastFreeSpace[5]` and
-`AvgPbFreeSpacePct` — DBGs hit the gate independently, so a hot DBG can
-already be erasing while a cold DBG still fills.
 
 `SyncRequestsBatchSize` gates **batching density** per DBG (same value
 governs flush in §8 and erase here). With the default `10`, up to 9
@@ -1554,8 +1542,7 @@ max LSN seen by that DBG).
 - `AvgPbFreeSpacePct` (gauge; per-DBG = mean of `LastFreeSpace` across that
 DBG's PB0..PB2; root has both `AvgPbFreeSpacePctMin` and
 `AvgPbFreeSpacePctMax` over the per-DBG values plus the cluster-wide
-`AvgPbFreeSpacePct` mean) — drives the per-DBG `FillRatio` erase gate;
-same source as
+`AvgPbFreeSpacePct` mean) — monitoring metric; same source as
 [persistent_buffer_write.cpp:359-360,415,431](ydb/core/load_test/persistent_buffer_write.cpp).
 - `SyncGateThreshold` (gauge; root and per-DBG — echo of
 `TWorkloadConfig.SyncRequestsBatchSize` for headroom comparisons against
@@ -2322,7 +2309,7 @@ OnTEvNbsLoadTabletDelete():
 alloc-shape fields live in `TAllocConfig`). Concretely it carries: `Tag`,
 `DurationSeconds`, `DelayBeforeMeasurementsSeconds`,
 `NumDirectBlockGroupsToUse`, `ReadWriteSizeKiB`,
-`InFlightWrites`, `FillRatio`, `ReadRatio`, `Sequential`,
+`InFlightWrites`, `ReadRatio`, `Sequential`,
 plus `TabletConfig TConfigureTablet` that the load actor forwards to the
 tablet at Bootstrap.
 
@@ -2407,7 +2394,7 @@ separate `nbs_dbg_like_worker.{h,cpp}` files (with
 `CreateNbsDbgLikeWorker`) are gone in v2.1; their state and handlers
 are tablet members. Per-Run knobs (`MaxInflightLsns`, `FlushBatchSize`,
 `EraseBatchSize`, `SyncRequestsBatchSize`,
-`PBufferReplyTimeoutMicroseconds`, `FillRatio`,
+`PBufferReplyTimeoutMicroseconds`,
 `NumDirectBlockGroupsToUse`, `IoSizeBytes`) are installed via a
 `TEvConfigureTablet` self-event the tablet posts to itself at the start
 of every Run; the same event is also accepted from a tablet pipe
@@ -2674,7 +2661,6 @@ TWorkloadConfig: {
     InFlightWrites: 2048                     # tweak per run (the user's "multiple inflights" use case)
     MaxInflightLsns: 131072
 
-    FillRatio: 50
     ReadRatio: 0
     SyncRequestsBatchSize: 10                # matches partition default
     FlushBatchSize: 16

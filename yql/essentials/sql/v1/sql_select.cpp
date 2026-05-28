@@ -6,6 +6,8 @@
 #include "sql_values.h"
 #include "sql_match_recognize.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
@@ -1208,10 +1210,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
     // WITH named_single_source (PRESORT sort_specification_list)?
     // ON expr USING using_call_expr
 
-    if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(GetPos(node.GetToken1()),
-                                                       "COMBINE",
-                                                       GetMaxLangVersion()))
-    {
+    if (!Ctx_.EnsureAvailable(GetPos(node.GetToken1()), NYql::NFeature::Combine)) {
         return {};
     }
 
@@ -1565,10 +1564,7 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
         TString nextOp = ToLowerUTF8(Token(token));
         if (nextOp != "union" &&
             !Ctx_.ExceptIntersectBefore202503 &&
-            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                Ctx_.TokenPosition(token),
-                "EXCEPT/INTERSECT",
-                MakeLangVersion(2025, 3)))
+            !Ctx_.EnsureAvailable(Ctx_.TokenPosition(token), NYql::NFeature::ExceptIntersect))
         {
             return nullptr;
         }
@@ -1578,10 +1574,7 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
             const TString qualifier = ToLowerUTF8(Token(token));
             if (qualifier == "distinct" &&
                 !Ctx_.ExceptIntersectBefore202503 &&
-                !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                    Ctx_.TokenPosition(token),
-                    "UNION DISTINCT",
-                    MakeLangVersion(2025, 3)))
+                !Ctx_.EnsureAvailable(Ctx_.TokenPosition(token), NYql::NFeature::UnionDistinct))
             {
                 return nullptr;
             }
@@ -1675,10 +1668,7 @@ TSourcePtr TSqlSelect::BuildIntersection(
 
         const NSQLv1Generated::TToken& token = nextBlock.GetRule_intersect_op1().GetToken1();
         if (!Ctx_.ExceptIntersectBefore202503 &&
-            !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                Ctx_.TokenPosition(token),
-                "EXCEPT/INTERSECT",
-                MakeLangVersion(2025, 3)))
+            !Ctx_.EnsureAvailable(Ctx_.TokenPosition(token), NYql::NFeature::ExceptIntersect))
         {
             return nullptr;
         }

@@ -207,8 +207,11 @@ namespace NKikimr {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             const bool reduceInterpileTraffic = ev->Get()->ReduceInterpileTraffic;
-            Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
-            Y_ABORT_UNLESS(tactic <= PutTacticCount);
+            Y_ABORT_UNLESS(NKikimrBlobStorage::EPutHandleClass_MIN <= handleClass &&
+                handleClass <= NKikimrBlobStorage::EPutHandleClass_MAX,
+                "incorrect PutHandleClass# %u", static_cast<unsigned>(handleClass));
+            Y_ABORT_UNLESS(0 <= tactic && tactic < TEvBlobStorage::TEvPut::TacticCount,
+                "incorrect PutTactic# %d", static_cast<int>(tactic));
 
             TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic][reduceInterpileTraffic];
             if (batchedPuts.Queue.empty()) {

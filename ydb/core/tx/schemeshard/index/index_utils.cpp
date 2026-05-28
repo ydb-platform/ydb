@@ -800,6 +800,43 @@ bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTy
     return true;
 }
 
+namespace {
+
+bool IsIntegerPrimaryKeyType(NScheme::TTypeId typeId) {
+    return typeId == NScheme::NTypeIds::Uint64
+        || typeId == NScheme::NTypeIds::Int64
+        || typeId == NScheme::NTypeIds::Uint32
+        || typeId == NScheme::NTypeIds::Int32;
+}
+
+} // namespace
+
+bool CheckSingleIntegerPrimaryKey(
+    const TTableColumns& baseTableColumns,
+    const TColumnTypes& baseColumnTypes,
+    TStringBuf indexKind,
+    TString& error)
+{
+    if (baseTableColumns.Keys.size() != 1) {
+        error = TStringBuilder()
+            << indexKind << " index requires exactly one primary key column of type 'Uint64', 'Int64', 'Uint32' or 'Int32'"
+            << ", but table has " << baseTableColumns.Keys.size() << " primary key columns";
+        return false;
+    }
+
+    const TString& pkColumnName = baseTableColumns.Keys[0];
+    Y_ABORT_UNLESS(baseColumnTypes.contains(pkColumnName));
+    const auto pkTypeInfo = baseColumnTypes.at(pkColumnName);
+    if (!IsIntegerPrimaryKeyType(pkTypeInfo.GetTypeId())) {
+        error = TStringBuilder()
+            << indexKind << " index requires primary key column '" << pkColumnName
+            << "' to be of type 'Uint64', 'Int64', 'Uint32' or 'Int32' but got " << NScheme::TypeName(pkTypeInfo);
+        return false;
+    }
+
+    return true;
+}
+
 bool IsCompatibleKeyTypes(
     const TColumnTypes& baseTableColumnTypes,
     const TTableColumns& implTableColumns,

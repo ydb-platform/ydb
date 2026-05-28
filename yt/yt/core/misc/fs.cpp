@@ -1180,6 +1180,16 @@ std::optional<std::string> FindBinaryPath(const std::string& binary)
     return std::nullopt;
 }
 
+bool IsOutOfDiskSpaceError(const TError& error)
+{
+#ifdef _linux_
+    return error.FindMatching(ELinuxErrorCode::NOSPC).has_value();
+#else
+    Y_UNUSED(error);
+    YT_UNIMPLEMENTED();
+#endif
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NFS

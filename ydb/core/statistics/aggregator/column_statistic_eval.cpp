@@ -164,8 +164,8 @@ class TCMSEval : public IStage2ColumnStatisticEval {
     std::optional<ui32> Seq;
     std::unique_ptr<TCountMinSketch> IntermediateState;
 
-    // current upper limit is 8_MB per columnar statistics
-    static constexpr ui64 MAX_WIDTH = 262144;
+    // current upper limit is 4_MB per columnar statistics
+    static constexpr ui64 MAX_WIDTH = 131072;
     static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
     static constexpr double RELATIVE_ERROR = 10;
@@ -272,8 +272,8 @@ private:
         return NAggFuncs::TEWHAggFunc::CreateState(ColumnType.GetTypeId(), params);
     }
 
-    // current upper limit is 8_MB per columnar statistics
-    static constexpr ui32 MAX_BUCKETS = 1048576;
+    // current upper limit is 4_MB per columnar statistics
+    static constexpr ui32 MAX_BUCKETS = 524288;
     static constexpr ui32 MIN_BUCKETS = 1;
 
 public:

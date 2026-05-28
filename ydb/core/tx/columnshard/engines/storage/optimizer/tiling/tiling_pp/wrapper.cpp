@@ -26,6 +26,7 @@ using TCoreTiling = Tiling<NArrow::TSimpleRow, TPortionInfo>;
 struct TPlannerSettings {
     TTilingSettings TilingSettings;
     ui64 PortionExpectedSize = 4ULL * 1024 * 1024;
+    ui32 CompactionThreads = 1;
 
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
         NJson::TJsonValue json(NJson::JSON_MAP);
@@ -46,6 +47,7 @@ struct TPlannerSettings {
         json["aging_enabled"] = TilingSettings.AgingSettings.Enabled;
         json["aging_promote_time_seconds"] = TilingSettings.AgingSettings.PromoteTime.Seconds();
         json["aging_max_portion_promotion"] = TilingSettings.AgingSettings.MaxPortionPromotion;
+        json["compaction_threads"] = CompactionThreads;
         proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
     }
 
@@ -154,6 +156,15 @@ struct TPlannerSettings {
                     return TConclusionStatus::Fail("tiling-core: aging_max_portion_promotion must be an unsigned integer");
                 }
                 TilingSettings.AgingSettings.MaxPortionPromotion = value.GetUInteger();
+            } else if (name == "compaction_threads") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling-core: compaction_threads must be an unsigned integer");
+                }
+                const ui64 threads = value.GetUInteger();
+                if (threads < 1) {
+                    return TConclusionStatus::Fail("tiling-core: compaction_threads must be at least 1");
+                }
+                CompactionThreads = static_cast<ui32>(threads);
             } else {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "tiling_core_unknown_setting_ignored")("setting", name);
             }
@@ -173,29 +184,44 @@ private:
     TCoreTiling Core;
     std::shared_ptr<IStoragesManager> StoragesManager;
     ui64 PortionExpectedSize;
+    ui32 CompactionThreads;
 
 protected:
     void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
-        Core.ModifyPortions(
-            std::vector<TPortionInfo::TConstPtr>(add.begin(), add.end()), std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
+        Core.ModifyPortions(add, std::vector<TPortionInfo::TConstPtr>(remove.begin(), remove.end()));
     }
 
-    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
+    bool DoUsesPullCompactionScheduling() const override {
+        return true;
+    }
+
+    ui32 DoGetMaxCompactionInflight() const override {
+        return CompactionThreads;
+    }
+
+    std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
         const auto isLocked = [dataLocksManager](TPortionInfo::TConstPtr p) -> bool {
             return dataLocksManager && dataLocksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction).has_value();
         };
 
-        const auto tasks = Core.GetOptimizationTasks(isLocked);
-        if (tasks.empty()) {
-            return {};
+        const auto task = Core.GetNextOptimizationTask(isLocked);
+        if (!task) {
+            return nullptr;
         }
 
-        const auto& task = tasks.front();
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task.Portions, TSaverContext(StoragesManager));
-        result->SetTargetCompactionLevel(task.TargetLevel);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, task->Portions, TSaverContext(StoragesManager));
+        result->SetTargetCompactionLevel(task->TargetLevel);
         result->SetPortionExpectedSize(PortionExpectedSize);
-        return { result };
+        return result;
+    }
+
+    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
+        if (auto task = DoGetNextOptimizationTask(granule, dataLocksManager)) {
+            return { std::move(task) };
+        }
+        return {};
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {
@@ -226,6 +252,7 @@ public:
         , Core(MakeCoreSettings(settings), Counters)
         , StoragesManager(storagesManager)
         , PortionExpectedSize(settings.PortionExpectedSize)
+        , CompactionThreads(settings.CompactionThreads)
     {
         AFL_VERIFY(StoragesManager);
     }

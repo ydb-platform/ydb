@@ -838,6 +838,9 @@ message TKqpTableSinkIndexSettings {
     optional bool IsUniq = 4;
     repeated uint32 WriteIndexes = 5;
     optional uint32 KeyPrefixSize = 6;
+    optional TKqpTableSinkSettings.EType OperationType = 7;
+    optional bool NeedDeleteOldRows = 8;
+    optional string IndexName = 9;
 }
 
 message TKqpTableSinkSettings {
@@ -848,7 +851,7 @@ message TKqpTableSinkSettings {
         MODE_DELETE = 3;
         MODE_UPDATE = 4;
         MODE_FILL = 5;
-        MODE_UPDATE_CONDITIONAL = 6; // UPDATE WHERE
+        reserved 6; // deprecated MODE_UPDATE_CONDITIONAL (UPDATE WHERE)
         MODE_UPSERT_INCREMENT = 7;
     }
 
@@ -877,6 +880,7 @@ message TKqpTableSinkSettings {
     optional uint64 QuerySpanId = 25;
     optional string UserSID = 26;
     optional bool NeedLookup = 27;
+    optional bool SkipMissingRows = 28;
 }
 
 message TReadVectorTopK {

@@ -1546,6 +1546,90 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateError("$.a ? ((@.b == 10 || !(@.c == 20)) is unknown)", predError, {}, {}, ECallableType::JsonExists);
     }
 
+    // Chained filters -> AND
+    Y_UNIT_TEST(CollectPath_FilterChain) {
+        // Basic comparisons
+        ValidateJsonExists("$.key ? (@.v1 >= 10) ? (@.v2 <= 20)", {"\4key\3v1", "\4key\3v2"}, TCollectResult::ETokensMode::And);
+        ValidateJsonExists("$.key ? (@.v1 >= 10 && @.v2 <= 20)", {"\4key\3v1", "\4key\3v2"}, TCollectResult::ETokensMode::And);
+
+        // Equality with literals
+        ValidateJsonExists("$.key ? (@.v1 == 10) ? (@.v2 == 20)", {"\4key\3v1" + numSuffix(10), "\4key\3v2" + numSuffix(20)});
+        ValidateJsonExists("$.key ? (@.v1 == 10 && @.v2 == 20)", {"\4key\3v1" + numSuffix(10), "\4key\3v2" + numSuffix(20)});
+
+        // Three filters in a chain
+        ValidateJsonExists("$.a ? (@.b == 1) ? (@.c == 2) ? (@.d == 3)", {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)});
+        ValidateJsonExists("$.a ? (@.b == 1 && @.c == 2 && @.d == 3)", {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)});
+
+        // Mixed predicate types
+        ValidateJsonExists("$.a ? (@.b == 10) ? (@.c starts with \"x\") ? (exists(@.d))", {"\2a\2b" + numSuffix(10), "\2a\2c", "\2a\2d"});
+        ValidateJsonExists("$.a ? (@.b == 10 && @.c starts with \"x\" && exists(@.d))", {"\2a\2b" + numSuffix(10), "\2a\2c", "\2a\2d"});
+
+        // @ on filter object itself
+        ValidateJsonExists("$.a ? (@ == \"x\") ? (@.b == 1)", {"\2a" + strSuffix("x"), "\2a\2b" + numSuffix(1)});
+
+        // Deeper input path
+        ValidateJsonExists("$.a.b ? (@.c == 1) ? (@.d == 2)", {"\2a\2b\2c" + numSuffix(1), "\2a\2b\2d" + numSuffix(2)});
+
+        // JsonValue
+        ValidateJsonValue("$.key ? (@.v1 > 0) ? (@.v2 < 10)", {"\4key\3v1", "\4key\3v2"}, TCollectResult::ETokensMode::And);
+
+        // Chained filter then member access
+        ValidateJsonValue("$.a ? (@.b == 10) ? (@.c == 20).d", {"\2a\2b" + numSuffix(10), "\2a\2c" + numSuffix(20)});
+
+        // Wildcard in first filter, equality in second
+        ValidateJsonExists("$.a ? (@.* == \"x\") ? (@.b == 1)", {"\2a\2b" + numSuffix(1)});
+
+        // && inside jsonpath
+        ValidateJsonExists("$.a ? (@.b == 1 && @.c == 2) ? (@.d == 3)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)},
+            TCollectResult::ETokensMode::And);
+        ValidateJsonExists("$.a ? (@.b == 1) ? (@.c == 2 && @.d == 3)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)},
+            TCollectResult::ETokensMode::And);
+        ValidateJsonExists("$.a ? (@.b == 1 && @.c == 2) ? (@.d == 3 && @.e == 4)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3), "\2a\2e" + numSuffix(4)},
+            TCollectResult::ETokensMode::And);
+
+        // || inside jsonpath
+        ValidateJsonExists("$.a ? (@.b == 1 || @.c == 2) ? (@.d == 3)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)},
+            TCollectResult::ETokensMode::Or);
+        ValidateJsonExists("$.a ? (@.b == 1) ? (@.c == 2 || @.d == 3)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)},
+            TCollectResult::ETokensMode::Or);
+        ValidateJsonExists("$.a ? (@.b == 1 || @.c == 2) ? (@.d == 3 || @.e == 4)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3), "\2a\2e" + numSuffix(4)},
+            TCollectResult::ETokensMode::Or);
+
+        // Mixed && and || inside
+        ValidateJsonExists("$.a ? (@.b == 1 && @.c == 2) ? (@.d == 3 || @.e == 4)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3), "\2a\2e" + numSuffix(4)},
+            TCollectResult::ETokensMode::Or);
+        ValidateJsonExists("$.a ? (@.b == 1 || @.c == 2) ? (@.d == 3 && @.e == 4)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3), "\2a\2e" + numSuffix(4)},
+            TCollectResult::ETokensMode::Or);
+        ValidateJsonExists("$.a ? ((@.b < 5) && ((@.c > 1) || (@.d > 2))) ? (@.e == 0)",
+            {"\2a\2b", "\2a\2c", "\2a\2d", "\2a\2e" + numSuffix(0)},
+            TCollectResult::ETokensMode::Or);
+        ValidateJsonExists("$.a ? (@.b == 1) ? (((@.c < 5) || (@.d > 1)) && @.e > 2)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c", "\2a\2d", "\2a\2e"},
+            TCollectResult::ETokensMode::Or);
+        ValidateJsonExists("$.key ? (@.a < @.b || @.c > @.d) ? (@.e == 1)",
+            {"\4key\2a", "\4key\2b", "\4key\2c", "\4key\2d", "\4key\2e" + numSuffix(1)},
+            TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("$.a ? (@.b == 1 && @.c == 2) ? (@.d == 3)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)},
+            TCollectResult::ETokensMode::And);
+        ValidateJsonValue("$.a ? (@.b == 1 || @.c == 2) ? (@.d == 3)",
+            {"\2a\2b" + numSuffix(1), "\2a\2c" + numSuffix(2), "\2a\2d" + numSuffix(3)},
+            TCollectResult::ETokensMode::Or);
+
+        // Arithmetic two-path in chain
+        ValidateJsonExists("$.key ? (@.a + @.b == 5) ? (@.c == 1 || @.d == 2)",
+            {"\4key\2a", "\4key\2b", "\4key\2c" + numSuffix(1), "\4key\2d" + numSuffix(2)},
+            TCollectResult::ETokensMode::Or);
+    }
+
     // Nested filter: (@ ? (predicate)).member == value
     Y_UNIT_TEST(CollectPath_NestedFilter) {
         // Basic: inner == predicate, outer comparison dropped
@@ -2018,8 +2102,8 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a - $.b) == true", {"\2a", "\2b"});
 
         // Filter
-        ValidateJsonValue("($ ? (@.a > 0) ? (@.b < 10)).c", {"\2a"});
-        ValidateJsonValue("($ ? (@.a > 0) ? (@.b < 10)) == 1", {"\2a"});
+        ValidateJsonValue("($ ? (@.a > 0) ? (@.b < 10)).c", {"\2a", "\2b"});
+        ValidateJsonValue("($ ? (@.a > 0) ? (@.b < 10)) == 1", {"\2a", "\2b"});
         ValidateJsonValue("$ ? (@.a > 0 && @.b < 10).c", {"\2a", "\2b"});
         ValidateJsonValue("$ ? (@.a > 0 && @.b < 10) == 1", {"\2a", "\2b"});
 

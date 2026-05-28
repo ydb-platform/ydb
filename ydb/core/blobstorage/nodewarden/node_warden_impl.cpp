@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
@@ -59,6 +60,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , ThrottlingMinLogChunkCount(100, 1, 100000)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
+    , MaxInProgressStartupDataSyncCount(0, 0, 10000)
+    , MaxInProgressStartupDataSyncPerPDiskCount(0, 0, 10000)
+    , MaxInProgressLocalRecoveryCount(0, 0, 10000)
+    , MaxInProgressLocalRecoveryPerPDiskCount(0, 0, 10000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , EnablePhantomFlagStorage(1, 0, 1)
     , EnablePersistentPhantomFlagStorage(0, 0, 1)
@@ -437,6 +442,11 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
 
+        TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncCount, icb->VDiskControls.MaxInProgressStartupDataSyncCount);
+        TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, icb->VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount);
+        TControlBoard::RegisterSharedControl(MaxInProgressLocalRecoveryCount, icb->VDiskControls.MaxInProgressLocalRecoveryCount);
+        TControlBoard::RegisterSharedControl(MaxInProgressLocalRecoveryPerPDiskCount, icb->VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount);
+
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksHDD, icb->PDiskControls.MaxCommonLogChunksHDD);
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksSSD, icb->PDiskControls.MaxCommonLogChunksSSD);
         TControlBoard::RegisterSharedControl(CommonStaticLogChunks, icb->PDiskControls.CommonStaticLogChunks);
@@ -495,6 +505,12 @@ void TNodeWarden::Bootstrap() {
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageLocalRecoveryBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressLocalRecoveryCount, MaxInProgressLocalRecoveryPerPDiskCount)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageStartupDataSyncBrokerID(), Register(
+        CreateVDiskOperationBrokerActor(MaxInProgressStartupDataSyncCount, MaxInProgressStartupDataSyncPerPDiskCount)));
 
     actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
         CreateSyncBrokerActor(MaxInProgressSyncCount)));

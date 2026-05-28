@@ -162,6 +162,44 @@ TKikimrConfiguration::TKikimrConfiguration() {
             }
         });
 
+    /* CBO internal constants for tuning */
+    REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
+
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinMult);
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsSelMult);
+    REGISTER_SETTING(*this, OptCBOConstsSelPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsShuffleLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleRightSidePow);
+
+    REGISTER_SETTING(*this, OptCBOConstsRightSideCostMult);
+    REGISTER_SETTING(*this, OptCBOConstsByteSizeMult);
+
+    REGISTER_SETTING(*this, OptCBOConstsLeftSideByteSizeFactor);
+    REGISTER_SETTING(*this, OptCBOConstsRightSideByteSizeFactor);
+    REGISTER_SETTING(*this, OptCBOConstsOutputSideByteSizeFactor);
+
+    REGISTER_SETTING(*this, OptCBOConstsInteractionsMult);
+    REGISTER_SETTING(*this, OptCBOConstsInteractionsPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinRightSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinOutputMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinOutputPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputPow);
+    
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 }

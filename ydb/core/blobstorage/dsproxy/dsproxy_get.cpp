@@ -218,6 +218,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdisk);
+        ui32 orderNumber = GetImpl.GetOrderNumber(shortId);
 
         LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVGet, totalSize, tabletId, vdisk.GroupID.GetRawId(), channel,
                 Info->GetFailDomainOrderNumber(shortId),
@@ -233,7 +234,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     GetVDiskTimeMs(record.GetTimestamps()));
         }
 
-        ui32 orderNumber = Info->GetOrderNumber(shortId);
         if (DiskCounters.size() <= orderNumber) {
             DiskCounters.resize(orderNumber + 1);
         }
@@ -294,6 +294,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
         const auto &record = ev->Get()->Record;
         const TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         TVDiskIdShort shortId(vDiskId);
+        ui32 orderNumber = GetImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         NActors::NLog::EPriority priority = PriorityForStatusInbound(status);
         DSP_LOG_LOG_S(priority, "BPG30", "Handle VPuEventResult"
@@ -317,7 +318,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                     GetVDiskTimeMs(record.GetTimestamps()));
         }
 
-        ui32 orderNumber = Info->GetOrderNumber(shortId);
         if (DiskCounters.size() <= orderNumber) {
             DiskCounters.resize(orderNumber + 1);
         }

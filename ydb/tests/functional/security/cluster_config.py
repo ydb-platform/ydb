@@ -107,6 +107,7 @@ def create_ydb_configurator(
     require_healthcheck_authentication=None,
     enable_tablet_dev_ui_secure_path=None,
     binary_paths=None,
+    extra_feature_flags=None,
 ):
     cluster_config = {
         'default_clusteradmin': 'root@builtin',
@@ -114,6 +115,8 @@ def create_ydb_configurator(
     }
     if binary_paths is not None:
         cluster_config['binary_paths'] = binary_paths
+    if extra_feature_flags:
+        cluster_config['extra_feature_flags'] = extra_feature_flags
     config_generator = KikimrConfigGenerator(**cluster_config)
 
     if 'grpc_config' not in config_generator.yaml_config:

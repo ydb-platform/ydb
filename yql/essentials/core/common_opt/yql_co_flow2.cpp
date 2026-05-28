@@ -2902,6 +2902,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
+        if (const auto tableSource = self.Input().Maybe<TCoTableSource>()) {
+            if (auto res = ApplyExtractMembersToTableSource(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
         return node;
     };
 

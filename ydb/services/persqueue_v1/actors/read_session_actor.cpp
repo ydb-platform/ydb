@@ -36,7 +36,6 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     , StartTimestamp(TInstant::Now())
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
-    , CommitsDisabled(false)
     , ReadWithoutConsumer(false)
     , InitDone(false)
     , RangesMode(false)
@@ -415,10 +414,6 @@ template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitCookie::TPtr& ev, const TActorContext& ctx) {
     RequestNotChecked = true;
 
-    if (CommitsDisabled) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "commits in session are disabled by client option", ctx);
-    }
-
     auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end()) { // stale commit - ignore it
         return;
@@ -438,10 +433,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitCookie
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitRange::TPtr& ev, const TActorContext& ctx) {
     RequestNotChecked = true;
-
-    if (CommitsDisabled) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "commits in session are disabled by client option", ctx);
-    }
 
     auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end()) { // stale commit - ignore it
@@ -655,8 +646,6 @@ void TReadSessionActor<UseMigrationProtocol>::DropPartition(TPartitionsMapIterat
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, const TActorContext& ctx) {
-    AFL_ENSURE(!CommitsDisabled);
-
     if (!ActualPartitionActors.contains(ev->Sender)) {
         return;
     }
@@ -805,7 +794,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         << "_" << Cookie
         << "_" << TAppData::RandomProvider->GenRand64()
         << "_" << "v1";
-    CommitsDisabled = false;
 
 
     PeerName = ev->Get()->PeerName;
@@ -1324,7 +1312,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     const auto database = topic->DbPath;
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
-        record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
+        record.GetStep(), record.GetTabletId(), it->second, ClientDC, RangesMode,
         converterIter->second, database, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs,
         topic, notCommitedToFinishParents, PartitionMaxInFlightBytes));
 

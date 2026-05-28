@@ -39,6 +39,34 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         {"Compacted"sv, &TPartition::CompactionBlobEncoder},
         {"FastWrite"sv, &TPartition::BlobEncoder},
     };
+    struct THeadMonitoringStats {
+        ui64 PackedPayloadSize = 0;
+        ui64 PackedPayloadCapacity = 0;
+        ui64 UnpackedClientBlobs = 0;
+        ui32 PackedBatches = 0;
+        ui32 UnpackedBatches = 0;
+        ui32 SharedPackedBatches = 0;
+        ui32 OwnedPackedBatches = 0;
+    };
+    auto getHeadStats = [](const THead& head) {
+        THeadMonitoringStats stats;
+        for (const auto& batch : head.GetBatches()) {
+            if (batch.Packed) {
+                ++stats.PackedBatches;
+                stats.PackedPayloadSize += batch.PackedData.Size();
+                stats.PackedPayloadCapacity += batch.PackedData.Capacity();
+                if (batch.PackedData.IsShared()) {
+                    ++stats.SharedPackedBatches;
+                } else {
+                    ++stats.OwnedPackedBatches;
+                }
+            } else {
+                ++stats.UnpackedBatches;
+                stats.UnpackedClientBlobs += batch.Blobs.size();
+            }
+        }
+        return stats;
+    };
 
     TStringStream out;
     HTML_PART(out) {
@@ -133,7 +161,33 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("MaxCurrently writing", BlobEncoder.MaxWriteResponsesSize);
                         for (const auto& [encoderName, encoderPtr] : encoders) {
                             const TPartitionBlobEncoder& encoder = this->*encoderPtr;
+                            const auto headStats = getHeadStats(encoder.Head);
+                            const auto newHeadStats = getHeadStats(encoder.NewHead);
+                            ui32 dataKeysHeadKeys = 0;
+                            for (const auto& level : encoder.DataKeysHead) {
+                                dataKeysHeadKeys += level.KeysCount();
+                            }
                             PROPERTY(TString::Join(encoderName, " DataKeysBody size"), encoder.DataKeysBody.size());
+                            PROPERTY(TString::Join(encoderName, " DataKeysHead keys"), dataKeysHeadKeys);
+                            PROPERTY(TString::Join(encoderName, " HeadKeys size"), encoder.HeadKeys.size());
+                            PROPERTY(TString::Join(encoderName, " Head batches"), encoder.Head.GetBatches().size()
+                                << " packed: " << headStats.PackedBatches
+                                << " unpacked: " << headStats.UnpackedBatches
+                                << " sharedPacked: " << headStats.SharedPackedBatches
+                                << " ownedPacked: " << headStats.OwnedPackedBatches);
+                            PROPERTY(TString::Join(encoderName, " Head payload bytes"), headStats.PackedPayloadSize
+                                << " capacity: " << headStats.PackedPayloadCapacity
+                                << " unpackedClientBlobs: " << headStats.UnpackedClientBlobs);
+                            PROPERTY(TString::Join(encoderName, " NewHead batches"), encoder.NewHead.GetBatches().size()
+                                << " packed: " << newHeadStats.PackedBatches
+                                << " unpacked: " << newHeadStats.UnpackedBatches
+                                << " sharedPacked: " << newHeadStats.SharedPackedBatches
+                                << " ownedPacked: " << newHeadStats.OwnedPackedBatches);
+                            PROPERTY(TString::Join(encoderName, " NewHead payload bytes"), newHeadStats.PackedPayloadSize
+                                << " capacity: " << newHeadStats.PackedPayloadCapacity
+                                << " unpackedClientBlobs: " << newHeadStats.UnpackedClientBlobs);
+                            PROPERTY(TString::Join(encoderName, " PartitionedBlob"), "clientBlobs: " << encoder.PartitionedBlob.GetClientBlobs().size()
+                                << " formedBlobs: " << encoder.PartitionedBlob.GetFormedBlobs().size());
                         }
                     }
 

@@ -515,6 +515,7 @@ void TBatch::Pack() {
     }
     Packed = true;
 
+    PackedData.Reserve(GetUnpackedSize() + GetMaxHeaderSize());
     TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>(*this).Pack();
 
     if (GetPackedSize() > GetUnpackedSize() + GetMaxHeaderSize()) { //packing is not effective, write as-is
@@ -547,7 +548,7 @@ void TBatch::Unpack() {
     }
     AFL_ENSURE(InternalPartsPos.size() == GetInternalPartsCount());
 
-    TBuffer().Swap(PackedData);
+    PackedData.Reset();
 }
 
 void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const

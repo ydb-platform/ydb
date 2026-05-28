@@ -404,6 +404,31 @@ Y_UNIT_TEST(RestoreKeysWithOffsetDelta) {
     }
 }
 
+Y_UNIT_TEST(LegacyKeysBackwardCompatible) {
+    // Keys in DS without OffsetDelta (body size == KeySize()) must keep parsing after format extension.
+    const TString legacyBody = "d0000000009_00000000000000000008_00007_0000000006_00005";
+    const TString legacyHead = legacyBody + "|";
+    const TString legacyFastWrite = legacyBody + "?";
+
+    UNIT_ASSERT(!TKey::FromString(legacyBody).HasOffsetDelta());
+    UNIT_ASSERT(!TKey::FromString(legacyHead).HasOffsetDelta());
+    UNIT_ASSERT(!TKey::FromString(legacyFastWrite).HasOffsetDelta());
+
+    const auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    UNIT_ASSERT_VALUES_EQUAL(key.ToString(), legacyBody);
+    UNIT_ASSERT_EQUAL(TKey::FromString(key.ToString()), key);
+
+    const auto fromLegacy = TKey::FromKey(key, TKeyPrefix::TypeData, TPartitionId{10}, 11);
+    UNIT_ASSERT(!fromLegacy.GetOffsetDelta().Defined());
+    UNIT_ASSERT_VALUES_EQUAL(fromLegacy.ToString(), "d0000000010_00000000000000000011_00007_0000000006_00005");
+
+    auto withDelta = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5);
+    withDelta.SetOffsetDelta(99);
+    const auto fromWithDelta = TKey::FromKey(withDelta, TKeyPrefix::TypeData, TPartitionId{10}, 11);
+    UNIT_ASSERT_VALUES_EQUAL(*fromWithDelta.GetOffsetDelta(), 99u);
+    UNIT_ASSERT_VALUES_EQUAL(fromWithDelta.ToString(), "d0000000010_00000000000000000011_00007_0000000006_00005_0000000099");
+}
+
 } //Y_UNIT_TEST_SUITE
 
 

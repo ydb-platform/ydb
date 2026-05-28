@@ -246,7 +246,7 @@ jobs:
 
       - name: Upload all generated files as artifacts
         if: steps.changes_check.outputs.changes == 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: muted-tests-all-files-${{ env.BASE_BRANCH }}-${{ env.BUILD_TYPE }}
           path: |

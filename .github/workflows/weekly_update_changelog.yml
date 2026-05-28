@@ -71,7 +71,7 @@ jobs:
           cat prs-${{ matrix.branch }}.json
 
       - name: Upload PRs JSON
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: prs-json-${{ matrix.branch }}
           path: prs-${{ matrix.branch }}.json

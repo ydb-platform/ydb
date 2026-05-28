@@ -124,9 +124,7 @@ public:
     }
 
     void SetNewOffsetDelta(const TKey& key) {
-        if (!key.HasOffsetDelta() && OffsetDelta_ > 0) {
-            OffsetDelta_ = 0;
-        } else if (key.HasOffsetDelta()) {
+        if (key.HasOffsetDelta()) {
             OffsetDelta_ += *key.GetOffsetDelta();
         }
     }

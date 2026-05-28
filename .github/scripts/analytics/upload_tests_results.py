@@ -1,83 +1,52 @@
 #!/usr/bin/env python3
 
 import argparse
-import configparser
-import datetime
-import fnmatch
 import os
 import posixpath
-import shlex
-import subprocess
 import sys
-import time
 import xml.etree.ElementTree as ET
 import ydb
 
-
 from codeowners import CodeOwners
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
-max_characters_for_status_description = int(7340032/4) #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
+# Add analytics directory to sys.path for ydb_wrapper import
+_analytics_dir = os.path.dirname(os.path.abspath(__file__))
+if _analytics_dir not in sys.path:
+    sys.path.insert(0, _analytics_dir)
+from ydb_wrapper import YDBWrapper
 
-def create_tables(pool,  table_path):
-    print(f"> create table if not exists:'{table_path}'")
+max_characters_for_status_description = int(7340032 / 4)
 
-    def callee(session):
-        session.execute_scheme(f"""
-            CREATE table IF NOT EXISTS `{table_path}` (
-                build_type Utf8 NOT NULL,
-                job_name Utf8,
-                job_id Uint64,
-                commit Utf8,
-                branch Utf8 NOT NULL,
-                pull Utf8,
-                run_timestamp Timestamp NOT NULL,
-                test_id Utf8 NOT NULL,
-                suite_folder Utf8 NOT NULL,
-                test_name Utf8 NOT NULL,
-                duration Double,
-                status Utf8 NOT NULL,
-                status_description Utf8,
-                owners Utf8,
-                log Utf8,
-                logsdir Utf8,
-                stderr Utf8,
-                stdout Utf8,
-                PRIMARY KEY (`test_name`, `suite_folder`,build_type, branch, status, run_timestamp)
-            )
-              PARTITION BY HASH(`suite_folder`,test_name, build_type, branch )
-                WITH (STORE = COLUMN)
-            """)
-
-    return pool.retry_operation_sync(callee)
+TABLE_NAME = "test_results/test_runs_column"
 
 
-def bulk_upsert(table_client, table_path, rows):
-    print(f"> bulk upsert: {table_path}")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
-        .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("logsdir", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("pull", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("run_timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("stderr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("stdout", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-
-    )
-    table_client.bulk_upsert(table_path, rows, column_types)
+def get_table_schema(table_path):
+    return f"""
+        CREATE TABLE IF NOT EXISTS `{table_path}` (
+            build_type Utf8 NOT NULL,
+            job_name Utf8,
+            job_id Uint64,
+            commit Utf8,
+            branch Utf8 NOT NULL,
+            pull Utf8,
+            run_timestamp Timestamp NOT NULL,
+            test_id Utf8 NOT NULL,
+            suite_folder Utf8 NOT NULL,
+            test_name Utf8 NOT NULL,
+            duration Double,
+            status Utf8 NOT NULL,
+            status_description Utf8,
+            owners Utf8,
+            log Utf8,
+            logsdir Utf8,
+            stderr Utf8,
+            stdout Utf8,
+            PRIMARY KEY (`test_name`, `suite_folder`, build_type, branch, status, run_timestamp)
+        )
+        PARTITION BY HASH(`suite_folder`, test_name, build_type, branch)
+        WITH (STORE = COLUMN)
+    """
 
 
 def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp):
@@ -115,19 +84,18 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
                     "commit": commit,
                     "branch": branch,
                     "pull": pull,
-                    "run_timestamp": int(run_timestamp)*1000000,
+                    "run_timestamp": int(run_timestamp) * 1000000,
                     "job_name": job_name,
                     "job_id": int(job_id),
                     "suite_folder": suite_folder,
                     "test_name": name,
-                    "duration": Decimal(duration),
+                    "duration": Decimal(duration) if duration else Decimal(0),
                     "status": status,
-                    "status_description": status_description.replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'")[:max_characters_for_status_description],
+                    "status_description": (status_description or "").replace("\r\n", ";;").replace("\n", ";;").replace("\"", "'")[:max_characters_for_status_description],
                     "log": "" if testcase.find("properties/property/[@name='url:log']") is None else testcase.find("properties/property/[@name='url:log']").get('value'),
                     "logsdir": "" if testcase.find("properties/property/[@name='url:logsdir']") is None else testcase.find("properties/property/[@name='url:logsdir']").get('value'),
                     "stderr": "" if testcase.find("properties/property/[@name='url:stderr']") is None else testcase.find("properties/property/[@name='url:stderr']").get('value'),
                     "stdout": "" if testcase.find("properties/property/[@name='url:stdout']") is None else testcase.find("properties/property/[@name='url:stdout']").get('value'),
-
                 }
             )
     return results
@@ -135,139 +103,116 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
 
 def sort_codeowners_lines(codeowners_lines):
     def path_specificity(line):
-        # removing comments
         trimmed_line = line.strip()
         if not trimmed_line or trimmed_line.startswith('#'):
             return -1, -1
         path = trimmed_line.split()[0]
         return len(path.split('/')), len(path)
 
-    sorted_lines = sorted(codeowners_lines, key=path_specificity)
-    return sorted_lines
+    return sorted(codeowners_lines, key=path_specificity)
+
 
 def get_codeowners_for_tests(codeowners_file_path, tests_data):
     with open(codeowners_file_path, 'r') as file:
         data = file.readlines()
-        owners_odj = CodeOwners(''.join(sort_codeowners_lines(data)))
-        tests_data_with_owners = []
+        owners_obj = CodeOwners(''.join(sort_codeowners_lines(data)))
         for test in tests_data:
-            target_path = f'{test["suite_folder"]}'
-            owners = owners_odj.of(target_path)
-            test["owners"] = ";;".join(
-                [(":".join(x)) for x in owners])
-            tests_data_with_owners.append(test)
-        return tests_data_with_owners
+            owners = owners_obj.of(test["suite_folder"])
+            test["owners"] = ";;".join([":".join(x) for x in owners])
+    return tests_data
 
 
 def main():
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test-results-file', action='store',
-                        required=True, help='XML with results of tests')
-    parser.add_argument('--build-type', action='store',
-                        required=True, help='build type')
-    parser.add_argument('--commit', default='store',
-                        dest="commit", required=True, help='commit sha')
-    parser.add_argument('--branch', default='store',
-                        dest="branch", required=True, help='branch name ')
-    parser.add_argument('--pull', action='store', dest="pull",
-                        required=True, help='pull number')
-    parser.add_argument('--run-timestamp', action='store',
-                        dest="run_timestamp", required=True, help='time of test run start')
-    parser.add_argument('--job-name', action='store', dest="job_name",
-                        required=True, help='job name where launched')
-    parser.add_argument('--job-id', action='store', dest="job_id",
-                        required=True, help='job id of workflow')
-
+    parser.add_argument('--test-results-file', required=True,
+                        help='JUnit XML with results of tests')
+    parser.add_argument('--build-type', required=True)
+    parser.add_argument('--commit', required=True)
+    parser.add_argument('--branch', required=True)
+    parser.add_argument('--pull', required=True)
+    parser.add_argument('--run-timestamp', dest="run_timestamp", required=True)
+    parser.add_argument('--job-name', dest="job_name", required=True)
+    parser.add_argument('--job-id', dest="job_id", required=True)
     args = parser.parse_args()
 
-    test_results_file = args.test_results_file
-    build_type = args.build_type
-    commit = args.commit
-    branch = args.branch
-    pull = args.pull
-    run_timestamp = args.run_timestamp
-    job_name = args.job_name
-    job_id = args.job_id
-
-    path_in_database = "test_results"
-    dir = os.path.dirname(__file__)
-    git_root = f"{dir}/../../.."
+    dir_path = os.path.dirname(os.path.abspath(__file__))
+    git_root = os.path.normpath(f"{dir_path}/../../..")
     codeowners = f"{git_root}/.github/TESTOWNERS"
-    config = configparser.ConfigParser()
-    config_file_path = f"{git_root}/.github/config/ydb_qa_db.ini"
-    config.read(config_file_path)
 
-    DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-    DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
+        .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+        .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("logsdir", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("pull", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("run_timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("stderr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("stdout", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    )
 
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print(
-            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
-        )
-        return 1
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
-    test_table_name = f"{path_in_database}/test_runs_column"
-    full_path = posixpath.join(DATABASE_PATH, test_table_name)
+    try:
+        with YDBWrapper() as wrapper:
+            if not wrapper.check_credentials():
+                print("Warning: YDB credentials not found, skipping upload")
+                return 0
 
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
+            full_table_path = posixpath.join(wrapper.database_path, TABLE_NAME)
+            wrapper.create_table(full_table_path, get_table_schema(full_table_path))
 
-        # Parse and upload
-        results = parse_junit_xml(
-            test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
-        )
-        result_with_owners = get_codeowners_for_tests(codeowners, results)
-        prepared_for_upload_rows = []
-        for index, row in enumerate(result_with_owners):
-            prepared_for_upload_rows.append({
-                'branch': row['branch'],
-                'build_type': row['build_type'],
-                'commit': row['commit'],
-                'duration': row['duration'],
-                'job_id': row['job_id'],
-                'job_name': row['job_name'],
-                'log': row['log'],
-                'logsdir': row['logsdir'],
-                'owners': row['owners'],
-                'pull': row['pull'],
-                'run_timestamp': row['run_timestamp'],
-                'status_description': row['status_description'],
-                'status': row['status'],
-                'stderr': row['stderr'],
-                'stdout': row['stdout'],
-                'suite_folder': row['suite_folder'],
-                'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
-                'test_name': row['test_name'],
-            })
-        print(f'upserting runs: {len(prepared_for_upload_rows)} rows')
-        if prepared_for_upload_rows:
-            batch_rows_for_upload_size = 1000
-            with ydb.SessionPool(driver) as pool:
-                create_tables(pool, test_table_name)
-                for start in range(0, len(prepared_for_upload_rows), batch_rows_for_upload_size):
-                    batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_rows_for_upload_size]     
-                    bulk_upsert(driver.table_client, full_path,
-                            batch_rows_for_upload)
-                
-            print('tests uploaded')
-        else:
-            print('nothing to upload')
+            results = parse_junit_xml(
+                args.test_results_file, args.build_type, args.job_name, args.job_id,
+                args.commit, args.branch, args.pull, args.run_timestamp
+            )
+            results_with_owners = get_codeowners_for_tests(codeowners, results)
 
-       
+            rows = []
+            for index, row in enumerate(results_with_owners):
+                rows.append({
+                    'branch': row['branch'],
+                    'build_type': row['build_type'],
+                    'commit': row['commit'],
+                    'duration': row['duration'],
+                    'job_id': row['job_id'],
+                    'job_name': row['job_name'],
+                    'log': row['log'],
+                    'logsdir': row['logsdir'],
+                    'owners': row['owners'],
+                    'pull': row['pull'],
+                    'run_timestamp': row['run_timestamp'],
+                    'status_description': row['status_description'],
+                    'status': row['status'],
+                    'stderr': row['stderr'],
+                    'stdout': row['stdout'],
+                    'suite_folder': row['suite_folder'],
+                    'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
+                    'test_name': row['test_name'],
+                })
+
+            if rows:
+                print(f'Uploading {len(rows)} test results to {full_table_path}')
+                wrapper.bulk_upsert_batches(full_table_path, rows, column_types)
+                print('tests uploaded')
+            else:
+                print('nothing to upload')
+
+    except Exception as e:
+        print(f"Warning: Failed to upload test results to YDB: {e}")
+        print("This is not a critical error, continuing with CI process...")
+        return 0
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -20,12 +20,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace Ydb;
 
-// unused?
-// struct TCommitCookie {
-//     ui64 AssignId;
-//     ui64 Cookie;
-// };
-
 struct TLocalResponseBase {
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
@@ -692,25 +686,6 @@ struct TGetPartitionsLocationRequest : public TLocalRequestBase {
     {}
 
     TVector<ui32> PartitionIds;
-
 };
-
-struct TAlterTopicRequest : public TLocalRequestBase {
-    TAlterTopicRequest(Ydb::Topic::AlterTopicRequest&& request, const TString& workDir, const TString& name,
-                       const TString& database, const TString& token, bool missingOk)
-        : TLocalRequestBase(request.path(), database, token)
-        , Request(std::move(request))
-        , WorkingDir(workDir)
-        , Name(name)
-        , MissingOk(missingOk)
-    {}
-
-    Ydb::Topic::AlterTopicRequest Request;
-    TString WorkingDir;
-    TString Name;
-    bool MissingOk;
-};
-
-
 
 }

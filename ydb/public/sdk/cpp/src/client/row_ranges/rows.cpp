@@ -38,15 +38,15 @@ public:
     {}
 
     explicit TImpl(NQuery::TExecuteQueryIterator&& iterator)
-        : Producer_(std::make_unique<TExecuteQueryStreamProducer>(std::move(iterator)))
+        : Producer_(std::make_unique<TStreamProducer<NQuery::TExecuteQueryIterator>>(std::move(iterator)))
     {}
 
     explicit TImpl(NTable::TScanQueryPartIterator&& iterator)
-        : Producer_(std::make_unique<TScanQueryStreamProducer>(std::move(iterator)))
+        : Producer_(std::make_unique<TStreamProducer<NTable::TScanQueryPartIterator>>(std::move(iterator)))
     {}
 
     explicit TImpl(NTable::TTablePartIterator&& iterator)
-        : Producer_(std::make_unique<TReadTableStreamProducer>(std::move(iterator)))
+        : Producer_(std::make_unique<TStreamProducer<NTable::TTablePartIterator>>(std::move(iterator)))
     {}
 
     bool Start() {
@@ -115,9 +115,10 @@ private:
         }
     };
 
-    class TExecuteQueryStreamProducer : public IResultSetProducer {
+    template <typename Iterator>
+    class TStreamProducer : public IResultSetProducer {
     public:
-        explicit TExecuteQueryStreamProducer(NQuery::TExecuteQueryIterator&& iterator)
+        explicit TStreamProducer(Iterator&& iterator)
             : Iterator_(std::move(iterator))
         {}
 
@@ -126,35 +127,7 @@ private:
         }
 
     private:
-        NQuery::TExecuteQueryIterator Iterator_;
-    };
-
-    class TScanQueryStreamProducer : public IResultSetProducer {
-    public:
-        explicit TScanQueryStreamProducer(NTable::TScanQueryPartIterator&& iterator)
-            : Iterator_(std::move(iterator))
-        {}
-
-        std::optional<TResultSet> TryGetNextResultSet() override {
-            return NRowRangesDetail::DrainStreamIterator(Iterator_);
-        }
-
-    private:
-        NTable::TScanQueryPartIterator Iterator_;
-    };
-
-    class TReadTableStreamProducer : public IResultSetProducer {
-    public:
-        explicit TReadTableStreamProducer(NTable::TTablePartIterator&& iterator)
-            : Iterator_(std::move(iterator))
-        {}
-
-        std::optional<TResultSet> TryGetNextResultSet() override {
-            return NRowRangesDetail::DrainStreamIterator(Iterator_);
-        }
-
-    private:
-        NTable::TTablePartIterator Iterator_;
+        Iterator Iterator_;
     };
 
     std::unique_ptr<IResultSetProducer> Producer_;
@@ -210,39 +183,42 @@ TValue TRowParser::GetValue(const std::string& columnName) const {
 
 class TRowIterator::TImpl {
 public:
-    explicit TImpl(TRowRange::TImpl& range)
-        : Range_(range)
+    explicit TImpl(std::shared_ptr<TRowRange::TImpl> range)
+        : Range_(std::move(range))
     {
         ResetRowView();
     }
 
-    bool IsAtEnd() const {
-        return !Range_.HasCurrent();
+    bool IsAtEnd() const noexcept {
+        return !Range_ || !Range_->HasCurrent();
     }
 
     void Advance() {
         RowView_.reset();
-        Range_.Advance();
+        if (Range_) {
+            Range_->Advance();
+        }
         ResetRowView();
     }
 
     TRowParser& Current() {
+        Y_ABORT_UNLESS(RowView_.has_value(), "TRowIterator dereference at end");
         return RowView_->Get();
     }
 
 private:
     void ResetRowView() {
-        if (Range_.HasCurrent()) {
-            RowView_.emplace(Range_.CurrentParser());
+        if (Range_ && Range_->HasCurrent()) {
+            RowView_.emplace(Range_->CurrentParser());
         }
     }
 
-    TRowRange::TImpl& Range_;
+    std::shared_ptr<TRowRange::TImpl> Range_;
     std::optional<TRowParserHolder> RowView_;
 };
 
 TRowRange::TRowRange(TResultSet&& resultSet)
-    : Impl_(std::make_unique<TImpl>(std::move(resultSet)))
+    : Impl_(std::make_shared<TImpl>(std::move(resultSet)))
 {}
 
 TRowRange::TRowRange(NTable::TDataQueryResult&& result) {
@@ -252,25 +228,25 @@ TRowRange::TRowRange(NTable::TDataQueryResult&& result) {
         ythrow yexception() << "multiple queries in one range is not allowed";
     }
     if (sets.empty()) {
-        Impl_ = std::make_unique<TImpl>(TRowRange::TImpl::TEmptyTag{});
+        Impl_ = std::make_shared<TImpl>(TRowRange::TImpl::TEmptyTag{});
     } else {
-        Impl_ = std::make_unique<TImpl>(std::move(sets[0]));
+        Impl_ = std::make_shared<TImpl>(std::move(sets[0]));
     }
 }
 
 TRowRange::TRowRange(NQuery::TExecuteQueryIterator&& iterator) {
     ThrowIfUnsuccessful(iterator);
-    Impl_ = std::make_unique<TImpl>(std::move(iterator));
+    Impl_ = std::make_shared<TImpl>(std::move(iterator));
 }
 
 TRowRange::TRowRange(NTable::TScanQueryPartIterator&& iterator) {
     ThrowIfUnsuccessful(iterator);
-    Impl_ = std::make_unique<TImpl>(std::move(iterator));
+    Impl_ = std::make_shared<TImpl>(std::move(iterator));
 }
 
 TRowRange::TRowRange(NTable::TTablePartIterator&& iterator) {
     ThrowIfUnsuccessful(iterator);
-    Impl_ = std::make_unique<TImpl>(std::move(iterator));
+    Impl_ = std::make_shared<TImpl>(std::move(iterator));
 }
 
 TRowRange::TRowRange(TRowRange&&) noexcept = default;
@@ -278,12 +254,18 @@ TRowRange& TRowRange::operator=(TRowRange&&) noexcept = default;
 TRowRange::~TRowRange() = default;
 
 TRowIterator TRowRange::begin() {
-    Impl_->Start();
-    return TRowIterator(std::make_unique<TRowIterator::TImpl>(*Impl_));
+    return BeginIterator(Impl_);
 }
 
-TRowIterEnd TRowRange::end() {
+TRowIterEnd TRowRange::end() noexcept {
     return TRowIterEnd{};
+}
+
+TRowIterator TRowRange::BeginIterator(const std::shared_ptr<TImpl>& state) {
+    if (state) {
+        state->Start();
+    }
+    return TRowIterator(std::make_unique<TRowIterator::TImpl>(state));
 }
 
 TRowIterator::TRowIterator(std::unique_ptr<TImpl> impl)
@@ -294,19 +276,11 @@ TRowIterator::TRowIterator(TRowIterator&&) noexcept = default;
 TRowIterator& TRowIterator::operator=(TRowIterator&&) noexcept = default;
 TRowIterator::~TRowIterator() = default;
 
-bool TRowIterator::operator==(const TRowIterator& other) const {
-    return Impl_->IsAtEnd() && other.Impl_->IsAtEnd();
-}
-
-bool TRowIterator::operator!=(const TRowIterator& other) const {
-    return !(*this == other);
-}
-
-bool TRowIterator::operator==(const TRowIterEnd&) const {
+bool TRowIterator::operator==(const TRowIterEnd&) const noexcept {
     return Impl_->IsAtEnd();
 }
 
-bool TRowIterator::operator!=(const TRowIterEnd& end) const {
+bool TRowIterator::operator!=(const TRowIterEnd& end) const noexcept {
     return !(*this == end);
 }
 

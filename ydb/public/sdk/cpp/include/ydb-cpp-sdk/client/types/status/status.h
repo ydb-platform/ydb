@@ -101,9 +101,6 @@ void ThrowOnErrorOrPrintIssues(TStatus status);
 
 bool StatusContainsIssueWithCode(const TStatus& status, NYdb::NIssue::TIssueCode code);
 
-//! Converts the active exception to TStatus. Must be called from a catch block.
-TStatus StatusFromCurrentException();
-
 }
 
 } // namespace NYdb

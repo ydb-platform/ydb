@@ -148,20 +148,6 @@ void ThrowOnErrorOrPrintIssues(TStatus status) {
     });
 }
 
-TStatus StatusFromCurrentException() {
-    try {
-        throw;
-    } catch (const TYdbRangeErrorException& e) {
-        return e.GetStatus();
-    } catch (const TYdbErrorException& e) {
-        return e.GetStatus();
-    } catch (const std::exception& e) {
-        return TStatus(TPlainStatus::Internal(e.what()));
-    } catch (...) {
-        return TStatus(TPlainStatus::Internal("unknown exception"));
-    }
-}
-
 } // namespace NStatusHelpers
 
 } // namespace NYdb

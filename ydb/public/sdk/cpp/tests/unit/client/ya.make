@@ -14,7 +14,6 @@ RECURSE(
     result
     row_ranges
     retry_range
-    status
     table
     value
 )

@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/fwd.h>
 
 #include <array>
+#include <cstddef>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
@@ -15,6 +16,8 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+
+#include "detail/rows_parser_getter.h"
 
 namespace NYdb::inline Dev {
 
@@ -27,35 +30,11 @@ class TRowParserHolder;
 template <class... Args>
 class TRowColumns;
 
-class TRowIterator {
-    friend class TRowRange;
-public:
-    class TImpl;
+class TRowIterator;
 
-    TRowIterator(const TRowIterator&) = delete;
-    TRowIterator(TRowIterator&&) noexcept;
-    ~TRowIterator();
-    TRowIterator& operator=(const TRowIterator&) = delete;
-    TRowIterator& operator=(TRowIterator&&) noexcept;
-
-    bool operator==(const TRowIterator& other) const;
-    bool operator!=(const TRowIterator& other) const;
-    bool operator==(const TRowIterEnd& other) const;
-    bool operator!=(const TRowIterEnd& other) const;
-
-    TRowParser& operator*() const;
-    TRowParser* operator->() const;
-
-    TRowIterator& operator++();
-
-private:
-    explicit TRowIterator(std::unique_ptr<TImpl> impl);
-
-    std::unique_ptr<TImpl> Impl_;
-};
+class TRowRange;
 
 class TRowParser {
-    friend class TRowIterator::TImpl;
     friend class TRowParserHolder;
 public:
     TRowParser(const TRowParser&) = delete;
@@ -77,9 +56,60 @@ private:
     TResultSetParser& Parser_;
 };
 
+#include "detail/rows_column_getter.h"
+
+//! Move-only, single-pass input iterator over rows.
+//! Valid while shared range state is alive. Not copyable and not multipass:
+//! do not expect independent copies, re-traversal, or classic STL algorithms
+//! that require copyable input iterators. Advertises input_iterator_tag for
+//! ranges-style sentinel iteration, not classic copyable input iterators.
+class TRowIterator {
+    friend class TRowRange;
+public:
+    class TImpl;
+
+    using iterator_category = std::input_iterator_tag;
+    using value_type = TRowParser;
+    using difference_type = std::ptrdiff_t;
+    using pointer = TRowParser*;
+    using reference = TRowParser&;
+
+    TRowIterator(const TRowIterator&) = delete;
+    TRowIterator(TRowIterator&&) noexcept;
+    ~TRowIterator();
+    TRowIterator& operator=(const TRowIterator&) = delete;
+    TRowIterator& operator=(TRowIterator&&) noexcept;
+
+    bool operator==(const TRowIterEnd& end) const noexcept;
+    bool operator!=(const TRowIterEnd& end) const noexcept;
+
+    reference operator*() const;
+    pointer operator->() const;
+
+    TRowIterator& operator++();
+    void operator++(int) {
+        ++(*this);
+    }
+
+private:
+    explicit TRowIterator(std::unique_ptr<TImpl> impl);
+
+    std::unique_ptr<TImpl> Impl_;
+};
+
+inline bool operator==(const TRowIterEnd& end, const TRowIterator& it) noexcept {
+    return it == end;
+}
+
+inline bool operator!=(const TRowIterEnd& end, const TRowIterator& it) noexcept {
+    return it != end;
+}
+
 //! Forward, single-pass range over rows of a single logical result set.
 class TRowRange {
     friend class TRowIterator::TImpl;
+    template <class... Args>
+    friend class TRowColumns;
 public:
     explicit TRowRange(TResultSet&& resultSet);
     explicit TRowRange(NTable::TDataQueryResult&& result);
@@ -95,7 +125,7 @@ public:
     ~TRowRange();
 
     TRowIterator begin();
-    TRowIterEnd end();
+    TRowIterEnd end() noexcept;
 
     //! Build a typed-tuple view over this range.
     //! Args... are the column C++ types (e.g. int32_t, std::optional<std::string>);
@@ -107,85 +137,16 @@ public:
     template <class... Args, class StringIterable>
     TRowColumns<Args...> Get(const StringIterable& columns);
 
-private:
     class TImpl;
-    std::unique_ptr<TImpl> Impl_;
+
+private:
+    static TRowIterator BeginIterator(const std::shared_ptr<TImpl>& state);
+
+    std::shared_ptr<TImpl> Impl_;
 };
 
-namespace NRowRangesDetail {
-
-//! Maps a C++ type to the TValueParser accessor that reads it.
-//! Unspecialised T fails to compile ("incomplete type") — that is the intended
-//! error for unsupported column types.
-template <class T>
-struct TValueParserGetter;
-
-#define Y_DEFINE_VALUE_PARSER_GETTER(Type, Suffix) \
-    template <> struct TValueParserGetter<Type> { \
-        static Type Get(TValueParser& p) { return p.Get##Suffix(); } \
-    }; \
-    template <> struct TValueParserGetter<std::optional<Type>> { \
-        static std::optional<Type> Get(TValueParser& p) { return p.GetOptional##Suffix(); } \
-    }
-
-Y_DEFINE_VALUE_PARSER_GETTER(bool,        Bool);
-Y_DEFINE_VALUE_PARSER_GETTER(int8_t,      Int8);
-Y_DEFINE_VALUE_PARSER_GETTER(uint8_t,     Uint8);
-Y_DEFINE_VALUE_PARSER_GETTER(int16_t,     Int16);
-Y_DEFINE_VALUE_PARSER_GETTER(uint16_t,    Uint16);
-Y_DEFINE_VALUE_PARSER_GETTER(int32_t,     Int32);
-Y_DEFINE_VALUE_PARSER_GETTER(uint32_t,    Uint32);
-Y_DEFINE_VALUE_PARSER_GETTER(int64_t,     Int64);
-Y_DEFINE_VALUE_PARSER_GETTER(uint64_t,    Uint64);
-Y_DEFINE_VALUE_PARSER_GETTER(float,       Float);
-Y_DEFINE_VALUE_PARSER_GETTER(double,      Double);
-Y_DEFINE_VALUE_PARSER_GETTER(std::string, Utf8);
-Y_DEFINE_VALUE_PARSER_GETTER(TUuidValue,  Uuid);
-
-#undef Y_DEFINE_VALUE_PARSER_GETTER
-
-//! TInstant maps to whichever date/time primitive the column actually holds:
-//! Date, Datetime, or Timestamp. All three TValueParser accessors return TInstant
-//! at the C++ level; only the runtime primitive type tells us which one is valid.
-template <> struct TValueParserGetter<TInstant> {
-    static TInstant Get(TValueParser& p) {
-        switch (p.GetPrimitiveType()) {
-            case EPrimitiveType::Date:      return p.GetDate();
-            case EPrimitiveType::Datetime:  return p.GetDatetime();
-            case EPrimitiveType::Timestamp: return p.GetTimestamp();
-            default:
-                throw std::runtime_error(
-                    "TValueParserGetter<TInstant>: column type is not Date/Datetime/Timestamp");
-        }
-    }
-};
-
-template <> struct TValueParserGetter<std::optional<TInstant>> {
-    static std::optional<TInstant> Get(TValueParser& p) {
-        p.OpenOptional();
-        std::optional<TInstant> result;
-        bool unsupported = false;
-        if (!p.IsNull()) {
-            switch (p.GetPrimitiveType()) {
-                case EPrimitiveType::Date:      result = p.GetDate();      break;
-                case EPrimitiveType::Datetime:  result = p.GetDatetime();  break;
-                case EPrimitiveType::Timestamp: result = p.GetTimestamp(); break;
-                default: unsupported = true; break;
-            }
-        }
-        p.CloseOptional();
-        if (unsupported) {
-            throw std::runtime_error(
-                "TValueParserGetter<std::optional<TInstant>>: column inner type is not Date/Datetime/Timestamp");
-        }
-        return result;
-    }
-};
-
-} // namespace NRowRangesDetail
-
-//! Lightweight typed view over a TRowRange. Holds only a reference to
-//! the underlying range and the column names; yields std::tuple<Args...> per row.
+//! Lightweight typed view over a TRowRange. Holds shared range state and column
+//! names; yields std::tuple<Args...> per row.
 template <class... Args>
 class TRowColumns {
     friend class TRowRange;
@@ -232,7 +193,7 @@ public:
         value_type MakeTuple(std::index_sequence<Is...>) const {
             TRowParser& row = *Inner_;
             return value_type{
-                NRowRangesDetail::TValueParserGetter<Args>::Get(row.ColumnParser((*Names_)[Is]))...
+                NRowRangesDetail::TRowColumnGetter<Args>::Get(row, (*Names_)[Is])...
             };
         }
 
@@ -246,7 +207,7 @@ public:
     TRowColumns& operator=(TRowColumns&&) noexcept = default;
 
     Iterator begin() {
-        return Iterator(Range_.begin(), Names_);
+        return Iterator(TRowRange::BeginIterator(State_), Names_);
     }
 
     TRowIterEnd end() const noexcept {
@@ -254,48 +215,26 @@ public:
     }
 
 private:
-    TRowColumns(TRowRange& range, TNames&& names)
-        : Range_(range)
+    TRowColumns(std::shared_ptr<TRowRange::TImpl> state, TNames&& names)
+        : State_(std::move(state))
         , Names_(std::move(names))
     {}
 
-    TRowRange& Range_;
+    std::shared_ptr<TRowRange::TImpl> State_;
     TNames Names_;
 };
-
-namespace NRowRangesDetail {
-
-template <size_t N, class It>
-std::array<std::string, N> BuildColumnNames(It first, It last) {
-    std::array<std::string, N> names;
-    size_t i = 0;
-    for (auto it = first; it != last; ++it) {
-        if (i >= N) {
-            throw std::invalid_argument(
-                "TRowRange::Get: too many column names for the requested types");
-        }
-        names[i++] = std::string(*it);
-    }
-    if (i != N) {
-        throw std::invalid_argument(
-            "TRowRange::Get: not enough column names for the requested types");
-    }
-    return names;
-}
-
-} // namespace NRowRangesDetail
 
 template <class... Args>
 TRowColumns<Args...> TRowRange::Get(std::initializer_list<std::string_view> columns) {
     return TRowColumns<Args...>(
-        *this,
+        Impl_,
         NRowRangesDetail::BuildColumnNames<sizeof...(Args)>(columns.begin(), columns.end()));
 }
 
 template <class... Args, class StringIterable>
 TRowColumns<Args...> TRowRange::Get(const StringIterable& columns) {
     return TRowColumns<Args...>(
-        *this,
+        Impl_,
         NRowRangesDetail::BuildColumnNames<sizeof...(Args)>(std::begin(columns), std::end(columns)));
 }
 

@@ -151,7 +151,7 @@ void TDirectReadSessionControlCallbacks::StopPartitionSession(TPartitionSessionI
 // TDirectReadSessionManager
 
 TDirectReadSessionManager::TDirectReadSessionManager(
-    std::string_view serverSessionId,
+    TReadSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
     IDirectReadSessionControlCallbacks::TPtr controlCallbacks,
     NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -159,7 +159,7 @@ TDirectReadSessionManager::TDirectReadSessionManager(
     TLog log
 )
     : ReadSessionSettings(settings)
-    , ServerSessionId(serverSessionId)
+    , ServerSessionId(std::move(serverSessionId))
     , ClientContext(clientContext)
     , ProcessorFactory(processorFactory)
     , ControlCallbacks(controlCallbacks)
@@ -323,7 +323,7 @@ bool TDirectReadSessionManager::StopPartitionSessionGracefully(TPartitionSession
 
 TDirectReadSession::TDirectReadSession(
     TNodeId nodeId,
-    std::string_view serverSessionId,
+    TReadSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
     IDirectReadSessionControlCallbacks::TPtr controlCallbacks,
     NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -332,7 +332,7 @@ TDirectReadSession::TDirectReadSession(
 )
     : ClientContext(clientContext)
     , ReadSessionSettings(settings)
-    , ServerSessionId(serverSessionId)
+    , ServerSessionId(std::move(serverSessionId))
     , ProcessorFactory(processorFactory)
     , NodeId(nodeId)
     , IncomingMessagesForControlSession(std::make_shared<TLockFreeQueue<Ydb::Topic::StreamDirectReadMessage::DirectReadResponse>>())

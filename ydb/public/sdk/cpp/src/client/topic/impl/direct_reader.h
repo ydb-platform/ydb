@@ -105,7 +105,7 @@ public:
 
     TDirectReadSession(
         TNodeId,
-        std::string_view,
+        TReadSessionId,
         const NYdb::NTopic::TReadSessionSettings,
         IDirectReadSessionControlCallbacks::TPtr,
         NYdbGrpc::IQueueClientContextPtr,
@@ -220,7 +220,7 @@ public:
     using TPtr = std::shared_ptr<TSelf>;
 
     TDirectReadSessionManager(
-        std::string_view,
+        TReadSessionId,
         const NYdb::NTopic::TReadSessionSettings,
         IDirectReadSessionControlCallbacks::TPtr,
         NYdbGrpc::IQueueClientContextPtr,

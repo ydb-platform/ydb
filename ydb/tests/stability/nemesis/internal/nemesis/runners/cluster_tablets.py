@@ -16,6 +16,8 @@ from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import Monitor
 class ClusterKillTabletByTypeNemesis(MonitoredAgentActor):
     """Kill one random tablet of ``_tablet_type`` (tablet_state + tablet_kill)."""
 
+    supports_local_mode = True
+
     _tablet_type: ClassVar[TabletTypes]
 
     def __init__(self) -> None:
@@ -128,6 +130,8 @@ class ClusterKillBlockstorePartitionNemesis(ClusterKillTabletByTypeNemesis):
 class ClusterChangeTabletGroupNemesis(MonitoredAgentActor):
     """change_tablet_group for one tablet id (after tablet_state)."""
 
+    supports_local_mode = True
+
     def __init__(self, tablet_type: TabletTypes, channels: tuple = ()) -> None:
         super().__init__(scope="tablets")
         self._tablet_type = tablet_type
@@ -185,6 +189,8 @@ class ClusterChangeTabletGroupNemesis(MonitoredAgentActor):
 
 class ClusterBulkChangeTabletGroupNemesis(MonitoredAgentActor):
     """change_tablet_group_by_tablet_type."""
+
+    supports_local_mode = True
 
     def __init__(self, tablet_type: TabletTypes, *, percent: Optional[int] = None, channels: tuple = ()) -> None:
         super().__init__(scope="tablets")

@@ -14,6 +14,8 @@ import time
 import urllib.request
 import urllib.error
 
+from ydb.tests.tools.local_cluster import nemesis_integration
+
 from ydb.tests.library.harness import kikimr_config
 from ydb.tests.library.harness import kikimr_runner
 from ydb.tests.library.harness.kikimr_port_allocator import (
@@ -181,10 +183,12 @@ class LocalCluster:
         return slots
 
 
-def setup_signal_handlers(cluster):
+def setup_signal_handlers(cluster, nemesis_proc=None):
     """Sets up signal handlers for graceful shutdown."""
     def signal_handler(signum, frame):
         logger.info("Received signal %s, stopping cluster...", signum)
+        if nemesis_proc is not None and nemesis_proc.poll() is None:
+            nemesis_proc.terminate()
         cluster.stop()
         sys.exit(0)
 
@@ -227,6 +231,21 @@ def main():
              'With offset N: GRPC=2135+N, MON=8765+N, IC=19001+N. '
              'Example: --port-offset=1000 for GRPC=3135, MON=9765, IC=20001'
     )
+    parser.add_argument(
+        '--enable-nemesis',
+        action='store_true',
+        help='Start nemesis chaos testing UI alongside the cluster. '
+             'Requires port-offset=0 (default) because nemesis connects to the '
+             'cluster on default ports (grpc=2135). '
+             'Access the UI at http://localhost:<nemesis-port>/static/index.html'
+    )
+    parser.add_argument(
+        '--nemesis-port',
+        type=int,
+        default=31434,
+        help='Port for the nemesis HTTP API and web UI (default: 31434)'
+    )
+
 
     args = parser.parse_args()
 
@@ -250,16 +269,36 @@ def main():
         port_offset=args.port_offset
     )
 
+    if args.enable_nemesis and args.port_offset != 0:
+        logger.error(
+            "--enable-nemesis requires --port-offset=0 (default) because nemesis "
+            "connects to the cluster on default ports (grpc=2135, ic=19001). "
+            "Got --port-offset=%d.", args.port_offset
+        )
+        sys.exit(1)
+
+    nemesis_proc = None
     try:
         cluster_manager.start()
-        setup_signal_handlers(cluster_manager)
 
+        if args.enable_nemesis:
+            nemesis_proc, nemesis_ui_url = nemesis_integration.start_nemesis(
+                cluster=cluster_manager.cluster,
+                working_dir=working_dir,
+                nemesis_port=args.nemesis_port,
+            )
+            logger.info("=" * 60)
+            logger.info("Nemesis chaos UI: %s", nemesis_ui_url)
+            logger.info("=" * 60)
+
+        setup_signal_handlers(cluster_manager, nemesis_proc)
         logger.info("Cluster is running. Press Ctrl+C to stop.")
         cluster_manager.wait()
 
     except Exception as e:
         logger.exception("Error during cluster operation: %s", e)
-
+        if nemesis_proc is not None and nemesis_proc.poll() is None:
+            nemesis_proc.terminate()
         cluster_manager.stop()
         sys.exit(1)
 

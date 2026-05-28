@@ -52,6 +52,21 @@ class SafetyCheckSpec:
     build_warden: Optional[Callable[[], Any]] = None
 
 
+def warden_supports_local(warden: Any) -> bool:
+    """True iff the warden's class declares supports_local_mode=True."""
+    return bool(getattr(type(warden), "supports_local_mode", False))
+
+
+def spec_supports_local(spec: SafetyCheckSpec) -> bool:
+    """Inspect the warden(s) the spec builds; True iff all of them are local-safe."""
+    if spec.build_warden is not None:
+        return warden_supports_local(spec.build_warden())
+    if spec.build_pairs is not None:
+        pairs = spec.build_pairs()
+        return bool(pairs) and all(warden_supports_local(w) for _, w in pairs)
+    return False
+
+
 def collect_safety_warden_pairs(
     specs: Iterable[SafetyCheckSpec],
 ) -> List[Tuple[str, Any]]:

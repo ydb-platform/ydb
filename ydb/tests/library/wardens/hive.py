@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 class BootQueueSizeWarden(LivenessWarden):
+    # mon_port HTTP sensors — works against the local harness cluster.
+    supports_local_mode = True
+
     def __init__(self, cluster):
         super(BootQueueSizeWarden, self).__init__()
         self.cluster = cluster
@@ -43,6 +46,8 @@ class BootQueueSizeWarden(LivenessWarden):
 
 
 class AllTabletsAliveLivenessWarden(LivenessWarden):
+    supports_local_mode = True
+
     def __init__(self, cluster):
         self.cluster = cluster
 

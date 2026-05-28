@@ -46,6 +46,10 @@ def deduplicate_verify_failed(violations: List[str]) -> List[str]:
 class UnifiedAgentVerifyFailedAggregated:
     """Merges violations from agent rows whose name matches the source warden class name."""
 
+    # Aggregates results from agent-side wardens that read unified_agent /
+    # kikimr-start logs; neither exists in the local harness deployment.
+    supports_local_mode = False
+
     def __init__(
         self,
         *,

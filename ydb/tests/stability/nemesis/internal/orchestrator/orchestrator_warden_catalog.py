@@ -11,10 +11,15 @@ from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
 from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
+from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
 from ydb.tests.stability.nemesis.internal.orchestrator.unified_agent_verify_failed_aggregated import (
     UnifiedAgentVerifyFailedAggregated,
 )
-from ydb.tests.stability.nemesis.internal.safety_warden_execution import SafetyCheckSpec
+from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
+    SafetyCheckSpec,
+    spec_supports_local,
+    warden_supports_local,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -31,13 +36,16 @@ def collect_orchestrator_cluster_safety_specs(
     Each spec wraps a ``build_warden`` that takes no args (cluster is captured).
     To add a new orchestrator cluster safety check, append a ``SafetyCheckSpec``.
     """
-    return [
+    specs = [
         SafetyCheckSpec(
             name="AllPDisksAreInValidState",
             description="Check all PDisks are in valid state",
             build_warden=lambda: AllPDisksAreInValidStateSafetyWarden(cluster, timeout_seconds=30),
         ),
     ]
+    if get_orchestrator_settings().local_mode:
+        specs = [s for s in specs if spec_supports_local(s)]
+    return specs
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +80,12 @@ ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS: Tuple[OrchestratorAggregatedSafetyCheck, 
         impl=UnifiedAgentVerifyFailedAggregated,
     ),
 )
+
+if get_orchestrator_settings().local_mode:
+    ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS = tuple(
+        c for c in ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS
+        if getattr(c.impl, "supports_local_mode", False)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -110,3 +124,12 @@ ORCHESTRATOR_LIVENESS_CHECKS: Tuple[OrchestratorLivenessCheck, ...] = (
         build=lambda c: TxCompleteLagLivenessWarden(c),
     ),
 )
+
+if get_orchestrator_settings().local_mode:
+    # Liveness wardens stash the cluster reference in __init__ but never touch
+    # it during construction, so we can probe with cluster=None just to read
+    # the class-level supports_local_mode attribute.
+    ORCHESTRATOR_LIVENESS_CHECKS = tuple(
+        c for c in ORCHESTRATOR_LIVENESS_CHECKS
+        if warden_supports_local(c.build(None))
+    )

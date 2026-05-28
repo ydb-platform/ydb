@@ -11,6 +11,8 @@ from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import Monitor
 class KillNodeNemesis(MonitoredAgentActor):
     """SIGKILL one local YDB ic-port process; extract is a monitoring noop."""
 
+    supports_local_mode = True
+
     def __init__(self) -> None:
         super().__init__(scope="node")
 

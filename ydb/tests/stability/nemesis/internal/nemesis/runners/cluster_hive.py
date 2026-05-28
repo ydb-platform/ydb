@@ -13,6 +13,8 @@ from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import Monitor
 class ClusterKickTabletsFromNodeNemesis(MonitoredAgentActor):
     """block_node → kick_tablets_from_node → unblock_node on random cluster node."""
 
+    supports_local_mode = True
+
     def __init__(self) -> None:
         super().__init__(scope="tablets")
         self._hive: HiveClient | None = None
@@ -48,6 +50,8 @@ class ClusterKickTabletsFromNodeNemesis(MonitoredAgentActor):
 
 class ClusterReBalanceTabletsNemesis(MonitoredAgentActor):
     """Hive rebalance_all_tablets."""
+
+    supports_local_mode = True
 
     def __init__(self) -> None:
         super().__init__(scope="tablets")

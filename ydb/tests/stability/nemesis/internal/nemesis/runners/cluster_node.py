@@ -159,6 +159,8 @@ def _resolve_local_slots(cluster):
 class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
     """Kill one random local slot daemon via subprocess."""
 
+    supports_local_mode = True
+
     def __init__(self) -> None:
         super().__init__(scope="node")
 
@@ -187,6 +189,8 @@ class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
 class ClusterKillNodeDaemonNemesis(MonitoredAgentActor):
     """Kill the local kikimr node daemon via subprocess."""
 
+    supports_local_mode = True
+
     def __init__(self) -> None:
         super().__init__(scope="node")
 
@@ -212,6 +216,8 @@ class ClusterKillNodeDaemonNemesis(MonitoredAgentActor):
 
 class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
     """Kill the local node daemon; ``node_id`` + ``sleep_before`` come from the orchestrator payload."""
+
+    supports_local_mode = True
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -247,6 +253,8 @@ class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
 
 class ClusterSerialKillSlotsNemesis(MonitoredAgentActor):
     """Kill the local slot daemon; ``slot_idx`` + ``sleep_before`` from orchestrator."""
+
+    supports_local_mode = True
 
     def __init__(self) -> None:
         super().__init__(scope="node")
@@ -323,6 +331,8 @@ class ClusterStopStartNodeNemesis(MonitoredAgentActor):
 
 class ClusterSuspendNodeNemesis(MonitoredAgentActor):
     """SIGSTOP / SIGCONT on local node or slot (>=8 nodes)."""
+
+    supports_local_mode = True
 
     def __init__(self) -> None:
         super().__init__(scope="node")

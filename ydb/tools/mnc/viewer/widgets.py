@@ -11,10 +11,9 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, ListItem, ListView, Static
 
 
-class OpenTabListItem(ListItem):
-    def __init__(self, title: str, action: str) -> None:
-        self.action = action
-        super().__init__(Label(title))
+CONFIG_FIELD_TITLES = {
+    "git_ydb_root": "YDB source root",
+}
 
 
 class OverviewStatusCard(ListItem):
@@ -42,10 +41,7 @@ class OverviewPane(Vertical):
         width: 100%;
         padding: 1 2;
         layout: horizontal;
-    }
-
-    #overview-tabs {
-        height: 1fr;
+        background: transparent;
     }
 
     .overview-status-card {
@@ -58,7 +54,23 @@ class OverviewPane(Vertical):
         height: 5;
         width: 100%;
         padding: 0 2;
-        border: hkey $border;
+        background: $surface;
+    }
+
+    .overview-status-card-content:dark {
+        background: $panel-darken-1;
+    }
+
+    #overview-status-row > .overview-status-card.-highlight {
+        background: transparent;
+    }
+
+    #overview-status-row > .overview-status-card.-highlight .overview-status-card-content {
+        background: $block-cursor-blurred-background;
+    }
+
+    #overview-status-row > .overview-status-card.-highlight .overview-status-title {
+        color: $block-cursor-blurred-foreground;
     }
 
     .overview-status-title {
@@ -96,16 +108,10 @@ class OverviewPane(Vertical):
             OverviewStatusCard("Cluster Config", self._cluster_config_status, action="open_cluster_config"),
             id="overview-status-row",
         )
-        yield ListView(
-            OpenTabListItem("MNC Config", "open_mnc_config"),
-            OpenTabListItem("Cluster Config", "open_cluster_config"),
-            id="overview-tabs",
-        )
 
     def on_key(self, event: Key) -> None:
         focused = self.screen.focused
         status_row = self.query_one("#overview-status-row", ListView)
-        tabs_list = self.query_one("#overview-tabs", ListView)
 
         if event.key in ("left", "right") and focused is status_row:
             if status_row.index is None:
@@ -114,14 +120,6 @@ class OverviewPane(Vertical):
                 status_row.index -= 1
             elif event.key == "right" and status_row.index < len(status_row.children) - 1:
                 status_row.index += 1
-            event.stop()
-        elif event.key == "down" and focused is status_row:
-            tabs_list.focus()
-            tabs_list.index = 0
-            event.stop()
-        elif event.key == "up" and focused is tabs_list and tabs_list.index in (None, 0):
-            status_row.focus()
-            status_row.index = 0
             event.stop()
 
 
@@ -136,7 +134,7 @@ class ConfigFieldItem(ListItem):
         super().__init__(
             Horizontal(
                 Label(title, classes="config-field-title"),
-                self.input,
+                Vertical(self.input, classes="config-field-value"),
                 classes="config-field-row",
             )
         )
@@ -168,6 +166,31 @@ class MncConfigForm(Vertical):
 
     #mnc-config-fields {
         height: 1fr;
+        background: $surface;
+    }
+
+    #mnc-config-fields:dark {
+        background: $panel-darken-1;
+    }
+
+    #mnc-config-fields > ConfigFieldItem {
+        height: 3;
+    }
+
+    #mnc-config-fields > ConfigFieldItem.-highlight {
+        background: transparent;
+        color: $block-cursor-blurred-foreground;
+    }
+
+    #mnc-config-fields > ConfigFieldItem.-highlight .config-field-title,
+    #mnc-config-fields > ConfigFieldItem.-highlight .config-field-value {
+        background: $primary-background;
+    }
+
+    #mnc-config-fields > ConfigFieldItem.-highlight .config-field-title,
+    #mnc-config-fields > ConfigFieldItem.-highlight Input {
+        color: $block-cursor-blurred-foreground;
+        text-style: bold;
     }
 
     .config-field-row {
@@ -176,14 +199,34 @@ class MncConfigForm(Vertical):
     }
 
     .config-field-title {
-        width: 18;
+        width: 22;
         height: 3;
-        content-align: center middle;
+        padding-left: 2;
+        margin-right: 1;
+        background: $background;
+        content-align: left middle;
+        text-style: bold;
+    }
+
+    .config-field-value {
+        width: 1fr;
+        height: 3;
+        padding: 0 1;
+        background: $background;
     }
 
     .config-field-row Input {
         width: 1fr;
-        height: 3;
+        height: 1;
+        margin-top: 1;
+        border: none;
+        background: transparent;
+        padding: 0;
+    }
+
+    .config-field-row Input:focus {
+        border: none;
+        background-tint: 0%;
     }
     """
 
@@ -196,7 +239,7 @@ class MncConfigForm(Vertical):
         yield ListView(
             ConfigFieldItem(
                 "git_ydb_root",
-                "git_ydb_root",
+                CONFIG_FIELD_TITLES["git_ydb_root"],
                 self._config.get("git_ydb_root", self._default_git_ydb_root),
                 path_picker=True,
             ),
@@ -213,7 +256,14 @@ class ConfigCandidate:
 class ConfigCandidateItem(ListItem):
     def __init__(self, candidate: ConfigCandidate) -> None:
         self.candidate = candidate
-        super().__init__(Label(f"{candidate.name}  {candidate.path}"))
+        super().__init__(
+            Vertical(
+                Label(candidate.name, classes="config-candidate-name"),
+                Label(candidate.path, classes="config-candidate-path"),
+                classes="config-candidate-content",
+            ),
+            classes="config-candidate-item",
+        )
 
 
 class ClusterConfigPane(Horizontal):
@@ -226,7 +276,11 @@ class ClusterConfigPane(Horizontal):
     #cluster-config-left {
         width: 2fr;
         height: 1fr;
-        border: solid $primary;
+        background: $surface;
+    }
+
+    #cluster-config-left:dark {
+        background: $panel-darken-1;
     }
 
     #cluster-configs {
@@ -234,12 +288,50 @@ class ClusterConfigPane(Horizontal):
         background: transparent;
     }
 
+    #cluster-configs > .config-candidate-item {
+        height: 2;
+    }
+
+    .config-candidate-content {
+        height: 2;
+        padding-left: 1;
+    }
+
+    .config-candidate-name {
+        height: 1;
+        text-style: bold;
+        content-align: left middle;
+    }
+
+    .config-candidate-path {
+        height: 1;
+        color: $text-muted;
+        content-align: left middle;
+    }
+
+    #cluster-configs > .config-candidate-item.-highlight {
+        background: $block-cursor-blurred-background;
+    }
+
+    #cluster-configs > .config-candidate-item.-highlight .config-candidate-name {
+        color: $block-cursor-blurred-foreground;
+        text-style: bold;
+    }
+
+    #cluster-configs > .config-candidate-item.-highlight .config-candidate-path {
+        color: $text;
+    }
+
     #cluster-config-details {
         width: 3fr;
         height: 1fr;
         padding: 1 2;
-        border: solid $primary;
+        background: $surface;
         margin-left: 1;
+    }
+
+    #cluster-config-details:dark {
+        background: $panel-darken-1;
     }
     """
 
@@ -346,7 +438,7 @@ class InvalidPathModal(ModalScreen[None]):
         yield Vertical(
             Label("Invalid path", id="invalid-path-title"),
             Static(
-                f"Path is not suitable for git_ydb_root:\n{self._path}\n\nSelect an existing directory.",
+                f"Path is not suitable for YDB source root:\n{self._path}\n\nSelect an existing directory.",
                 id="invalid-path-message",
             ),
             Horizontal(

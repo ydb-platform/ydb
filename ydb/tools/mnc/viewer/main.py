@@ -17,7 +17,6 @@ from ydb.tools.mnc.viewer.widgets import (
     ConfigFieldItem,
     InvalidPathModal,
     MncConfigForm,
-    OpenTabListItem,
     OverviewPane,
     OverviewStatusCard,
     PathPickerScreen,
@@ -273,9 +272,7 @@ class Viewer(App):
         )
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if isinstance(event.item, OpenTabListItem):
-            await self.run_action(event.item.action)
-        elif isinstance(event.item, OverviewStatusCard):
+        if isinstance(event.item, OverviewStatusCard):
             if event.item.action is not None:
                 await self.run_action(event.item.action)
         elif isinstance(event.item, ConfigFieldItem):

@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -69,6 +70,13 @@ public:
     }
 };
 
+struct TIndexBuildOnInsertPolicy {
+    bool Enabled = false;
+    ui64 MinBlobBytes = 0;
+
+    bool ShouldBuildIndexesOnInsert(NEvWrite::EModificationType mType, ui64 totalBlobBytes) const;
+};
+
 struct TIndexInfo: public IIndexInfo {
 public:
     using TColumns = THashMap<ui32, NTable::TColumn>;
@@ -91,6 +99,7 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
+    TIndexBuildOnInsertPolicy IndexBuildOnInsert;
 
     TPresetId PresetId;
     ui64 Version = 0;
@@ -245,6 +254,10 @@ public:
 
     bool GetSchemeNeedActualization() const {
         return SchemeNeedActualization;
+    }
+
+    const TIndexBuildOnInsertPolicy& GetIndexBuildOnInsert() const {
+        return IndexBuildOnInsert;
     }
 
     std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {

@@ -206,11 +206,29 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
+bool TIndexBuildOnInsertPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
+    if (!Enabled) {
+        return false;
+    }
+    if (mType == NEvWrite::EModificationType::Delete) {
+        return false;
+    }
+    if (MinBlobBytes > 0 && totalBlobBytes < MinBlobBytes) {
+        return false;
+    }
+    return true;
+}
+
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
     SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
+    }
+    if (optionsProto.HasIndexBuildOnInsert()) {
+        const auto& policy = optionsProto.GetIndexBuildOnInsert();
+        IndexBuildOnInsert.Enabled = policy.GetEnabled();
+        IndexBuildOnInsert.MinBlobBytes = policy.GetMinBlobBytes();
     }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =

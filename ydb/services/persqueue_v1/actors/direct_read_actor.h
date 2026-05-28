@@ -105,10 +105,8 @@ private:
     // proxy events
     void Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev,  const TActorContext& ctx);
-    //void Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
-    //void Handle(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDirectReadDataSessionConnectedResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuth::TPtr& ev, const TActorContext& ctx);

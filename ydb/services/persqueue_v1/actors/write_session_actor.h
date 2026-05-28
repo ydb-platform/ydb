@@ -139,8 +139,6 @@ private:
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
 
-    //void InitCheckACL(const TActorContext& ctx);
-
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
     void MakeAndSendInitResponse(const TMaybe<ui64>& maxSeqNo, const TActorContext& ctx);
 

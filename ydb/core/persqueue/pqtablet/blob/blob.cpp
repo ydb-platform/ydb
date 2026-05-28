@@ -570,7 +570,7 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
 
     if (!Blobs.empty()) {
         for (const auto& blob : Blobs) {
-            if (blob.PartData && blob.PartData->PartNo == 0) {
+            if (!blob.PartData || blob.PartData->PartNo == 0) {
                 offsetDelta += blob.GetLogicalOffsetSpan();
             }
         }

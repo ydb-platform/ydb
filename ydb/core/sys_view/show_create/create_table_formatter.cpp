@@ -1938,19 +1938,34 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeValue(options.GetSchemeNeedActualization(), paramsStr);
         del = ", ";
     }
-    if (options.HasIndexBuildOnInsert()) {
-        const auto& policy = options.GetIndexBuildOnInsert();
-        paramsStr << del;
-        EscapeName("INDEX_BUILD_ON_INSERT.ENABLED", paramsStr);
-        paramsStr << "=";
-        EscapeValue(policy.GetEnabled(), paramsStr);
-        del = ", ";
-
-        if (policy.GetMinBlobBytes()) {
+    if (options.HasInsertOptions()) {
+        const auto& insertOptions = options.GetInsertOptions();
+        if (insertOptions.GetCompressionEnabled()) {
             paramsStr << del;
-            EscapeName("INDEX_BUILD_ON_INSERT.MIN_BLOB_BYTES", paramsStr);
+            EscapeName("INSERT_OPTIONS.COMPRESSION_ENABLED", paramsStr);
             paramsStr << "=";
-            EscapeValue(policy.GetMinBlobBytes(), paramsStr);
+            EscapeValue(insertOptions.GetCompressionEnabled(), paramsStr);
+            del = ", ";
+        }
+        if (insertOptions.GetCompressionMinRawBytes()) {
+            paramsStr << del;
+            EscapeName("INSERT_OPTIONS.COMPRESSION_MIN_RAW_BYTES", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertOptions.GetCompressionMinRawBytes(), paramsStr);
+            del = ", ";
+        }
+        if (insertOptions.GetBuildIndexesEnabled()) {
+            paramsStr << del;
+            EscapeName("INSERT_OPTIONS.BUILD_INDEXES_ENABLED", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertOptions.GetBuildIndexesEnabled(), paramsStr);
+            del = ", ";
+        }
+        if (insertOptions.GetBuildIndexesMinBlobBytes()) {
+            paramsStr << del;
+            EscapeName("INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES", paramsStr);
+            paramsStr << "=";
+            EscapeValue(insertOptions.GetBuildIndexesMinBlobBytes(), paramsStr);
             del = ", ";
         }
     }

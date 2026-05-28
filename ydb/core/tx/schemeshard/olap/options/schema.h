@@ -11,7 +11,7 @@ class TOlapOptionsDescription {
 private:
     YDB_READONLY(bool, SchemeNeedActualization, false);
     YDB_READONLY_DEF(std::optional<TString>, ScanReaderPolicyName);
-    YDB_READONLY_DEF(NOlap::TIndexBuildOnInsertPolicy, IndexBuildOnInsert);
+    YDB_READONLY_DEF(NOlap::TInsertOptions, InsertOptions);
     YDB_READONLY_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_READONLY_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:

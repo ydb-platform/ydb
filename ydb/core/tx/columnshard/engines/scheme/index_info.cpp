@@ -206,14 +206,27 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
-bool TIndexBuildOnInsertPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
-    if (!Enabled) {
+bool TInsertOptions::ShouldCompressOnInsert(const NEvWrite::EModificationType mType, const ui64 totalRawBytes) const {
+    if (!CompressionEnabled) {
         return false;
     }
     if (mType == NEvWrite::EModificationType::Delete) {
         return false;
     }
-    if (MinBlobBytes > 0 && totalBlobBytes < MinBlobBytes) {
+    if (CompressionMinRawBytes > 0 && totalRawBytes < CompressionMinRawBytes) {
+        return false;
+    }
+    return true;
+}
+
+bool TInsertOptions::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalPackedBytes) const {
+    if (!BuildIndexesEnabled) {
+        return false;
+    }
+    if (mType == NEvWrite::EModificationType::Delete) {
+        return false;
+    }
+    if (BuildIndexesMinBlobBytes > 0 && totalPackedBytes < BuildIndexesMinBlobBytes) {
         return false;
     }
     return true;
@@ -225,10 +238,12 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }
-    if (optionsProto.HasIndexBuildOnInsert()) {
-        const auto& policy = optionsProto.GetIndexBuildOnInsert();
-        IndexBuildOnInsert.Enabled = policy.GetEnabled();
-        IndexBuildOnInsert.MinBlobBytes = policy.GetMinBlobBytes();
+    if (optionsProto.HasInsertOptions()) {
+        const auto& options = optionsProto.GetInsertOptions();
+        InsertOptions.CompressionEnabled = options.GetCompressionEnabled();
+        InsertOptions.CompressionMinRawBytes = options.GetCompressionMinRawBytes();
+        InsertOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+        InsertOptions.BuildIndexesMinBlobBytes = options.GetBuildIndexesMinBlobBytes();
     }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =

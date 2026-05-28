@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INDEX_BUILD_ON_INSERT.ENABLED`=`true`);
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INDEX_BUILD_ON_INSERT.ENABLED`=`true`, `INDEX_BUILD_ON_INSERT.MIN_BLOB_BYTES`=`500`);
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES`=`500`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INDEX_BUILD_ON_INSERT.ENABLED`=`true`);
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INDEX_BUILD_ON_INSERT.ENABLED`=`true`);
+        ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTableAllIdx` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_minmax, TYPE=MIN_MAX, FEATURES=`{"column_name" : "field"}`);
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTableCatBloom` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INDEX_BUILD_ON_INSERT.ENABLED`=`true`, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+        ALTER OBJECT `/Root/ColumnTableCatBloom` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTableCatBloom` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=payload, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTableLocalIdx` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INDEX_BUILD_ON_INSERT.ENABLED`=`true`, `SCHEME_NEED_ACTUALIZATION`=`true`);
+        ALTER OBJECT `/Root/ColumnTableLocalIdx` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`, `SCHEME_NEED_ACTUALIZATION`=`true`);
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTableLocalIdx` (pk, field) VALUES (1u, 'alpha_beta_gamma');
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WITH (STORE = COLUMN, PARTITION_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTableLocalAdd` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INDEX_BUILD_ON_INSERT.ENABLED`=`true`);
+        ALTER OBJECT `/Root/ColumnTableLocalAdd` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
         ------
         SCHEMA:
         ALTER TABLE `/Root/ColumnTableLocalAdd` ADD INDEX idx_minmax LOCAL USING min_max ON (field);

@@ -70,11 +70,14 @@ public:
     }
 };
 
-struct TIndexBuildOnInsertPolicy {
-    bool Enabled = false;
-    ui64 MinBlobBytes = 0;
+struct TInsertOptions {
+    bool CompressionEnabled = false;
+    ui64 CompressionMinRawBytes = 0;
+    bool BuildIndexesEnabled = false;
+    ui64 BuildIndexesMinBlobBytes = 0;
 
-    bool ShouldBuildIndexesOnInsert(NEvWrite::EModificationType mType, ui64 totalBlobBytes) const;
+    bool ShouldCompressOnInsert(NEvWrite::EModificationType mType, ui64 totalRawBytes) const;
+    bool ShouldBuildIndexesOnInsert(NEvWrite::EModificationType mType, ui64 totalPackedBytes) const;
 };
 
 struct TIndexInfo: public IIndexInfo {
@@ -99,7 +102,7 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
-    TIndexBuildOnInsertPolicy IndexBuildOnInsert;
+    TInsertOptions InsertOptions;
 
     TPresetId PresetId;
     ui64 Version = 0;
@@ -256,8 +259,8 @@ public:
         return SchemeNeedActualization;
     }
 
-    const TIndexBuildOnInsertPolicy& GetIndexBuildOnInsert() const {
-        return IndexBuildOnInsert;
+    const TInsertOptions& GetInsertOptions() const {
+        return InsertOptions;
     }
 
     std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {

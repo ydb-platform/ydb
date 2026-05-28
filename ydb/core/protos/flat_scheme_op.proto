@@ -761,9 +761,11 @@ message TMetadataManagerConstructorContainer {
     }
 }
 
-message TIndexBuildOnInsertPolicy {
-    optional bool Enabled = 1 [default = false];
-    optional uint64 MinBlobBytes = 2 [default = 0];
+message TInsertOptions {
+    optional bool CompressionEnabled = 1 [default = false];
+    optional uint64 CompressionMinRawBytes = 2 [default = 0];
+    optional bool BuildIndexesEnabled = 3 [default = false];
+    optional uint64 BuildIndexesMinBlobBytes = 4 [default = 0];
 }
 
 message TColumnTableSchemeOptions {
@@ -771,7 +773,7 @@ message TColumnTableSchemeOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
-    optional TIndexBuildOnInsertPolicy IndexBuildOnInsert = 6;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TColumnTableSchema {
@@ -817,7 +819,7 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
-    optional TIndexBuildOnInsertPolicy IndexBuildOnInsert = 6;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TAlterColumnTableSchema {

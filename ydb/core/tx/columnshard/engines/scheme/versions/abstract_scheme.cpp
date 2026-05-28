@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
@@ -15,9 +16,27 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
+
+namespace {
+
+std::shared_ptr<arrow::RecordBatch> BuildRecordBatchForSaver(
+    const std::shared_ptr<arrow::Field>& field, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& columnData) {
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ field });
+    if (columnData->GetType() == NArrow::NAccessor::IChunkedArray::EType::Array) {
+        const auto* arr = static_cast<const NArrow::NAccessor::TTrivialArray*>(columnData.get());
+        return arrow::RecordBatch::Make(schema, columnData->GetRecordsCount(), { arr->GetArray() });
+    }
+    auto chunked = columnData->GetChunkedArray();
+    auto table = arrow::Table::Make(schema, { chunked }, columnData->GetRecordsCount());
+    return NArrow::ToBatch(table);
+}
+
+}   // namespace
 
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) const {
     auto schema = GetSchema();
@@ -328,6 +347,18 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     auto itIndexEnd = GetIndexInfo().ArrowSchema().end();
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks;
 
+    struct TPendingColumn {
+        ui32 ColumnId = 0;
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> Array;
+        std::shared_ptr<arrow::Field> Field;
+        std::shared_ptr<TColumnLoader> Loader;
+        TSimpleColumnInfo ColumnFeatures;
+        bool IsDictionary = false;
+    };
+
+    std::vector<TPendingColumn> pendingColumns;
+    ui64 totalRawBytes = 0;
+
     std::shared_ptr<TDefaultSchemaDetails> schemaDetails(
         new TDefaultSchemaDetails(selfPtr, std::make_shared<NArrow::NSplitter::TSerializationStats>()));
 
@@ -337,9 +368,6 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema().begin();
             const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
             auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
-            auto saver = GetIndexInfo().GetColumnSaver(columnId);
-            saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
-            saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
             const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
             auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingBatch->column(incomingIndex));
             TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =
@@ -349,23 +377,42 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
                 return arrToWrite;
             }
 
-            const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
-            std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks;
-            if (loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
-                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(*arrToWrite, loadContext);
-                columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                    std::move(blobAndMeta.Blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures, std::move(blobAndMeta.Meta)) };
-            } else {
-                columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                    loader->GetAccessorConstructor()->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0),
-                    columnFeatures) };
-            }
-            AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
+            totalRawBytes += arrToWrite.GetResult()->GetRawSizeVerified();
+            pendingColumns.push_back(TPendingColumn{
+                .ColumnId = columnId,
+                .Array = arrToWrite.DetachResult(),
+                .Field = *itIndex,
+                .Loader = loader,
+                .ColumnFeatures = columnFeatures,
+                .IsDictionary = loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName,
+            });
             ++itIncoming;
         }
         ++itIndex;
     }
     AFL_VERIFY(itIncoming == itIncomingEnd);
+
+    const auto& insertOptions = GetIndexInfo().GetInsertOptions();
+    const bool useCompression = insertOptions.ShouldCompressOnInsert(mType, totalRawBytes);
+    for (auto&& pending : pendingColumns) {
+        const auto loadContext = pending.Loader->BuildAccessorContext(pending.Array->GetRecordsCount());
+        std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks;
+        if (pending.IsDictionary) {
+            auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(pending.Array, loadContext);
+            columnChunks = { std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), pending.Array,
+                TChunkAddress(pending.ColumnId, 0), pending.ColumnFeatures, std::move(blobAndMeta.Meta)) };
+        } else if (useCompression) {
+            const auto batch = BuildRecordBatchForSaver(pending.Field, pending.Array);
+            const auto data = GetIndexInfo().GetColumnSaver(pending.ColumnId).Apply(batch);
+            columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                data, pending.Array, TChunkAddress(pending.ColumnId, 0), pending.ColumnFeatures) };
+        } else {
+            columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
+                pending.Loader->GetAccessorConstructor()->SerializeToString(pending.Array, loadContext), pending.Array,
+                TChunkAddress(pending.ColumnId, 0), pending.ColumnFeatures) };
+        }
+        AFL_VERIFY(chunks.emplace(pending.ColumnId, std::move(columnChunks)).second);
+    }
 
     TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
     const auto groups = NSplitter::TEntityGroups(
@@ -373,7 +420,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     const ui64 totalBlobBytes = slice.GetPackedSize();
     THashMap<ui32, std::shared_ptr<IPortionDataChunk>> inplaceChunks;
     std::vector<TSplittedBlob> blobs;
-    if (GetIndexInfo().GetIndexBuildOnInsert().ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size()) {
+    if (insertOptions.ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size()) {
         auto dataWithSecondaryConclusion = GetIndexInfo().AppendIndexes(
             slice.GetPortionChunksToHash(), storagesManager, slice.GetRecordsCount(), IStoragesManager::DefaultStorageId);
         if (dataWithSecondaryConclusion.IsFail()) {

@@ -13,8 +13,10 @@ class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
-    YDB_ACCESSOR_DEF(std::optional<bool>, IndexBuildOnInsertEnabled);
-    YDB_ACCESSOR_DEF(std::optional<ui64>, IndexBuildOnInsertMinBlobBytes);
+    YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsCompressionEnabled);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsCompressionMinRawBytes);
+    YDB_ACCESSOR_DEF(std::optional<bool>, InsertOptionsBuildIndexesEnabled);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
@@ -39,13 +41,19 @@ public:
             }
             CompactionPlannerConstructor = container.DetachResult();
         }
-        if (alterRequest.GetOptions().HasIndexBuildOnInsert()) {
-            const auto& policyProto = alterRequest.GetOptions().GetIndexBuildOnInsert();
-            if (policyProto.HasEnabled()) {
-                IndexBuildOnInsertEnabled = policyProto.GetEnabled();
+        if (alterRequest.GetOptions().HasInsertOptions()) {
+            const auto& optionsProto = alterRequest.GetOptions().GetInsertOptions();
+            if (optionsProto.HasCompressionEnabled()) {
+                InsertOptionsCompressionEnabled = optionsProto.GetCompressionEnabled();
             }
-            if (policyProto.HasMinBlobBytes()) {
-                IndexBuildOnInsertMinBlobBytes = policyProto.GetMinBlobBytes();
+            if (optionsProto.HasCompressionMinRawBytes()) {
+                InsertOptionsCompressionMinRawBytes = optionsProto.GetCompressionMinRawBytes();
+            }
+            if (optionsProto.HasBuildIndexesEnabled()) {
+                InsertOptionsBuildIndexesEnabled = optionsProto.GetBuildIndexesEnabled();
+            }
+            if (optionsProto.HasBuildIndexesMinBlobBytes()) {
+                InsertOptionsBuildIndexesMinBlobBytes = optionsProto.GetBuildIndexesMinBlobBytes();
             }
         }
         return true;
@@ -61,13 +69,20 @@ public:
         if (MetadataManagerConstructor.HasObject()) {
             MetadataManagerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableMetadataManagerConstructor());
         }
-        if (IndexBuildOnInsertEnabled || IndexBuildOnInsertMinBlobBytes) {
-            auto& policy = *alterRequest.MutableOptions()->MutableIndexBuildOnInsert();
-            if (IndexBuildOnInsertEnabled) {
-                policy.SetEnabled(*IndexBuildOnInsertEnabled);
+        if (InsertOptionsCompressionEnabled || InsertOptionsCompressionMinRawBytes || InsertOptionsBuildIndexesEnabled ||
+            InsertOptionsBuildIndexesMinBlobBytes) {
+            auto& options = *alterRequest.MutableOptions()->MutableInsertOptions();
+            if (InsertOptionsCompressionEnabled) {
+                options.SetCompressionEnabled(*InsertOptionsCompressionEnabled);
             }
-            if (IndexBuildOnInsertMinBlobBytes) {
-                policy.SetMinBlobBytes(*IndexBuildOnInsertMinBlobBytes);
+            if (InsertOptionsCompressionMinRawBytes) {
+                options.SetCompressionMinRawBytes(*InsertOptionsCompressionMinRawBytes);
+            }
+            if (InsertOptionsBuildIndexesEnabled) {
+                options.SetBuildIndexesEnabled(*InsertOptionsBuildIndexesEnabled);
+            }
+            if (InsertOptionsBuildIndexesMinBlobBytes) {
+                options.SetBuildIndexesMinBlobBytes(*InsertOptionsBuildIndexesMinBlobBytes);
             }
         }
     }

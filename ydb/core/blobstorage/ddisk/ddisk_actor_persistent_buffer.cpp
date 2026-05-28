@@ -445,7 +445,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie) {
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
         Y_ABORT_UNLESS(eraseCnt == 1);
-        inflight.Span.Event("Part written");
+        inflight.Span.Event("Part erased");
         ClearPersistentBufferRecords(inflight, partCookie);
 
         if (inflight.OperationCookies.empty()) {
@@ -502,7 +502,7 @@ namespace NKikimr::NDDisk {
                     if (opCookie2 != opCookie) {
                         auto itInflight2 = PersistentBufferDiskOperationInflight.find(opCookie2);
                         if (itInflight2 == PersistentBufferDiskOperationInflight.end()) {
-                            return;
+                            continue;
                         }
                         auto& inflight2 = itInflight2->second;
                         HandleErasePart(inflight2, opCookie2, partCookie);

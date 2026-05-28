@@ -723,7 +723,7 @@ namespace NKikimr::NDDisk {
             ui32 Size;
             std::vector<TPersistentBufferSectorInfo> Sectors;
 
-            // map operationCookie to <lsn, generation> pairs were erased by operation
+            // map operationCookie to <lsn, generation> pairs that were erased by this operation
             std::unordered_map<ui64, std::vector<std::tuple<ui64, ui32>>> Erases;
 
             std::map<ui64, TRope> DataParts;

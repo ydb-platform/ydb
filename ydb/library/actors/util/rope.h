@@ -119,6 +119,10 @@ private:
     TChunkList Chain;
     size_t Size = 0;
 
+    static bool IsNonEmptyChunk(const TRcBuf& data) {
+        return data.HasBuffer() && data.GetSize();
+    }
+
 private:
     template<bool IsConst>
     class TIteratorImpl {
@@ -367,7 +371,7 @@ public:
     TRope(const TRope& rope) = default;
 
     TRope(const TRcBuf& data) {
-        if(!data.HasBuffer()) {
+        if (!IsNonEmptyChunk(data)) {
             return;
         }
         Size = data.GetSize();
@@ -375,7 +379,7 @@ public:
     }
 
     TRope(TRcBuf&& data) {
-        if(!data.HasBuffer()) {
+        if (!IsNonEmptyChunk(data)) {
             return;
         }
         Size = data.GetSize();
@@ -400,12 +404,19 @@ public:
     }
 
     explicit TRope(NActors::TSharedData s) {
+        if (!s.size()) {
+            return;
+        }
         Size = s.size();
         Chain.PutToEnd(std::move(s));
     }
 
     TRope(IContiguousChunk::TPtr item) {
-        Size = item->GetData().size();
+        const size_t size = item->GetData().size();
+        if (!size) {
+            return;
+        }
+        Size = size;
         Chain.PutToEnd(std::move(item));
     }
 
@@ -419,14 +430,19 @@ public:
 
         while (begin.Iter != end.Iter) {
             const size_t size = begin.ContiguousSize();
-            Chain.PutToEnd(TRcBuf::Piece, begin.ContiguousData(), size, begin.GetChunk());
+            if (size) {
+                Chain.PutToEnd(TRcBuf::Piece, begin.ContiguousData(), size, begin.GetChunk());
+                Size += size;
+            }
             begin.AdvanceToNextContiguousBlock();
-            Size += size;
         }
 
         if (begin != end && end.PointsToChunkMiddle()) {
-            Chain.PutToEnd(TRcBuf::Piece, begin.Ptr, end.Ptr, begin.GetChunk());
-            Size += end.Ptr - begin.Ptr;
+            const size_t size = end.Ptr - begin.Ptr;
+            if (size) {
+                Chain.PutToEnd(TRcBuf::Piece, begin.Ptr, end.Ptr, begin.GetChunk());
+                Size += size;
+            }
         }
     }
 
@@ -559,7 +575,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(this == pos.Rope);
         Y_DEBUG_ABORT_UNLESS(this != &rope);
 
-        if (!rope) {
+        if (rope.IsEmpty()) {
             return; // do nothing for empty rope
         }
 
@@ -869,11 +885,15 @@ private:
         }
 
         auto addBlock = [&](const TRcBuf& from, const char *begin, const char *end) {
+            const size_t size = end - begin;
+            if (!size) {
+                return;
+            }
             if (target) {
                 target->Chain.PutToEnd(TRcBuf::Piece, begin, end, from);
-                target->Size += end - begin;
+                target->Size += size;
             }
-            Size -= end - begin;
+            Size -= size;
         };
 
         // consider special case -- when begin and end point to the same block; in this case we have to split up this
@@ -1123,6 +1143,9 @@ public:
 inline TRope TRope::CopySpaceOptimized(TRope&& origin, size_t worstRatioPer1k, TRopeArena& arena) {
     TRope res;
     for (TRcBuf& chunk : origin.Chain) {
+        if (!chunk.GetSize()) {
+            continue;
+        }
         size_t ratio = chunk.GetSize() * 1024 / chunk.GetOccupiedMemorySize();
         if (ratio < 1024 - worstRatioPer1k) {
             res.Insert(res.End(), arena.CreateRope(chunk.Begin, chunk.GetSize()));

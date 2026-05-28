@@ -5,7 +5,9 @@ PY3_PROGRAM(mnc_viewer)
     PY_MAIN(ydb.tools.mnc.viewer.main)
 
     PY_SRCS(
+        commands.py
         main.py
+        widgets.py
     )
 
     PEERDIR(

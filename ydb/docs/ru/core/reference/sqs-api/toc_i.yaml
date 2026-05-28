@@ -1,4 +1,6 @@
 items:
+  - name: Настройка
+    href: setup.md
   - name: Аутентификация
     href: auth.md
   - name: Примеры чтения и записи

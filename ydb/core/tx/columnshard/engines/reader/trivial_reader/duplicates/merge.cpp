@@ -26,8 +26,12 @@ TMergeBorders::TMergeBorders(const TActorId& owner, const std::shared_ptr<TMerge
 }
 
 void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+    auto allocationGuard = std::move(Event->Get()->AllocationGuard);
     auto columnData = Event->Get()->Result->ExtractDataByPortion(Context->FetchingColumns);
     for (const auto& [portionId, data] : columnData) {
+        if (allocationGuard) {
+            Context->ColumnDataAllocationGuards.emplace(portionId, allocationGuard);
+        }
         Context->Merger->AddSource(data, nullptr,
             Context->IsReversed ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
         Context->FiltersBuilder.AddSource(portionId, Context->Portions->GetPortionVerified(portionId)->GetRecordsCount());
@@ -51,8 +55,13 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     Context->PrevRowsAdded = Context->FiltersBuilder.GetRowsAdded();
     Context->PrevRowsSkipped = Context->FiltersBuilder.GetRowsSkipped();
 
-    TActivationContext::AsActorContext().Send(Owner, std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context),
-                                                         Context->FiltersBuilder.ExtractReadyFilters(), TConclusionStatus::Success()));
+    auto readyFilters = Context->FiltersBuilder.ExtractReadyFilters();
+    for (const auto& [portionId, _] : readyFilters) {
+        Context->ColumnDataAllocationGuards.erase(portionId);
+    }
+
+    TActivationContext::AsActorContext().Send(Owner,
+        std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context), std::move(readyFilters), TConclusionStatus::Success()));
 }
 
 void TMergeBorders::DoOnCannotExecute(const TString& reason) {

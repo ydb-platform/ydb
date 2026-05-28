@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
@@ -18,6 +19,7 @@ struct TMergeContext {
     bool IsReversed;
     std::shared_ptr<TPortionStore> Portions;
     std::map<ui32, std::shared_ptr<arrow::Field>> FetchingColumns;
+    THashMap<ui64, std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ColumnDataAllocationGuards;
 
     TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
         std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed, const std::shared_ptr<TPortionStore>& portions,

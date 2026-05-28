@@ -69,7 +69,7 @@ public:
 
 private:
     TString ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf baseQuery, ui64 backend) const;
-    bool CanChangeBackendViaDevUi(TStringBuf pathInfo, const TString& userToken) const;
+    bool CanAdminActionViaDevUi(TStringBuf pathInfo, const TString& userToken) const;
 };
 
 } // NGraph

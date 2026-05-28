@@ -7,6 +7,15 @@
 namespace NKikimr {
 namespace NGraph {
 
+namespace {
+
+bool IsPublicMonitoringAction(TStringBuf action) {
+    // Any action outside this list is treated as admin-only by default.
+    return action == "get_settings";
+}
+
+} // namespace
+
 class TTxMonitoring : public TTransactionBase<TGraphShard> {
 private:
     NMon::TEvRemoteHttpInfo::TPtr Event;
@@ -167,19 +176,23 @@ public:
 
 void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
     if (ev->Get()->Cgi().Has("action")) {
-        if (ev->Get()->Cgi().Get("action") == "change_backend") {
+        const TString action = ev->Get()->Cgi().Get("action");
+        if (!IsPublicMonitoringAction(action)
+            && !CanAdminActionViaDevUi(ev->Get()->PathInfo(), ev->Get()->GetUserToken()))
+        {
+            Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+            return;
+        }
+
+        if (action == "change_backend") {
             ui64 backend = FromStringWithDefault(ev->Get()->Cgi().Get("backend"), 0);
             if (backend >= 0 && backend <= 2) {
-                if (CanChangeBackendViaDevUi(ev->Get()->PathInfo(), ev->Get()->GetUserToken())) {
-                    ExecuteTxChangeBackend(static_cast<EBackendType>(backend));
-                    Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>ok</p></html>"));
-                    return;
-                }
-                Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                ExecuteTxChangeBackend(static_cast<EBackendType>(backend));
+                Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>ok</p></html>"));
                 return;
             }
         }
-        if (ev->Get()->Cgi().Get("action") == "get_settings") {
+        if (action == "get_settings") {
             Execute(new TTxMonitoringGetSettings(this, std::move(ev)));
             return;
         }
@@ -202,7 +215,7 @@ TString TGraphShard::ChangeBackendSecureHref(TStringBuf pathInfo, TStringBuf bas
     return href;
 }
 
-bool TGraphShard::CanChangeBackendViaDevUi(TStringBuf pathInfo, const TString& userToken) const {
+bool TGraphShard::CanAdminActionViaDevUi(TStringBuf pathInfo, const TString& userToken) const {
     return IsTabletDevUiSecurePath(pathInfo) && IsAdministrator(AppData(), userToken);
 }
 

@@ -1,4 +1,4 @@
-# table_service_config
+﻿# table_service_config
 
 Секция `table_service_config` содержит параметры конфигурации для сервиса таблиц, включая настройки спиллинга.
 
@@ -139,7 +139,7 @@ table_service_config:
 
 {% note info %}
 
-Для получения информации о настройке лимитов файловых дескрипторов при первоначальном развертывании см. раздел [Лимиты файловых дескрипторов](../../../devops/deployment-options/manual/initial-deployment.html#file-descriptors).
+Для получения информации о настройке лимитов файловых дескрипторов при первоначальном развертывании см. раздел [Лимиты файловых дескрипторов](../../../devops/deployment-options/manual/initial-deployment/index.html#file-descriptors).
 
 {% endnote %}
 

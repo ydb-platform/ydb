@@ -1,4 +1,4 @@
-# Параметры конфигурации кластера
+﻿# Параметры конфигурации кластера
 
 Конфигурация кластера задается в YAML-файле, который передается в параметре `--yaml-config` при запуске узлов кластера. В данной статье приведено описание основных разделов конфигурации и ссылки на подробную документацию по каждому разделу.
 
@@ -41,7 +41,7 @@
 
     - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
     - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-    - [Вручную](../../devops/deployment-options/manual/initial-deployment.md)
+    - [Вручную](../../devops/deployment-options/manual/initial-deployment/index.md)
 
 - В рамках [поиска и устранения неисправностей](../../troubleshooting/index.md)
 - В рамках [усиления безопасности](../../security/index.md)

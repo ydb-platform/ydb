@@ -1051,11 +1051,17 @@ TEST_P(TBuiltinRotationTest, All)
         ConvertToYsonString(useLogrotateCompatibleTimestampSuffix).AsStringBuf(),
         RotationDepth));
 
+    Cerr << "[RotationTest] Test parameters (UseTimestampSuffix: " << useTimestampSuffix
+         << ", UseLogrotateCompatibleTimestampSuffix: " << useLogrotateCompatibleTimestampSuffix
+         << ", RotationDepth: " << RotationDepth
+         << ", Prefix: " << logFileNamePrefix << ")" << Endl;
+
     std::vector<TString> messages;
     for (int index = 0; index < RotationDepth + 3; ++index) {
         auto message = Format("Message%v", index);
         messages.push_back(message);
 
+        Cerr << "[RotationTest] Waiting for message in file (Iter: " << index << ")" << Endl;
         // Wait until the message hits the file.
         WaitForPredicate([&] {
             YT_LOG_INFO(message);
@@ -1065,7 +1071,14 @@ TEST_P(TBuiltinRotationTest, All)
             }
             return CheckPlainTextLogFileContains(files[0], message);
         });
+        {
+            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
+            Cerr << "[RotationTest] Message in file observed (Iter: " << index
+                 << ", FileCount: " << files.size()
+                 << ", Head: " << (files.empty() ? TString("<none>") : TString(files.front())) << ")" << Endl;
+        }
 
+        Cerr << "[RotationTest] Waiting for rotation (Iter: " << index << ")" << Endl;
         // Wait until the file is rotated.
         WaitForPredicate([&] {
             auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
@@ -1076,9 +1089,19 @@ TEST_P(TBuiltinRotationTest, All)
             auto lines = ReadPlainTextEvents(files[0]);
             return lines.empty();
         });
+        {
+            auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
+            Cerr << "[RotationTest] Rotation observed (Iter: " << index
+                 << ", FileCount: " << files.size() << ")" << Endl;
+        }
     }
 
     auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
+    Cerr << "[RotationTest] Final file listing (FileCount: " << files.size()
+         << ", Expected: " << (RotationDepth + 1) << ")" << Endl;
+    for (int i = 0; i < ssize(files); ++i) {
+        Cerr << "[RotationTest]   File (Index: " << i << ", Name: " << files[i] << ")" << Endl;
+    }
     ASSERT_EQ(RotationDepth + 1, ssize(files));
     if (useLogrotateCompatibleTimestampSuffix) {
         EXPECT_EQ(files[0], logFileNamePrefix);

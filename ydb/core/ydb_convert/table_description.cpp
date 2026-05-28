@@ -1003,7 +1003,6 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 break;
             }
             default:
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::SCHEMESHARD_DESCRIBE, "FillColumnTableIndexDescription: unsupported olap index kind:" << olapIndex.GetClassName());
                 break;
         }
     }

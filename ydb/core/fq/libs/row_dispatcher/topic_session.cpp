@@ -318,6 +318,7 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     bool EnableStreamingQueriesCounters = false;
+    bool CreateSessionScheduled = false;
 
 public:
     TTopicSession(
@@ -449,15 +450,14 @@ TTopicSession::TTopicSession(
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, EnableStreamingQueriesCounters);
-    LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
-        << ", Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
+    LogPrefix = LogPrefix + " " + SelfId().ToString() + " [" + TopicPathPartition + "] ";
+    LOG_ROW_DISPATCHER_INFO("Bootstrap, Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
 }
 
 void TTopicSession::PassAway() {
-    LOG_ROW_DISPATCHER_DEBUG("PassAway");
+    LOG_ROW_DISPATCHER_INFO("PassAway");
     StopReadSession();
     FormatHandlers.clear();
     TBase::PassAway();
@@ -578,6 +578,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
+    CreateSessionScheduled = false;
     CreateTopicSession();
 }
 
@@ -793,6 +794,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 }
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {
+    LOG_ROW_DISPATCHER_TRACE("StartClientSession, read actor id " << info.ReadActorId << ", offset " << info.GetNextMessageOffset());
     if (ReadSession) {
         auto offset = info.GetNextMessageOffset();
         if (offset && offset <= LastMessageOffset) {
@@ -805,6 +807,10 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
     }
 
     if (!ReadSession) {
+        if (CreateSessionScheduled) {
+            return;
+        }
+        CreateSessionScheduled = true;
         Schedule(Config.GetTimeoutBeforeStartSession(), new NFq::TEvPrivate::TEvCreateSession());
     }
 }

@@ -1938,6 +1938,22 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeValue(options.GetSchemeNeedActualization(), paramsStr);
         del = ", ";
     }
+    if (options.HasIndexBuildOnInsert()) {
+        const auto& policy = options.GetIndexBuildOnInsert();
+        paramsStr << del;
+        EscapeName("INDEX_BUILD_ON_INSERT.ENABLED", paramsStr);
+        paramsStr << "=";
+        EscapeValue(policy.GetEnabled(), paramsStr);
+        del = ", ";
+
+        if (policy.GetMinBlobBytes()) {
+            paramsStr << del;
+            EscapeName("INDEX_BUILD_ON_INSERT.MIN_BLOB_BYTES", paramsStr);
+            paramsStr << "=";
+            EscapeValue(policy.GetMinBlobBytes(), paramsStr);
+            del = ", ";
+        }
+    }
     if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {
         paramsStr << del;
         EscapeName("SCAN_READER_POLICY_NAME", paramsStr);

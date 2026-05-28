@@ -26,3 +26,4 @@ feature_flags:
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
 | `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |
+| `enable_topic_message_level_parallelism`                 | Включение возможности создавать [shared-читателей](../../concepts/datamodel/topic.md#consumer) у топика |

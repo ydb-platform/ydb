@@ -208,7 +208,12 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
     const auto* lStreaming = left->Streaming;
     const auto* rStreaming = right->Streaming;
     if (lStreaming || rStreaming) {
-        YQL_ENSURE(IsIn({EJoinAlgoType::Undefined, EJoinAlgoType::MapJoin, EJoinAlgoType::StreamLookupJoin}, linkSettings.JoinAlgo), "Unsupported join strategy: " << linkSettings.JoinAlgo << " for streaming inputs");
+        if (!IsIn({EJoinAlgoType::Undefined, EJoinAlgoType::MapJoin, EJoinAlgoType::StreamLookupJoin}, linkSettings.JoinAlgo)) {
+            ctx.AddError(TIssue(ctx.GetPosition(joinTuple.Pos()), TStringBuilder() << "Unsupported join strategy: " << linkSettings.JoinAlgo << " for streaming inputs"));
+            hasErrors = true;
+            return {};
+        }
+
         mode = EHashJoinMode::Map;
 
         if (joinType.StartsWith("Left") && rStreaming) {

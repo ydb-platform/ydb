@@ -349,7 +349,7 @@ private:
     THolder<IGraphTransformer> LoadMetaDataTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<IGraphTransformer> IODiscoveryTransformer_;
-    const std::unique_ptr<IGraphTransformer> ConstraintsTransformer_;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer_;
 };
 
 } // anonymous namespace

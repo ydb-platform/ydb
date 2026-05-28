@@ -1,5 +1,6 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_expr_nodes.h"
+#include "yql_kikimr_settings.h"
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/library/yql/dq/constraints/dq_constraints.h>
@@ -72,11 +73,19 @@ private:
 
 } // anonymous namespace
 
-std::unique_ptr<IGraphTransformer> CreateKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx) {
-    return std::make_unique<TKiSourceConstraintsTransformer>(sessionCtx);
+TAutoPtr<IGraphTransformer> CreateKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx) {
+    if (!sessionCtx->Config()._KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false)) {
+        return CreateDefCallableConstraintTransformer();
+    }
+
+    return new TKiSourceConstraintsTransformer(sessionCtx);
 }
 
-THolder<IGraphTransformer> CreateKiSinkConstraintsTransformer() {
+TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx) {
+    if (!sessionCtx->Config()._KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false)) {
+        return CreateDefCallableConstraintTransformer();
+    }
+
     auto dqTransformer = NDq::CreateDqConstraintsTransformer(/* disableChecks */ true);
 
     return CreateFunctorTransformer([dq = std::move(dqTransformer)](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {

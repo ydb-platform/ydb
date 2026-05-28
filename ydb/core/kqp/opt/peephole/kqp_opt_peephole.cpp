@@ -682,7 +682,9 @@ private:
 
 class TKqpTxsPeepholeTransformer : public TSyncTransformerBase {
 public:
-    TKqpTxsPeepholeTransformer(TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config) {
+    TKqpTxsPeepholeTransformer(TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
+        : ValidateConstraints(config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false) && config->OptValidateStreamingConstraints.Get().GetOrElse(true))
+    {
         TxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("TxsPeephole", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxsPeephole")
@@ -693,7 +695,6 @@ public:
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-
         if (!TKqpPhysicalQuery::Match(input.Get())) {
             return TStatus::Error;
         }
@@ -746,7 +747,7 @@ private:
         }
 
         TKqpPhysicalTx physicalTx(expr);
-        if (!ValidateStreamingConstraints(txIdx, physicalTx, streamingTxResults, ctx)) {
+        if (ValidateConstraints && !ValidateStreamingConstraints(txIdx, physicalTx, streamingTxResults, ctx)) {
             return {};
         }
 
@@ -754,6 +755,7 @@ private:
     }
 
     TAutoPtr<IGraphTransformer> TxTransformer;
+    const bool ValidateConstraints = false;
 };
 
 } // anonymous namespace

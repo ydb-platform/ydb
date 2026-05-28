@@ -562,7 +562,7 @@ public:
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
         , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
-        , ConstraintsTransformer(CreateKiSinkConstraintsTransformer())
+        , ConstraintsTransformer(CreateKiSinkConstraintsTransformer(sessionCtx))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -1921,7 +1921,7 @@ private:
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
     const THolder<TVisitorTransformerBase> DqTypeAnnTransformer;
-    const THolder<IGraphTransformer> ConstraintsTransformer;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
 };
 
 } // anonymous namespace

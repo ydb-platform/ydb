@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
+#include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 
 namespace NYql {
@@ -62,8 +63,11 @@ private:
 
 } // anonymous namespace
 
-std::unique_ptr<IGraphTransformer> CreatePqDataSourceConstraintTransformer(TPqState::TPtr state) {
-    return std::make_unique<TPqDataSourceConstraintTransformer>(std::move(state));
+TAutoPtr<IGraphTransformer> CreatePqDataSourceConstraintTransformer(TPqState::TPtr state) {
+    if (!state->EnablePqConstraintsTransformer) {
+        return CreateDefCallableConstraintTransformer();
+    }
+    return new TPqDataSourceConstraintTransformer(std::move(state));
 }
 
 } // namespace NYql

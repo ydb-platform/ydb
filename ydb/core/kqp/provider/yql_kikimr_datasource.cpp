@@ -977,7 +977,7 @@ private:
     TAutoPtr<IGraphTransformer> LoadTableMetadataTransformer;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-    const std::unique_ptr<IGraphTransformer> ConstraintsTransformer;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
 };
 
 } // anonymous namespace

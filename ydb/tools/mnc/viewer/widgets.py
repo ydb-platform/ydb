@@ -104,33 +104,39 @@ class PathSuggestionItem(ListItem):
 class PathPickerScreen(ModalScreen[Optional[str]]):
     CSS = """
     PathPickerScreen {
-        align: center middle;
+        color: $foreground;
+        background: $background 60%;
+        align-horizontal: center;
     }
 
     #path-picker {
-        width: 100;
-        max-width: 95%;
+        width: 100%;
         height: auto;
         max-height: 16;
-        border: thick $background 80%;
+        margin-top: 3;
         background: $surface;
-        padding: 1 2;
+    }
+
+    #path-picker:dark {
+        background: $panel-darken-1;
     }
 
     #path-picker-input-row {
-        height: 3;
+        height: auto;
         layout: horizontal;
+        border: hkey $border;
+        padding-left: 1;
+        padding-right: 1;
     }
 
     #path-picker-input {
         width: 1fr;
-        height: 3;
+        height: auto;
+        border: none;
     }
 
     #path-picker-mode {
-        width: 14;
-        height: 3;
-        content-align: center middle;
+        display: none;
     }
 
     #path-suggestions {

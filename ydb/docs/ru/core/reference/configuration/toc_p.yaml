@@ -27,6 +27,8 @@ items:
   href: host_configs.md
 - name: hosts
   href: hosts.md
+- name: http_proxy_config
+  href: http_proxy_config.md
 - name: kafka_proxy_config
   href: kafka_proxy_config.md
 - name: log_config

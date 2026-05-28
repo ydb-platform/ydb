@@ -5128,11 +5128,13 @@ bool TSqlTranslation::ParseViewQuery(
 
     // The AST is needed solely for the validation of the CREATE VIEW statement.
     // The final storage format for the query is a plain text, not an AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx);
-    if (!viewSelect) {
-        return false;
+    if (Ctx.Settings.ValidateViewStatement) {
+        const auto viewSelect = BuildViewSelect(query, Ctx);
+        if (!viewSelect) {
+            return false;
+        }
+        features["query_ast"] = { viewSelect, Ctx };
     }
-    features["query_ast"] = { viewSelect, Ctx };
 
     return true;
 }

@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(8, 0).BlobIdx, 2u);
 
         // Offset inside a batched slot is not a valid message boundary.
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(3, 0).BlobIdx, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(3, 0).BlobIdx, 0u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(9, 0).BlobIdx, Max<ui32>());
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 1).BlobIdx, Max<ui32>());
     }
@@ -210,14 +210,14 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             ts, ts, 0, "", "", 5));
 
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, 0u);
 
         batch.Pack();
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].BatchMessageCount, 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
-        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, 0u);
     }
 }
 

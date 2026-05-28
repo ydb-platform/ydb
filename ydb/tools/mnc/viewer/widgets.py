@@ -1,5 +1,6 @@
 import glob
 import os
+from dataclasses import dataclass
 from typing import Optional
 
 from textual.app import ComposeResult
@@ -92,11 +93,12 @@ class OverviewPane(Vertical):
     def compose(self) -> ComposeResult:
         yield ListView(
             OverviewStatusCard("MNC Config", self._mnc_config_status, action="open_mnc_config"),
-            OverviewStatusCard("Cluster Config", self._cluster_config_status),
+            OverviewStatusCard("Cluster Config", self._cluster_config_status, action="open_cluster_config"),
             id="overview-status-row",
         )
         yield ListView(
             OpenTabListItem("MNC Config", "open_mnc_config"),
+            OpenTabListItem("Cluster Config", "open_cluster_config"),
             id="overview-tabs",
         )
 
@@ -199,6 +201,92 @@ class MncConfigForm(Vertical):
                 path_picker=True,
             ),
             id="mnc-config-fields",
+        )
+
+
+@dataclass
+class ConfigCandidate:
+    name: str
+    path: str
+
+
+class ConfigCandidateItem(ListItem):
+    def __init__(self, candidate: ConfigCandidate) -> None:
+        self.candidate = candidate
+        super().__init__(Label(f"{candidate.name}  {candidate.path}"))
+
+
+class ClusterConfigPane(Horizontal):
+    DEFAULT_CSS = """
+    ClusterConfigPane {
+        height: 1fr;
+        padding: 0 1 1 1;
+    }
+
+    #cluster-config-left {
+        width: 2fr;
+        height: 1fr;
+        border: solid $primary;
+    }
+
+    #cluster-configs {
+        height: 1fr;
+        background: transparent;
+    }
+
+    #cluster-config-details {
+        width: 3fr;
+        height: 1fr;
+        padding: 1 2;
+        border: solid $primary;
+        margin-left: 1;
+    }
+    """
+
+    def __init__(self, candidates: list[ConfigCandidate]) -> None:
+        super().__init__()
+        self._candidates = candidates
+        self._selected_candidate: Optional[ConfigCandidate] = None
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="cluster-config-left"):
+            yield ListView(id="cluster-configs")
+        yield Static("", id="cluster-config-details")
+
+    def on_mount(self) -> None:
+        self._refresh()
+        self.query_one("#cluster-configs", ListView).focus()
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.list_view.id == "cluster-configs" and isinstance(event.item, ConfigCandidateItem):
+            event.stop()
+            self._show_details(event.item.candidate)
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.list_view.id == "cluster-configs" and isinstance(event.item, ConfigCandidateItem):
+            event.stop()
+            self._selected_candidate = event.item.candidate
+            self._show_details(event.item.candidate)
+
+    def _refresh(self) -> None:
+        list_view = self.query_one("#cluster-configs", ListView)
+        list_view.clear()
+        list_view.extend([ConfigCandidateItem(candidate) for candidate in self._candidates])
+        list_view.index = 0 if self._candidates else None
+        if self._candidates:
+            self._show_details(self._candidates[0])
+        else:
+            self.query_one("#cluster-config-details", Static).update("No configs found")
+
+    def _show_details(self, candidate: ConfigCandidate) -> None:
+        try:
+            with open(candidate.path) as file:
+                content = file.read()
+        except Exception as error:
+            content = f"Failed to read config: {error}"
+        selected = " [selected]" if candidate == self._selected_candidate else ""
+        self.query_one("#cluster-config-details", Static).update(
+            f"{candidate.name}{selected}\n{candidate.path}\n\n{content}"
         )
 
 

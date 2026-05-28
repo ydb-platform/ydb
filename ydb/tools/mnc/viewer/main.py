@@ -12,6 +12,8 @@ from textual.widgets import Footer, Header, Input, ListView, TabbedContent, TabP
 
 from ydb.tools.mnc.viewer.commands import TabCommands, ViewerCommands
 from ydb.tools.mnc.viewer.widgets import (
+    ClusterConfigPane,
+    ConfigCandidate,
     ConfigFieldItem,
     InvalidPathModal,
     MncConfigForm,
@@ -38,15 +40,17 @@ class Viewer(App):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._created_tabs: set[str] = set()
-        self._available_tab_order = ["general", "mnc-config"]
+        self._available_tab_order = ["general", "mnc-config", "cluster-config"]
         self._opened_tab_order = ["general"]
         self._tab_titles = {
             "general": "Overview",
             "mnc-config": "MNC Config",
+            "cluster-config": "Cluster Config",
         }
         self._tab_descriptions = {
             "general": "Overview viewer and cluster state",
             "mnc-config": "Read and edit MNC Config",
+            "cluster-config": "Select and inspect cluster config",
         }
         self._editing_config_field: Optional[ConfigFieldItem] = None
         self._mnc_config = self._load_mnc_config()
@@ -131,6 +135,39 @@ class Viewer(App):
             return self._is_valid_git_ydb_root(value)
         return True
 
+    def _discover_cluster_config_candidates(self) -> list[ConfigCandidate]:
+        roots = [os.path.dirname(MNC_CONFIG_PATH)]
+        git_ydb_root = self._mnc_config.get("git_ydb_root", "")
+        if self._is_valid_git_ydb_root(git_ydb_root):
+            roots.append(
+                os.path.join(
+                    git_ydb_root,
+                    "junk",
+                    os.environ.get("USER", "ydb"),
+                    ".mnc",
+                )
+            )
+
+        candidates = []
+        seen = set()
+        for root in roots:
+            if not root or not os.path.isdir(root):
+                continue
+            for name in sorted(os.listdir(root)):
+                path = os.path.join(root, name)
+                if not os.path.isfile(path):
+                    continue
+                base, ext = os.path.splitext(name)
+                if ext not in (".yaml", ".yml", ""):
+                    continue
+                candidate_name = base if ext else name
+                key = (candidate_name, path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(ConfigCandidate(candidate_name, path))
+        return candidates
+
     def _tab_choices(self, opened_only: bool = False) -> list[tuple[str, str, str]]:
         tab_order = self._opened_tab_order if opened_only else self._available_tab_order
         return [
@@ -201,6 +238,13 @@ class Viewer(App):
             "mnc-config",
             self._tab_titles["mnc-config"],
             MncConfigForm(self._mnc_config, DEFAULT_GIT_YDB_ROOT),
+        )
+
+    async def action_open_cluster_config(self) -> None:
+        await self._open_tab(
+            "cluster-config",
+            self._tab_titles["cluster-config"],
+            ClusterConfigPane(self._discover_cluster_config_candidates()),
         )
 
     async def on_list_view_selected(self, event: ListView.Selected) -> None:

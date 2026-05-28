@@ -40,5 +40,6 @@ class ViewerCommands(CommandProviderBase):
         return [
             ("Open tab: General", "Overview viewer and cluster state", "show_tab('general')"),
             ("Open tab: MNC Config", "Read and edit MNC Config", "open_mnc_config"),
+            ("Open tab: Cluster Config", "Select and inspect cluster config", "open_cluster_config"),
             ("Close tab", "Close the current tab", "close_tab"),
         ]

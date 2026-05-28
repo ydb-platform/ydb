@@ -14,8 +14,6 @@
 
 * Fixed some data races in Producer (concurrent access to `PartitionsIndex`)
 
-* Added `TYdbRangeErrorException` for `TRowRange` open/drain failures; plain `RetryQuerySync` / `RetryOperationSync` automatically convert it to `TStatus` for retry (other exceptions propagate)
-* `TRowRange` rejects multiple logical result sets (`yexception`: `"multiple queries in one range is not allowed"`)
 
 * Added interface for export of metrics and spans, supported plugin for OpenTelemetry
 

@@ -654,8 +654,11 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
     for (const auto& item : items) {
         const auto literal = UnwrapValue(item);
         auto extracted = TryExtractComparisonValue(literal);
-        if (!extracted.has_value() || !extracted->has_value()) {
+        if (!extracted.has_value()) {
             return MakeCollectError(ctx, literal.Pos(), extracted.error());
+        }
+        if (!extracted->has_value()) {
+            return std::nullopt;
         }
 
         auto itemResult = AppendComparisonValue(baseResult.ColumnName, baseResult.Collect, *extracted);

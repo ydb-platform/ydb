@@ -10,28 +10,12 @@ The lookup is fully loaded into memory when the query starts. If the lookup data
 
 {% endnote %}
 
-## Preparing a data source for topics
+You can enrich data from [local and external topics](./local-and-external-topics.md).
 
-Create an external data source for working with topics. Store the token in a [secret](../../yql/reference/syntax/create-secret.md) and create the source with [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
+In the examples below:
 
-```yql
--- Secret with a token for connecting to YDB
-CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
-
--- YDB data source for reading and writing topics
-CREATE EXTERNAL DATA SOURCE ydb_source WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION = "<ydb_endpoint>",
-    DATABASE_NAME = "<db_name>",
-    AUTH_METHOD = "TOKEN",
-    TOKEN_SECRET_PATH = "secrets/ydb_token"
-);
-```
-
-The queries in the examples below read events from the input topic, attach the service name from the reference by `ServiceId` to each event, and write the result to the output topic.
-
-- `<ydb_endpoint>` is the {{ ydb-short-name }} endpoint, for example `grpcs://<ydb_host>:2135`.
-- `<db_name>` is the path to the {{ ydb-short-name }} database, for example `/Root/database`.
+- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md) for topics in another {{ ydb-short-name }} database;
+- `input_topic` and `output_topic` — topics in the current or external {{ ydb-short-name }} database
 
 ## Streaming queries for data enrichment
 

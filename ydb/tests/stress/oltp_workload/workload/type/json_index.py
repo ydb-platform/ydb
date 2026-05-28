@@ -9,6 +9,7 @@ from ydb.tests.library.fixtures import json
 
 logger = logging.getLogger("JsonIndexWorkload")
 
+
 class WorkloadJsonIndex(WorkloadBase):
     def __init__(self, client, prefix, stop):
         super().__init__(client, prefix, "json_index", stop)

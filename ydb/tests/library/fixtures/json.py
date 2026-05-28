@@ -2,6 +2,7 @@ import json as std_json
 import random
 import string
 
+
 class JsonCorpusGenerator:
     _MAX_DEPTH = 3
     _MAX_ARRAY_LEN = 4

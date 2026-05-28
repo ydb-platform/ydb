@@ -16,6 +16,113 @@ class OpenTabListItem(ListItem):
         super().__init__(Label(title))
 
 
+class OverviewStatusCard(ListItem):
+    def __init__(self, title: str, status: str, action: Optional[str] = None) -> None:
+        self.action = action
+        status_class = status.lower().replace(" ", "-")
+        super().__init__(
+            Vertical(
+                Label(title, classes="overview-status-title"),
+                Label(status, classes=f"overview-status-value status-{status_class}"),
+                classes="overview-status-card-content",
+            ),
+            classes="overview-status-card",
+        )
+
+
+class OverviewPane(Vertical):
+    DEFAULT_CSS = """
+    OverviewPane {
+        height: 1fr;
+    }
+
+    #overview-status-row {
+        height: 7;
+        width: 100%;
+        padding: 1 2;
+        layout: horizontal;
+    }
+
+    #overview-tabs {
+        height: 1fr;
+    }
+
+    .overview-status-card {
+        width: 32;
+        height: 5;
+        margin-right: 2;
+    }
+
+    .overview-status-card-content {
+        height: 5;
+        width: 100%;
+        padding: 0 2;
+        border: hkey $border;
+    }
+
+    .overview-status-title {
+        height: 2;
+        content-align: left middle;
+        text-style: bold;
+    }
+
+    .overview-status-value {
+        height: 2;
+        content-align: left middle;
+    }
+
+    .status-ok {
+        color: $success;
+    }
+
+    .status-error {
+        color: $error;
+    }
+
+    .status-not-selected {
+        color: $text-muted;
+    }
+    """
+
+    def __init__(self, mnc_config_ok: bool, cluster_config_status: str = "NOT SELECTED") -> None:
+        super().__init__()
+        self._mnc_config_status = "OK" if mnc_config_ok else "ERROR"
+        self._cluster_config_status = cluster_config_status
+
+    def compose(self) -> ComposeResult:
+        yield ListView(
+            OverviewStatusCard("MNC Config", self._mnc_config_status, action="open_mnc_config"),
+            OverviewStatusCard("Cluster Config", self._cluster_config_status),
+            id="overview-status-row",
+        )
+        yield ListView(
+            OpenTabListItem("MNC Config", "open_mnc_config"),
+            id="overview-tabs",
+        )
+
+    def on_key(self, event: Key) -> None:
+        focused = self.screen.focused
+        status_row = self.query_one("#overview-status-row", ListView)
+        tabs_list = self.query_one("#overview-tabs", ListView)
+
+        if event.key in ("left", "right") and focused is status_row:
+            if status_row.index is None:
+                status_row.index = 0
+            elif event.key == "left" and status_row.index > 0:
+                status_row.index -= 1
+            elif event.key == "right" and status_row.index < len(status_row.children) - 1:
+                status_row.index += 1
+            event.stop()
+        elif event.key == "down" and focused is status_row:
+            tabs_list.focus()
+            tabs_list.index = 0
+            event.stop()
+        elif event.key == "up" and focused is tabs_list and tabs_list.index in (None, 0):
+            status_row.focus()
+            status_row.index = 0
+            event.stop()
+
+
 class ConfigFieldItem(ListItem):
     def __init__(self, field_name: str, title: str, value: str, path_picker: bool = False) -> None:
         self.field_name = field_name

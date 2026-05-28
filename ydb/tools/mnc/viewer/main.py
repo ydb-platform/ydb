@@ -15,6 +15,8 @@ from ydb.tools.mnc.viewer.widgets import (
     ConfigFieldItem,
     MncConfigForm,
     OpenTabListItem,
+    OverviewPane,
+    OverviewStatusCard,
     PathPickerScreen,
 )
 
@@ -53,10 +55,7 @@ class Viewer(App):
 
         with TabbedContent(initial="general", id="tabs"):
             with TabPane("General", id="general"):
-                yield ListView(
-                    OpenTabListItem("MNC Config", "open_mnc_config"),
-                    id="general-tabs",
-                )
+                yield OverviewPane(self._mnc_config_ok())
 
         yield Footer()
 
@@ -110,6 +109,9 @@ class Viewer(App):
         os.makedirs(os.path.dirname(MNC_CONFIG_PATH), exist_ok=True)
         with open(MNC_CONFIG_PATH, "w") as file:
             yaml.safe_dump(self._mnc_config, file)
+
+    def _mnc_config_ok(self) -> bool:
+        return os.path.isfile(MNC_CONFIG_PATH) and bool(self._mnc_config.get("git_ydb_root"))
 
     def _tab_choices(self, opened_only: bool = False) -> list[tuple[str, str, str]]:
         tab_order = self._opened_tab_order if opened_only else self._available_tab_order
@@ -186,6 +188,9 @@ class Viewer(App):
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
         if isinstance(event.item, OpenTabListItem):
             await self.run_action(event.item.action)
+        elif isinstance(event.item, OverviewStatusCard):
+            if event.item.action is not None:
+                await self.run_action(event.item.action)
         elif isinstance(event.item, ConfigFieldItem):
             await self._activate_config_field(event.item)
 

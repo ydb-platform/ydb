@@ -10,6 +10,8 @@
 
 namespace NYT::NQueryClient {
 
+////////////////////////////////////////////////////////////////////////////////
+
 using NTransactionClient::TTimestamp;
 
 using NTableClient::TRowRange;

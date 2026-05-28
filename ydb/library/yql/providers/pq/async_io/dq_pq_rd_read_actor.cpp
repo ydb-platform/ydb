@@ -1284,7 +1284,7 @@ void TDqPqRdReadActor::AddMessageBatch(TRope&& messageBatch, NKikimr::NMiniKQL::
             } else {
                 // TODO: replace stub metadata implementation (and move inside row_dispatcher/format_handler)
                 const auto itemType = StructType->GetMemberType(itemPtr - itemHead);
-                // must be metaddata field, with exactly two cases:
+                // must be metadata field, with exactly two cases:
                 if (itemType->IsData()) {
                     // POD (cluster, create_time, etc)
                     *(itemPtr++) = NUdf::TUnboxedValuePod::Zero();

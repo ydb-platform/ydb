@@ -1,148 +1,139 @@
-Internationalized Domain Names in Applications (IDNA)
-=====================================================
+# Internationalized Domain Names in Applications (IDNA)
 
-Support for `Internationalized Domain Names in
-Applications (IDNA) <https://tools.ietf.org/html/rfc5891>`_
-and `Unicode IDNA Compatibility Processing
-<https://unicode.org/reports/tr46/>`_.
+Support for [Internationalized Domain Names in
+Applications (IDNA)](https://tools.ietf.org/html/rfc5891)
+and [Unicode IDNA Compatibility Processing](https://unicode.org/reports/tr46/).
 
 The latest versions of these standards supplied here provide
 more comprehensive language coverage and reduce the potential of
 allowing domains with known security vulnerabilities. This library
-is a suitable replacement for the “encodings.idna”
+is a suitable replacement for the "encodings.idna"
 module that comes with the Python standard library, but which
 only supports an older superseded IDNA specification from 2003.
 
 Basic functions are simply executed:
 
-.. code-block:: pycon
+```pycon
+>>> import idna
+>>> idna.encode('ドメイン.テスト')
+b'xn--eckwd4c7c.xn--zckzah'
+>>> print(idna.decode('xn--eckwd4c7c.xn--zckzah'))
+ドメイン.テスト
+```
 
-    >>> import idna
-    >>> idna.encode('ドメイン.テスト')
-    b'xn--eckwd4c7c.xn--zckzah'
-    >>> print(idna.decode('xn--eckwd4c7c.xn--zckzah'))
-    ドメイン.テスト
 
-
-Installation
-------------
+## Installation
 
 This package is available for installation from PyPI via the
 typical mechanisms, such as:
 
-.. code-block:: bash
+```bash
+$ python3 -m pip install idna
+```
 
-    $ python3 -m pip install idna
 
+## Usage
 
-Usage
------
-
-For typical usage, the ``encode`` and ``decode`` functions will take a
+For typical usage, the `encode` and `decode` functions will take a
 domain name argument and perform a conversion to ASCII-compatible encoding
 (known as A-labels), or to Unicode strings (known as U-labels)
 respectively.
 
-.. code-block:: pycon
+```pycon
+>>> import idna
+>>> idna.encode('ドメイン.テスト')
+b'xn--eckwd4c7c.xn--zckzah'
+>>> print(idna.decode('xn--eckwd4c7c.xn--zckzah'))
+ドメイン.テスト
+```
 
-    >>> import idna
-    >>> idna.encode('ドメイン.テスト')
-    b'xn--eckwd4c7c.xn--zckzah'
-    >>> print(idna.decode('xn--eckwd4c7c.xn--zckzah'))
-    ドメイン.テスト
+Conversions can be applied at a per-label basis using the `ulabel` or
+`alabel` functions if necessary:
 
-Conversions can be applied at a per-label basis using the ``ulabel`` or
-``alabel`` functions if necessary:
-
-.. code-block:: pycon
-
-    >>> idna.alabel('测试')
-    b'xn--0zwm56d'
+```pycon
+>>> idna.alabel('测试')
+b'xn--0zwm56d'
+```
 
 
-Compatibility Mapping (UTS #46)
-+++++++++++++++++++++++++++++++
+### Compatibility Mapping (UTS #46)
 
-This library provides support for `Unicode IDNA Compatibility
-Processing <https://unicode.org/reports/tr46/>`_ which normalizes input from
+This library provides support for [Unicode IDNA Compatibility
+Processing](https://unicode.org/reports/tr46/) which normalizes input from
 different potential ways a user may input a domain prior to performing the IDNA
-conversion operations. This functionality, known as a 
-`mapping <https://tools.ietf.org/html/rfc5895>`_, is considered by the
+conversion operations. This functionality, known as a
+[mapping](https://tools.ietf.org/html/rfc5895), is considered by the
 specification to be a local user-interface issue distinct from IDNA
 conversion functionality.
 
-For example, “Königsgäßchen” is not a permissible label as *LATIN
+For example, "Königsgäßchen" is not a permissible label as *LATIN
 CAPITAL LETTER K* is not allowed (nor are capital letters in general).
 UTS 46 will convert this into lower case prior to applying the IDNA
 conversion.
 
-.. code-block:: pycon
+```pycon
+>>> import idna
+>>> idna.encode('Königsgäßchen')
+...
+idna.core.InvalidCodepoint: Codepoint U+004B at position 1 of 'Königsgäßchen' not allowed
+>>> idna.encode('Königsgäßchen', uts46=True)
+b'xn--knigsgchen-b4a3dun'
+>>> print(idna.decode('xn--knigsgchen-b4a3dun'))
+königsgäßchen
+```
 
-    >>> import idna
-    >>> idna.encode('Königsgäßchen')
-    ...
-    idna.core.InvalidCodepoint: Codepoint U+004B at position 1 of 'Königsgäßchen' not allowed
-    >>> idna.encode('Königsgäßchen', uts46=True)
-    b'xn--knigsgchen-b4a3dun'
-    >>> print(idna.decode('xn--knigsgchen-b4a3dun'))
-    königsgäßchen
 
-
-Exceptions
-----------
+## Exceptions
 
 All errors raised during the conversion following the specification
-should raise an exception derived from the ``idna.IDNAError`` base
+should raise an exception derived from the `idna.IDNAError` base
 class.
 
-More specific exceptions that may be generated as ``idna.IDNABidiError``
+More specific exceptions that may be generated as `idna.IDNABidiError`
 when the error reflects an illegal combination of left-to-right and
-right-to-left characters in a label; ``idna.InvalidCodepoint`` when
+right-to-left characters in a label; `idna.InvalidCodepoint` when
 a specific codepoint is an illegal character in an IDN label (i.e.
-INVALID); and ``idna.InvalidCodepointContext`` when the codepoint is
+INVALID); and `idna.InvalidCodepointContext` when the codepoint is
 illegal based on its position in the string (i.e. it is CONTEXTO or CONTEXTJ
 but the contextual requirements are not satisfied.)
 
-Building and Diagnostics
-------------------------
+## Building and Diagnostics
 
 The IDNA and UTS 46 functionality relies upon pre-calculated lookup
 tables for performance. These tables are derived from computing against
 eligibility criteria in the respective standards using the command-line
-script ``tools/idna-data``.
+script `tools/idna-data`.
 
 This tool will fetch relevant codepoint data from the Unicode repository
 and perform the required calculations to identify eligibility. There are
 three main modes:
 
-* ``idna-data make-libdata``. Generates ``idnadata.py`` and
-  ``uts46data.py``, the pre-calculated lookup tables used for IDNA and
+* `idna-data make-libdata`. Generates `idnadata.py` and
+  `uts46data.py`, the pre-calculated lookup tables used for IDNA and
   UTS 46 conversions. Implementers who wish to track this library against
   a different Unicode version may use this tool to manually generate a
-  different version of the ``idnadata.py`` and ``uts46data.py`` files.
+  different version of the `idnadata.py` and `uts46data.py` files.
 
-* ``idna-data make-table``. Generate a table of the IDNA disposition
+* `idna-data make-table`. Generate a table of the IDNA disposition
   (e.g. PVALID, CONTEXTJ, CONTEXTO) in the format found in Appendix
-  B.1 of RFC 5892 and the pre-computed tables published by `IANA
-  <https://www.iana.org/>`_.
+  B.1 of RFC 5892 and the pre-computed tables published by [IANA](https://www.iana.org/).
 
-* ``idna-data U+0061``. Prints debugging output on the various
+* `idna-data U+0061`. Prints debugging output on the various
   properties associated with an individual Unicode codepoint (in this
   case, U+0061), that are used to assess the IDNA and UTS 46 status of a
   codepoint. This is helpful in debugging or analysis.
 
-The tool accepts a number of arguments, described using ``idna-data -h``.
-Most notably, the ``--version`` argument allows the specification
+The tool accepts a number of arguments, described using `idna-data -h`.
+Most notably, the `--version` argument allows the specification
 of the version of Unicode to be used in computing the table data. For
-example, ``idna-data --version 9.0.0 make-libdata`` will generate
+example, `idna-data --version 9.0.0 make-libdata` will generate
 library data against Unicode 9.0.0.
 
 
-Additional Notes
-----------------
+## Additional Notes
 
 * **Packages**. The latest tagged release version is published in the
-  `Python Package Index <https://pypi.org/project/idna/>`_.
+  [Python Package Index](https://pypi.org/project/idna/).
 
 * **Version support**. This library supports Python 3.8 and higher.
   As this library serves as a low-level toolkit for a variety of
@@ -154,8 +145,7 @@ Additional Notes
 
 * **Testing**. The library has a test suite based on each rule of the
   IDNA specification, as well as tests that are provided as part of the
-  Unicode Technical Standard 46, `Unicode IDNA Compatibility Processing
-  <https://unicode.org/reports/tr46/>`_.
+  Unicode Technical Standard 46, [Unicode IDNA Compatibility Processing](https://unicode.org/reports/tr46/).
 
 * **Emoji**. It is an occasional request to support emoji domains in
   this library. Encoding of symbols like emoji is expressly prohibited by

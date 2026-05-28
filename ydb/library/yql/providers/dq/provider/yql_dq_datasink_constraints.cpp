@@ -14,23 +14,6 @@ using namespace NNodes;
 
 namespace {
 
-template <class... Other>
-struct TCopyConstraint;
-
-template <>
-struct TCopyConstraint<> {
-    static void Do(const TExprNode&, const TExprNode::TPtr&) {}
-};
-
-template <class TConstraint, class... Other>
-struct TCopyConstraint<TConstraint, Other...> {
-    static void Do(const TExprNode& from, const TExprNode::TPtr& to) {
-        if (const auto c = from.GetConstraint<TConstraint>())
-            to->AddConstraint(c);
-        TCopyConstraint<Other...>::Do(from, to);
-    }
-};
-
 class TDqDataSinkConstraintTransformer : public TVisitorTransformerBase {
 public:
     TDqDataSinkConstraintTransformer()

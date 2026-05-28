@@ -30,9 +30,7 @@ namespace NKikimr::NHttpProxy {
         enum TEv {
             EvDiscoverDatabaseEndpointRequest = EventSpaceBegin(TKikimrEvents::ES_HTTP_PROXY),
             EvDiscoverDatabaseEndpointResult,
-            EvReportMetricsRequest,
             EvGrpcRequestResult,
-            EvUpdateDatabasesEvent,
             EvListEndpointsRequest,
             EvListEndpointsResponse,
             EvErrorWithIssue,
@@ -50,21 +48,12 @@ namespace NKikimr::NHttpProxy {
 
         struct TEvDiscoverDatabaseEndpointRequest : public TEventLocal<TEvDiscoverDatabaseEndpointRequest, EvDiscoverDatabaseEndpointRequest> {
             TString DatabasePath;
-            TString DatabaseId;
-        };
-
-        struct TEvUpdateDatabasesEvent : public TEventLocal<TEvUpdateDatabasesEvent, EvUpdateDatabasesEvent> {
-            std::vector<TDatabase> Databases;
-            std::unique_ptr<NYdbGrpc::TGrpcStatus> Status;
         };
 
         struct TEvDiscoverDatabaseEndpointResult : public TEventLocal<TEvDiscoverDatabaseEndpointResult, EvDiscoverDatabaseEndpointResult> {
             THolder<TDatabase> DatabaseInfo;
             NYdb::EStatus Status;
             TString Message;
-        };
-
-        struct TEvReportMetricsRequest : public TEventLocal<TEvReportMetricsRequest, EvReportMetricsRequest> {
         };
 
         struct TEvListEndpointsRequest : public TEventLocal<TEvListEndpointsRequest, EvListEndpointsRequest> {
@@ -161,16 +150,14 @@ namespace NKikimr::NHttpProxy {
         TString CloudId;
         TString FolderId;
         TString Sid;
-        TString AuthType;
 
         TMaybe<TError> Error;
 
-        TEvYmqCloudAuthResponse(const TString& cloudId, const TString& folderId, const TString& sid, const TString& authType)
+        TEvYmqCloudAuthResponse(const TString& cloudId, const TString& folderId, const TString& sid)
             : IsSuccess(true)
             , CloudId(cloudId)
             , FolderId(folderId)
             , Sid(sid)
-            , AuthType(authType)
             , Error(Nothing())
             {}
 
@@ -212,11 +199,6 @@ namespace NKikimr::NHttpProxy {
 
     inline TActorId MakeHttpProxyID() {
         static const char x[12] = "http_proxy ";
-        return TActorId(0, TStringBuf(x, 12));
-    }
-
-    inline TActorId MakeFolderServiceID() {
-        static const char x[12] = "folder_svc";
         return TActorId(0, TStringBuf(x, 12));
     }
 

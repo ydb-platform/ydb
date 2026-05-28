@@ -91,7 +91,6 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
@@ -422,14 +421,12 @@ namespace NKikimr::NHttpProxy {
 
         private:
             TInstant StartTime;
-            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
             TProtoRequest Request;
             TDuration RequestTimeout = TDuration::Seconds(60);
             ui32 PoolId;
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             NThreading::TFuture<TProtoResponse> RpcFuture;
-            THolder<NThreading::TFuture<void>> DiscoveryFuture;
             TProtoCall ProtoCall;
             TString Method;
             std::function<TString(TProtoRequest&)> QueueUrlExtractor;

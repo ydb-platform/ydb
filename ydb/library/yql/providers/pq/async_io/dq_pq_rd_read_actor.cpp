@@ -1282,10 +1282,15 @@ void TDqPqRdReadActor::AddMessageBatch(TRope&& messageBatch, NKikimr::NMiniKQL::
                 YQL_ENSURE(*index < parsedData.Width(), "Unexpected data width " << parsedData.Width() << ", failed to extract column by index " << index);
                 *(itemPtr++) = parsedRow[*index];
             } else {
-                // TODO: support metadata fields here
-                if (StructType->GetMemberType(itemPtr - itemHead)->IsData()) {
+                // TODO: replace stub metadata implementation (and move inside row_dispatcher/format_handler)
+                const auto itemType = StructType->GetMemberType(itemPtr - itemHead);
+                // must be metaddata field, with exactly two cases:
+                if (itemType->IsData()) {
+                    // POD (cluster, create_time, etc)
                     *(itemPtr++) = NUdf::TUnboxedValuePod::Zero();
-                } else { // special handling for user_attributes
+                } else {
+                    // Dict (user_attributes)
+                    YQL_ENSURE(itemType->IsDict());
                     *(itemPtr++) = HolderFactory.GetEmptyContainerLazy();
                 }
             }

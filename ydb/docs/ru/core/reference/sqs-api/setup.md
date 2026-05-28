@@ -6,4 +6,3 @@
 
 - включить флаг [`enable_topic_message_level_parallelism`](../configuration/feature_flags.md);
 - сконфигурировать [`http_proxy_config`](../configuration/http_proxy_config.md).
-

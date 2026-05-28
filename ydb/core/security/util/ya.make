@@ -13,6 +13,7 @@ PEERDIR(
     library/cpp/string_utils/base64
     ydb/core/base
     ydb/core/security/certificate_check
+    contrib/libs/openssl
 )
 
 END()

@@ -515,8 +515,10 @@ private:
                 return ResolveTableShards();
             }
             case Ydb::StatusIds::OVERLOADED: {
-                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
-                if (!isThrottled && (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read))) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!throttleDelay && (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read))) {
                     return replyError(
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
@@ -524,7 +526,7 @@ private:
                 CA_LOG_D("OVERLOADED was received from tablet: " << read.ShardId << "."
                     << getIssues().ToOneLineString());
                 read.SetBlocked();
-                return RetryTableRead(read, /*allowInstantRetry = */false, isThrottled);
+                return RetryTableRead(read, /*allowInstantRetry = */false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
                 if (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read)) {
@@ -765,11 +767,12 @@ private:
         return limit && TotalRetryAttempts + 1 > *limit;
     }
 
-    void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true, bool isThrottled = false) {
+    void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true, std::optional<TDuration> throttleDelay = std::nullopt) {
         CA_LOG_D("Retry reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << failedRead.Id
             << ", shardId: " << failedRead.ShardId);
 
-        if (!isThrottled) {
+        TDuration delay;
+        if (!throttleDelay) {
             if (CheckTotalRetriesExeeded()) {
                 return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded",
                     NYql::NDqProto::StatusIds::UNAVAILABLE);
@@ -781,9 +784,13 @@ private:
                 Reads.erase(failedRead);
                 return ResolveTableShards();
             }
+
+            delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
 
-        auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
+
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
             auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, ReadId);
@@ -792,7 +799,7 @@ private:
             }
             Reads.erase(failedRead);
         } else {
-            CA_LOG_D("Schedule retry atempt for readId: " << failedRead.Id << " after " << delay);
+            CA_LOG_D("Schedule retry attempt for readId: " << failedRead.Id << " after " << delay);
             TlsActivationContext->Schedule(
                 delay, new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvRetryRead(failedRead.Id, failedRead.LastSeqNo, /*instantStart = */ true))
             );

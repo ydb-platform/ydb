@@ -463,8 +463,10 @@ public:
             case Ydb::StatusIds::OVERLOADED: {
                 CA_LOG_D("OVERLOADED was received from tablet: " << shardId << "."
                     << getIssues().ToOneLineString());
-                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
-                if (!RetryTableRead(record.GetReadId(), false, isThrottled)) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!RetryTableRead(record.GetReadId(), false, throttleDelay)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::OVERLOADED,
                         NYql::TIssuesIds::KIKIMR_OVERLOADED,
@@ -601,18 +603,24 @@ public:
         }
     }
 
-    bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, bool isThrottled = false) {
+    bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, std::optional<TDuration> throttleDelay = std::nullopt) {
         auto& failedRead = ReadIdToState.at(failedReadId);
         auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
         CA_LOG_D("Retry reading of table: " << lookupState.Worker->GetTablePath() << ", failedReadId: " << failedReadId
             << ", shardId: " << failedRead.ShardId);
         failedRead.Blocked = true;
 
-        if (!isThrottled && failedRead.RetryAttempts >= MaxShardRetries()) {
-            return false;
+        TDuration delay;
+        if (!throttleDelay) {
+            if (failedRead.RetryAttempts >= MaxShardRetries()) {
+                return false;
+            }
+            ++failedRead.RetryAttempts;
+            delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
 
-        auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);
         } else {
@@ -633,7 +641,7 @@ public:
             const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
             StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.IsUniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
-            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts + 1;
+            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts;
         }
         ReadIdToState.erase(failedReadId);
     }

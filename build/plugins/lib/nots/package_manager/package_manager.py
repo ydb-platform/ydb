@@ -333,9 +333,7 @@ class PackageManager(object):
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
         store_dir = self._get_pnpm_store()
         if self.inject_peers or use_legacy_pnpm_virtual_store:
-            virtual_store_dir = os.path.join(
-                self.build_path, NODE_MODULES_DIRNAME if nm_bundle else '', VIRTUAL_STORE_DIRNAME
-            )
+            virtual_store_dir = os.path.join(self.build_path, NODE_MODULES_DIRNAME, VIRTUAL_STORE_DIRNAME)
         else:
             virtual_store_dir = None
 

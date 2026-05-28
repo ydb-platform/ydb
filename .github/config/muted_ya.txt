@@ -21,6 +21,7 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Local
 ydb/core/transfer/ut/functional Transfer.CreateAndDropConsumer
+ydb/core/transfer/ut/functional Transfer.CustomConsumer
 ydb/core/transfer/ut/functional Transfer.EnsureError
 ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleChangefeed
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk

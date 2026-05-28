@@ -1,9 +1,12 @@
 #include "jwk.h"
 
-#include <util/string/hex.h>
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
+
+#include <openssl/sha.h>
+
+#include <array>
 
 namespace NKikimr::NSecurity {
 
@@ -144,7 +147,7 @@ std::vector<std::string> ParseX5C(const NJson::TJsonValue& jwk) {
             continue;
         }
         try {
-            x5c.push_back(Base64Decode(cert.GetString()));
+            x5c.push_back(Base64StrictDecode(cert.GetString()));
         } catch (const std::exception&) {
             continue;
         }
@@ -153,13 +156,22 @@ std::vector<std::string> ParseX5C(const NJson::TJsonValue& jwk) {
     return x5c;
 }
 
+// this is copy-paste from Base64DecodeUneven except it uses Base64StrictDecode
+TString Base64StrictDecodeUneven(const TStringBuf s) {
+    const size_t tail = s.length() % 4;
+    if (tail == 0) {
+        return Base64StrictDecode(s);
+    }
+    return Base64StrictDecode(TString(s) + TString(4 - tail, '='));
+}
+
 std::string ParseX5T(const NJson::TJsonValue& jwk) {
     const auto x5t = ParseStr(jwk, "x5t");
     if (!x5t.has_value()) {
         return "";
     }
     try {
-        return Base64DecodeUneven(x5t.value());
+        return Base64StrictDecodeUneven(x5t.value());
     } catch (const std::exception&) {
         return "";
     }
@@ -171,7 +183,7 @@ std::string ParseX5TS256(const NJson::TJsonValue& jwk) {
         return  "";
     }
     try {
-        return Base64DecodeUneven(x5ts256.value());
+        return Base64StrictDecodeUneven(x5ts256.value());
     } catch (const std::exception&) {
         return "";
     }
@@ -196,9 +208,47 @@ std::optional<TJWK> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
     return res;
 }
 
-TString GetPublicKeyFromX5C(const std::string& cert) {
-    // TODO(vlad-serikov): check thumbprint
-    return GetCertificatePublicKey(cert, false);
+template <auto HASH, size_t LENGTH>
+std::string CalculateThumbprint(const std::string& cert) {
+    std::array<unsigned char, LENGTH> hash;
+    HASH(reinterpret_cast<const unsigned char*>(cert.data()), cert.size(), hash.data());
+    return std::string(reinterpret_cast<const char*>(hash.data()), LENGTH);
+}
+
+bool CheckCertificateThumbprints(const TJWK& jwk, const std::string& cert) {
+    if (!jwk.X509CertificateSha1Thumbprint.empty()
+        && jwk.X509CertificateSha1Thumbprint != CalculateThumbprint<SHA1, SHA_DIGEST_LENGTH>(cert))
+    {
+        return false;
+    }
+
+    if (!jwk.X509CertificateSha256Thumbprint.empty()
+        && jwk.X509CertificateSha256Thumbprint != CalculateThumbprint<SHA256, SHA256_DIGEST_LENGTH>(cert))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+std::optional<std::string> GetPublicKeyFromX5C(const TJWK& jwk) {
+    if (jwk.X509Chain.empty()) {
+        return std::nullopt;
+    }
+
+    const auto& keyCert = jwk.X509Chain.front();
+    if (!CheckCertificateThumbprints(jwk, keyCert)) {
+        return std::nullopt;
+    }
+
+    // TODO(vlad-serikov): validate certificate chain if possible
+
+    const auto publicKey = GetCertificatePublicKey(keyCert, ECertificateFormat::DER);
+    if (publicKey.empty()) {
+        return std::nullopt;
+    }
+
+    return publicKey;
 }
 
 } // namespace
@@ -207,34 +257,31 @@ TJWK::TJWK(TKeyType type)
     : Type(type)
 {}
 
-std::string TJWK::CalculatePublicKey() const {
-    if (!X509Chain.empty()) {
-        return GetPublicKeyFromX5C(X509Chain.front());
-    }
-
+std::optional<std::string> TJWK::CalculatePublicKey() const {
     // TODO(vlad-serikov): write code to generate public key from RSA/EC parameters
-    return "";
+    // TODO(vlad-serikov): validate cert key matches key from RSA/EC parameters
+    return GetPublicKeyFromX5C(*this);
 }
 
 std::optional<TJWK> ParseJWK(const NJson::TJsonValue& jwk) {
     return ParseJwkRfc7517(jwk);
 }
 
-std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwk) {
+std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet) {
     static constexpr TStringBuf KEYS = "keys";
 
-    if (!jwk.Has(KEYS) || !jwk[KEYS].IsArray()) {
+    if (!jwkSet.Has(KEYS) || !jwkSet[KEYS].IsArray()) {
         return std::nullopt;
     }
 
-    TJWKSet jwkSet;
-    for (const auto& key : jwk[KEYS].GetArray()) {
+    TJWKSet res;
+    for (const auto& key : jwkSet[KEYS].GetArray()) {
         auto jwk = ParseJWK(key);
         if (jwk.has_value()) {
-            jwkSet.Keys.push_back(std::move(jwk.value()));
+            res.Keys.push_back(std::move(jwk.value()));
         }
     }
-    return jwkSet;
+    return res;
 }
 
 } // namespace NKikimr::NSecurity

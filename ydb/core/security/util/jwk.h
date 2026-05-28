@@ -2,6 +2,8 @@
 
 #include <library/cpp/json/writer/json_value.h>
 
+#include <util/system/types.h>
+
 #include <optional>
 #include <string>
 #include <vector>
@@ -48,27 +50,29 @@ enum class TAlg : ui8 {
 // {kty, kid} - Unique identifier
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
 struct TJWK {
-    TKeyType Type;
-    std::optional<TUsage> Usage;
-    std::vector<TKeyOps> KeyOperations;
-    std::optional<TAlg> Algorithm;
-    std::string KeyId;
-    std::string X509Url;
-    std::vector<std::string> X509Chain; // In DER format
-    std::string X509CertificateSha1Thumbprint;
-    std::string X509CertificateSha256Thumbprint;
+    TKeyType Type; // `kty`
+    std::optional<TUsage> Usage; // `use`
+    std::vector<TKeyOps> KeyOperations; // `key_ops`
+    std::optional<TAlg> Algorithm; // `alg`
+    std::string KeyId; // `kid`
+    std::string X509Url; // `x5u`
+    std::vector<std::string> X509Chain; // `x5c` (in DER format)
+    std::string X509CertificateSha1Thumbprint; // `x5t`
+    std::string X509CertificateSha256Thumbprint; // `x5t#S256`
 
     explicit TJWK(TKeyType type);
 
-    std::string CalculatePublicKey() const;
+    // If parameters are missing or an error occurred in validation/parsing process, std::nullopt is returned.
+    // Otherwise, the publicKey is returned, which may be empty if the certificate did not contain the public key.
+    std::optional<std::string> CalculatePublicKey() const;
 };
 
 // https://datatracker.ietf.org/doc/html/rfc7517#section-5
 struct TJWKSet {
-    std::vector<TJWK> Keys;
+    std::vector<TJWK> Keys; // `keys`
 };
 
 std::optional<TJWK> ParseJWK(const NJson::TJsonValue& jwk);
-std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwk);
+std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet);
 
 } // namespace NKikimr::NSecurity

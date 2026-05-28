@@ -1,7 +1,6 @@
 #include "jwk.h"
 
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NSecurity {
@@ -435,6 +434,7 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
                 "x5c": [
                   "MIICozCCAYsCBgGeOZ43AjANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPGH/axeTkeHg0sUq/M6ut+YoKG2V77o8F+Nq0PWQO+EQLzm8v/hGVJhizULQYHfVBhPIyzejLYDvcUtNWXwa5Mos2vVcA5SrtZWsikjKOJOhpNo0l3qYvq6xGltyLX+yB4slIT6SYSm1/rOzW2XjYP0GI8eJYGw+kVxZvB3I15Q29EaShULNCUnDltaOEPVI6gV8h7i0Okjhosc5G/rij2z29xwqpFYs+DnzWMiJHvdLValnuWy/8fDNraaBIopxE3sDOMTMkqBzM/wxPbDpRygIdv1FWfvBnMrnYKPumcYRTsRxBQBlcbSCEgvvkjJ3DTTxoVIAOOgbzsFNjZm3usCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAoeb91xEPgnBtSmOuVKUCGER0hXJlT1iRCMyxzb2uA/IoT//GGGOCUhlt2wKkOHR8NZS6QFzBO0/tB1t9/AXORjJyme8H1Xg6+1EwpzwBO2+Om6iJsNnga0eLL0xh9UvIciQzwVF6rSS6wSqxvVaozjMHD7b0CfI7Kezdz3sJKT1TmYA9xVcdVyTyxRU4JjGrLtvKGqjgywXlzCKKkPpcoUtMSKVzNIgN92U/v/47Y+cFAGVZ7k4mIuGbCRe4gxgK39tYuyAoAKNxDzp5qAQ3Pbs41pojRNEtetsOuR57sN/7GIlLkjhoOFzgpZ/ZZ6bdtYsqbPEKzS/sVz6JEhFsvA=="
                 ],
+                "x5t": "cV52LLmVDLw0mv2s1yx7dFYsQKQ",
                 "x5t#S256": "W-a6UnSQH4EX5bKR5e_2i55-llXgKq-KTLZrAnC-pHA"
               },
               {
@@ -451,8 +451,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
 
         UNIT_ASSERT(jwkSet.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 2);
+        UNIT_ASSERT(jwkSet->Keys[0].CalculatePublicKey().has_value());
         UNIT_ASSERT_STRINGS_EQUAL(
-            jwkSet->Keys[0].CalculatePublicKey(),
+            jwkSet->Keys[0].CalculatePublicKey().value(),
             "-----BEGIN PUBLIC KEY-----\n"
             "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8Yf9rF5OR4eDSxSr8zq6\n"
             "35igobZXvujwX42rQ9ZA74RAvOby/+EZUmGLNQtBgd9UGE8jLN6MtgO9xS01ZfBr\n"
@@ -462,8 +463,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
             "HKAh2/UVZ+8Gcyudgo+6ZxhFOxHEFAGVxtIISC++SMncNNPGhUgA46BvOwU2Nmbe\n"
             "6wIDAQAB\n"
             "-----END PUBLIC KEY-----\n");
+        UNIT_ASSERT(jwkSet->Keys[1].CalculatePublicKey().has_value());
         UNIT_ASSERT_VALUES_EQUAL(
-            jwkSet->Keys[1].CalculatePublicKey(),
+            jwkSet->Keys[1].CalculatePublicKey().value(),
             "-----BEGIN PUBLIC KEY-----\n"
             "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzib6/S/YkMstKH07kSUb\n"
             "3AV9vePmAX4ABXdg3O15TwOwcHGfkjOVXsZSenCwN7sqraNCXpHOZbw3g+5lE4+F\n"
@@ -473,6 +475,81 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
             "ijpov3x5YlSseeRvJfqGZdKskcYfOsIgytA91a8dX4A97yAnR5fpQN4B9Yj1S6JY\n"
             "8wIDAQAB\n"
             "-----END PUBLIC KEY-----\n");
+    }
+
+    Y_UNIT_TEST(CalculatePublicKeyWithoutThumbprint) {
+        const auto jwk = ParseJWK(ParseJson(R"({
+            "kty": "RSA",
+            "alg": "RS256",
+            "x5c": [
+                "MIICozCCAYsCBgGeOZ43AjANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPGH/axeTkeHg0sUq/M6ut+YoKG2V77o8F+Nq0PWQO+EQLzm8v/hGVJhizULQYHfVBhPIyzejLYDvcUtNWXwa5Mos2vVcA5SrtZWsikjKOJOhpNo0l3qYvq6xGltyLX+yB4slIT6SYSm1/rOzW2XjYP0GI8eJYGw+kVxZvB3I15Q29EaShULNCUnDltaOEPVI6gV8h7i0Okjhosc5G/rij2z29xwqpFYs+DnzWMiJHvdLValnuWy/8fDNraaBIopxE3sDOMTMkqBzM/wxPbDpRygIdv1FWfvBnMrnYKPumcYRTsRxBQBlcbSCEgvvkjJ3DTTxoVIAOOgbzsFNjZm3usCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAoeb91xEPgnBtSmOuVKUCGER0hXJlT1iRCMyxzb2uA/IoT//GGGOCUhlt2wKkOHR8NZS6QFzBO0/tB1t9/AXORjJyme8H1Xg6+1EwpzwBO2+Om6iJsNnga0eLL0xh9UvIciQzwVF6rSS6wSqxvVaozjMHD7b0CfI7Kezdz3sJKT1TmYA9xVcdVyTyxRU4JjGrLtvKGqjgywXlzCKKkPpcoUtMSKVzNIgN92U/v/47Y+cFAGVZ7k4mIuGbCRe4gxgK39tYuyAoAKNxDzp5qAQ3Pbs41pojRNEtetsOuR57sN/7GIlLkjhoOFzgpZ/ZZ6bdtYsqbPEKzS/sVz6JEhFsvA=="
+            ]
+        })"));
+
+        UNIT_ASSERT(jwk.has_value());
+        UNIT_ASSERT(jwk->CalculatePublicKey().has_value());
+        UNIT_ASSERT_STRINGS_EQUAL(
+            jwk->CalculatePublicKey().value(),
+            "-----BEGIN PUBLIC KEY-----\n"
+            "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8Yf9rF5OR4eDSxSr8zq6\n"
+            "35igobZXvujwX42rQ9ZA74RAvOby/+EZUmGLNQtBgd9UGE8jLN6MtgO9xS01ZfBr\n"
+            "kyiza9VwDlKu1layKSMo4k6Gk2jSXepi+rrEaW3Itf7IHiyUhPpJhKbX+s7NbZeN\n"
+            "g/QYjx4lgbD6RXFm8HcjXlDb0RpKFQs0JScOW1o4Q9UjqBXyHuLQ6SOGixzkb+uK\n"
+            "PbPb3HCqkViz4OfNYyIke90tVqWe5bL/x8M2tpoEiinETewM4xMySoHMz/DE9sOl\n"
+            "HKAh2/UVZ+8Gcyudgo+6ZxhFOxHEFAGVxtIISC++SMncNNPGhUgA46BvOwU2Nmbe\n"
+            "6wIDAQAB\n"
+            "-----END PUBLIC KEY-----\n");
+    }
+
+    Y_UNIT_TEST(CalculatePublicKeyWithoutX5CReturnsNullopt) {
+        const auto jwk = ParseJWK(ParseJson(R"({
+            "kty": "RSA",
+            "alg": "RS256",
+            "n": "sXchDaQpG81NwH8YFkBM2fScS9bCqV8e3X5R2Ua3h2Y",
+            "e": "AQAB"
+        })"));
+
+        UNIT_ASSERT(jwk.has_value());
+        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
+    }
+
+    Y_UNIT_TEST(CalculatePublicKeyWithInvalidX5CReturnsNullopt) {
+        const auto jwk = ParseJWK(ParseJson(R"({
+            "kty": "RSA",
+            "alg": "RS256",
+            "x5c": ["Y2VydC1kYXRh"]
+        })"));
+
+        UNIT_ASSERT(jwk.has_value());
+        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
+    }
+
+    Y_UNIT_TEST(CalculatePublicKeyWithWrongSha1ThumbprintReturnsNullopt) {
+        const auto jwk = ParseJWK(ParseJson(R"({
+            "kty": "RSA",
+            "alg": "RS256",
+            "x5c": [
+                "MIICozCCAYsCBgGeOZ43AjANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPGH/axeTkeHg0sUq/M6ut+YoKG2V77o8F+Nq0PWQO+EQLzm8v/hGVJhizULQYHfVBhPIyzejLYDvcUtNWXwa5Mos2vVcA5SrtZWsikjKOJOhpNo0l3qYvq6xGltyLX+yB4slIT6SYSm1/rOzW2XjYP0GI8eJYGw+kVxZvB3I15Q29EaShULNCUnDltaOEPVI6gV8h7i0Okjhosc5G/rij2z29xwqpFYs+DnzWMiJHvdLValnuWy/8fDNraaBIopxE3sDOMTMkqBzM/wxPbDpRygIdv1FWfvBnMrnYKPumcYRTsRxBQBlcbSCEgvvkjJ3DTTxoVIAOOgbzsFNjZm3usCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAoeb91xEPgnBtSmOuVKUCGER0hXJlT1iRCMyxzb2uA/IoT//GGGOCUhlt2wKkOHR8NZS6QFzBO0/tB1t9/AXORjJyme8H1Xg6+1EwpzwBO2+Om6iJsNnga0eLL0xh9UvIciQzwVF6rSS6wSqxvVaozjMHD7b0CfI7Kezdz3sJKT1TmYA9xVcdVyTyxRU4JjGrLtvKGqjgywXlzCKKkPpcoUtMSKVzNIgN92U/v/47Y+cFAGVZ7k4mIuGbCRe4gxgK39tYuyAoAKNxDzp5qAQ3Pbs41pojRNEtetsOuR57sN/7GIlLkjhoOFzgpZ/ZZ6bdtYsqbPEKzS/sVz6JEhFsvA=="
+            ],
+            "x5t": "d3Jvbmc"
+        })"));
+
+        UNIT_ASSERT(jwk.has_value());
+        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
+    }
+
+    Y_UNIT_TEST(CalculatePublicKeyWithWrongSha256ThumbprintReturnsNullopt) {
+        const auto jwk = ParseJWK(ParseJson(R"({
+            "kty": "RSA",
+            "alg": "RS256",
+            "x5c": [
+                "MIICozCCAYsCBgGeOZ43AjANBgkqhkiG9w0BAQsFADAVMRMwEQYDVQQDDApwcm9kdWN0aW9uMB4XDTI2MDUxODA1NDM1MFoXDTM2MDUxODA1NDUzMFowFTETMBEGA1UEAwwKcHJvZHVjdGlvbjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAPGH/axeTkeHg0sUq/M6ut+YoKG2V77o8F+Nq0PWQO+EQLzm8v/hGVJhizULQYHfVBhPIyzejLYDvcUtNWXwa5Mos2vVcA5SrtZWsikjKOJOhpNo0l3qYvq6xGltyLX+yB4slIT6SYSm1/rOzW2XjYP0GI8eJYGw+kVxZvB3I15Q29EaShULNCUnDltaOEPVI6gV8h7i0Okjhosc5G/rij2z29xwqpFYs+DnzWMiJHvdLValnuWy/8fDNraaBIopxE3sDOMTMkqBzM/wxPbDpRygIdv1FWfvBnMrnYKPumcYRTsRxBQBlcbSCEgvvkjJ3DTTxoVIAOOgbzsFNjZm3usCAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAoeb91xEPgnBtSmOuVKUCGER0hXJlT1iRCMyxzb2uA/IoT//GGGOCUhlt2wKkOHR8NZS6QFzBO0/tB1t9/AXORjJyme8H1Xg6+1EwpzwBO2+Om6iJsNnga0eLL0xh9UvIciQzwVF6rSS6wSqxvVaozjMHD7b0CfI7Kezdz3sJKT1TmYA9xVcdVyTyxRU4JjGrLtvKGqjgywXlzCKKkPpcoUtMSKVzNIgN92U/v/47Y+cFAGVZ7k4mIuGbCRe4gxgK39tYuyAoAKNxDzp5qAQ3Pbs41pojRNEtetsOuR57sN/7GIlLkjhoOFzgpZ/ZZ6bdtYsqbPEKzS/sVz6JEhFsvA=="
+            ],
+            "x5t#S256": "d3Jvbmc"
+        })"));
+
+        UNIT_ASSERT(jwk.has_value());
+        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
     }
 
 }

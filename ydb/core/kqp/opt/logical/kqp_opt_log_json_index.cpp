@@ -568,11 +568,20 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
                 return MakeCollectError(ctx, param.Pos(), "List parameter item type is not supported for JSON index");
             }
         } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Tuple) {
-            const auto* tupleType = paramTypeAnn->Cast<TTupleExprType>();
-            for (const auto* itemType : tupleType->GetItems()) {
+            const auto& items = paramTypeAnn->Cast<TTupleExprType>()->GetItems();
+            for (const auto* itemType : items) {
                 if (!IsSupportedJsonParamType(itemType)) {
                     return MakeCollectError(ctx, param.Pos(),
                         "Tuple parameter item type is not supported for JSON index");
+                }
+            }
+            if (!items.empty()) {
+                const auto* firstItemType = items.front();
+                for (const auto* itemType : items) {
+                    if (!itemType->Equals(*firstItemType)) {
+                        return MakeCollectError(ctx, param.Pos(),
+                            "Tuple parameter must have all items of the same type for JSON index");
+                    }
                 }
             }
         } else if (paramTypeAnn->GetKind() == ETypeAnnotationKind::Dict) {
@@ -645,7 +654,7 @@ std::optional<TPredicateCollectResult> VisitJsonSqlIn(const TCoSqlIn& node, TExp
     for (const auto& item : items) {
         const auto literal = UnwrapValue(item);
         auto extracted = TryExtractComparisonValue(literal);
-        if (!extracted.has_value()) {
+        if (!extracted.has_value() || !extracted->has_value()) {
             return MakeCollectError(ctx, literal.Pos(), extracted.error());
         }
 

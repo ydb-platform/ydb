@@ -2498,6 +2498,22 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             {"\2a\2b", "\2a\2c"}, EMode::Or);
     }
 
+    Y_UNIT_TEST(MergeAndOr_ValueTokens) {
+        CheckMerge(
+            MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
+            {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::And);
+        CheckMerge(
+            MergeAnd(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
+            {"\2a\2b" + strSuffix("x")}, EMode::And);
+
+        CheckMerge(
+            MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b" + strSuffix("xyz")})),
+            {"\2a\2b" + strSuffix("x"), "\2a\2b" + strSuffix("xyz")}, EMode::Or);
+        CheckMerge(
+            MergeOr(MakeTokens({"\2a\2b" + strSuffix("x")}), MakeTokens({"\2a\2b"})),
+            {"\2a\2b"}, EMode::Or);
+    }
+
     // Ensure different-length key names don't create false prefix matches.
     // Key "ab" (2 bytes, length prefix \x02) must NOT match as a prefix for key "a" (\x01).
     Y_UNIT_TEST(MergeAndOr_DifferentLengthKeys) {

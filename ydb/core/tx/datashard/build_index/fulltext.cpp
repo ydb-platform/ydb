@@ -61,6 +61,13 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     ui64 DocCount = 0;
     ui64 TotalDocLength = 0;
 
+    // Diagnostic counters: how many entries the scan added to each destination
+    // buffer (cumulative, never reset on flush). These must match what
+    // eventually lands in the impl tables — when they don't, the docs build
+    // lost rows somewhere on the upload path.
+    ui64 PostingEntriesAdded = 0;
+    ui64 DocsEntriesAdded = 0;
+
     TTags ScanTags;
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
@@ -241,6 +248,11 @@ public:
         ReadBytes += CountRowCellBytes(key, *row);
 
         LastProcessedKey = TSerializedCellVec(key);
+        // Inform the uploader of the latest source key so that subsequent
+        // TryUpload calls can snapshot it as a per-destination flush
+        // boundary. This is what makes IN_PROGRESS LastKeyAck checkpoints
+        // correct in the face of asymmetric posting/docs buffer fills.
+        Uploader.SetCurrentSourceKey(LastProcessedKey);
 
         // Effective doc-id key cells: either the table PK or the single __rowId cell.
         TArrayRef<const TCell> docIdKey = key;
@@ -283,6 +295,7 @@ public:
                 uploadValue.push_back(TCell::Make(freq));
 
                 UploadBuf->AddRow(uploadKey, uploadValue);
+                ++PostingEntriesAdded;
             }
 
             uploadValue.clear();
@@ -298,6 +311,7 @@ public:
             // Document length column
             uploadValue.push_back(TCell::Make(totalTokens));
             DocsBuf->AddRow(docIdKey, uploadValue);
+            ++DocsEntriesAdded;
 
             DocCount++;
             TotalDocLength += totalTokens;
@@ -319,10 +333,18 @@ public:
                 }
 
                 UploadBuf->AddRow(uploadKey, uploadValue);
+                ++PostingEntriesAdded;
             }
         }
 
-        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+        bool shouldSleep = Uploader.ShouldWaitUpload();
+        if (shouldSleep) {
+            LOG_T("Feed sleep at row " << ReadRows
+                << " posting added: " << PostingEntriesAdded
+                << " docs added: " << DocsEntriesAdded
+                << " " << Debug());
+        }
+        return shouldSleep ? EScan::Sleep : EScan::Feed;
     }
 
     EScan PageFault() final
@@ -336,7 +358,11 @@ public:
         if (JsonErrors > 0) {
             LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
         }
-        LOG_T("Exhausted " << Debug());
+        LOG_D("Exhausted ReadRows: " << ReadRows
+            << " DocCount: " << DocCount
+            << " posting added: " << PostingEntriesAdded
+            << " docs added: " << DocsEntriesAdded
+            << " " << Debug());
 
         // call Seek to wait uploads
         return EScan::Reset;
@@ -364,9 +390,15 @@ public:
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_N("Done " << Debug()
+                << " posting added: " << PostingEntriesAdded
+                << " docs added: " << DocsEntriesAdded
+                << " " << Response->Record.ShortDebugString());
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_E("Failed " << Debug()
+                << " posting added: " << PostingEntriesAdded
+                << " docs added: " << DocsEntriesAdded
+                << " " << Response->Record.ShortDebugString());
         }
         Send(ResponseActorId, Response.Release());
 
@@ -411,6 +443,8 @@ protected:
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
         LOG_D("Handle TEvUploadRowsResponse " << Debug()
+            << " posting added: " << PostingEntriesAdded
+            << " docs added: " << DocsEntriesAdded
             << " ev->Sender: " << ev->Sender.ToString());
 
         if (!Driver) {
@@ -420,19 +454,29 @@ protected:
         bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
-            if (batchUploaded && LastProcessedKey.GetBuffer() &&
-                LastProcessedKey.GetBuffer() != LastAckedKey.GetBuffer()) {
-                LastAckedKey = LastProcessedKey;
+            if (batchUploaded) {
+                // Use the cross-destination safe checkpoint, not the scan's
+                // LastProcessedKey. In relevance mode the posting buffer
+                // fills much faster than docs; advancing LastAckedKey on
+                // every posting flush would leave docs entries for those
+                // same rows still buffered. On shard restart the SchemeShard
+                // would resume from LastAckedKey-exclusive and the buffered
+                // docs entries would be permanently lost.
+                if (auto safeKey = Uploader.GetMinFlushedKey();
+                    safeKey && safeKey->GetBuffer() &&
+                    safeKey->GetBuffer() != LastAckedKey.GetBuffer()) {
+                    LastAckedKey = std::move(*safeKey);
 
-                auto progress = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
-                auto& record = progress->Record;
-                record.SetId(BuildId);
-                record.SetTabletId(TabletId);
-                record.SetRequestSeqNoGeneration(Request.GetSeqNoGeneration());
-                record.SetRequestSeqNoRound(Request.GetSeqNoRound());
-                record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
-                record.SetLastKeyAck(LastAckedKey.GetBuffer());
-                Send(ResponseActorId, progress.Release());
+                    auto progress = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
+                    auto& record = progress->Record;
+                    record.SetId(BuildId);
+                    record.SetTabletId(TabletId);
+                    record.SetRequestSeqNoGeneration(Request.GetSeqNoGeneration());
+                    record.SetRequestSeqNoRound(Request.GetSeqNoRound());
+                    record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                    record.SetLastKeyAck(LastAckedKey.GetBuffer());
+                    Send(ResponseActorId, progress.Release());
+                }
             }
             Driver->Touch(EScan::Feed);
             return;

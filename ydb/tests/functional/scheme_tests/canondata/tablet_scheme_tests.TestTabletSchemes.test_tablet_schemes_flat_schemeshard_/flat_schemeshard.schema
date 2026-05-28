@@ -5333,6 +5333,21 @@
                 "ColumnId": 49,
                 "ColumnName": "SubState",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 50,
+                "ColumnName": "CreateBuildSequenceTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 51,
+                "ColumnName": "CreateBuildSequenceTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 52,
+                "ColumnName": "CreateBuildSequenceTxDone",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -5387,7 +5402,10 @@
                     46,
                     47,
                     48,
-                    49
+                    49,
+                    50,
+                    51,
+                    52
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8172,6 +8190,16 @@
                 "ColumnId": 6,
                 "ColumnName": "FamilyName",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "DefaultFromSequence",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "BitReverseSequenceValue",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -8183,7 +8211,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

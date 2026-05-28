@@ -136,7 +136,6 @@ private:
     std::unique_ptr<TEvStreamReadRequest> Request;
     ui64 Cookie;
     const TString ClientDC;
-    const TInstant StartTimestamp;
 
     TActorId SchemeCache;
     TActorId NewSchemeCache;

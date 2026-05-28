@@ -3,12 +3,15 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+import yaml
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import Key
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, ListItem, ListView, Static
+
+import ydb.tools.mnc.scheme as mnc_scheme
 
 
 CONFIG_FIELD_TITLES = {
@@ -253,6 +256,32 @@ class ConfigCandidate:
     path: str
 
 
+@dataclass
+class ConfigValidation:
+    errors: list[str]
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
+
+
+def _validate_multinode_config(path: str) -> ConfigValidation:
+    try:
+        with open(path) as file:
+            config = yaml.safe_load(file)
+    except Exception as error:
+        return ConfigValidation([f"Failed to parse config: {error}"])
+
+    try:
+        validated, errors = mnc_scheme.apply_scheme(config, mnc_scheme.multinode.scheme)
+    except Exception as error:
+        return ConfigValidation([f"Failed to validate config: {error}"])
+
+    if validated is None:
+        return ConfigValidation(errors or ["Config does not match multinode scheme"])
+    return ConfigValidation([])
+
+
 class ConfigCandidateItem(ListItem):
     def __init__(self, candidate: ConfigCandidate) -> None:
         self.candidate = candidate
@@ -268,9 +297,52 @@ class ConfigCandidateItem(ListItem):
 
 class ClusterConfigDetails(VerticalScroll, inherit_bindings=False):
     def compose(self) -> ComposeResult:
+        yield Horizontal(
+            Label("", id="cluster-config-details-name"),
+            Label("SELECTED", id="cluster-config-selected-badge", classes="cluster-config-badge"),
+            Label("OK", id="cluster-config-ok-badge", classes="cluster-config-badge"),
+            Label("FAIL", id="cluster-config-fail-badge", classes="cluster-config-badge"),
+            id="cluster-config-details-header",
+        )
+        yield Label("", id="cluster-config-details-path")
+        yield Static("", id="cluster-config-validation-errors", markup=False)
         yield Static("", id="cluster-config-details-content", markup=False)
 
-    def update_content(self, content: str) -> None:
+    def update_empty(self, message: str) -> None:
+        self.query_one("#cluster-config-details-name", Label).update(message)
+        self.query_one("#cluster-config-details-path", Label).update("")
+        self.query_one("#cluster-config-validation-errors", Static).display = False
+        self.query_one("#cluster-config-details-content", Static).update("")
+        for badge_id in ("#cluster-config-selected-badge", "#cluster-config-ok-badge", "#cluster-config-fail-badge"):
+            self.query_one(badge_id, Label).display = False
+        self.scroll_to(y=0, animate=False, force=True)
+
+    def update_candidate(
+        self,
+        candidate: ConfigCandidate,
+        selected: bool,
+        validation: ConfigValidation,
+        content: str,
+    ) -> None:
+        self.query_one("#cluster-config-details-name", Label).update(candidate.name)
+        self.query_one("#cluster-config-details-path", Label).update(candidate.path)
+
+        self.query_one("#cluster-config-selected-badge", Label).display = selected
+        self.query_one("#cluster-config-ok-badge", Label).display = validation.ok
+        self.query_one("#cluster-config-fail-badge", Label).display = not validation.ok
+
+        errors = self.query_one("#cluster-config-validation-errors", Static)
+        if validation.errors:
+            errors.display = True
+            errors.update(
+                "Config is not compatible with multinode scheme:\n"
+                + "\n".join(f"- {error}" for error in validation.errors)
+                + "\n"
+            )
+        else:
+            errors.display = False
+            errors.update("")
+
         self.query_one("#cluster-config-details-content", Static).update(content)
         self.scroll_to(y=0, animate=False, force=True)
 
@@ -359,6 +431,53 @@ class ClusterConfigPane(Horizontal):
         background: $primary-background;
     }
 
+    #cluster-config-details-header {
+        height: 1;
+        width: 1fr;
+        margin-bottom: 1;
+    }
+
+    #cluster-config-details-name {
+        width: auto;
+        margin-right: 1;
+        text-style: bold;
+    }
+
+    #cluster-config-details-path {
+        height: 1;
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    .cluster-config-badge {
+        height: 1;
+        width: auto;
+        padding: 0 1;
+        margin-right: 1;
+        text-style: bold;
+    }
+
+    #cluster-config-selected-badge {
+        background: $secondary-muted;
+        color: $text-secondary;
+    }
+
+    #cluster-config-ok-badge {
+        background: $success-muted;
+        color: $text-success;
+    }
+
+    #cluster-config-fail-badge {
+        background: $error-muted;
+        color: $text-error;
+    }
+
+    #cluster-config-validation-errors {
+        height: auto;
+        color: $text-error;
+        margin-bottom: 1;
+    }
+
     #cluster-config-details-content {
         height: auto;
         width: 1fr;
@@ -403,7 +522,7 @@ class ClusterConfigPane(Horizontal):
         if self._candidates:
             self._show_details(self._candidates[0])
         else:
-            self.query_one("#cluster-config-details", ClusterConfigDetails).update_content("No configs found")
+            self.query_one("#cluster-config-details", ClusterConfigDetails).update_empty("No configs found")
 
     def _show_details(self, candidate: ConfigCandidate) -> None:
         try:
@@ -411,9 +530,11 @@ class ClusterConfigPane(Horizontal):
                 content = file.read()
         except Exception as error:
             content = f"Failed to read config: {error}"
-        selected = " [selected]" if candidate == self._selected_candidate else ""
-        self.query_one("#cluster-config-details", ClusterConfigDetails).update_content(
-            f"{candidate.name}{selected}\n{candidate.path}\n\n{content}"
+        self.query_one("#cluster-config-details", ClusterConfigDetails).update_candidate(
+            candidate,
+            candidate == self._selected_candidate,
+            _validate_multinode_config(candidate.path),
+            content,
         )
 
 

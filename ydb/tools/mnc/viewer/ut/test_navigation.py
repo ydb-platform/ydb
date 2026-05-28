@@ -74,10 +74,9 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
         for command in commands:
             wait_for_close = command == "close_tab" and app.query_one("#tabs", TabbedContent).active != "general"
             await self._run_command(app, command)
-            if wait_for_close:
-                await pilot.pause()
-                await pilot.pause()
             expected.apply(command)
+            if wait_for_close:
+                await self._wait_for_tab_panes(app, pilot, expected.tabs)
             self._assert_tabs(app, expected, commands, command)
 
     async def _reset_tabs(self, app: Viewer, start_tab: str) -> None:
@@ -114,6 +113,12 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
 
     def _actual_tabs(self, app: Viewer) -> list[str]:
         return [pane.id for pane in app.query_one("#tabs", TabbedContent).query(TabPane)]
+
+    async def _wait_for_tab_panes(self, app: Viewer, pilot, expected_tabs: list[str]) -> None:
+        for _ in range(10):
+            if self._actual_tabs(app) == expected_tabs:
+                return
+            await pilot.pause()
 
     def _assert_tabs(
         self,

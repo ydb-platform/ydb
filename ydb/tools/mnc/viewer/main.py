@@ -6,6 +6,7 @@ import yaml
 from textual.app import App, ComposeResult, ScreenStackError
 from textual.binding import Binding
 from textual.command import CommandPalette
+from textual.css.query import NoMatches
 from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Footer, Header, Input, ListView, TabbedContent, TabPane, Tabs
@@ -81,7 +82,12 @@ class Viewer(App):
         if self._navigation_generation != generation or tab_id not in self._opened_tab_order:
             return
 
-        self.query_one("#tabs", TabbedContent).active = tab_id
+        try:
+            tabs = self.query_one("#tabs", TabbedContent)
+        except NoMatches:
+            return
+
+        tabs.active = tab_id
         self._focus_active_tab_content(tab_id)
 
     def _disable_tab_header_focus(self) -> None:
@@ -89,13 +95,21 @@ class Viewer(App):
             tabs_header.can_focus = False
 
     def _focus_active_tab_content(self, expected_tab_id: Optional[str] = None) -> None:
-        tabs = self.query_one("#tabs", TabbedContent)
+        try:
+            tabs = self.query_one("#tabs", TabbedContent)
+        except NoMatches:
+            return
+
         if tabs.active is None:
             return
         if expected_tab_id is not None and tabs.active != expected_tab_id:
             return
 
-        active_pane = self.query_one(f"#{tabs.active}", TabPane)
+        try:
+            active_pane = self.query_one(f"#{tabs.active}", TabPane)
+        except NoMatches:
+            return
+
         for widget in active_pane.children:
             if (
                 getattr(widget, "can_focus", False)

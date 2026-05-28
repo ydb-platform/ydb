@@ -1,6 +1,7 @@
 PY3TEST()
 
 TEST_SRCS(
+    test_cluster_config_validation.py
     test_navigation.py
 )
 

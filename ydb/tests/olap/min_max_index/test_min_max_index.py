@@ -123,6 +123,9 @@ class TestYdbMinMaxIndex(TestBase):
                 'optimizer_freshness_check_duration_ms': 0,
                 'small_portion_detect_size_limit': 0,
             },
+            extra_feature_flags={
+                'enable_local_min_max_index': True
+            }
         ))
 
         cls.cluster.start()
@@ -170,10 +173,7 @@ class TestYdbMinMaxIndex(TestBase):
             """)
             # Add minmax index on the column
             self.query(f"""
-                ALTER OBJECT `{self.database}/minmax_index_all_types` (TYPE TABLE) SET (
-                    ACTION=UPSERT_INDEX, NAME=idx_{col_name}_minmax, TYPE=MIN_MAX,
-                    FEATURES=`{{"column_name": "{col_name}"}}`
-                );
+                ALTER TABLE `{self.database}/minmax_index_all_types` ADD INDEX idx_{col_name}_minmax LOCAL USING min_max ON(`{col_name}`);
             """)
 
         # Insert 5000 rows via SQL: every 10th row has all nullable columns set to NULL.
@@ -246,10 +246,7 @@ class TestYdbMinMaxIndex(TestBase):
 
         with pytest.raises(ydb.issues.SchemeError) as exc_info:
             self.query(f"""
-                ALTER OBJECT `{self.database}/{table_name}` (TYPE TABLE) SET (
-                    ACTION=UPSERT_INDEX, NAME=idx_val_minmax, TYPE=MIN_MAX,
-                    FEATURES=`{{"column_name": "val"}}`
-                );
+                ALTER TABLE `{self.database}/{table_name}` ADD INDEX idx_val_minmax LOCAL USING min_max ON(`val`);
             """)
 
         assert "inappropriate column type for min_max index" in str(exc_info.value), (

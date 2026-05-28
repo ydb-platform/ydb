@@ -319,7 +319,7 @@ TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata);
 /**
  * Takes valid MainConfig and increases version exactly by one
  */
-TString UpgradeMainConfigVersion(const TString &config);
+TString UpgradeMainConfigVersion(const TString& config);
 
 /**
  * Takes valid StorageConfig and increases version exactly by one

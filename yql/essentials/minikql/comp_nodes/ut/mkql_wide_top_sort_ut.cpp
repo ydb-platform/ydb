@@ -2,6 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
 #include <cstring>
 
@@ -776,6 +777,312 @@ Y_UNIT_TEST_LLVM(SortByExtDateTypeAsc) {
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
+
+Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingBasic) {
+    TSetup<LLVM, SPILLING> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto strType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({ui64Type, strType});
+
+    // Create 9 tuples with keys in non-sorted order
+    TRuntimeNode::TList items;
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(5), pb.NewDataLiteral<NUdf::EDataSlot::String>("five")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<NUdf::EDataSlot::String>("three")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(8), pb.NewDataLiteral<NUdf::EDataSlot::String>("eight")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<NUdf::EDataSlot::String>("one")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(9), pb.NewDataLiteral<NUdf::EDataSlot::String>("nine")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<NUdf::EDataSlot::String>("two")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(7), pb.NewDataLiteral<NUdf::EDataSlot::String>("seven")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(4), pb.NewDataLiteral<NUdf::EDataSlot::String>("four")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(6), pb.NewDataLiteral<NUdf::EDataSlot::String>("six")}));
+
+    const auto list = pb.NewList(tupleType, items);
+
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                               {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
+    const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (SPILLING) {
+        graph->GetContext().SpillerFactory = spillerFactory;
+    }
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue item;
+
+    // Expect sorted ascending by first key: 1,2,3,4,5,6,7,8,9
+    const NUdf::TStringRef expectedValues[] = {
+        NUdf::TStringRef::Of("one"), NUdf::TStringRef::Of("two"), NUdf::TStringRef::Of("three"),
+        NUdf::TStringRef::Of("four"), NUdf::TStringRef::Of("five"), NUdf::TStringRef::Of("six"),
+        NUdf::TStringRef::Of("seven"), NUdf::TStringRef::Of("eight"), NUdf::TStringRef::Of("nine")
+    };
+    for (ui64 i = 1; i <= 9; ++i) {
+        NUdf::EFetchStatus status;
+        do {
+            status = streamVal.Fetch(item);
+            UNIT_ASSERT_C(status != NUdf::EFetchStatus::Finish, TStringBuilder() << "Unexpected end at row " << i);
+        } while (status == NUdf::EFetchStatus::Yield);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<ui64>(), i);
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), expectedValues[i - 1]);
+    }
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(item), NUdf::EFetchStatus::Finish);
+
+    if (SPILLING) {
+        const auto& spillers = spillerFactory->GetCreatedSpillers();
+        UNIT_ASSERT_C(!spillers.empty(), "Expected spiller to be created");
+        const auto mockSpiller = std::dynamic_pointer_cast<TMockSpiller>(spillers.front());
+        UNIT_ASSERT_C(mockSpiller != nullptr, "Expected TMockSpiller");
+        UNIT_ASSERT_C(mockSpiller->GetTotalSpilled() > 0, "Expected data to be spilled");
+    }
+}
+
+Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingDescending) {
+    TSetup<LLVM, SPILLING> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto strType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({ui64Type, strType});
+
+    TRuntimeNode::TList items;
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(5), pb.NewDataLiteral<NUdf::EDataSlot::String>("five")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<NUdf::EDataSlot::String>("three")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(8), pb.NewDataLiteral<NUdf::EDataSlot::String>("eight")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<NUdf::EDataSlot::String>("one")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(9), pb.NewDataLiteral<NUdf::EDataSlot::String>("nine")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<NUdf::EDataSlot::String>("two")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(7), pb.NewDataLiteral<NUdf::EDataSlot::String>("seven")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(4), pb.NewDataLiteral<NUdf::EDataSlot::String>("four")}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(6), pb.NewDataLiteral<NUdf::EDataSlot::String>("six")}));
+
+    const auto list = pb.NewList(tupleType, items);
+
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                               {{0U, pb.NewDataLiteral<bool>(false)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
+    const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (SPILLING) {
+        graph->GetContext().SpillerFactory = spillerFactory;
+    }
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue item;
+
+    // Expect sorted descending: 9,8,7,6,5,4,3,2,1
+    const NUdf::TStringRef expectedValues[] = {
+        NUdf::TStringRef::Of("nine"), NUdf::TStringRef::Of("eight"), NUdf::TStringRef::Of("seven"),
+        NUdf::TStringRef::Of("six"), NUdf::TStringRef::Of("five"), NUdf::TStringRef::Of("four"),
+        NUdf::TStringRef::Of("three"), NUdf::TStringRef::Of("two"), NUdf::TStringRef::Of("one")
+    };
+    for (ui64 i = 0; i < 9; ++i) {
+        NUdf::EFetchStatus status;
+        do {
+            status = streamVal.Fetch(item);
+            UNIT_ASSERT_C(status != NUdf::EFetchStatus::Finish, TStringBuilder() << "Unexpected end at row " << i);
+        } while (status == NUdf::EFetchStatus::Yield);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<ui64>(), 9 - i);
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), expectedValues[i]);
+    }
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(item), NUdf::EFetchStatus::Finish);
+
+    if (SPILLING) {
+        const auto& spillers = spillerFactory->GetCreatedSpillers();
+        UNIT_ASSERT_C(!spillers.empty(), "Expected spiller to be created");
+        const auto mockSpiller = std::dynamic_pointer_cast<TMockSpiller>(spillers.front());
+        UNIT_ASSERT_C(mockSpiller != nullptr, "Expected TMockSpiller");
+        UNIT_ASSERT_C(mockSpiller->GetTotalSpilled() > 0, "Expected data to be spilled");
+    }
+}
+
+Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingManyRowsTriggersMerge) {
+    // This test generates enough rows to create > MaxMergeWidth (10) spilled runs.
+    // With MinSpillBatchRows=2 and yellow zone always on (SPILLING=true),
+    // every 2 rows trigger a spill. 30 rows => 15 spills => triggers multi-level merge.
+    TSetup<LLVM, SPILLING> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
+
+    constexpr ui64 N = 30;
+    TRuntimeNode::TList items;
+    // Insert in reverse order to make sorting non-trivial
+    for (ui64 i = N; i >= 1; --i) {
+        items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(i), pb.NewDataLiteral<ui64>(i * 100)}));
+    }
+
+    const auto list = pb.NewList(tupleType, items);
+
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                               {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
+    const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (SPILLING) {
+        graph->GetContext().SpillerFactory = spillerFactory;
+    }
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue item;
+
+    // Verify all N rows come out in ascending order
+    for (ui64 i = 1; i <= N; ++i) {
+        NUdf::EFetchStatus status;
+        do {
+            status = streamVal.Fetch(item);
+            UNIT_ASSERT_C(status != NUdf::EFetchStatus::Finish, TStringBuilder() << "Expected row " << i << " but got end of stream");
+        } while (status == NUdf::EFetchStatus::Yield);
+        UNIT_ASSERT_VALUES_EQUAL_C(item.GetElement(0).Get<ui64>(), i,
+            TStringBuilder() << "Row " << i << ": expected key=" << i << " got=" << item.GetElement(0).Get<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<ui64>(), i * 100);
+    }
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(item), NUdf::EFetchStatus::Finish);
+
+    if (SPILLING) {
+        const auto& spillers = spillerFactory->GetCreatedSpillers();
+        UNIT_ASSERT_C(!spillers.empty(), "Expected spiller to be created");
+        const auto mockSpiller = std::dynamic_pointer_cast<TMockSpiller>(spillers.front());
+        UNIT_ASSERT_C(mockSpiller != nullptr, "Expected TMockSpiller");
+        UNIT_ASSERT_C(mockSpiller->GetTotalSpilled() > 0, "Expected data to be spilled");
+
+        // With 30 rows and MinSpillBatchRows=2, we get 15 initial spill batches.
+        // When spilled runs reach MaxMergeWidth (10), the two smallest are merged.
+        // Merge reads 2 runs and writes the merged result back as additional Put(s).
+        // So total Put count must be strictly greater than 15 (the initial spills),
+        // proving that merge actually wrote data back to the spiller.
+        const size_t initialSpillBatches = N / 2; // MinSpillBatchRows = 2
+        const auto totalPuts = mockSpiller->GetPutSizes().size();
+        UNIT_ASSERT_C(totalPuts > initialSpillBatches,
+            TStringBuilder() << "Expected merge to produce additional Put operations beyond "
+                             << initialSpillBatches << " initial spills, but got only " << totalPuts
+                             << " total Puts. Merge did not happen.");
+    }
+}
+
+Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingMultiKey) {
+    // Test multi-key sort with spilling: sort by (key1 ASC, key2 DESC)
+    TSetup<LLVM, SPILLING> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto strType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto tupleType = pb.NewTupleType({strType, ui64Type});
+
+    TRuntimeNode::TList items;
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("b"), pb.NewDataLiteral<ui64>(1)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("a"), pb.NewDataLiteral<ui64>(3)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("b"), pb.NewDataLiteral<ui64>(3)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("a"), pb.NewDataLiteral<ui64>(1)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("c"), pb.NewDataLiteral<ui64>(2)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("a"), pb.NewDataLiteral<ui64>(2)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("b"), pb.NewDataLiteral<ui64>(2)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("c"), pb.NewDataLiteral<ui64>(1)}));
+    items.push_back(pb.NewTuple(tupleType, {pb.NewDataLiteral<NUdf::EDataSlot::String>("c"), pb.NewDataLiteral<ui64>(3)}));
+
+    const auto list = pb.NewList(tupleType, items);
+
+    // Sort by key0 ASC, key1 DESC
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                               {{0U, pb.NewDataLiteral<bool>(true)}, {1U, pb.NewDataLiteral<bool>(false)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
+    const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (SPILLING) {
+        graph->GetContext().SpillerFactory = spillerFactory;
+    }
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue item;
+
+    // Expected order: (a,3), (a,2), (a,1), (b,3), (b,2), (b,1), (c,3), (c,2), (c,1)
+    const NUdf::TStringRef expectedKeys[] = {
+        NUdf::TStringRef::Of("a"), NUdf::TStringRef::Of("a"), NUdf::TStringRef::Of("a"),
+        NUdf::TStringRef::Of("b"), NUdf::TStringRef::Of("b"), NUdf::TStringRef::Of("b"),
+        NUdf::TStringRef::Of("c"), NUdf::TStringRef::Of("c"), NUdf::TStringRef::Of("c")
+    };
+    const ui64 expectedVals[] = {3, 2, 1, 3, 2, 1, 3, 2, 1};
+    for (size_t i = 0; i < 9; ++i) {
+        NUdf::EFetchStatus status;
+        do {
+            status = streamVal.Fetch(item);
+            UNIT_ASSERT_C(status != NUdf::EFetchStatus::Finish, TStringBuilder() << "Expected row " << i);
+        } while (status == NUdf::EFetchStatus::Yield);
+        UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), expectedKeys[i]);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<ui64>(), expectedVals[i]);
+    }
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(item), NUdf::EFetchStatus::Finish);
+
+    if (SPILLING) {
+        const auto& spillers = spillerFactory->GetCreatedSpillers();
+        UNIT_ASSERT_C(!spillers.empty(), "Expected spiller to be created");
+        const auto mockSpiller = std::dynamic_pointer_cast<TMockSpiller>(spillers.front());
+        UNIT_ASSERT_C(mockSpiller != nullptr, "Expected TMockSpiller");
+        UNIT_ASSERT_C(mockSpiller->GetTotalSpilled() > 0, "Expected data to be spilled");
+    }
+}
+
+Y_UNIT_TEST_LLVM_SPILLING(SortWithSpillingEmpty) {
+    // Edge case: empty input with spilling enabled
+    TSetup<LLVM, SPILLING> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto tupleType = pb.NewTupleType({ui64Type});
+
+    const auto list = pb.NewList(tupleType, {});
+
+    const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U)}; }),
+                                                               {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    if (SPILLING) {
+        setup.RenameCallable(pgmReturn, "WideSort", "WideSortWithSpilling");
+    }
+
+    const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
+    const auto graph = setup.BuildGraph(pgmReturn);
+    if (SPILLING) {
+        graph->GetContext().SpillerFactory = spillerFactory;
+    }
+    const auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(item), NUdf::EFetchStatus::Finish);
+
+    if (SPILLING) {
+        // Empty input: spiller may or may not be created, but no data should be spilled
+        const auto& spillers = spillerFactory->GetCreatedSpillers();
+        if (!spillers.empty()) {
+            const auto mockSpiller = std::dynamic_pointer_cast<TMockSpiller>(spillers.front());
+            UNIT_ASSERT_C(mockSpiller != nullptr, "Expected TMockSpiller");
+            UNIT_ASSERT_VALUES_EQUAL(mockSpiller->GetTotalSpilled(), 0u);
+        }
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideSortTest)
 
 } // namespace NMiniKQL

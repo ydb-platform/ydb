@@ -29,6 +29,18 @@ public:
             };
         }
 
+        if (SpillingSettings.IsSortSpillingEnabled() && name == "WideSort") {
+            return [](NKikimr::NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+                TCallableBuilder callableBuilder(env,
+                    "WideSortWithSpilling",
+                    callable.GetType()->GetReturnType(), false);
+                for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
+                    callableBuilder.Add(callable.GetInput(i));
+                }
+                return TRuntimeNode(callableBuilder.Build(), false);
+            };
+        }
+
         return TCallableVisitFunc();
     }
 

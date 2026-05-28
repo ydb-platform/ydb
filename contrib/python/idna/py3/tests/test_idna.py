@@ -2,84 +2,98 @@
 
 import unittest
 import warnings
+from typing import List, Tuple
 
 import idna
 
 
 class IDNATests(unittest.TestCase):
     def setUp(self):
-        self.tld_strings = [
-            ["\u6d4b\u8bd5", b"xn--0zwm56d"],
-            ["\u092a\u0930\u0940\u0915\u094d\u0937\u093e", b"xn--11b5bs3a9aj6g"],
-            ["\ud55c\uad6d", b"xn--3e0b707e"],
-            ["\u09ad\u09be\u09b0\u09a4", b"xn--45brj9c"],
-            ["\u09ac\u09be\u0982\u09b2\u09be", b"xn--54b7fta0cc"],
-            [
+        self.tld_strings: List[Tuple[str, bytes]] = [
+            ("\u6d4b\u8bd5", b"xn--0zwm56d"),
+            ("\u092a\u0930\u0940\u0915\u094d\u0937\u093e", b"xn--11b5bs3a9aj6g"),
+            ("\ud55c\uad6d", b"xn--3e0b707e"),
+            ("\u09ad\u09be\u09b0\u09a4", b"xn--45brj9c"),
+            ("\u09ac\u09be\u0982\u09b2\u09be", b"xn--54b7fta0cc"),
+            (
                 "\u0438\u0441\u043f\u044b\u0442\u0430\u043d\u0438\u0435",
                 b"xn--80akhbyknj4f",
-            ],
-            ["\u0441\u0440\u0431", b"xn--90a3ac"],
-            ["\ud14c\uc2a4\ud2b8", b"xn--9t4b11yi5a"],
-            [
+            ),
+            ("\u0441\u0440\u0431", b"xn--90a3ac"),
+            ("\ud14c\uc2a4\ud2b8", b"xn--9t4b11yi5a"),
+            (
                 "\u0b9a\u0bbf\u0b99\u0bcd\u0b95\u0baa\u0bcd\u0baa\u0bc2\u0bb0\u0bcd",
                 b"xn--clchc0ea0b2g2a9gcd",
-            ],
-            ["\u05d8\u05e2\u05e1\u05d8", b"xn--deba0ad"],
-            ["\u4e2d\u56fd", b"xn--fiqs8s"],
-            ["\u4e2d\u570b", b"xn--fiqz9s"],
-            ["\u0c2d\u0c3e\u0c30\u0c24\u0c4d", b"xn--fpcrj9c3d"],
-            ["\u0dbd\u0d82\u0d9a\u0dcf", b"xn--fzc2c9e2c"],
-            ["\u6e2c\u8a66", b"xn--g6w251d"],
-            ["\u0aad\u0abe\u0ab0\u0aa4", b"xn--gecrj9c"],
-            ["\u092d\u093e\u0930\u0924", b"xn--h2brj9c"],
-            ["\u0622\u0632\u0645\u0627\u06cc\u0634\u06cc", b"xn--hgbk6aj7f53bba"],
-            ["\u0baa\u0bb0\u0bbf\u0b9f\u0bcd\u0b9a\u0bc8", b"xn--hlcj6aya9esc7a"],
-            ["\u0443\u043a\u0440", b"xn--j1amh"],
-            ["\u9999\u6e2f", b"xn--j6w193g"],
-            ["\u03b4\u03bf\u03ba\u03b9\u03bc\u03ae", b"xn--jxalpdlp"],
-            ["\u0625\u062e\u062a\u0628\u0627\u0631", b"xn--kgbechtv"],
-            ["\u53f0\u6e7e", b"xn--kprw13d"],
-            ["\u53f0\u7063", b"xn--kpry57d"],
-            ["\u0627\u0644\u062c\u0632\u0627\u0626\u0631", b"xn--lgbbat1ad8j"],
-            ["\u0639\u0645\u0627\u0646", b"xn--mgb9awbf"],
-            ["\u0627\u06cc\u0631\u0627\u0646", b"xn--mgba3a4f16a"],
-            ["\u0627\u0645\u0627\u0631\u0627\u062a", b"xn--mgbaam7a8h"],
-            ["\u067e\u0627\u06a9\u0633\u062a\u0627\u0646", b"xn--mgbai9azgqp6j"],
-            ["\u0627\u0644\u0627\u0631\u062f\u0646", b"xn--mgbayh7gpa"],
-            ["\u0628\u06be\u0627\u0631\u062a", b"xn--mgbbh1a71e"],
-            ["\u0627\u0644\u0645\u063a\u0631\u0628", b"xn--mgbc0a9azcg"],
-            ["\u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629", b"xn--mgberp4a5d4ar"],
-            ["\u10d2\u10d4", b"xn--node"],
-            ["\u0e44\u0e17\u0e22", b"xn--o3cw4h"],
-            ["\u0633\u0648\u0631\u064a\u0629", b"xn--ogbpf8fl"],
-            ["\u0440\u0444", b"xn--p1ai"],
-            ["\u062a\u0648\u0646\u0633", b"xn--pgbs0dh"],
-            ["\u0a2d\u0a3e\u0a30\u0a24", b"xn--s9brj9c"],
-            ["\u0645\u0635\u0631", b"xn--wgbh1c"],
-            ["\u0642\u0637\u0631", b"xn--wgbl6a"],
-            ["\u0b87\u0bb2\u0b99\u0bcd\u0b95\u0bc8", b"xn--xkc2al3hye2a"],
-            ["\u0b87\u0ba8\u0bcd\u0ba4\u0bbf\u0baf\u0bbe", b"xn--xkc2dl3a5ee0h"],
-            ["\u65b0\u52a0\u5761", b"xn--yfro4i67o"],
-            ["\u0641\u0644\u0633\u0637\u064a\u0646", b"xn--ygbi2ammx"],
-            ["\u30c6\u30b9\u30c8", b"xn--zckzah"],
-            ["\u049b\u0430\u0437", b"xn--80ao21a"],
-            ["\u0645\u0644\u064a\u0633\u064a\u0627", b"xn--mgbx4cd0ab"],
-            ["\u043c\u043e\u043d", b"xn--l1acc"],
-            ["\u0633\u0648\u062f\u0627\u0646", b"xn--mgbpl2fh"],
+            ),
+            ("\u05d8\u05e2\u05e1\u05d8", b"xn--deba0ad"),
+            ("\u4e2d\u56fd", b"xn--fiqs8s"),
+            ("\u4e2d\u570b", b"xn--fiqz9s"),
+            ("\u0c2d\u0c3e\u0c30\u0c24\u0c4d", b"xn--fpcrj9c3d"),
+            ("\u0dbd\u0d82\u0d9a\u0dcf", b"xn--fzc2c9e2c"),
+            ("\u6e2c\u8a66", b"xn--g6w251d"),
+            ("\u0aad\u0abe\u0ab0\u0aa4", b"xn--gecrj9c"),
+            ("\u092d\u093e\u0930\u0924", b"xn--h2brj9c"),
+            ("\u0622\u0632\u0645\u0627\u06cc\u0634\u06cc", b"xn--hgbk6aj7f53bba"),
+            ("\u0baa\u0bb0\u0bbf\u0b9f\u0bcd\u0b9a\u0bc8", b"xn--hlcj6aya9esc7a"),
+            ("\u0443\u043a\u0440", b"xn--j1amh"),
+            ("\u9999\u6e2f", b"xn--j6w193g"),
+            ("\u03b4\u03bf\u03ba\u03b9\u03bc\u03ae", b"xn--jxalpdlp"),
+            ("\u0625\u062e\u062a\u0628\u0627\u0631", b"xn--kgbechtv"),
+            ("\u53f0\u6e7e", b"xn--kprw13d"),
+            ("\u53f0\u7063", b"xn--kpry57d"),
+            ("\u0627\u0644\u062c\u0632\u0627\u0626\u0631", b"xn--lgbbat1ad8j"),
+            ("\u0639\u0645\u0627\u0646", b"xn--mgb9awbf"),
+            ("\u0627\u06cc\u0631\u0627\u0646", b"xn--mgba3a4f16a"),
+            ("\u0627\u0645\u0627\u0631\u0627\u062a", b"xn--mgbaam7a8h"),
+            ("\u067e\u0627\u06a9\u0633\u062a\u0627\u0646", b"xn--mgbai9azgqp6j"),
+            ("\u0627\u0644\u0627\u0631\u062f\u0646", b"xn--mgbayh7gpa"),
+            ("\u0628\u06be\u0627\u0631\u062a", b"xn--mgbbh1a71e"),
+            ("\u0627\u0644\u0645\u063a\u0631\u0628", b"xn--mgbc0a9azcg"),
+            ("\u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629", b"xn--mgberp4a5d4ar"),
+            ("\u10d2\u10d4", b"xn--node"),
+            ("\u0e44\u0e17\u0e22", b"xn--o3cw4h"),
+            ("\u0633\u0648\u0631\u064a\u0629", b"xn--ogbpf8fl"),
+            ("\u0440\u0444", b"xn--p1ai"),
+            ("\u062a\u0648\u0646\u0633", b"xn--pgbs0dh"),
+            ("\u0a2d\u0a3e\u0a30\u0a24", b"xn--s9brj9c"),
+            ("\u0645\u0635\u0631", b"xn--wgbh1c"),
+            ("\u0642\u0637\u0631", b"xn--wgbl6a"),
+            ("\u0b87\u0bb2\u0b99\u0bcd\u0b95\u0bc8", b"xn--xkc2al3hye2a"),
+            ("\u0b87\u0ba8\u0bcd\u0ba4\u0bbf\u0baf\u0bbe", b"xn--xkc2dl3a5ee0h"),
+            ("\u65b0\u52a0\u5761", b"xn--yfro4i67o"),
+            ("\u0641\u0644\u0633\u0637\u064a\u0646", b"xn--ygbi2ammx"),
+            ("\u30c6\u30b9\u30c8", b"xn--zckzah"),
+            ("\u049b\u0430\u0437", b"xn--80ao21a"),
+            ("\u0645\u0644\u064a\u0633\u064a\u0627", b"xn--mgbx4cd0ab"),
+            ("\u043c\u043e\u043d", b"xn--l1acc"),
+            ("\u0633\u0648\u062f\u0627\u0646", b"xn--mgbpl2fh"),
         ]
 
     def testIDNTLDALabels(self):
-        for ulabel, alabel in self.tld_strings:
-            self.assertEqual(alabel, idna.alabel(ulabel))
+        for u, a in self.tld_strings:
+            self.assertEqual(a, idna.alabel(u))
 
     def testIDNTLDULabels(self):
-        for ulabel, alabel in self.tld_strings:
-            self.assertEqual(ulabel, idna.ulabel(alabel))
+        for u, a in self.tld_strings:
+            self.assertEqual(u, idna.ulabel(a))
 
     def test_valid_label_length(self):
         self.assertTrue(idna.valid_label_length("a" * 63))
         self.assertFalse(idna.valid_label_length("a" * 64))
         self.assertRaises(idna.IDNAError, idna.encode, "a" * 64)
+
+    def test_oversized_input_rejected_promptly(self):
+        # GHSA-65pc-fj4g-8rjx: encode/decode must reject inputs that
+        # exceed the maximum DNS domain length before per-codepoint
+        # validation runs, so labels dominated by CONTEXTO codepoints
+        # cannot drive validation into quadratic time.
+        import time
+
+        for payload in ("٠" * 8000, "・" * 8000 + "漢"):
+            start = time.perf_counter()
+            self.assertRaises(idna.IDNAError, idna.encode, payload)
+            self.assertRaises(idna.IDNAError, idna.decode, payload)
+            self.assertLess(time.perf_counter() - start, 1.0)
 
     def test_check_bidi(self):
         la = "\u0061"
@@ -302,6 +316,15 @@ class IDNATests(unittest.TestCase):
             warnings.simplefilter("always")
             idna.encode("example.com", uts46=True)
             self.assertEqual(len(w), 0)
+
+    def test_encode_decode_invalid_input_type(self):
+        # encode() and decode() are documented to raise IDNAError on bad
+        # input.  Inputs that are not str, bytes, or bytes-like used to leak
+        # a raw TypeError out of str(s, "ascii"); they should be wrapped in
+        # IDNAError just like UnicodeDecodeError already is.
+        for value in (42, None, 1.5, ["a", "b"], {"a": 1}):
+            self.assertRaises(idna.IDNAError, idna.encode, value)
+            self.assertRaises(idna.IDNAError, idna.decode, value)
 
 
 if __name__ == "__main__":

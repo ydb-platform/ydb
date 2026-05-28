@@ -4,9 +4,15 @@
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
+#include <library/cpp/yt/memory/tagged_ptr.h>
+
 #include <atomic>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRefCountedBase;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -57,8 +63,12 @@ public:
     THazardPtr& operator=(const THazardPtr&) = delete;
     THazardPtr& operator=(THazardPtr&& other) noexcept;
 
+    //! Reject types that virtually inherit TRefCountedBase.
+    //! Such types must go through TAtomicPtr<T>.
     template <class TPtrLoader>
-    static THazardPtr Acquire(TPtrLoader&& ptrLoader, T* ptr);
+    static THazardPtr Acquire(TPtrLoader&& ptrLoader, T* ptr)
+        requires (!std::derived_from<T, TRefCountedBase> ||
+            requires(TRefCountedBase* b) { static_cast<T*>(b); });
     template <class TPtrLoader>
     static THazardPtr Acquire(TPtrLoader&& ptrLoader);
 
@@ -76,10 +86,27 @@ public:
     explicit operator bool() const;
 
 private:
-    THazardPtr(T* ptr, std::atomic<void*>* hazardPtr);
+    // TAtomicPtr stores a precomputed vbase offset alongside the pointer and
+    // uses this overload to publish the canonical base address into the
+    // hazard slot without dereferencing |*ptr| — needed when T inherits
+    // TRefCountedBase virtually.
+    template <class T_, bool EnableAcquireHazard_>
+    friend class TAtomicPtr;
+
+    template <class TPtrLoader>
+    static THazardPtr Acquire(TPtrLoader&& ptrLoader, TTaggedPtr<T> taggedPtr);
+
+    THazardPtr(T* ptr, std::atomic<void*>* hazardPtr, void* protectedPtr);
 
     T* Ptr_ = nullptr;
     std::atomic<void*>* HazardPtr_ = nullptr;
+#ifndef NDEBUG
+    // The value last published into HazardPtr_'s slot. Saved here so Reset's
+    // YT_VERIFY can confirm no one else has overwritten the slot — we cannot
+    // reconstruct it from Ptr_ alone when virtual inheritance makes the
+    // canonical base address differ from the typed pointer.
+    void* ProtectedPtr_ = nullptr;
+#endif
 };
 
 ////////////////////////////////////////////////////////////////////////////////

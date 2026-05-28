@@ -1030,7 +1030,7 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& stagePlanNode) {
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
@@ -1049,27 +1049,42 @@ private:
         if (dataSinkCategory == NYql::KqpTableSinkName) {
             auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
 
+            NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
+            {
+                AFL_ENSURE(stagePlanNode.StageProto);
+                bool found = false;
+                for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
+                    if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                            && protoSink.HasInternalSink()
+                            && protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                                found = true;
+                                break;
+                    }
+                }
+                AFL_ENSURE(found);
+            }
+
             TString tablePath;
             TTableWrite writeInfo;
-            if (settings.Mode().StringValue() == "replace") {
+            if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE) {
                 op.Properties["Name"] = "Replace";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert" || settings.Mode().StringValue() == "update_conditional" || settings.Mode().StringValue().empty()) {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
                 op.Properties["Name"] = "Upsert";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsert;
-            } else if (settings.Mode().StringValue() == "insert") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                 op.Properties["Name"] = "Insert";
                 writeInfo.Type = EPlanTableWriteType::MultiInsert;
-            } else if (settings.Mode().StringValue() == "delete") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
                 op.Properties["Name"] = "Delete";
                 writeInfo.Type = EPlanTableWriteType::MultiErase;
-            } else if (settings.Mode().StringValue() == "update") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
                 op.Properties["Name"] = "Update";
                 writeInfo.Type = EPlanTableWriteType::MultiUpdate;
-            } else if (settings.Mode().StringValue() == "fill_table") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                 op.Properties["Name"] = "FillTable";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
-            } else if (settings.Mode().StringValue() == "upsert_increment") {
+            } else if (tableSinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT) {
                 op.Properties["Name"] = "UpsertIncrement";
                 writeInfo.Type = EPlanTableWriteType::MultiUpsertIncrement;
             } else {
@@ -1110,7 +1125,79 @@ private:
             }
 
             SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
-            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+
+            if (tableSinkSettings.GetNeedLookup()) {
+                TTableRead readInfo;
+                readInfo.Type = EPlanTableReadType::Lookup;
+
+                NJson::TJsonValue lookupColumns;
+                lookupColumns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& col : tableSinkSettings.GetKeyColumns()) {
+                    readInfo.Columns.push_back(col.GetName());
+                }
+                for (const auto& col : tableSinkSettings.GetLookupColumns()) {
+                    lookupColumns.AppendValue(col.GetName());
+                    readInfo.Columns.push_back(col.GetName());
+                }
+
+                op.Properties["Lookup"] = lookupColumns;
+                SerializerCtx.Tables[tablePath].Reads.push_back(readInfo);
+            }
+
+            if (!tableSinkSettings.GetIndexes().empty()) {
+                NJson::TJsonValue updateIndexes;
+                updateIndexes.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                for (const auto& index : tableSinkSettings.GetIndexes()) {
+                    NJson::TJsonValue indexInfo;
+                    indexInfo["Name"] = index.GetIndexName();
+                    indexInfo["Path"] = index.GetTable().GetPath();
+
+                    TTableWrite indexWriteInfo;
+                    if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpdate;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiErase;
+                    } else if (index.GetOperationType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT) {
+                        indexWriteInfo.Type = EPlanTableWriteType::MultiUpsert;
+                    } else {
+                        YQL_ENSURE(false, "Unexpected operation type for index");
+                    }
+
+                    NJson::TJsonValue columns;
+                    columns.SetType(NJson::EJsonValueType::JSON_ARRAY);
+                    for (const auto& col : index.GetColumns()) {
+                        columns.AppendValue(col.GetName());
+                        indexWriteInfo.Columns.push_back(col.GetName());
+                    }
+                    indexInfo["Columns"] = columns;
+                    SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexWriteInfo);
+
+                    if (index.GetIsUniq()) {
+                        indexInfo["CheckUnique"] = true;
+
+                        TTableRead readInfo;
+                        readInfo.Type = EPlanTableReadType::Lookup;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            readInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Reads.push_back(readInfo);
+                    }
+
+                    if (index.GetNeedDeleteOldRows()) {
+                        TTableWrite indexDeleteInfo;
+                        indexDeleteInfo.Type = EPlanTableWriteType::MultiErase;
+                        for (const auto& col : index.GetKeyColumns()) {
+                            indexDeleteInfo.Columns.push_back(col.GetName());
+                        }
+                        SerializerCtx.Tables[index.GetTable().GetPath()].Writes.push_back(indexDeleteInfo);
+                    }
+
+                    updateIndexes.AppendValue(indexInfo);
+                }
+                op.Properties["UpdateIndexes"] = updateIndexes;
+            }
+
+            planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
         } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;
@@ -1123,7 +1210,7 @@ private:
             dqIntegration->FillSinkPlanProperties(sink, op.Properties);
         }
 
-        AddOperator(stagePlanNode, "Sink", op);
+        AddOperator(planNode, "Sink", op);
     }
 
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
@@ -1196,7 +1283,7 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
                     }
                 }
             }

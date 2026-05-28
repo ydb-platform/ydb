@@ -66,7 +66,7 @@ def test_allowed_paths_lookup(ydb_cluster):
             driver.scheme_client.modify_permissions(TENANT_NAME_1 + '/.sys', permissions_settings)
 
         assert exc_info.type is ydb.issues.SchemeError
-        assert 'Path does not exist' in exc_info.value.message
+        assert "Path `/Root/Tenant1/.sys` does not exist" in exc_info.value.message
 
     # Check allowed lookups from Tenant database
     tenant_driver_config = ydb.DriverConfig(
@@ -81,14 +81,14 @@ def test_allowed_paths_lookup(ydb_cluster):
             driver.scheme_client.modify_permissions(DOMAIN_NAME, permissions_settings)
 
         assert exc_info.type is ydb.issues.SchemeError
-        assert 'Path does not exist' in exc_info.value.message
+        assert "Path `/Root` does not exist" in exc_info.value.message
 
         # Modify permissions on Domain regular path
         with pytest.raises(ydb.issues.Error) as exc_info:
             driver.scheme_client.modify_permissions(DOMAIN_NAME + '/.sys', permissions_settings)
 
         assert exc_info.type is ydb.issues.SchemeError
-        assert 'Path does not exist' in exc_info.value.message
+        assert "Path `/Root/.sys` does not exist" in exc_info.value.message
 
         # Modify permissions on current Tenant root path
         driver.scheme_client.modify_permissions(TENANT_NAME_1, permissions_settings)
@@ -101,14 +101,14 @@ def test_allowed_paths_lookup(ydb_cluster):
             driver.scheme_client.modify_permissions(TENANT_NAME_2, permissions_settings)
 
         assert exc_info.type is ydb.issues.SchemeError
-        assert 'Path does not exist' in exc_info.value.message
+        assert "Path `/Root/Tenant2` does not exist" in exc_info.value.message
 
         # Modify permissions on other Tenant regular path
         with pytest.raises(ydb.issues.Error) as exc_info:
             driver.scheme_client.modify_permissions(TENANT_NAME_2 + '/.sys', permissions_settings)
 
         assert exc_info.type is ydb.issues.SchemeError
-        assert 'Path does not exist' in exc_info.value.message
+        assert "Path `/Root/Tenant2/.sys` does not exist" in exc_info.value.message
 
     ydb_cluster.remove_database(TENANT_NAME_1)
     ydb_cluster.unregister_and_stop_slots(tenant_nodes_1)

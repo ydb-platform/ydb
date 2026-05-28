@@ -4619,6 +4619,39 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexTokens) {
         });
     }
 
+    Y_UNIT_TEST(JsonExistsFilterChain) {
+        TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 1) ? (@.k3 == 2)'))",
+                {"\3k1\3k2" + numSuffix(1), "\3k1\3k3" + numSuffix(2)}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 1 && @.k3 == 2)'))",
+                {"\3k1\3k2" + numSuffix(1), "\3k1\3k3" + numSuffix(2)}, "and");
+
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 >= 10) ? (@.k2 <= 20)'))",
+                {"\3k1", "\3k2"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 1) ? (@.k3 == 2) ? (@.k4 == 3)'))",
+                {"\3k1\3k2" + numSuffix(1), "\3k1\3k3" + numSuffix(2), "\3k1\3k4" + numSuffix(3)}, "and");
+
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 1 || @.k3 == 2) ? (@.k4 == 3)'))",
+                {"\3k1\3k2" + numSuffix(1), "\3k1\3k3" + numSuffix(2), "\3k1\3k4" + numSuffix(3)}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 1) ? (@.k3 == 2 || @.k4 == 3)'))",
+                {"\3k1\3k2" + numSuffix(1), "\3k1\3k3" + numSuffix(2), "\3k1\3k4" + numSuffix(3)}, "or");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 == 1 && @.k3 == 2) ? (@.k4 == 3 || @.k5 == 4)'))",
+                {"\3k1\3k2" + numSuffix(1), "\3k1\3k3" + numSuffix(2), "\3k1\3k4" + numSuffix(3), "\3k1\3k5" + numSuffix(4)},
+                "or");
+
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (exists(@.k2)) ? (@.k3 > 0)'))",
+                {"\3k1\3k2", "\3k1\3k3"}, "and");
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@.k2 starts with "a") ? (@.k3 == 1)'))",
+                {"\3k1\3k2", "\3k1\3k3" + numSuffix(1)}, "and");
+
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.items[*] ? (exists(@.id)) ? (@.id > 0)'))",
+                {"\6items\3id"}, "and");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, '$.items[*] ? (exists(@.id)) ? (@.id == 1).id' RETURNING Int64) = 1)",
+                {"\6items\3id" + numSuffix(1)}, "and");
+        });
+    }
+
     Y_UNIT_TEST(JsonPruningPrefixRelationships) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             // OR pruning between distinct paths

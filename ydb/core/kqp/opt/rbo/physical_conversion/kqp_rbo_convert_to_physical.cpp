@@ -177,13 +177,25 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
         } else if (op->Kind == EOperator::UnionAll) {
             auto unionAll = CastOperator<TOpUnionAll>(op);
+            const auto unionOutput = unionAll->GetOutputIUs();
 
             auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(leftArg);
 
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
             stageArgs[opStageId].push_back(rightArg);
-            TVector<TExprNode::TPtr> extendArgs{leftArg, rightArg};
+
+            auto projectInput = [&](TExprNode::TPtr input, const TVector<TInfoUnit>& inputOutput) {
+                if (inputOutput == unionOutput) {
+                    return input;
+                }
+                return NPhysicalConvertionUtils::ExtractMembers(input, ctx, unionOutput);
+            };
+
+            TVector<TExprNode::TPtr> extendArgs{
+                projectInput(leftArg, unionAll->GetLeftInput()->GetOutputIUs()),
+                projectInput(rightArg, unionAll->GetRightInput()->GetOutputIUs())
+            };
 
             if (unionAll->Ordered) {
                 // clang-format off
@@ -199,8 +211,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 // clang-format on
             }
 
-            if (unionAll->GetOutputIUs() != unionAll->GetLeftInput()->GetOutputIUs()) {
-                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, unionAll->GetOutputIUs());
+            if (unionOutput != unionAll->GetLeftInput()->GetOutputIUs()) {
+                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, unionOutput);
             }
 
             if (!unionAll->IsSingleConsumer()) {

@@ -948,7 +948,25 @@ TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
     if (const auto& outputIUs = GetOutputIUsOverride()) {
         return *outputIUs;
     }
-    return GetLeftInput()->GetOutputIUs();
+
+    const auto leftOutput = GetLeftInput()->GetOutputIUs();
+    const auto rightOutput = GetRightInput()->GetOutputIUs();
+    if (leftOutput.size() == rightOutput.size()) {
+        return leftOutput;
+    }
+
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
+    rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
+
+    TVector<TInfoUnit> commonOutput;
+    commonOutput.reserve(std::min(leftOutput.size(), rightOutput.size()));
+    for (const auto& iu : leftOutput) {
+        if (rightOutputSet.contains(iu)) {
+            commonOutput.push_back(iu);
+        }
+    }
+
+    return commonOutput.empty() ? leftOutput : commonOutput;
 }
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {

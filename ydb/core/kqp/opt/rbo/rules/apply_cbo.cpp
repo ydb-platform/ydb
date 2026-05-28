@@ -30,6 +30,17 @@ struct TShuffleEliminationContext {
 };
 
 constexpr size_t MaxShuffleEliminationRelationCount = 256;
+constexpr const char* SyntheticCboAliasPrefix = "#rbo_synthetic_";
+
+bool IsSyntheticCboAlias(const TString& alias) {
+    return alias.StartsWith(SyntheticCboAliasPrefix);
+}
+
+void AddUniqueAlias(TVector<TString>& aliases, const TString& alias) {
+    if (std::find(aliases.begin(), aliases.end(), alias) == aliases.end()) {
+        aliases.push_back(alias);
+    }
+}
 
 TShuffleEliminationContext BuildShuffleEliminationContext(
     TIntrusivePtr<TOpCBOTree>& cboTree,
@@ -143,6 +154,8 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
 
     auto lineage = cboTree->TreeRoot->Props.Metadata->ColumnLineage;
     int fakeAliasId = 0;
+    int syntheticAliasId = 0;
+    THashMap<TInfoUnit, TString, TInfoUnit::THashFunction> syntheticAliases;
 
     for (auto op : cboTree->TreeNodes) {
         auto joinOp = CastOperator<TOpJoin>(op);
@@ -159,14 +172,21 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
 
         TVector<TString> childAliases;
         auto childIUs = child->GetOutputIUs();
+        auto ensureSyntheticAlias = [&]() -> TString {
+            return TStringBuilder() << SyntheticCboAliasPrefix << syntheticAliasId++;
+        };
 
         for (auto col : allJoinColumns) {
             if (std::find(childIUs.begin(), childIUs.end(), col) != childIUs.end()) {
                 if (auto it = lineage.Mapping.find(col); it != lineage.Mapping.end()) {
                     auto alias = it->second.GetCannonicalAlias();
-                    if (std::find(childAliases.begin(), childAliases.end(), alias) == childAliases.end()) {
-                        childAliases.push_back(alias);
+                    AddUniqueAlias(childAliases, alias);
+                } else {
+                    auto aliasIt = syntheticAliases.find(col);
+                    if (aliasIt == syntheticAliases.end()) {
+                        aliasIt = syntheticAliases.emplace(col, ensureSyntheticAlias()).first;
                     }
+                    AddUniqueAlias(childAliases, aliasIt->second);
                 }
             }
         }
@@ -191,6 +211,18 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
         for (auto [leftKey, rightKey] : join->JoinKeys) {
             auto mappedLeftKey = cboTree->TreeRoot->Props.Metadata->MapColumn(leftKey);
             auto mappedRightKey = cboTree->TreeRoot->Props.Metadata->MapColumn(rightKey);
+
+            if (mappedLeftKey.GetAlias().empty()) {
+                if (auto alias = syntheticAliases.find(leftKey); alias != syntheticAliases.end()) {
+                    mappedLeftKey = TInfoUnit(alias->second, mappedLeftKey.GetColumnName());
+                }
+            }
+
+            if (mappedRightKey.GetAlias().empty()) {
+                if (auto alias = syntheticAliases.find(rightKey); alias != syntheticAliases.end()) {
+                    mappedRightKey = TInfoUnit(alias->second, mappedRightKey.GetColumnName());
+                }
+            }
 
             leftKeys.push_back(TJoinColumn(mappedLeftKey.GetAlias(), mappedLeftKey.GetColumnName()));
             rightKeys.push_back(TJoinColumn(mappedRightKey.GetAlias(), mappedRightKey.GetColumnName()));
@@ -241,6 +273,13 @@ TString FormatInfoUnitCandidates(const TVector<TInfoUnit>& candidates) {
 }
 
 TInfoUnit ConvertJoinColumn(const TJoinColumn& column, const TColumnLineage& lineage, const TInfoUnitSet& visibleColumns) {
+    if (IsSyntheticCboAlias(column.RelName)) {
+        const auto synthetic = TInfoUnit(column.AttributeName);
+        if (visibleColumns.contains(synthetic)) {
+            return synthetic;
+        }
+    }
+
     const auto original = TInfoUnit(column.RelName, column.AttributeName);
     if (visibleColumns.contains(original)) {
         return original;

@@ -160,10 +160,41 @@ void NormalizeJoin(const TIntrusivePtr<TOpJoin>& join, TExprContext& ctx, TPlanP
 void NormalizeUnionAll(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprContext& ctx, TPlanProps& props) {
     const auto leftOutput = unionAll->GetLeftInput()->GetOutputIUs();
     const auto rightOutput = unionAll->GetRightInput()->GetOutputIUs();
-    Y_ENSURE(leftOutput.size() == rightOutput.size(),
-        "UnionAll inputs have different column counts: " << leftOutput.size() << " vs " << rightOutput.size());
 
     if (leftOutput == rightOutput) {
+        ValidateUniqueOutputIUs(unionAll, ctx);
+        return;
+    }
+
+    auto buildProject = [&](const TIntrusivePtr<IOperator>& input, const TVector<TInfoUnit>& output) {
+        if (input->GetOutputIUs() == output) {
+            return input;
+        }
+
+        TVector<TMapElement> mapElements;
+        mapElements.reserve(output.size());
+        for (const auto& iu : output) {
+            mapElements.emplace_back(iu, iu, unionAll->Pos, &ctx, &props);
+        }
+        return CastOperator<IOperator>(MakeIntrusive<TOpMap>(input, unionAll->Pos, mapElements));
+    };
+
+    if (leftOutput.size() != rightOutput.size()) {
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
+        rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
+        TVector<TInfoUnit> commonOutput;
+        commonOutput.reserve(std::min(leftOutput.size(), rightOutput.size()));
+        for (const auto& iu : leftOutput) {
+            if (rightOutputSet.contains(iu)) {
+                commonOutput.push_back(iu);
+            }
+        }
+
+        Y_ENSURE(!commonOutput.empty(),
+            "UnionAll inputs have different column counts and no common columns: " << leftOutput.size() << " vs " << rightOutput.size());
+
+        unionAll->GetLeftInput() = buildProject(unionAll->GetLeftInput(), commonOutput);
+        unionAll->GetRightInput() = buildProject(unionAll->GetRightInput(), commonOutput);
         ValidateUniqueOutputIUs(unionAll, ctx);
         return;
     }

@@ -89,3 +89,7 @@ nemesis install \
 ```bash
 nemesis stop --yaml-config-location /path/to/cluster.yaml
 ```
+
+## Расширение Nemesis
+
+Если нужно добавить новый тип хаоса (сбоя) или новую проверку safety/liveness, см. [README](https://github.com/ydb-platform/ydb/blob/main/ydb/tests/stability/nemesis/README.md). Там описано, как реализовать и зарегистрировать новые раннеры сбоев, планировщики и классы warden'ов.

@@ -90,3 +90,7 @@ Stop all Nemesis services on the cluster:
 nemesis stop --yaml-config-location /path/to/cluster.yaml
 ```
 
+## Extending Nemesis
+
+To add a new chaos type (fault) or a new safety/liveness check, see the [README](https://github.com/ydb-platform/ydb/blob/main/ydb/tests/stability/nemesis/README.md). It describes how to implement and register new fault runners, planners, and warden classes.
+

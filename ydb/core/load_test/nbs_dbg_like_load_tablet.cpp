@@ -72,6 +72,7 @@ constexpr ui32 kOpCount = GetEnumItemsCount<EOp>();
 constexpr ui32 kBscRetryLimit = 5;
 constexpr TDuration kBscRetryInitialBackoff = TDuration::MilliSeconds(500);
 constexpr TDuration kBscRetryMaxBackoff = TDuration::Seconds(10);
+constexpr ui64 kInitialDDiskSessionSeqNo = 1;
 
 // Auto-disable per-peer counters at this many DBGs (10 wires per DBG quickly
 // blows up Solomon scrape size). Honour an explicit user setting first.
@@ -1436,7 +1437,8 @@ void TNbsDbgLikeLoadTablet::ConnectPeer(const TActorContext& ctx,
     TActorId target = isPb
         ? MakeBlobStoragePersistentBufferId(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId())
         : MakeBlobStorageDDiskId(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
-    NDDisk::TQueryCredentials creds(AllocConfig.GetTabletId(), Generation(),
+    auto creds = NDDisk::TQueryCredentials::FromTablet(
+        AllocConfig.GetTabletId(), Generation(), kInitialDDiskSessionSeqNo,
         std::nullopt);
     st.ConnectInFlight = true;
     ctx.Send(target, new NDDisk::TEvConnect(creds), 0,
@@ -1590,7 +1592,8 @@ void TNbsDbgLikeLoadTablet::DisconnectAllPeers() {
     for (ui32 i = 0; i < Conn.size() && i < Dbgs.size(); ++i) {
         for (ui32 k = 0; k < hostsPerDbg; ++k) {
             if (Conn[i].PB[k].Connected) {
-                NDDisk::TQueryCredentials creds(bscTabletId, generation, Conn[i].PB[k].Guid);
+                auto creds = NDDisk::TQueryCredentials::FromTablet(
+                    bscTabletId, generation, kInitialDDiskSessionSeqNo, Conn[i].PB[k].Guid);
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
                 creds.Serialize(ev->Record.MutableCredentials());
                 const auto& id = Dbgs[i].PBIds[k];
@@ -1601,7 +1604,8 @@ void TNbsDbgLikeLoadTablet::DisconnectAllPeers() {
                 Conn[i].PB[k].Guid = 0;
             }
             if (Conn[i].DD[k].Connected) {
-                NDDisk::TQueryCredentials creds(bscTabletId, generation, Conn[i].DD[k].Guid);
+                auto creds = NDDisk::TQueryCredentials::FromTablet(
+                    bscTabletId, generation, kInitialDDiskSessionSeqNo, Conn[i].DD[k].Guid);
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
                 creds.Serialize(ev->Record.MutableCredentials());
                 const auto& id = Dbgs[i].DDiskIds[k];
@@ -1961,7 +1965,8 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const
 
     const ui64 bscTabletId = AllocConfig.GetTabletId();
     const ui32 generation = Generation();
-    NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[coord]);
+    auto creds = NDDisk::TQueryCredentials::FromTablet(
+        bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.PBGuid[coord]);
     NDDisk::TBlockSelector selector(vChunkIndex, offset, IoSizeBytes);
     std::vector<NKikimrBlobStorage::NDDisk::TDDiskId> pbIds;
     pbIds.reserve(kPrimaryHostsPerDbg);
@@ -2017,8 +2022,8 @@ bool TNbsDbgLikeLoadTablet::SendPbRead(TPerDbgState& dbg, ui32 dbgIndex, ui64 ls
     const ui32 k = PickRandomSetBit(info.WriteConfirmed, Rng.GenRand());
     const ui64 bscTabletId = AllocConfig.GetTabletId();
     const ui32 generation = Generation();
-    NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[k],
-        /*fromPersistentBuffer=*/true);
+    auto creds = NDDisk::TQueryCredentials::FromTablet(
+        bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.PBGuid[k]);
     NDDisk::TBlockSelector selector(info.VChunkIndex,
         static_cast<ui32>(info.OffsetInVChunk), info.Size);
     auto ev = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
@@ -2051,7 +2056,8 @@ bool TNbsDbgLikeLoadTablet::SendDDiskRead(TPerDbgState& dbg, ui32 dbgIndex,
     const ui32 k = PickRandomSetBit(effectiveMask, Rng.GenRand());
     const ui64 bscTabletId = AllocConfig.GetTabletId();
     const ui32 generation = Generation();
-    NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.DDGuid[k]);
+    auto creds = NDDisk::TQueryCredentials::FromTablet(
+        bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.DDGuid[k]);
     NDDisk::TBlockSelector selector(vChunkIndex, static_cast<ui32>(offset), size);
     auto ev = std::make_unique<NDDisk::TEvRead>(
         creds, selector, NDDisk::TReadInstruction(true));
@@ -2348,7 +2354,8 @@ void TNbsDbgLikeLoadTablet::DoFlush(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.DDGuid[k]);
+        auto creds = NDDisk::TQueryCredentials::FromTablet(
+            bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.DDGuid[k]);
         std::tuple<ui32, ui32, ui32> srcId{
             dbg.PBIdsPb[k].GetNodeId(),
             dbg.PBIdsPb[k].GetPDiskId(),
@@ -2571,7 +2578,8 @@ void TNbsDbgLikeLoadTablet::DoErase(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[k]);
+        auto creds = NDDisk::TQueryCredentials::FromTablet(
+            bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.PBGuid[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
@@ -2753,7 +2761,8 @@ void TNbsDbgLikeLoadTablet::BestEffortEraseAll(TPerDbgState& dbg) {
         if (pending[k].empty()) {
             continue;
         }
-        NDDisk::TQueryCredentials creds(bscTabletId, generation, dbg.PBGuid[k]);
+        auto creds = NDDisk::TQueryCredentials::FromTablet(
+            bscTabletId, generation, kInitialDDiskSessionSeqNo, dbg.PBGuid[k]);
         auto ev = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(creds);
         TEraseBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;

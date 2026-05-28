@@ -298,8 +298,8 @@ TClientCommandOption& TClientCommandOption::SetSupportsProfile(bool supports) {
     return *this;
 }
 
-TClientCommandOption& TClientCommandOption::SkipFromProfileAndEnvIf(std::function<bool()> condition) {
-    SkipFromProfileAndEnvCondition = std::move(condition);
+TClientCommandOption& TClientCommandOption::DisableImplicitSourcesIf(std::function<bool()> condition) {
+    ImplicitSourcesDisabled = std::move(condition);
     return *this;
 }
 
@@ -728,7 +728,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
         if (clientOption->IsMainAuthOption() && !AuthMethodOpts.empty()) { // Parsed from command line or from profile
             continue;
         }
-        if (clientOption->SkipFromProfileAndEnvCondition && clientOption->SkipFromProfileAndEnvCondition()) {
+        if (clientOption->ImplicitSourcesDisabled && clientOption->ImplicitSourcesDisabled()) {
             continue;
         }
 

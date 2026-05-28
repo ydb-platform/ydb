@@ -31,7 +31,7 @@ void TClientCommandRootBase::Config(TConfig& config) {
         .FileName("CA certificates").ProfileParam("ca-file", true)
         .LogToConnectionParams("ca-file")
         .Env("YDB_CA_FILE", true, "CA certificates")
-        .SkipFromProfileAndEnvIf([isSslEnabled] { return !isSslEnabled(); })
+        .DisableImplicitSourcesIf([isSslEnabled] { return !isSslEnabled(); })
         .RequiredArgument("PATH").StoreFilePath(&config.CaCertsFile).StoreResult(&config.CaCerts);
     opts.AddLongOption("client-cert-file",
         "File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded)")
@@ -39,7 +39,7 @@ void TClientCommandRootBase::Config(TConfig& config) {
         .LogToConnectionParams("client-cert-file")
         .Env("YDB_CLIENT_CERT_FILE", true, "Client certificate")
         .ProfileParam("client-cert-file", true)
-        .SkipFromProfileAndEnvIf([isSslEnabled] { return !isSslEnabled(); })
+        .DisableImplicitSourcesIf([isSslEnabled] { return !isSslEnabled(); })
         .RequiredArgument("PATH").StoreFilePath(&config.ClientCertFile).StoreResult(&config.ClientCert);
     opts.AddLongOption("client-cert-key-file",
         "File containing PEM encoded client certificate private key for SSL/TLS connections")
@@ -47,7 +47,7 @@ void TClientCommandRootBase::Config(TConfig& config) {
         .LogToConnectionParams("client-cert-key-file")
         .Env("YDB_CLIENT_CERT_KEY_FILE", true, "Client certificate private key")
         .ProfileParam("client-cert-key-file", true)
-        .SkipFromProfileAndEnvIf([isSslEnabled] { return !isSslEnabled(); })
+        .DisableImplicitSourcesIf([isSslEnabled] { return !isSslEnabled(); })
         .RequiredArgument("PATH").StoreFilePath(&config.ClientCertPrivateKeyFile).StoreResult(&config.ClientCertPrivateKey);
     opts.AddLongOption("client-cert-key-password-file",
         "File containing password for client certificate private key (if key is encrypted).\n"
@@ -57,7 +57,7 @@ void TClientCommandRootBase::Config(TConfig& config) {
         .Env("YDB_CLIENT_CERT_KEY_PASSWORD", false)
         .Env("YDB_CLIENT_CERT_KEY_PASSWORD_FILE", true, "Client certificate private key password")
         .ProfileParam("client-cert-key-password-file", true)
-        .SkipFromProfileAndEnvIf([isSslEnabled] { return !isSslEnabled(); })
+        .DisableImplicitSourcesIf([isSslEnabled] { return !isSslEnabled(); })
         .RequiredArgument("PATH").StoreFilePath(&config.ClientCertPrivateKeyPasswordFile).StoreResult(&config.ClientCertPrivateKeyPassword);
 
     opts.SetCustomUsage(config.ArgV[0]);

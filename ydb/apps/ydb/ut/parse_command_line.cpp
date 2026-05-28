@@ -1043,13 +1043,13 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
     }
 
     // An explicitly provided --ca-file with a non-SSL endpoint is a clear user contradiction
-    // and must still fail.
-    Y_UNIT_TEST_F(ExplicitCAFileWithNonSslEndpointFails, TCliTestFixtureWithSsl) {
-        // GetRootCAFile() is a valid CA file path, but we connect via grpc:// — error expected.
+    // and must still fail. GetRootCAFile() is a valid CA file path; the failure must come
+    // from misuse validation, not from TLS handshake — hence the non-SSL fixture.
+    Y_UNIT_TEST_F(ExplicitCAFileWithNonSslEndpointFails, TCliTestFixture) {
         ExpectFail();
         RunCli({
             "-v",
-            "-e", TStringBuilder() << "grpc://" << GetAddress(),
+            "-e", GetEndpoint(),
             "-d", GetDatabase(),
             "--ca-file", GetRootCAFile(),
             "scheme", "ls",

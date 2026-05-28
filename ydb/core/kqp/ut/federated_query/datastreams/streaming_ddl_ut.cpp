@@ -3027,6 +3027,129 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName2, "Y-k2-2025-08-25T00:00:00.000000Z-1", disposition);
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST_F(StreamingQueryWithTwoGroupByHopsOnSameKey, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "streamingQueryWithTwoGroupByHopsOnSameKeyInputTopic";
+        constexpr char outputTopicName1[] = "streamingQueryWithTwoGroupByHopsOnSameKeyOutputTopic1";
+        constexpr char outputTopicName2[] = "streamingQueryWithTwoGroupByHopsOnSameKeyOutputTopic2";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName1);
+        CreateTopic(outputTopicName2);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time1 String NOT NULL,
+                        time2 String NOT NULL,
+                        key String
+                    )
+                );
+
+                $grouped1 = SELECT
+                    key,
+                    SOME(time1) AS time1,
+                    CAST(COUNT(*) AS String) AS count
+                FROM $pq_source
+                GROUP BY
+                    HOP (CAST(time1 AS Timestamp), "PT1H", "PT1H", "PT0H"),
+                    key;
+
+                $grouped2 = SELECT
+                    key,
+                    SOME(time2) AS time2,
+                    CAST(COUNT(*) AS String) AS count
+                FROM $pq_source
+                GROUP BY
+                    HOP (CAST(time2 AS Timestamp), "PT1H", "PT1H", "PT0H"),
+                    key;
+
+                INSERT INTO `{pq_source}`.`{output_topic1}`
+                SELECT Unwrap(key || "-" || time1 || "-" || count) FROM $grouped1;
+
+                INSERT INTO `{pq_source}`.`{output_topic2}`
+                SELECT Unwrap(key || "-" || time2 || "-" || count) FROM $grouped2;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic1"_a = outputTopicName1,
+            "output_topic2"_a = outputTopicName2
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessages(inputTopicName, {
+            R"({"time1": "2025-08-24T00:00:00.000000Z", "time2": "2028-08-24T00:00:00.000000Z", "key": "A"})",
+            R"({"time1": "2025-08-25T00:00:00.000000Z", "time2": "2028-08-25T00:00:00.000000Z", "key": "B"})",
+        });
+        ReadTopicMessage(outputTopicName1, "A-2025-08-24T00:00:00.000000Z-1");
+        ReadTopicMessage(outputTopicName2, "A-2028-08-24T00:00:00.000000Z-1");
+
+        const auto& result = ExecQuery("SELECT Ast FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
+            check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
+        });
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+            "query_name"_a = queryName
+        ));
+
+        const auto disposition = TInstant::Now();
+        WriteTopicMessage(inputTopicName, R"({"time1": "2025-08-26T00:00:00.000000Z", "time2": "2028-08-26T00:00:00.000000Z", "key": "C"})");
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName1, "B-2025-08-25T00:00:00.000000Z-1", disposition);
+        ReadTopicMessage(outputTopicName2, "B-2028-08-25T00:00:00.000000Z-1", disposition);
+    }
+
+    Y_UNIT_TEST_F(TableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        constexpr char topic[] = "tableMode";
+
+        ui32 partitionCount = 4;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
+        for (ui32 i = 0; i < partitionCount; ++i) {
+            WriteTopicMessage(topic, "data", i, /* local */ true);
+        }
+        Sleep(TDuration::Seconds(1));
+
+        const auto& result1 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}`)","topic"_a = topic));
+        CheckScriptResult(result1[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
+        });
+
+        const auto& result2 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` WITH(STREAMING="FALSE"))","topic"_a = topic));
+        CheckScriptResult(result2[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
+        });
+    }
+
+>>>>>>> 87d0630e675 (YQ-5352 fixed empty compile error in group by hop (#41721))
     Y_UNIT_TEST_F(UnionAllTwoTopics, TStreamingTestFixture) {
         constexpr char inputTopicName1[] = "unionAllTwoTopicsInputTopic1";
         constexpr char inputTopicName2[] = "unionAllTwoTopicsInputTopic2";

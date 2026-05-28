@@ -1,4 +1,5 @@
 import os
+import glob
 from typing import Optional
 
 import yaml
@@ -30,9 +31,10 @@ class OpenTabListItem(ListItem):
 
 
 class ConfigFieldItem(ListItem):
-    def __init__(self, field_name: str, title: str, value: str) -> None:
+    def __init__(self, field_name: str, title: str, value: str, path_picker: bool = False) -> None:
         self.field_name = field_name
         self.title = title
+        self.path_picker = path_picker
         self._saved_value = value
         self.input = Input(value=value, id=f"config-field-{field_name}")
         self.input.disabled = True
@@ -100,9 +102,155 @@ class MncConfigForm(Vertical):
                 "git_ydb_root",
                 "git_ydb_root",
                 self._config.get("git_ydb_root", DEFAULT_GIT_YDB_ROOT),
+                path_picker=True,
             ),
             id="mnc-config-fields",
         )
+
+
+class PathSuggestionItem(ListItem):
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(Label(path))
+
+
+class PathPickerScreen(ModalScreen[Optional[str]]):
+    CSS = """
+    PathPickerScreen {
+        align: center middle;
+    }
+
+    #path-picker {
+        width: 100;
+        max-width: 95%;
+        height: auto;
+        max-height: 16;
+        border: thick $background 80%;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #path-picker-input-row {
+        height: 3;
+        layout: horizontal;
+    }
+
+    #path-picker-input {
+        width: 1fr;
+        height: 3;
+    }
+
+    #path-picker-mode {
+        width: 14;
+        height: 3;
+        content-align: center middle;
+    }
+
+    #path-suggestions {
+        height: auto;
+        max-height: 10;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("ctrl+d", "toggle_directories_only", "Dirs/all"),
+    ]
+
+    def __init__(self, initial_path: str, directories_only: bool = True) -> None:
+        super().__init__()
+        self._initial_path = initial_path
+        self._directories_only = directories_only
+        self._suggestions: list[str] = []
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Horizontal(
+                Input(value=self._initial_path, id="path-picker-input"),
+                Static(self._mode_label(), id="path-picker-mode"),
+                id="path-picker-input-row",
+            ),
+            ListView(id="path-suggestions"),
+            id="path-picker",
+        )
+
+    async def on_mount(self) -> None:
+        await self._refresh_suggestions()
+        path_input = self.query_one("#path-picker-input", Input)
+        path_input.focus()
+        path_input.cursor_position = len(path_input.value)
+
+    def _mode_label(self) -> str:
+        return "dirs" if self._directories_only else "all"
+
+    def _current_path(self) -> str:
+        return self.query_one("#path-picker-input", Input).value
+
+    def _matching_paths(self, value: str) -> list[str]:
+        expanded_pattern = os.path.expanduser(value) + "*"
+        matches = glob.glob(expanded_pattern)
+        if self._directories_only:
+            matches = [path for path in matches if os.path.isdir(path)]
+
+        def display_path(path: str) -> str:
+            if value.startswith("~"):
+                home = os.path.expanduser("~")
+                if path == home:
+                    return "~"
+                if path.startswith(home + os.sep):
+                    return "~" + path[len(home):]
+            return path
+
+        return sorted(display_path(path) for path in matches)[:10]
+
+    async def _refresh_suggestions(self) -> None:
+        self._suggestions = self._matching_paths(self._current_path())
+        suggestions = self.query_one("#path-suggestions", ListView)
+        await suggestions.clear()
+        await suggestions.extend(PathSuggestionItem(path) for path in self._suggestions)
+        suggestions.index = 0 if self._suggestions else None
+        self.query_one("#path-picker-mode", Static).update(self._mode_label())
+
+    async def _complete_with(self, path: str) -> None:
+        path_input = self.query_one("#path-picker-input", Input)
+        path_input.value = path
+        path_input.cursor_position = len(path)
+        path_input.focus()
+        await self._refresh_suggestions()
+
+    def _accept_current_input(self) -> None:
+        if len(self._suggestions) == 1:
+            self.dismiss(self._suggestions[0])
+        else:
+            self.dismiss(self._current_path())
+
+    async def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "path-picker-input":
+            await self._refresh_suggestions()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "path-picker-input":
+            event.stop()
+            self._accept_current_input()
+
+    async def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.list_view.id == "path-suggestions" and isinstance(event.item, PathSuggestionItem):
+            event.stop()
+            await self._complete_with(event.item.path)
+
+    def on_key(self, event: Key) -> None:
+        if event.key == "down" and self.focused is self.query_one("#path-picker-input", Input):
+            suggestions = self.query_one("#path-suggestions", ListView)
+            if self._suggestions:
+                suggestions.focus()
+                event.stop()
+
+    async def action_toggle_directories_only(self) -> None:
+        self._directories_only = not self._directories_only
+        await self._refresh_suggestions()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class TabPickerScreen(ModalScreen[Optional[str]]):
@@ -315,7 +463,32 @@ class Viewer(App):
         if isinstance(event.item, OpenTabListItem):
             await self.run_action(event.item.action)
         elif isinstance(event.item, ConfigFieldItem):
-            self._start_config_field_edit(event.item)
+            await self._activate_config_field(event.item)
+
+    async def _activate_config_field(self, field: ConfigFieldItem) -> None:
+        if field.path_picker:
+            self._open_path_picker(field)
+        else:
+            self._start_config_field_edit(field)
+
+    def _normalize_config_path(self, path: str) -> str:
+        return os.path.abspath(os.path.expanduser(path))
+
+    def _open_path_picker(self, field: ConfigFieldItem) -> None:
+        def update_path(path: Optional[str]) -> None:
+            if path is None:
+                self.call_after_refresh(self._focus_mnc_config_fields)
+                return
+
+            normalized_path = self._normalize_config_path(path)
+            field.input.value = normalized_path
+            field.save_edit()
+            self._mnc_config[field.field_name] = normalized_path
+            self._save_mnc_config()
+            self.refresh_bindings()
+            self.call_after_refresh(self._focus_mnc_config_fields)
+
+        self.push_screen(PathPickerScreen(field.value, directories_only=True), update_path)
 
     def _start_config_field_edit(self, field: ConfigFieldItem) -> None:
         if self._editing_config_field is not None:

@@ -116,34 +116,6 @@ struct TEvPQProxy {
         const ui64 Cookie;
     };
 
-    struct TEvScheduleUpdateClusters : public NActors::TEventLocal<TEvScheduleUpdateClusters, EvScheduleUpdateClusters> {
-        TEvScheduleUpdateClusters()
-        { }
-    };
-
-
-    struct TEvUpdateClusters : public NActors::TEventLocal<TEvUpdateClusters, EvUpdateClusters> {
-        TEvUpdateClusters(const TString& localCluster, bool enabled, const TVector<TString>& clusters)
-            : LocalCluster(localCluster)
-            , Enabled(enabled)
-            , Clusters(clusters)
-        { }
-
-        const TString LocalCluster;
-        const bool Enabled;
-        const TVector<TString> Clusters;
-    };
-
-    struct TEvQueryCompiled : public NActors::TEventLocal<TEvQueryCompiled, EvQueryCompiled> {
-        TEvQueryCompiled(const TString& selectQ, const TString& updateQ, const TString& deleteQ)
-            : SelectQ(selectQ)
-            , UpdateQ(updateQ)
-            , DeleteQ(deleteQ)
-        { }
-
-        const TString SelectQ, UpdateQ, DeleteQ;
-    };
-
     struct TEvWriteInit : public NActors::TEventLocal<TEvWriteInit, EvWriteInit> {
         TEvWriteInit(PersQueue::V1::StreamingWriteClientMessage&& req, const TString& peerName)
             : Request(std::move(req))

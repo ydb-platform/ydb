@@ -280,8 +280,8 @@ std::string_view ScriptTypeAsStr(EScriptType type) {
 EScriptType ScriptTypeFromStr(std::string_view str) {
     TString lowerStr = TString(str);
     lowerStr.to_lower();
-#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName, allowSuffix)              \
-    if ((allowSuffix && lowerStr.StartsWith(#lowerName)) || lowerStr == #lowerName) \
+#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName, allowSubstring)            \
+    if ((allowSubstring && lowerStr.Contains(#lowerName)) || lowerStr == #lowerName) \
         return EScriptType::name;
 
     MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_FROM_STR)

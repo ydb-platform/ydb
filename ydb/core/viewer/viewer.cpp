@@ -346,14 +346,6 @@ public:
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-<<<<<<< HEAD
-                    mon->RegisterActorHandler({
-                        .Path = name,
-                        .Handler = ctx.SelfID,
-                        .AuthMode = TMon::EAuthMode::Enforce,
-                        .AllowedSIDs = databaseAllowedSIDs,
-                    });
-=======
                     if (name == "/viewer/capabilities" || name == "/viewer/json/capabilities") {
                         // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
                         mon->RegisterActorHandler({
@@ -369,7 +361,6 @@ public:
                             .AllowedSIDs = resolveAllowedSids(name),
                         });
                     }
->>>>>>> 67455aae8b0 (Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens (#39687))
                 }
             }
         }

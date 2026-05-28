@@ -789,7 +789,6 @@ Y_UNIT_TEST(TestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes) {
             .StoragePoolCounters = DSProxyEnv.StoragePoolCounters,
             .RestartCounter = 0,
             .Event = request.get(),
-            .DoSendDeathNote = false,
         },
         .ExpectedResults = 9,
     };

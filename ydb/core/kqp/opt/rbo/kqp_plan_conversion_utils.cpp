@@ -157,24 +157,6 @@ void NormalizeJoin(const TIntrusivePtr<TOpJoin>& join, TExprContext& ctx, TPlanP
     ValidateUniqueOutputIUs(join, ctx);
 }
 
-void NormalizeInitialRenames(TOpRoot& root, TExprContext& ctx) {
-    for (auto iter : root) {
-        if (iter.Current->Kind == EOperator::Map) {
-            NormalizeMap(CastOperator<TOpMap>(iter.Current), ctx, root.PlanProps);
-        } else if (iter.Current->Kind == EOperator::Join) {
-            NormalizeJoin(CastOperator<TOpJoin>(iter.Current), ctx, root.PlanProps);
-        } else {
-            ValidateUniqueOutputIUs(iter.Current, ctx);
-        }
-    }
-
-    const auto rootOutput = root.GetInput()->GetOutputIUs();
-    for (const auto& column : root.ColumnOrder) {
-        const auto iu = TInfoUnit(column);
-        Y_ENSURE(ContainsIU(rootOutput, iu), "Root output column " << column << " is not visible before physical result narrowing");
-    }
-}
-
 /**
  * Computes dependent variables and updates the plan
  */
@@ -255,6 +237,24 @@ bool GetOrdered(const TKqpOpMap& map) {
 }
 
 } // anonymous namespace
+
+void NormalizePlanOutputIUs(TOpRoot& root, TExprContext& ctx) {
+    for (auto iter : root) {
+        if (iter.Current->Kind == EOperator::Map) {
+            NormalizeMap(CastOperator<TOpMap>(iter.Current), ctx, root.PlanProps);
+        } else if (iter.Current->Kind == EOperator::Join) {
+            NormalizeJoin(CastOperator<TOpJoin>(iter.Current), ctx, root.PlanProps);
+        } else {
+            ValidateUniqueOutputIUs(iter.Current, ctx);
+        }
+    }
+
+    const auto rootOutput = root.GetInput()->GetOutputIUs();
+    for (const auto& column : root.ColumnOrder) {
+        const auto iu = TInfoUnit(column);
+        Y_ENSURE(ContainsIU(rootOutput, iu), "Root output column " << column << " is not visible before physical result narrowing");
+    }
+}
 
 TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
@@ -354,7 +354,7 @@ TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     }
 
     opRoot->ComputeParents();
-    NormalizeInitialRenames(*opRoot, Ctx);
+    NormalizePlanOutputIUs(*opRoot, Ctx);
     opRoot->ComputeParents();
 
     // For subplans, we need to compute dependent variables correctly

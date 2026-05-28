@@ -3,8 +3,6 @@
 
 #include <yql/essentials/utils/log/log.h>
 
-#include <cstdlib>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -141,6 +139,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
             YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
         stage->RunStage(root, rboCtx);
+        NormalizePlanOutputIUs(root, ctx);
+        root.ComputeParents();
         ValidateNoDuplicateOutputIUs(root);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
@@ -153,11 +153,6 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
     ComputeRequiredProps(root, convertProps, rboCtx);
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
-    }
-    if (std::getenv("KQP_RBO_DUMP_FINAL")) {
-        Cerr << "Final plan before generation:\n"
-             << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics)
-             << Endl;
     }
 
     ui64 counter = 0;

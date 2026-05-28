@@ -187,8 +187,8 @@ TExprNode::TPtr TPhysicalJoinBuilder::PrepareJoinSide(TExprNode::TPtr input, con
     }
 
     for (const auto& remapTuple: remap) {
-        const auto& oldKey = std::get<0>(remapTuple);
-        const auto& newKey = std::get<1>(remapTuple);
+        const auto oldKey = std::get<0>(remapTuple).StringValue();
+        const auto newKey = std::get<1>(remapTuple).StringValue();
         const ui32 joinKeyIndex = std::get<2>(remapTuple);
         Y_ENSURE(joinKeyIndex < joinKeys.size());
         Y_ENSURE(joinKeys[joinKeyIndex] == oldKey);

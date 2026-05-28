@@ -186,7 +186,17 @@ class MinMaxWorkload:
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN)
         """)
-        logger.info("Table created")
+        logger.info("Table created with sql:")
+        logger.info(f"""
+            CREATE TABLE IF NOT EXISTS `{self.table_path}` (
+                id Int64 NOT NULL,
+                {col_defs},
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN)
+        """)
+        
 
         for name, *_ in COLUMNS:
             try:
@@ -201,12 +211,13 @@ class MinMaxWorkload:
         col_exprs = ",\n                    ".join(
             f"{expr} AS {name}" for name, _, expr, *_ in COLUMNS
         )
+        step = max(1, self.batch_size // 3)
 
         while not self._stop.is_set():
             with self._lock:
                 start = self._next_id
-                self._next_id += self.batch_size
-
+                self._next_id += step
+            sleep(0.1)
             query = f"""
                 $data = ListMap(ListFromRange({start}L, {start + self.batch_size}L), ($x) -> {{
                     RETURN AsStruct(
@@ -227,7 +238,7 @@ class MinMaxWorkload:
         while not self._stop.is_set():
             with self._lock:
                 max_id = self._next_id
-
+            sleep(1)
             if max_id < self.batch_size * 3:
                 time.sleep(2)
                 continue
@@ -251,9 +262,9 @@ class MinMaxWorkload:
                 cnt = result[0].rows[0]["cnt"]
                 with self._lock:
                     self._queries_run += 1
-                logger.info(f"query target_id={target_id} max_id={max_id} count={cnt}")
+                logger.info(f"query({query})\n target_id={target_id} max_id={max_id} count={cnt}")
             except Exception as e:
-                logger.error(f"Query error (target_id={target_id}): {e}")
+                logger.error(f"Query({query})\n error (target_id={target_id}): {e}")
 
     def run(self):
         threads = []

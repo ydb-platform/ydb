@@ -62,3 +62,4 @@ namespace NKikimr {
 #endif
 
 #undef __PROTOS_WERE_INCLUDED
+// ci trigger v2

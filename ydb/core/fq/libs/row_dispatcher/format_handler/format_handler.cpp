@@ -383,6 +383,8 @@ public:
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
+        ForceRefresh(); // Clear parser before client is started (otherwise the client may receive too many new messages).
+
         if (Filters) {
             Filters->OnCompileResponse(ev);
         }

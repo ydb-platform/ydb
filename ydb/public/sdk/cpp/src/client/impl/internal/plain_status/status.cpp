@@ -72,13 +72,16 @@ TPlainStatus TPlainStatus::Internal(const std::string& message) {
     return { EStatus::CLIENT_INTERNAL_ERROR, "Internal client error: " + message };
 }
 
+namespace {
+
+static const std::string ConsumedUnitsHeaderKey{YDB_CONSUMED_UNITS_HEADER};
+
+} // namespace
+
 void TPlainStatus::InitCostInfo() {
-    for (const auto& [key, value] : Metadata) {
-        if (key != YDB_CONSUMED_UNITS_HEADER) {
-            continue;
-        }
+    if (auto metaIt = Metadata.find(ConsumedUnitsHeaderKey); metaIt != Metadata.end()) {
         try {
-            CostInfo.set_consumed_units(std::stod(value));
+            CostInfo.set_consumed_units(std::stod(metaIt->second));
         } catch (std::exception& e) {
             if (Ok()) {
                 Status = EStatus::CLIENT_INTERNAL_ERROR;
@@ -86,7 +89,6 @@ void TPlainStatus::InitCostInfo() {
 
             Issues.AddIssue(NIssue::TIssue{"Failed to parse CostInfo from Metadata: " + std::string{e.what()}});
         }
-        break;
     }
 }
 

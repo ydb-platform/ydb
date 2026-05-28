@@ -93,20 +93,21 @@ inline bool HasSpillingFlag(const TCallable& callable) {
     return TStringBuf(callable.GetType()->GetName()).EndsWith("WithSpilling"_sb);
 }
 
+// CustomPython should be after CustomPython2 & CustomPython3
 // clang-format off
-#define MKQL_SCRIPT_TYPES(xx)                                                                                                 \
+#define MKQL_SCRIPT_TYPES(xx)                         \
     xx(Unknown, 0, unknown, false)                    \
     xx(Python, 1, python, false)                      \
     xx(Lua, 2, lua, false)                            \
     xx(ArcPython, 3, arcpython, false)                \
-    xx(CustomPython, 4, custompython, true)           \
-    xx(Javascript, 5, javascript, false)              \
-    xx(Python2, 6, python2, false)                    \
-    xx(ArcPython2, 7, arcpython2, false)              \
-    xx(CustomPython2, 8, custompython2, true)         \
-    xx(Python3, 9, python3, false)                    \
-    xx(ArcPython3, 10, arcpython3, false)             \
-    xx(CustomPython3, 11, custompython3, true)        \
+    xx(Javascript, 4, javascript, false)              \
+    xx(Python2, 5, python2, false)                    \
+    xx(ArcPython2, 6, arcpython2, false)              \
+    xx(CustomPython2, 7, custompython2, true)         \
+    xx(Python3, 8, python3, false)                    \
+    xx(ArcPython3, 9, arcpython3, false)              \
+    xx(CustomPython3, 10, custompython3, true)        \
+    xx(CustomPython, 11, custompython, true)          \
     xx(SystemPython2, 12, systempython2, false)       \
     xx(SystemPython3, 13, systempython3, false)       \
     xx(SystemPython3_8, 14, systempython3_8, false)   \

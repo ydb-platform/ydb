@@ -6,6 +6,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_warning.h>
+#include <yql/essentials/core/langver/feature.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
 
@@ -283,17 +284,9 @@ public:
         }
     }
 
-    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
+    bool IsAvailable(const NYql::TFeature& feature) const;
 
-    bool EnsureBackwardCompatibleFeatureAvailable(
-        TPosition position,
-        TStringBuf feature,
-        NYql::TLangVersion version);
-
-    bool EnsureFeatureNotExpired(
-        TPosition position,
-        TStringBuf feature,
-        NYql::TLangVersion version);
+    bool EnsureAvailable(TPosition position, const NYql::TFeature& feature);
 
 private:
     IOutputStream& MakeIssue(

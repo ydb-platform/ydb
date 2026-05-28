@@ -244,7 +244,11 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         ++StatusResultMsgsReceived;
 
         auto& record = ev->Get()->Record;
-        const ui32 orderNumber = ev->Cookie;
+        const ui64 cookie = ev->Cookie;
+        Y_ABORT_UNLESS(cookie < IncarnationRecords.size(),
+            "unexpected TEvVStatusResult cookie# %" PRIu64 " IncarnationRecords.size# %zu",
+            cookie, IncarnationRecords.size());
+        const ui32 orderNumber = static_cast<ui32>(cookie);
         auto& incarnationRecord = IncarnationRecords[orderNumber];
         Y_ABORT_UNLESS(incarnationRecord.IncarnationGuid);
         Y_ABORT_UNLESS(incarnationRecord.ExpirationTimestamp != TMonotonic::Max());
@@ -254,7 +258,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         if (record.HasIncarnationGuid()) {
             HandleIncarnation(issue, orderNumber, record.GetIncarnationGuid());
         } else if (record.GetStatus() != NKikimrProto::OK) { // we can't obtain status from the vdisk; assume it has not been written
-            Y_ABORT_UNLESS(orderNumber < IncarnationRecords.size());
             IncarnationRecords[orderNumber] = {};
             PutImpl.InvalidatePartStates(orderNumber);
             ++*Mon->NodeMon->IncarnationChanges;
@@ -281,7 +284,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdiskId);
-        const ui32 vdisk = Info->GetOrderNumber(shortId);
+        const ui32 vdisk = PutImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const size_t blobIdx = PutImpl.GetBlobIdx(blobId);
 
@@ -297,7 +300,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if (record.HasIncarnationGuid()) {
             // TODO: correct timestamp
-            HandleIncarnation(TActivationContext::Monotonic(), Info->GetOrderNumber(shortId), record.GetIncarnationGuid());
+            HandleIncarnation(TActivationContext::Monotonic(), vdisk, record.GetIncarnationGuid());
         }
 
         LWTRACK(DSProxyVDiskRequestDuration, Orbit, TEvBlobStorage::EvVPut, blobId.BlobSize(), blobId.TabletID(),
@@ -347,7 +350,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(vdiskId);
-        const ui32 vdisk = Info->GetOrderNumber(shortId);
+        const ui32 vdisk = PutImpl.GetOrderNumber(shortId);
         const NKikimrProto::EReplyStatus status = record.GetStatus();
 
         if (TimeStatsEnabled && record.GetMsgQoS().HasExecTimeStats()) {

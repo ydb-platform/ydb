@@ -920,4 +920,16 @@ TExprNode::TPtr ApplyExtractMembersToNarrowMap(const TExprNode::TPtr& node, cons
     return ctx.ChangeChild(*node, TCoMapBase::idx_Lambda, ctx.DeepCopyLambda(node->Tail(), std::move(body)));
 }
 
+TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoTableSource tableSource(node);
+    YQL_CLOG(DEBUG, Core) << "Propagate ExtractMembers over " << node->Content() << logSuffix;
+    return Build<TCoTableSource>(ctx, node->Pos())
+        .Input<TCoExtractMembers>()
+            .Input(tableSource.Input())
+            .Members(members)
+        .Build()
+        .Done().Ptr();
+}
+
+
 } // NYql

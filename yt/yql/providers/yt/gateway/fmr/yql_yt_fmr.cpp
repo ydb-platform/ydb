@@ -2580,15 +2580,13 @@ private:
         std::shared_ptr<TFmrUserJob> fmrJob,
         TString& lambdaCode,
         std::vector<TFileInfo>& filesToUpload,
-        std::vector<TYtResourceInfo> ytResources,
+        std::vector<TYtResourceInfo>& ytResources,
         std::vector<TFmrResourceOperationInfo>& fmrResources
     ) {
-        if (!FmrServices_->FileUploadService) {
-            // For now, logic for file gateway is not implemented yet, and fileUpload service is not set.
-            // TODO (@cdzyura171) - all udfs should be executed locally, use TFileLabmdaBuilder and file transformer.
+        if (!Clusters_ || !UrlMapper_) {
+            // No gateway config (unit-test setup) — nothing to transform/upload.
             return MakeFuture();
         }
-        YQL_ENSURE(UrlMapper_ && Clusters_);
 
         TString sessionId = execCtx->GetSessionId();
 
@@ -2604,7 +2602,9 @@ private:
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TMapJobBuilder jobBuilder;
             // TODO - this function is the same for map and reduce, make function with template builder argument instead of method.
-            transformerFiles = jobBuilder.UpdateAndSetMapLambda(alloc, execCtx, downloader, lambdaCode, fmrJob.get());
+            // FMR's worker downloads YT resources as YsonBinary, so build YtTableContent
+            // with yson too — skiff would mismatch and read 0 records.
+            transformerFiles = jobBuilder.UpdateAndSetMapLambda(alloc, execCtx, downloader, lambdaCode, fmrJob.get(), /*useSkiff*/ false);
         }
 
         for (auto& fileInfo: transformerFiles.LocalFiles) {
@@ -2618,9 +2618,11 @@ private:
             filesToUpload.emplace_back(TFileInfo{.LocalPath = fileInfo.first, .Md5Key = fileInfo.second.Hash});
         }
 
-        auto remoteFilesClusterConnection = GetTableClusterConnection(execCtx->Cluster_, sessionId, execCtx->Options_.Config());
-
+        TMaybe<TClusterConnection> remoteFilesClusterConnection;
         for (auto& richPath: transformerFiles.RemoteFiles) {
+            if (!remoteFilesClusterConnection) {
+                remoteFilesClusterConnection = GetTableClusterConnection(execCtx->Cluster_, sessionId, execCtx->Options_.Config());
+            }
             // Remote files all should have the same cluster, and GatewayTransformer clears it from richPaths, so we need to fill it.
             richPath.Cluster(execCtx->Cluster_);
 
@@ -2643,9 +2645,9 @@ private:
             // adding remotePath info to list of ytResources to download in jobs.
 
             TYtResourceInfo ytResourceInfo{.RichPath = richPath};
-            ytResourceInfo.YtServerName = remoteFilesClusterConnection.YtServerName;
-            if (remoteFilesClusterConnection.Token.Defined()) {
-                ytResourceInfo.Token = *remoteFilesClusterConnection.Token;
+            ytResourceInfo.YtServerName = remoteFilesClusterConnection->YtServerName;
+            if (remoteFilesClusterConnection->Token.Defined()) {
+                ytResourceInfo.Token = *remoteFilesClusterConnection->Token;
             }
             ytResources.emplace_back(ytResourceInfo);
         }
@@ -2659,6 +2661,10 @@ private:
             }
         }
 
+        if (!FmrServices_->FileUploadService) {
+            // No distributed cache configured: rely on local hardlinks performed by the job launcher.
+            return MakeFuture();
+        }
         return UploadFilesToDistributedCache(filesToUpload);
     }
 

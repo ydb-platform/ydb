@@ -123,6 +123,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
 
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "SendDescribeProposeRequest "
+                << " database: " << Database
+                << " path: " << GetTopicPath()
+                << " showPrivate: " << showPrivate);
+
             navigateRequest->DatabaseName = Database;
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
                 .Path = NKikimr::SplitPath(GetTopicPath()),
@@ -184,8 +189,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
                 AddIssue(
                     FillIssue(
-                        TStringBuilder() << "path '" << path << "' does not exist or you " <<
-                        "do not have access rights",
+                        TStringBuilder() << "path '" << path <<
+                        "' does not exist or you do not have access rights",
                         Ydb::PersQueue::ErrorCode::ACCESS_DENIED
                     )
                 );

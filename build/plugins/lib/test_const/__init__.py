@@ -461,6 +461,7 @@ class CppLinterName(Enum):
     ClangFormatYT = "clang_format_yt"
     ClangFormat15 = "clang_format_15"
     ClangFormat18Vanilla = "clang_format_18_vanilla"
+    RussianStrings = "russian_strings"
 
 
 class CustomExplicitLinterName(Enum):

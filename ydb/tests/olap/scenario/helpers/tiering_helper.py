@@ -3,6 +3,7 @@ from ydb.tests.olap.scenario.helpers.scenario_tests_helper import (
     ScenarioTestHelper,
     TestContext,
 )
+from ydb.tests.olap.scenario.helpers.drop_helper import DropSecret
 from abc import abstractmethod
 
 from typing import override, Dict
@@ -132,25 +133,3 @@ class DropExternalDataSource(DropObjectBase):
     def _get_object_type(self):
         return 'EXTERNAL DATA SOURCE'
 
-
-class DropSecret(ScenarioTestHelper.IYqlble):
-    """Drop secret.
-
-     See {ScenarioTestHelper.IYqlble}.
-    """
-
-    def __init__(self, name: str, missing_ok: bool = False):
-        self._name = name
-        self._missing_ok = missing_ok
-
-    @override
-    def title(self):
-        return 'Drop secret'
-
-    @override
-    def to_yql(self, ctx: TestContext) -> str:
-        return f'DROP SECRET `{ScenarioTestHelper(ctx).get_full_path(self._name)}`'
-
-    @override
-    def params(self) -> Dict[str, str]:
-        return {"name": self._name}

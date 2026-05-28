@@ -25,8 +25,6 @@
 
 namespace NKikimr::NSecurity {
 
-////////////////////////////////////////////////////////////////////////////////
-
 bool IsIPv4(TStringBuf address);
 bool IsIPv6(TStringBuf address);
 

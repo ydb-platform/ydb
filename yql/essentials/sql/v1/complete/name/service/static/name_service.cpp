@@ -125,7 +125,7 @@ class TTypeNameService: public IRankingNameService {
 public:
     TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
         : IRankingNameService(std::move(ranking))
-        , SimpleTypes_(BuildNameIndex(std::move(types), NormalizeName))
+        , SimpleTypes_(BuildNameIndex(WithNull(std::move(types)), NormalizeName))
         , ContainerTypes_(BuildNameIndex(
               {
                   "Optional",
@@ -154,7 +154,7 @@ public:
     NThreading::TFuture<TNameResponse> LookupAllUnranked(const TNameRequest& request) const override {
         TNameResponse response;
         if (request.Constraints.Type) {
-            NameIndexScan<TTypeName>(SimpleTypes_, request.Prefix, request.Constraints, response.RankedNames);
+            SimpleTypesScan(request, response.RankedNames);
 
             size_t previousSize = response.RankedNames.size();
             NameIndexScan<TTypeName>(ContainerTypes_, request.Prefix, request.Constraints, response.RankedNames);
@@ -172,6 +172,27 @@ public:
     }
 
 private:
+    void SimpleTypesScan(const TNameRequest& request, TVector<TGenericName>& names) const {
+        NameIndexScan<TTypeName>(SimpleTypes_, request.Prefix, request.Constraints, names);
+
+        if (!IsIn(request.Keywords, "NULL")) {
+            return;
+        }
+
+        EraseIf(names, [](const TGenericName& name) {
+            const auto* type = std::get_if<TTypeName>(&name);
+            return type && type->Identifier == "Null";
+        });
+    }
+
+    static TVector<TString> WithNull(TVector<TString> types) {
+        if (!IsIn(types, "Null")) {
+            types.emplace_back("Null");
+        }
+
+        return types;
+    }
+
     TNameIndex SimpleTypes_;
     TNameIndex ContainerTypes_;
     TNameIndex ParameterizedTypes_;

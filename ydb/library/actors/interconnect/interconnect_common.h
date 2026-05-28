@@ -150,6 +150,9 @@ namespace NActors {
         std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
         std::atomic_uint64_t CyclesWithZeroSessions = 0;
 
+        std::atomic_uint64_t ErrorStateLogLastMicroSeconds = 0;
+        std::atomic_uint64_t ErrorStateLogSuppressed = 0;
+
         double CalculateNetworkUtilization();
         void AddSessionWithDataInQueue();
         void RemoveSessionWithDataInQueue();

@@ -205,10 +205,6 @@ void TBatch::ClearOffsetDelta() {
 }
 
 bool TBatch::IsGreaterThan(ui64 offset, ui16 partNo) const {
-    if (HasOffsetDelta()) {
-        return GetOffset() > offset || (offset >= GetOffset() && offset < GetOffset() + GetOffsetDelta() && GetPartNo() > partNo);
-    }
-
     return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
 }
 

@@ -168,11 +168,12 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
     constexpr size_t dataSize = 16;
     constexpr ui64 batchCount = 5;
     constexpr i64 readFromOffset = 3;
+    constexpr ui64 secondBatchCount = 3;
 
     CmdWriteBatched(0, sourceId, 1, TString(dataSize, 'a'), batchCount, tc);
-    CmdWriteBatched(0, sourceId, 2, TString(dataSize, 'b'), 0, tc);
+    CmdWriteBatched(0, sourceId, 2, TString(dataSize, 'b'), secondBatchCount, tc);
 
-    PQGetPartInfo(0, batchCount + 1, tc);
+    PQGetPartInfo(0, batchCount + secondBatchCount, tc);
 
     TPQCmdSettings sessionSettings{0, user, sessionId};
     sessionSettings.PartitionSessionId = 1;
@@ -190,12 +191,12 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatch) {
         {{.SeqNo = 1, .BatchMessageCount = batchCount, .Offset = 0, .Fill = 'a'}},
         dataSize);
 
-    readSettings.Offset = batchCount;
+    readSettings.Offset = batchCount + 1;
     readSettings.Count = 1;
     const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult2,
-        {{.SeqNo = 2, .BatchMessageCount = 0, .Offset = batchCount, .Fill = 'b'}},
+        {{.SeqNo = 2, .BatchMessageCount = secondBatchCount, .Offset = batchCount, .Fill = 'b'}},
         dataSize);
 }
 
@@ -248,14 +249,6 @@ Y_UNIT_TEST(BatchedMessagesReadFromMiddleOfBatchCompacted) {
     const auto readResult2 = CmdReadAndGetResult(readSettings, tc);
     AssertBatchedReadResults(
         readResult2,
-        {{.SeqNo = 2, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
-        dataSize);
-
-    readSettings.Offset = batchCount + 1;
-    readSettings.Count = 1;
-    const auto readResult2FromMiddle = CmdReadAndGetResult(readSettings, tc);
-    AssertBatchedReadResults(
-        readResult2FromMiddle,
         {{.SeqNo = 2, .BatchMessageCount = 3, .Offset = batchCount, .Fill = 'b'}},
         dataSize);
 

@@ -13,6 +13,8 @@ class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
+    YDB_ACCESSOR_DEF(std::optional<bool>, IndexBuildOnInsertEnabled);
+    YDB_ACCESSOR_DEF(std::optional<ui64>, IndexBuildOnInsertMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
@@ -37,6 +39,15 @@ public:
             }
             CompactionPlannerConstructor = container.DetachResult();
         }
+        if (alterRequest.GetOptions().HasIndexBuildOnInsert()) {
+            const auto& policyProto = alterRequest.GetOptions().GetIndexBuildOnInsert();
+            if (policyProto.HasEnabled()) {
+                IndexBuildOnInsertEnabled = policyProto.GetEnabled();
+            }
+            if (policyProto.HasMinBlobBytes()) {
+                IndexBuildOnInsertMinBlobBytes = policyProto.GetMinBlobBytes();
+            }
+        }
         return true;
     }
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
@@ -49,6 +60,15 @@ public:
         }
         if (MetadataManagerConstructor.HasObject()) {
             MetadataManagerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableMetadataManagerConstructor());
+        }
+        if (IndexBuildOnInsertEnabled || IndexBuildOnInsertMinBlobBytes) {
+            auto& policy = *alterRequest.MutableOptions()->MutableIndexBuildOnInsert();
+            if (IndexBuildOnInsertEnabled) {
+                policy.SetEnabled(*IndexBuildOnInsertEnabled);
+            }
+            if (IndexBuildOnInsertMinBlobBytes) {
+                policy.SetMinBlobBytes(*IndexBuildOnInsertMinBlobBytes);
+            }
         }
     }
 };

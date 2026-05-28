@@ -168,7 +168,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         return false;
     };
 
-    ui32 nextIndexId = 1;
+    ui32 nextIndexId = nextColumnId;
     for (const auto& index : in.indexes()) {
         if (index.name().empty()) {
             if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {

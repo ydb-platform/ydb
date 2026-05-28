@@ -368,13 +368,25 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     AFL_VERIFY(itIncoming == itIncomingEnd);
 
     TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
+    const auto groups = NSplitter::TEntityGroups(
+        NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(), NBlobOperations::TGlobal::DefaultStorageId);
+    const ui64 totalBlobBytes = slice.GetPackedSize();
+    THashMap<ui32, std::shared_ptr<IPortionDataChunk>> inplaceChunks;
     std::vector<TSplittedBlob> blobs;
-    if (!slice.GroupBlobs(blobs, NSplitter::TEntityGroups(NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(),
-                                     NBlobOperations::TGlobal::DefaultStorageId))) {
+    if (GetIndexInfo().GetIndexBuildOnInsert().ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size()) {
+        auto dataWithSecondaryConclusion = GetIndexInfo().AppendIndexes(
+            slice.GetPortionChunksToHash(), storagesManager, slice.GetRecordsCount(), IStoragesManager::DefaultStorageId);
+        if (dataWithSecondaryConclusion.IsFail()) {
+            return dataWithSecondaryConclusion;
+        }
+        inplaceChunks = std::move(dataWithSecondaryConclusion.GetResult().GetSecondaryInplaceData());
+        TGeneralSerializedSlice sliceWithIndexes(dataWithSecondaryConclusion.GetResult().GetExternalData(), schemaDetails, splitterCounters);
+        blobs = sliceWithIndexes.GroupChunksByBlobs(groups);
+    } else if (!slice.GroupBlobs(blobs, groups)) {
         return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
     }
     auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-        std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
+        std::move(blobs), std::move(inplaceChunks), pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
 
     NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(GetIndexInfo().GetReplaceKey()));
     const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;

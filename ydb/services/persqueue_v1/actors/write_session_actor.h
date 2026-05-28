@@ -214,7 +214,6 @@ private:
     std::optional<ui32> ExpectedGeneration;
     std::optional<ui64> InitialSeqNo;
 
-    bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
     bool UseDeduplication = true;

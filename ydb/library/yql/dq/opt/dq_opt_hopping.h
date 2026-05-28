@@ -15,6 +15,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> RewriteAsHoppingWindow(
     const NNodes::TDqConnection& input,
     bool analyticsHopping,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode);
+    bool defaultWatermarksMode,
+    bool sourceHasWatermarks = true);
 
 } // namespace NYql::NDq::NHopping

@@ -83,7 +83,8 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode) {
+    bool defaultWatermarksMode,
+    bool sourceHasWatermarks) {
     const auto aggregate = node.Cast<TCoAggregate>();
     const auto pos = aggregate.Pos();
 
@@ -122,7 +123,12 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
     const auto loadLambda = BuildLoadHopLambda(aggregate, ctx);
     const auto mergeLambda = BuildMergeHopLambda(aggregate, ctx);
     const auto finishLambda = BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
-    const bool enableWatermarks = hopTraits.Traits.Version().Cast<TCoAtom>().StringValue() == "v2" && !analyticsMode && defaultWatermarksMode;
+    // Watermark mode requires an upstream source that actually emits watermarks.
+    // Without one, windows never close — fall back to data-driven mode.
+    const bool enableWatermarks = hopTraits.Traits.Version().Cast<TCoAtom>().StringValue() == "v2"
+        && !analyticsMode
+        && defaultWatermarksMode
+        && sourceHasWatermarks;
 
     const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
     auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
@@ -243,9 +249,10 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindow(
     const TDqConnection& input,
     bool analyticsMode,
     TDuration lateArrivalDelay,
-    bool defaultWatermarksMode)
+    bool defaultWatermarksMode,
+    bool sourceHasWatermarks)
 {
-    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, getParents, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode);
+    auto result = RewriteAsHoppingWindowFullOutput(node, ctx, getParents, input, analyticsMode, lateArrivalDelay, defaultWatermarksMode, sourceHasWatermarks);
     if (!result) {
         return result;
     }

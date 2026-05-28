@@ -154,6 +154,27 @@ protected:
         return node;
     }
 
+    // Returns true if the expression tree rooted at 'expr' contains a DqPqTopicSource
+    // node with a WatermarkExpr child — meaning the source will emit watermark signals.
+    // WatermarkExpr is the optional child at index 10; its presence means the query
+    // has an explicit WATERMARK = <expr> clause on the input topic.
+    static bool InputHasWatermarkSource(const TExprBase& expr) {
+        bool found = false;
+        VisitExpr(expr.Ptr(), [&found](const TExprNode::TPtr& node) -> bool {
+            if (found) {
+                return false;
+            }
+            // DqPqTopicSource::idx_WatermarkExpr == 10; the child is present only
+            // when the query specifies WATERMARK = <expr> on the source topic.
+            if (node->IsCallable("DqPqTopicSource") && node->ChildrenSize() > 10) {
+                found = true;
+                return false;
+            }
+            return true;
+        });
+        return found;
+    }
+
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
@@ -163,6 +184,7 @@ protected:
             if (!input) {
                 return node;
             }
+            const bool sourceHasWatermarks = InputHasWatermarkSource(input.Cast());
             output = NHopping::RewriteAsHoppingWindow(
                 node,
                 ctx,
@@ -170,7 +192,8 @@ protected:
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->GetEnableWatermarks());
+                KqpCtx.Config->GetEnableWatermarks(),
+                sourceHasWatermarks);
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());

@@ -47,8 +47,6 @@ public:
         };
 
         TMaybe<TLiteralRange> LiteralRange;
-        // All extracted literal ranges. Unlike LiteralRange, this preserves disjoint ranges.
-        TVector<TLiteralRange> LiteralRanges;
     };
 
     virtual TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const = 0;

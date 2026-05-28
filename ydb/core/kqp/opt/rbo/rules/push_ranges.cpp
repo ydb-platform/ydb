@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
@@ -131,7 +132,7 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
     TPredicateExtractorSettings settings;
     settings.MergeAdjacentPointRanges = true;
     settings.HaveNextValueCallable = true;
-    settings.BuildLiteralRange = true;
+    settings.BuildLiteralRange = false;
     settings.IsValidForRange = IsValidForRange;
 
     if (kqpCtx.Config->GetExtractPredicateRangesLimit() != 0) {
@@ -169,95 +170,6 @@ TString ResolveExposedName(const TString& physicalName, const TOpRead& read,
         return read.Alias + "." + physicalName;
     }
     return physicalName;
-}
-TString StripAliasPrefix(const TString& column) {
-    const auto dot = column.rfind('.');
-    return (dot != TString::npos) ? column.substr(dot + 1) : column;
-}
-
-TString NormalizeLiteralText(TString value) {
-    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
-        return value.substr(1, value.size() - 2);
-    }
-    return value;
-}
-
-bool IsNothingLike(const TExprNode::TPtr& node) {
-    if (!node) {
-        return false;
-    }
-
-    if (node->IsCallable("Nothing")) {
-        return true;
-    }
-
-    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString", "FromPg", "ToPg"}) && node->ChildrenSize() > 0) {
-        return IsNothingLike(node->HeadPtr());
-    }
-
-    return false;
-}
-
-std::optional<TString> FormatLiteralValue(const TExprNode::TPtr& node) {
-    if (!node || IsNothingLike(node)) {
-        return std::nullopt;
-    }
-
-    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString", "FromPg", "ToPg"}) && node->ChildrenSize() > 0) {
-        return FormatLiteralValue(node->HeadPtr());
-    }
-
-    if (auto data = TExprBase(node).Maybe<TCoDataCtor>()) {
-        return NormalizeLiteralText(TString(data.Cast().Literal().Value()));
-    }
-
-    if (auto pg = TExprBase(node).Maybe<TCoPgConst>()) {
-        return NormalizeLiteralText(TString(pg.Cast().Value().Value()));
-    }
-
-    return std::nullopt;
-}
-
-using TLiteralRange = IPredicateRangeExtractor::TBuildResult::TLiteralRange;
-using TLiteralRangeBound = IPredicateRangeExtractor::TBuildResult::TLiteralRange::TLiteralRangeBound;
-
-bool TryFormatRangeBoundValue(const TLiteralRangeBound& bound, size_t columnIndex, std::optional<TString>& value) {
-    value = std::nullopt;
-    if (columnIndex >= bound.Columns.size() || IsNothingLike(bound.Columns[columnIndex])) {
-        return true;
-    }
-
-    value = FormatLiteralValue(bound.Columns[columnIndex]);
-    return value.has_value();
-}
-
-TVector<TString> BuildReadRangeDescriptions(const TVector<TLiteralRange>& ranges, const TVector<TString>& keyColumns, size_t usedPrefixLen) {
-    TVector<TString> result;
-    for (const auto& range : ranges) {
-        const size_t columnCount = Min(keyColumns.size(), usedPrefixLen);
-        for (size_t i = 0; i < columnCount; ++i) {
-            std::optional<TString> fromValue;
-            std::optional<TString> toValue;
-            if (!TryFormatRangeBoundValue(range.Left, i, fromValue) ||
-                !TryFormatRangeBoundValue(range.Right, i, toValue))
-            {
-                return {};
-            }
-
-            if (!fromValue && !toValue) {
-                continue;
-            }
-
-            TStringBuilder desc;
-            desc << StripAliasPrefix(keyColumns[i]) << " "
-                 << (fromValue && range.Left.Inclusive ? "[" : "(")
-                 << (fromValue ? *fromValue : "-∞") << ", "
-                 << (toValue ? *toValue : "+∞")
-                 << (toValue && range.Right.Inclusive ? "]" : ")");
-            result.push_back(desc);
-        }
-    }
-    return result;
 }
 
 const TStructExprType* PrepareSchemeType(const TOpRead& read, const TStructExprType* schemeType, TExprContext& ctx) {
@@ -338,7 +250,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     TOpRead::TRangeInfo rangeInfo{
         .KeyColumns = keyColumns,
-        .ReadRangeDescriptions = BuildReadRangeDescriptions(buildResult.LiteralRanges, keyColumns, buildResult.UsedPrefixLen),
+        .ReadRangeDescriptions = NOpt::BuildReadRangeDescriptions(ranges, keyColumns, buildResult.UsedPrefixLen),
         .UsedPrefixLen = buildResult.UsedPrefixLen,
         .ExpectedMaxRanges = buildResult.ExpectedMaxRanges
             ? TMaybe<size_t>(*buildResult.ExpectedMaxRanges)

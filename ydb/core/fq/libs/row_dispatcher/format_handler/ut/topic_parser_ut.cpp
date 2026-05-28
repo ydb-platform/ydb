@@ -337,11 +337,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT(result[0][0]);
             UNIT_ASSERT_VALUES_EQUAL(result[0][0].GetListLength(), 2);
             {
-                auto val = result[0][0].GetElement(0);
+                auto val = result[0][0].Lookup(NYql::NUdf::TUnboxedValuePod(0));
                 UNIT_ASSERT_VALUES_EQUAL("key1", TString(val.AsStringRef()));
             }
             {
-                auto val = result[0][0].GetElement(1);
+                auto val = result[0][0].Lookup(NYql::NUdf::TUnboxedValuePod(1));
                 UNIT_ASSERT_VALUES_EQUAL("key2", TString(val.AsStringRef()));
             }
             UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));

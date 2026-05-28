@@ -34,6 +34,13 @@ namespace NActors {
     const ui32 TEventOutputChannel::RdmaCredsMinSizeSerialized = CalcRdmaCredsMinSizeSerialized();
 
     namespace {
+        template <typename TIterator>
+        void SkipEmptyRopeChunks(TIterator& iter) {
+            while (iter.Valid() && !iter.ContiguousSize()) {
+                iter.AdvanceToNextContiguousBlock();
+            }
+        }
+
         bool IsRdmaSectionLayoutConsistentWithData(const TEventHolder& event, ssize_t rdmaDeviceIndex) {
 #ifdef NDEBUG
             Y_UNUSED(event);
@@ -44,6 +51,7 @@ namespace NActors {
             Y_ABORT_UNLESS(rdmaDeviceIndex >= 0);
 
             auto iter = event.Buffer->GetBeginIter();
+            SkipEmptyRopeChunks(iter);
             const auto& sections = event.Buffer->GetSerializationInfo().Sections;
             for (size_t sectionIndex = 0; sectionIndex < sections.size(); ++sectionIndex) {
                 const auto& section = sections[sectionIndex];
@@ -57,6 +65,7 @@ namespace NActors {
                     const size_t offset = data - buf.GetData();
                     const size_t leftInChunk = buf.GetSize() - offset;
                     const size_t chunkSize = Min(leftInChunk, bytesLeft);
+                    Y_ABORT_UNLESS(chunkSize);
 
                     if (section.IsRdmaCapable) {
                         auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
@@ -84,6 +93,7 @@ namespace NActors {
 
                     iter += chunkSize;
                     bytesLeft -= chunkSize;
+                    SkipEmptyRopeChunks(iter);
                     ++chunkIndex;
                 }
             }
@@ -320,18 +330,13 @@ namespace NActors {
                 }
             }
         } else if (event.Buffer) {
-            auto skipEmptyRopeChunks = [](auto& iter) {
-                while (iter.Valid() && !iter.ContiguousSize()) {
-                    iter.AdvanceToNextContiguousBlock();
-                }
-            };
-            skipEmptyRopeChunks(Iter);
+            SkipEmptyRopeChunks(Iter);
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
                 addChunk(obuf, numb, true);
                 Iter += numb;
-                skipEmptyRopeChunks(Iter);
+                SkipEmptyRopeChunks(Iter);
             }
             complete = !Iter.Valid();
         } else {
@@ -436,6 +441,7 @@ namespace NActors {
 
         Y_ABORT_UNLESS(event.Buffer);
         if (RdmaCredsBuffer.CredsSize() == 0) {
+            SkipEmptyRopeChunks(Iter);
             for (; Iter.Valid() && PartLenRemain; ) {
                 TRcBuf buf = Iter.GetChunk();
                 auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
@@ -448,6 +454,7 @@ namespace NActors {
                 const size_t offset = data - buf.GetData();
                 const size_t leftInChunk = buf.GetSize() - offset;
                 const size_t chunkSize = Min(leftInChunk, PartLenRemain);
+                Y_ABORT_UNLESS(chunkSize);
 
                 if (checksumming) {
                     XXH3_64bits_update(&RdmaCumulativeChecksumState, data, chunkSize);
@@ -460,6 +467,7 @@ namespace NActors {
                 event.EventActuallySerialized += chunkSize;
                 PartLenRemain -= chunkSize;
                 Iter += chunkSize;
+                SkipEmptyRopeChunks(Iter);
             }
         }
         Y_ABORT_UNLESS(PartLenRemain == 0);

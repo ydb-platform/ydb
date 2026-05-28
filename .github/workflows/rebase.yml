@@ -5,8 +5,9 @@ on:
     types: [labeled]
 
 jobs:
-  auto-rebase:
-    if: github.event.label.name == 'rebase-user-branch'
+  rebase:
+    if: github.event.label.name == 'rebase-user-branch' && (!github.event.pull_request.head.repo.fork || github.event.pull_request.maintainer_can_modify)
+     
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -16,24 +17,29 @@ jobs:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
+        
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
-          git config.user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Fetch base branch
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git fetch origin "$BASE_REF"
 
       - name: Attempt rebase
         id: rebase
         continue-on-error: true
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          if git rebase origin/${{ github.event.pull_request.base.ref }}; then
+          if git rebase "origin/$BASE_REF"; then
             echo "rebase_status=success" >> $GITHUB_OUTPUT
           else
             echo "rebase_status=failed" >> $GITHUB_OUTPUT
@@ -42,8 +48,10 @@ jobs:
 
       - name: Push rebased branch
         if: steps.rebase.outputs.rebase_status == 'success'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
-          git push --force-with-lease origin ${{ github.event.pull_request.head.ref }}
+          git push --force-with-lease origin "$HEAD_REF"
 
       - name: Remove label after rebase
         if: steps.rebase.outputs.rebase_status == 'success'
@@ -54,31 +62,67 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              name: 'auto-rebase'
+              name: 'rebase-user-branch'
             });
 
       - name: Add success comment
         if: steps.rebase.outputs.rebase_status == 'success'
         uses: actions/github-script@v7
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         with:
           script: |
+            const baseRef = process.env.BASE_REF;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '✅ **Auto-rebase complete!**\n\nPR has been automatically rebased onto `${{ github.event.pull_request.base.ref }}`.'
+              body: `✅ **Rebase complete!**\n\nPR has been automatically rebased onto \`${baseRef}\`.`
+            });
+
+      - name: Replace label on failure
+        if: steps.rebase.outputs.rebase_status == 'failed'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'rebase-user-branch'
+              });
+            } catch(e) {}
+            
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'rebase-user-branch-failed'
+              });
+            } catch(e) {}
+            
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['rebase-user-branch-failed']
             });
 
       - name: Add failure comment for conflicts
         if: steps.rebase.outputs.rebase_status == 'failed'
         uses: actions/github-script@v7
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         with:
           script: |
+            const baseRef = process.env.BASE_REF;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '❌ **Auto-rebase failed!**\n\nConflicts detected. Please resolve them manually:\n```\ngit fetch origin\ngit rebase origin/${{ github.event.pull_request.base.ref }}\n```\n\nAfter resolving conflicts, add the `auto-rebase` label again.'
+              body: '❌ **Rebase failed!**\n\nConflicts detected. Please resolve them manually:\n```\ngit fetch origin\ngit rebase origin/' + baseRef + '\n```\nAfter resolving conflicts and pushing your branch, the CI will run automatically.'
             });
 
       - name: Fail the job if conflicts

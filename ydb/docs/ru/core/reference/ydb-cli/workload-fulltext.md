@@ -238,6 +238,7 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
     ```
+
     Пример вывода:
 
     ```text
@@ -273,6 +274,7 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run upsert --model markov_dict.tsv.gz
     ```
+
     Пример вывода:
 
     ```text
@@ -323,6 +325,7 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run select --quality
     ```
+
     Пример вывода:
 
     ```text
@@ -351,6 +354,7 @@ fulltext            YDB fulltext workload
     ```bash
     {{ ydb-cli }} workload fulltext run upsert
     ```
+
     Пример вывода:
 
     ```text

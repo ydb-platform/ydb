@@ -233,6 +233,7 @@ Drop tables created for load testing:
     ```bash
     {{ ydb-cli }} workload fulltext run select --model markov_dict.tsv.gz
     ```
+
     Output example:
 
     ```text
@@ -268,6 +269,7 @@ Drop tables created for load testing:
     ```bash
     {{ ydb-cli }} workload fulltext run upsert --model markov_dict.tsv.gz
     ```
+
     Output example:
 
     ```text
@@ -319,6 +321,7 @@ Drop tables created for load testing:
     ```bash
     {{ ydb-cli }} workload fulltext run select --quality
     ```
+
     Output example:
 
     ```text
@@ -347,6 +350,7 @@ Drop tables created for load testing:
     ```bash
     {{ ydb-cli }} workload fulltext run upsert
     ```
+
     Output example:
 
     ```text

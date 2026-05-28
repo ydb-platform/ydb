@@ -54,4 +54,32 @@ Y_UNIT_TEST_SUITE(YdbUnaryRetrySettings) {
 
         UNIT_ASSERT_VALUES_EQUAL(resolved.MaxRetries_, 7u);
     }
+
+    Y_UNIT_TEST(ResolveRetrySettingsSkipsAutoIdempotentWhenOperationOverrideSet) {
+        const auto clientDefault = TRetryOperationSettings().MaxRetries(10);
+        const auto operationOverride = TRetryOperationSettings().MaxRetries(2);
+        const auto resolved = ResolveRetrySettings(
+            clientDefault,
+            operationOverride,
+            TDuration::Max(),
+            ERetryIdempotentDefault::True);
+
+        UNIT_ASSERT_VALUES_EQUAL(resolved.MaxRetries_, 2u);
+        UNIT_ASSERT(!resolved.Idempotent_);
+    }
+
+    Y_UNIT_TEST(ResolveRetrySettingsSkipsAutoIdempotentWhenExplicitOverrideSet) {
+        const auto clientDefault = TRetryOperationSettings().MaxRetries(10);
+        const auto operationOverride = TRetryOperationSettings().MaxRetries(2);
+        const auto explicitOverride = TRetryOperationSettings().MaxRetries(7);
+        const auto resolved = ResolveRetrySettings(
+            clientDefault,
+            operationOverride,
+            explicitOverride,
+            TDuration::Max(),
+            ERetryIdempotentDefault::True);
+
+        UNIT_ASSERT_VALUES_EQUAL(resolved.MaxRetries_, 7u);
+        UNIT_ASSERT(!resolved.Idempotent_);
+    }
 }

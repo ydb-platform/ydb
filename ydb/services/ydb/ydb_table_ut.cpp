@@ -4965,4 +4965,48 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         driver.Stop(true);
     }
+
+    Y_UNIT_TEST(ReadRowsNoDoubleRetryInRetryOperation) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+            UNIT_ASSERT(session.CreateTable("/Root/ReadRowsBuiltinRetryNested", tableBuilder.Build()).ExtractValueSync().IsSuccess());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Utf8("value")
+            .EndStruct();
+        rows.EndList();
+        auto rowsValue = rows.Build();
+
+        UNIT_ASSERT(client.BulkUpsert("/Root/ReadRowsBuiltinRetryNested", NYdb::TValue{rowsValue}).GetValueSync().IsSuccess());
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        keys.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+            .EndStruct();
+        keys.EndList();
+        auto keysValue = keys.Build();
+
+        auto status = client.RetryOperationSync([&](TTableClient& tableClient) {
+            return tableClient.ReadRows("/Root/ReadRowsBuiltinRetryNested", NYdb::TValue{keysValue}).GetValueSync();
+        });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
 }

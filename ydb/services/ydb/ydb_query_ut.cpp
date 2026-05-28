@@ -329,4 +329,22 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         driver.Stop(true);
     }
 
+    Y_UNIT_TEST(ExecuteQueryNoDoubleRetryInRetryQuery) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(location));
+        NYdb::NQuery::TQueryClient client(driver);
+
+        auto status = client.RetryQuerySync([&](NYdb::NQuery::TQueryClient& queryClient) {
+            return queryClient.ExecuteQuery(
+                "SELECT 1 AS x;",
+                NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
 }

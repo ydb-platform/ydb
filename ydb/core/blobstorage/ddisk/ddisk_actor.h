@@ -218,7 +218,7 @@ namespace NKikimr::NDDisk {
 
         TCounters Counters;
 
-    private:
+    public:
         struct TEvPrivate {
             enum {
                 EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -315,6 +315,7 @@ namespace NKikimr::NDDisk {
             };
         };
 
+    private:
         enum EWakeupTag {
             WakeupIoSubmitQueue = 1,
             WakeupUpdateFreeSpaceInfo = 2,
@@ -783,7 +784,7 @@ namespace NKikimr::NDDisk {
         void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<std::tuple<ui64, ui32>>& erases, const TFastErase& fastErase);
         void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
         void HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
-        void HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie);
+        void HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie, bool resultStatus);
 
         void Handle(TEvWritePersistentBuffer::TPtr ev);
         void Handle(TEvReadPersistentBuffer::TPtr ev);

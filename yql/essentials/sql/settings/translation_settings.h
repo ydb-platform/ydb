@@ -133,6 +133,8 @@ namespace NSQLTranslation {
         bool EmitReadsForExists = false;
         bool AlwaysAllowExports = false;
         bool IsReplay = false;
+
+        bool ValidateViewStatement = true;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

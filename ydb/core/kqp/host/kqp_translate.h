@@ -156,6 +156,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetValidateViewStatement(bool value) {
+        ValidateViewStatement = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -176,6 +181,7 @@ private:
     TMaybe<ui16> SqlVersion = {};
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+    bool ValidateViewStatement = true;
 };
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);

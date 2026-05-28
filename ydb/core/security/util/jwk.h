@@ -31,7 +31,7 @@ enum class TKeyOps : ui8 {
     DERIVE_BITS,
 };
 
-// Use for assymetric JWS: https://datatracker.ietf.org/doc/html/rfc7518#section-3
+// Use for asymmetric JWS: https://datatracker.ietf.org/doc/html/rfc7518#section-3
 // TODO(vlad-serikov): Also implement for JWE: https://datatracker.ietf.org/doc/html/rfc7518#section-4
 enum class TAlg : ui8 {
     RS256,

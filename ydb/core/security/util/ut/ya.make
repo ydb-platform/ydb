@@ -6,4 +6,8 @@ SRCS(
     net_ut.cpp
 )
 
+PEERDIR(
+    library/cpp/json/writer
+)
+
 END()

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>
 
@@ -11,6 +12,8 @@ using THttpIncomingRequestPtr = TIntrusivePtr<THttpIncomingRequest>;
 }
 
 namespace NMVP::NOIDC {
+
+struct TState;
 
 class TContext {
 public:
@@ -31,6 +34,7 @@ public:
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
     TString GetState(const TString& key) const;
+    TState CreateStatePayload(TInstant expirationTime) const;
     bool IsNavigationRequest() const;
     TString GetRequestedAddress() const;
 

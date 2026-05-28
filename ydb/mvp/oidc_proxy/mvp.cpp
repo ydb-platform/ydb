@@ -31,6 +31,8 @@
 #include <util/system/hostname.h>
 #include <util/system/mlock.h>
 
+#include <memory>
+
 NActors::IActor* CreateMemProfiler();
 
 namespace NMVP::NOIDC {
@@ -240,6 +242,10 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup() {
     TryGetOidcOptionsFromConfig();
 
     OpenIdConnectSettings.AccessServiceType = StartupOptions.AccessServiceType;
+    OpenIdConnectSettings.LocalEndpoint = StartupOptions.GetLocalEndpoint();
+    OpenIdConnectSettings.AuthCallbackContextStore = std::make_shared<TAuthCallbackContextStore>(
+        TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME,
+        OpenIdConnectSettings.AuthCallbackContextStoreMaxEntries);
     if (OpenIdConnectSettings.SessionServiceTokenName.empty()) {
         ythrow yexception() << NMVP::CONFIG_ERROR_PREFIX
                             << "SessionServiceTokenName must be specified in oidc config.";

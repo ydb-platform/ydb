@@ -1,12 +1,14 @@
 LIBRARY()
 
 SRCS(
+    auth_callback_context_store.cpp
     context.cpp
     extension.cpp
     extension_final.cpp
     extension_manager.cpp
     extension_whoami.cpp
     mvp.cpp
+    oidc_callback_context.cpp
     oidc_cleanup_page.cpp
     oidc_client.cpp
     oidc_impersonate_start_page_nebius.cpp

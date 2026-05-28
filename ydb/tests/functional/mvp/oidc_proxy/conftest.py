@@ -1,7 +1,11 @@
 import pytest
 import yatest.common
 
-from oidc_proxy_env import started_oidc_proxy_env, started_oidc_proxy_full_flow_env
+from oidc_proxy_env import (
+    started_oidc_proxy_cross_pod_full_flow_env,
+    started_oidc_proxy_env,
+    started_oidc_proxy_full_flow_env,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -19,4 +23,10 @@ def oidc_proxy_env():
 @pytest.fixture
 def oidc_proxy_full_flow_env():
     with started_oidc_proxy_full_flow_env() as env:
+        yield env
+
+
+@pytest.fixture
+def oidc_proxy_cross_pod_full_flow_env():
+    with started_oidc_proxy_cross_pod_full_flow_env() as env:
         yield env

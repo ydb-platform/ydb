@@ -2,14 +2,16 @@
 
 #include <ydb/mvp/core/mvp_log.h>
 
+#include "openid_connect.h"
+#include "oidc_settings.h"
+#include "context.h"
+
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include "oidc_settings.h"
-#include "context.h"
 
 namespace NMVP::NOIDC {
 
@@ -25,6 +27,8 @@ protected:
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     TContext Context;
+    TString Code;
+    TRestoreOidcContextResult CookieContextResult;
 
 public:
     THandlerSessionCreate(const NActors::TActorId& sender,
@@ -46,7 +50,25 @@ protected:
     void ReplyBadRequestAndPassAway(TString errorMessage);
 
 private:
+    void RestoreCookieContextFromRequest(TStringBuf cookieSuffix);
+    bool CanRetryRequestWithCookieContext() const;
+    void HandleInvalidState(TStringBuf errorMessage);
+    static TRestoreOidcContextResult CreateOwnerContextRestoreErrorResult(TString errorMessage);
+    void HandleContextRestoreFailure(const TRestoreOidcContextResult& restoreContextResult);
+    void RestoreSessionWithContext(const TContext& context);
+    void ProcessContextRestoreResult(const TRestoreOidcContextResult& restoreContextResult);
+    void RestoreContextFromLocalStore(TStringBuf flowId);
+    void RequestAuthCallbackContextFromOwner(TStringBuf flowId, TStringBuf ownerEndpoint, TStringBuf signedState);
+    void HandleOwnerContextResponseBody(TStringBuf responseBody);
+    void HandleAuthCallbackContextResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
     void SendUnknownErrorResponseAndDie();
+
+    STFUNC(StateWaitAuthCallbackContextResponse) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleAuthCallbackContextResponse);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
+        }
+    }
 };
 
 } // NMVP::NOIDC

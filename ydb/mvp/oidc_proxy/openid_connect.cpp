@@ -1,6 +1,8 @@
 #include "openid_connect.h"
 #include "context.h"
 
+#include <ydb/mvp/core/mvp_log.h>
+
 #include <ydb/core/util/random.h>
 #include <ydb/core/util/wildcard.h>
 #include <ydb/library/security/util.h>
@@ -86,14 +88,28 @@ void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& va
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings, TStringBuf requestId) {
     TContext context(request);
     const TString redirectUri = TStringBuilder()
-        << (request->Endpoint->Secure ? "https://" : "http://")
+        << (request->Endpoint->Secure ? "https" : "http") << "://"
         << request->Host
         << GetAuthCallbackUrl();
 
     TCgiParameters authParams;
     authParams.InsertUnescaped("response_type", "code");
     authParams.InsertUnescaped("scope", "openid");
-    authParams.InsertUnescaped("state", context.GetState(settings.ClientSecret));
+    TState state = context.CreateStatePayload(TInstant::Now() + TOpenIdConnectSettings::DEFAULT_AUTH_STATE_LIFETIME);
+    if (settings.AuthCallbackContextStore) {
+        state.FlowId = settings.AuthCallbackContextStore->Save(context.GetRequestedAddress());
+        state.OwnerEndpoint = settings.LocalEndpoint;
+        BLOG_D("X-Request-Id: " << requestId
+            << ", Created oidc auth flow"
+            << " (flow_id: " << NKikimr::MaskTicket(state.FlowId)
+            << ", owner_endpoint: " << settings.LocalEndpoint
+            << ", navigation_request: " << context.IsNavigationRequest() << ")");
+    } else {
+        BLOG_D("X-Request-Id: " << requestId
+            << ", Created oidc auth flow without local context store"
+            << " (navigation_request: " << context.IsNavigationRequest() << ")");
+    }
+    authParams.InsertUnescaped("state", EncodeState(state, settings.ClientSecret));
     authParams.InsertUnescaped("client_id", settings.ClientId);
     authParams.InsertUnescaped("redirect_uri", redirectUri);
 
@@ -115,7 +131,8 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
 }
 
 TString CreateNameYdbOidcCookie(TStringBuf suffix) {
-    return TString(TOpenIdConnectSettings::YDB_OIDC_COOKIE) + TString(suffix);
+    Y_UNUSED(suffix);
+    return TOpenIdConnectSettings::YDB_OIDC_COOKIE;
 }
 
 TString CreateNameSessionCookie(TStringBuf key) {
@@ -129,6 +146,11 @@ TString CreateNameImpersonatedCookie(TStringBuf key) {
 const TString& GetAuthCallbackUrl() {
     static const TString callbackUrl = "/auth/callback";
     return callbackUrl;
+}
+
+const TString& GetAuthCallbackContextUrl() {
+    static const TString callbackContextUrl = "/auth/callback/context";
+    return callbackContextUrl;
 }
 
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds) {
@@ -206,6 +228,71 @@ TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, con
                                      .ErrorMessage = ""}, TContext({.RequestedAddress = requestedAddress}));
 }
 
+TRestoreOidcContextResult RestoreOidcContextFromStore(const TAuthCallbackContextStorePtr& store, TStringBuf flowId) {
+    TStringBuilder errorMessage;
+    errorMessage << "Restore oidc context from store failed: ";
+    if (!store) {
+        return TRestoreOidcContextResult({
+            .IsSuccess = false,
+            .IsErrorRetryable = false,
+            .ErrorMessage = errorMessage << "Store is not configured",
+        });
+    }
+    if (flowId.empty()) {
+        return TRestoreOidcContextResult({
+            .IsSuccess = false,
+            .IsErrorRetryable = false,
+            .ErrorMessage = errorMessage << "Flow id is empty",
+        });
+    }
+
+    TMaybe<TString> requestedAddress = store->Find(TString(flowId));
+    if (!requestedAddress) {
+        return TRestoreOidcContextResult({
+            .IsSuccess = false,
+            .IsErrorRetryable = false,
+            .ErrorMessage = errorMessage << "Flow was not found or has expired",
+        });
+    }
+
+    return TRestoreOidcContextResult(
+        {.IsSuccess = true, .IsErrorRetryable = false, .ErrorMessage = ""},
+        TContext({.RequestedAddress = *requestedAddress})
+    );
+}
+
+TRestoreOidcContextResult RestoreOidcContextFromResponseBody(TStringBuf body) {
+    TString requestedAddress;
+    TStringBuilder errorMessage;
+    errorMessage << "Restore oidc context from response body failed: ";
+
+    NJson::TJsonValue jsonValue;
+    NJson::TJsonReaderConfig jsonConfig;
+    if (!NJson::ReadJsonTree(body, &jsonConfig, &jsonValue)) {
+        return TRestoreOidcContextResult({
+            .IsSuccess = false,
+            .IsErrorRetryable = false,
+            .ErrorMessage = errorMessage << "Response body is not valid json",
+        });
+    }
+
+    const NJson::TJsonValue* jsonRequestedAddress = nullptr;
+    if (jsonValue.GetValuePointer("requested_address", &jsonRequestedAddress) && jsonRequestedAddress->IsString()) {
+        requestedAddress = jsonRequestedAddress->GetString();
+    } else {
+        return TRestoreOidcContextResult({
+            .IsSuccess = false,
+            .IsErrorRetryable = false,
+            .ErrorMessage = errorMessage << "Requested address was not found in the response body",
+        });
+    }
+
+    return TRestoreOidcContextResult(
+        {.IsSuccess = true, .IsErrorRetryable = false, .ErrorMessage = ""},
+        TContext({.RequestedAddress = requestedAddress})
+    );
+}
+
 TCheckStateResult TDecodeStateResult::Check(const TString& key) const {
     static constexpr TStringBuf ErrorPrefix = "Check state failed: ";
     if (!HasSignedStateJson) {
@@ -242,6 +329,12 @@ TString EncodeState(const TState& payload, TStringBuf signingKey) {
     }
     if (!payload.CookieSuffix.empty()) {
         json["cookie_suffix"] = payload.CookieSuffix;
+    }
+    if (!payload.FlowId.empty()) {
+        json["flow_id"] = payload.FlowId;
+    }
+    if (!payload.OwnerEndpoint.empty()) {
+        json["owner_endpoint"] = payload.OwnerEndpoint;
     }
     const TString stateContainer = NJson::WriteJson(json, false);
 
@@ -282,6 +375,16 @@ TDecodeStateResult DecodeState(TStringBuf encodedState) {
             const NJson::TJsonValue* jsonCookieSuffix = nullptr;
             if (jsonValue.GetValuePointer("cookie_suffix", &jsonCookieSuffix) && jsonCookieSuffix->IsString()) {
                 result.Payload.CookieSuffix = jsonCookieSuffix->GetString();
+            }
+            const NJson::TJsonValue* jsonFlowId = nullptr;
+            if (jsonValue.GetValuePointer("flow_id", &jsonFlowId) && jsonFlowId->IsString()) {
+                result.Payload.FlowId = jsonFlowId->GetString();
+            }
+            const NJson::TJsonValue* jsonOwnerEndpoint = nullptr;
+            if (jsonValue.GetValuePointer("owner_endpoint", &jsonOwnerEndpoint) && jsonOwnerEndpoint->IsString()) {
+                result.Payload.OwnerEndpoint = jsonOwnerEndpoint->GetString();
+            } else if (jsonValue.GetValuePointer("forward_url", &jsonOwnerEndpoint) && jsonOwnerEndpoint->IsString()) {
+                result.Payload.OwnerEndpoint = jsonOwnerEndpoint->GetString();
             }
             const NJson::TJsonValue* jsonExpirationTime = nullptr;
             if (jsonValue.GetValuePointer("expiration_time", &jsonExpirationTime)) {
@@ -346,6 +449,23 @@ TString GenerateRandomBase64(size_t byteNumber) {
     TString bytes = TString::Uninitialized(byteNumber);
     NKikimr::SafeEntropyPoolRead(bytes.Detach(), bytes.size());
     return Base64EncodeUrlNoPadding(bytes);
+}
+
+TString CreateAuthCallbackContextRequestUrl(TStringBuf ownerEndpoint, TStringBuf state) {
+    TCgiParameters params;
+    params.InsertUnescaped("state", state);
+
+    TStringBuilder url;
+    url << ownerEndpoint;
+    if (ownerEndpoint.EndsWith('/') && GetAuthCallbackContextUrl().StartsWith('/')) {
+        url << TStringBuf(GetAuthCallbackContextUrl()).SubStr(1);
+    } else if (!ownerEndpoint.EndsWith('/') && !GetAuthCallbackContextUrl().StartsWith('/')) {
+        url << "/" << GetAuthCallbackContextUrl();
+    } else {
+        url << GetAuthCallbackContextUrl();
+    }
+    url << "?" << params.Print();
+    return url;
 }
 
 // Append request address to X-Forwarded-For header

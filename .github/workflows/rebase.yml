@@ -1,3 +1,9 @@
+# SECURITY NOTE:
+# This workflow uses pull_request_target with checkout from forks.
+# Only git operations (rebase, push) are performed - no build/test scripts.
+# The maintainer_can_modify check ensures only PRs where the author
+# has granted edit permissions are processed.
+# Do NOT add steps that execute untrusted code from the PR head.
 name: rebase
 
 on:
@@ -21,6 +27,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+          filter: blob:none
         
       - name: Configure git
         run: |
@@ -30,8 +37,10 @@ jobs:
       - name: Fetch base branch
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_REPO: ${{ github.event.pull_request.base.repo.clone_url }}
         run: |
-          git fetch origin "$BASE_REF"
+          git remote add upstream "$BASE_REPO"
+          git fetch upstream "$BASE_REF"
 
       - name: Attempt rebase
         id: rebase
@@ -39,22 +48,52 @@ jobs:
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          if git rebase "origin/$BASE_REF"; then
+          if git rebase "upstream/$BASE_REF"; then
             echo "rebase_status=success" >> $GITHUB_OUTPUT
           else
             echo "rebase_status=failed" >> $GITHUB_OUTPUT
             git rebase --abort
           fi
 
+      - name: Handle unexpected rebase failure
+        if: steps.rebase.outputs.rebase_status == ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-user-branch` label.'
+            });
+            
+      - name: Fail on unexpected error
+        if: steps.rebase.outputs.rebase_status == ''
+        run: exit 1    
+
       - name: Push rebased branch
+        id: push
         if: steps.rebase.outputs.rebase_status == 'success'
+        continue-on-error: true
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           git push --force-with-lease origin "$HEAD_REF"
 
+      - name: Add push failure comment
+        if: steps.rebase.outputs.rebase_status == 'success' && steps.push.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated. Please re-apply the `rebase-user-branch` label to retry.'
+            });
+      
       - name: Remove label after rebase
-        if: steps.rebase.outputs.rebase_status == 'success'
+        if: steps.push.outcome == 'success'
         uses: actions/github-script@v7
         with:
           script: |
@@ -66,7 +105,7 @@ jobs:
             });
 
       - name: Add success comment
-        if: steps.rebase.outputs.rebase_status == 'success'
+        if: steps.push.outcome == 'success'
         uses: actions/github-script@v7
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}

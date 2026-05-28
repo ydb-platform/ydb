@@ -3,7 +3,7 @@ from typing import Optional
 
 import yaml
 
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, ScreenStackError
 from textual.binding import Binding
 from textual.command import CommandPalette
 from textual.events import Key
@@ -54,6 +54,7 @@ class Viewer(App):
         }
         self._editing_config_field: Optional[ConfigFieldItem] = None
         self._mnc_config = self._load_mnc_config()
+        self._navigation_generation = 0
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -68,16 +69,31 @@ class Viewer(App):
         self._disable_tab_header_focus()
         self._focus_active_tab_content()
 
+    def _bump_navigation_generation(self) -> int:
+        self._navigation_generation += 1
+        return self._navigation_generation
+
     def action_show_tab(self, tab_id: str) -> None:
+        self._bump_navigation_generation()
         self.query_one("#tabs", TabbedContent).active = tab_id
+        self._focus_active_tab_content(tab_id)
+
+    def _restore_active_tab(self, tab_id: str, generation: int) -> None:
+        if self._navigation_generation != generation or tab_id not in self._opened_tab_order:
+            return
+
+        self.query_one("#tabs", TabbedContent).active = tab_id
+        self._focus_active_tab_content(tab_id)
 
     def _disable_tab_header_focus(self) -> None:
         for tabs_header in self.query(Tabs):
             tabs_header.can_focus = False
 
-    def _focus_active_tab_content(self) -> None:
+    def _focus_active_tab_content(self, expected_tab_id: Optional[str] = None) -> None:
         tabs = self.query_one("#tabs", TabbedContent)
         if tabs.active is None:
+            return
+        if expected_tab_id is not None and tabs.active != expected_tab_id:
             return
 
         active_pane = self.query_one(f"#{tabs.active}", TabPane)
@@ -185,7 +201,10 @@ class Viewer(App):
 
         active = tabs.active
         current_index = self._opened_tab_order.index(active) if active in self._opened_tab_order else 0
-        tabs.active = self._opened_tab_order[(current_index + step) % len(self._opened_tab_order)]
+        next_tab = self._opened_tab_order[(current_index + step) % len(self._opened_tab_order)]
+        self._bump_navigation_generation()
+        tabs.active = next_tab
+        self._focus_active_tab_content(next_tab)
         
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         if self._editing_config_field is not None:
@@ -200,8 +219,11 @@ class Viewer(App):
         self,
         event: TabbedContent.TabActivated,
     ) -> None:
-        self.refresh_bindings()
-        self.call_after_refresh(self._focus_active_tab_content)
+        try:
+            self.refresh_bindings()
+        except ScreenStackError:
+            return
+        self.call_after_refresh(self._focus_active_tab_content, event.pane.id)
 
     def action_open_tab_picker(self) -> None:
         if not CommandPalette.is_open(self):
@@ -222,9 +244,12 @@ class Viewer(App):
     async def _open_tab(self, tab_id: str, title: str, content: Widget) -> None:
         tabs = self.query_one("#tabs", TabbedContent)
         if tab_id in self._opened_tab_order:
+            self._bump_navigation_generation()
             tabs.active = tab_id
+            self._focus_active_tab_content(tab_id)
             return
 
+        self._bump_navigation_generation()
         self._created_tabs.add(tab_id)
         self._opened_tab_order.append(tab_id)
 
@@ -338,10 +363,17 @@ class Viewer(App):
             tab_index = self._opened_tab_order.index(tab_id)
             self._created_tabs.remove(tab_id)
             self._opened_tab_order.remove(tab_id)
-            await tabs.remove_pane(tab_id)
             next_index = min(tab_index, len(self._opened_tab_order) - 1)
             if next_index >= 0:
-                tabs.active = self._opened_tab_order[next_index]
+                generation = self._bump_navigation_generation()
+                next_tab = self._opened_tab_order[next_index]
+                tabs.active = next_tab
+                self._focus_active_tab_content(next_tab)
+            await tabs.remove_pane(tab_id)
+            if next_index >= 0:
+                self._restore_active_tab(next_tab, generation)
+                self.call_later(self._restore_active_tab, next_tab, generation)
+                self.set_timer(0.01, lambda: self._restore_active_tab(next_tab, generation))
             self.refresh_bindings()
 
 

@@ -155,7 +155,11 @@ void TBatch::AddBlob(const TClientBlob &b) {
         InternalPartsPos.push_back(i);
     }
 
-    Header.SetOffsetDelta(offsetDelta);
+    if (Header.HasOffsetDelta() || b.BatchMessageCount >= 1) {
+        Header.SetOffsetDelta(offsetDelta);
+    } else {
+        Header.ClearOffsetDelta();
+    }
     Header.SetUnpackedSize(unpackedSize);
     Header.SetCount(count);
     Header.SetInternalPartsCount(InternalPartsPos.size());

@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 import abc
 import logging
-import socket
 import time
 
 from ydb.tests.library.common.wait_for import wait_for
@@ -148,45 +147,56 @@ class KiKiMRClusterInterface(object):
         response.Response.operation.result.Unpack(result)
         return result
 
-    def wait_tenant_up(self, database_name, token=None, grpc_ready_timeout_seconds=240):
+    def wait_tenant_up(self, database_name, token=None, endpoints_timeout_seconds=240):
         self.__wait_tenant_up(
             database_name,
             expected_computational_units=1,
             token=token,
         )
-        # CMS reporting RUNNING means slot is registered, but its gRPC port may
-        # still be closed — e.g. compile cache warmup gates gRPC startup until
-        # warmup completes or its hard deadline. Wait for slots to actually
-        # accept TCP connections so callers can issue requests immediately.
-        self._wait_tenant_grpc_ready(database_name, timeout_seconds=grpc_ready_timeout_seconds)
+        # Console marks tenant RUNNING right after subdomain confirmation, before
+        # dyn-node finishes bringing up gRPC + publishing endpoint to Discovery.
+        # Compile cache warmup gates both, so callers may otherwise hit
+        # TRANSPORT_UNAVAILABLE. Wait for ListEndpoints to advertise every slot.
+        self._wait_tenant_endpoints(database_name, timeout_seconds=endpoints_timeout_seconds)
 
-    def _wait_tenant_grpc_ready(self, database_name, timeout_seconds=240):
-        slots_for_tenant = [
-            slot for slot in self.slots.values()
+    def _wait_tenant_endpoints(self, database_name, timeout_seconds=240):
+        expected_ports = {
+            slot.grpc_port for slot in self.slots.values()
             if getattr(slot, '_tenant_affiliation', None) == database_name
-        ]
-        if not slots_for_tenant:
+        }
+        if not expected_ports:
             return
 
-        def is_grpc_accepting(host, port):
+        entry_node = self.nodes[1]
+        driver_config = ydb.DriverConfig(
+            "%s:%d" % (entry_node.host, entry_node.grpc_port),
+            database_name,
+        )
+        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+        last_seen = {"ports": None, "debug": None}
+
+        def predicate():
             try:
-                with socket.create_connection((host, port), timeout=0.5):
-                    return True
-            except OSError:
-                return False
+                resolved = resolver.resolve()
+                if resolved is None:
+                    return False
+                ports = {ep.port for ep in resolved.endpoints}
+                last_seen["ports"] = sorted(ports)
+                return expected_ports <= ports
+            finally:
+                debug_getter = getattr(resolver, "debug_details", None)
+                if callable(debug_getter):
+                    try:
+                        last_seen["debug"] = debug_getter()
+                    except Exception:
+                        pass
 
-        deadline = time.time() + timeout_seconds
-        pending = list(slots_for_tenant)
-        while pending and time.time() < deadline:
-            pending = [s for s in pending if not is_grpc_accepting(s.host, s.grpc_port)]
-            if pending:
-                time.sleep(0.1)
-
-        if pending:
+        if not wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=0.5):
             raise AssertionError(
-                "gRPC ports not accepting connections within {}s for database {}: {}".format(
+                "Discovery did not advertise all tenant slots within {}s for {}: "
+                "expected {}, last seen {}, resolver details {!r}".format(
                     timeout_seconds, database_name,
-                    [(s.host, s.grpc_port) for s in pending],
+                    sorted(expected_ports), last_seen["ports"], last_seen["debug"],
                 )
             )
 

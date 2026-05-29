@@ -1214,7 +1214,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
 
         std::vector<std::tuple<ui64, ui32>> erases;
-        std::set<ui64> fastErases;
+        std::unordered_set<ui64> fastErases;
 
         for (auto& e : record.GetErases()) {
             auto lsn = e.GetLsn();

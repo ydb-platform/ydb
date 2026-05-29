@@ -92,6 +92,17 @@ namespace NKikimr::NDDisk {
         barrier.Header.Barrier.Barriers[pos] = {tabletId, lsn};
         barrier.Header.RecordLsn++;
 
+        auto erasesIt = Erases.find(tabletId);
+        if (erasesIt != Erases.end()) {
+            auto lsnIt = erasesIt->second.Lsns.begin();
+            while (lsnIt != erasesIt->second.Lsns.end()) {
+                if (*lsnIt <= lsn) {
+                    lsnIt = erasesIt->second.Lsns.erase(lsnIt);
+                } else {
+                    lsnIt++;
+                }
+            }
+        }
         return {oldChunkIdx, oldSectorIdx, barrier};
     }
 
@@ -155,17 +166,36 @@ namespace NKikimr::NDDisk {
         return true;
     }
 
-    bool TPersistentBufferBarriersManager::Compact(const std::set<ui64>& lsns, char* compactLsns) {
+    bool TPersistentBufferBarriersManager::Compact(const std::unordered_set<ui64>& oldLsns, const std::unordered_set<ui64>& newLsns, TPersistentBufferHeader& header) {
         ui32 resPos = 0;
-        if (lsns.empty()) {
+        if (oldLsns.size() + newLsns.size() == 0) {
             return false;
         }
+
+        if ((oldLsns.size() + newLsns.size()) * sizeof(ui64) <= TPersistentBufferHeader::ErasesBufferSize) {
+            ui32 pos = 0;
+            for (auto& lsn : oldLsns) {
+                memcpy(&header.Erase.CompactLsns[pos], &lsn, 8);
+                pos += 8;
+            }
+            for (auto& lsn : newLsns) {
+                memcpy(&header.Erase.CompactLsns[pos], &lsn, 8);
+                pos += 8;
+            }
+            Y_ABORT_UNLESS(pos <= TPersistentBufferHeader::ErasesBufferSize);
+            return true;
+        }
+        std::vector<ui64> lsns;
+        lsns.reserve(oldLsns.size() + newLsns.size());
+        lsns.insert(lsns.end(), oldLsns.begin(), oldLsns.end());
+        lsns.insert(lsns.end(), newLsns.begin(), newLsns.end());
+        std::sort(lsns.begin(), lsns.end());
 
         auto it = lsns.begin();
         ui64 first = *it;
 
         // Write first LSN as 8 raw bytes (little-endian)
-        memcpy(compactLsns, &first, 8);
+        memcpy(header.Erase.CompactLsns, &first, 8);
         resPos += 8;
         ui64 prev = first;
         ++it;
@@ -177,20 +207,20 @@ namespace NKikimr::NDDisk {
                 if (resPos >= TPersistentBufferHeader::ErasesBufferSize) {
                     return false;
                 }
-                compactLsns[resPos++] = static_cast<char>((delta & 0x7F) | 0x80);
+                header.Erase.CompactLsns[resPos++] = static_cast<char>((delta & 0x7F) | 0x80);
                 delta >>= 7;
             }
             if (resPos >= TPersistentBufferHeader::ErasesBufferSize) {
                 return false;
             }
-            compactLsns[resPos++] = static_cast<char>(delta & 0x7F);
+            header.Erase.CompactLsns[resPos++] = static_cast<char>(delta & 0x7F);
         }
-
+        header.Flags |= TPersistentBufferHeader::IS_ERASE_COMPACT;
         return true;
     }
 
-    std::set<ui64> TPersistentBufferBarriersManager::Uncompact(const char* data) {
-        std::set<ui64> res;
+    std::unordered_set<ui64> TPersistentBufferBarriersManager::Uncompact(const char* data, bool isCompact) {
+        std::unordered_set<ui64> res;
         ui64 first = 0;
         memcpy(&first, data, 8);
         if (first == 0) {
@@ -198,6 +228,19 @@ namespace NKikimr::NDDisk {
         }
         res.insert(first);
 
+        if (!isCompact) {
+            size_t pos = 8;
+            while (pos < TPersistentBufferHeader::ErasesBufferSize) {
+                ui64 v = 0;
+                memcpy(&v, data + pos, 8);
+                if (v == 0) {
+                    return res;
+                }
+                res.insert(v);
+                pos += 8;
+            }
+            return res;
+        }
         ui64 prev = first;
         size_t pos = 8;
         while (pos < TPersistentBufferHeader::ErasesBufferSize) {
@@ -221,25 +264,20 @@ namespace NKikimr::NDDisk {
         return res;
     }
 
-    std::optional<TFastErase> TPersistentBufferBarriersManager::Erase(ui64 tabletId, const std::set<ui64>& lsns,
+    std::optional<TFastErase> TPersistentBufferBarriersManager::Erase(ui64 tabletId, const std::unordered_set<ui64>& lsns,
         TPersistentBufferSpaceAllocator& allocator) {
         if (allocator.GetFreeSpace() < 2 || lsns.size() < 2) {
             return std::nullopt;
         }
         auto& erase = Erases[tabletId];
-        auto newLsns = erase.Lsns;
-        auto barrier = GetBarrier(tabletId);
-        auto it = newLsns.upper_bound(barrier);
-        newLsns.erase(newLsns.begin(), it);
-        newLsns.insert(lsns.begin(), lsns.end());
 
         TPersistentBufferHeader header;
         memset(&header, 0, sizeof(TPersistentBufferHeader));
-        if (!Compact(newLsns, header.Erase.CompactLsns)) {
+        if (!Compact(erase.Lsns, lsns, header)) {
             return std::nullopt;
         }
         memcpy(header.Signature, TPersistentBufferHeader::PersistentBufferHeaderSignature, 16);
-        erase.Lsns = std::move(newLsns);
+        erase.Lsns.insert(lsns.begin(), lsns.end());
         auto oldChunkIdx = erase.ChunkIdx;
         auto oldSectorIdx = erase.SectorIdx;
         auto space = allocator.Occupy(1);
@@ -271,7 +309,7 @@ namespace NKikimr::NDDisk {
         erase.ChunkIdx = chunkIdx;
         erase.SectorIdx = sectorIdx;
         erase.HeaderLsn = header->RecordLsn;
-        erase.Lsns = Uncompact(header->Erase.CompactLsns);
+        erase.Lsns = Uncompact(header->Erase.CompactLsns, header->Flags & TPersistentBufferHeader::IS_ERASE_COMPACT);
         STLOG(PRI_DEBUG, BS_DDISK, BSDD30, "TPersistentBufferBarriersManager::AddErase", (TabletId, tabletId), (HeaderLsn, header->RecordLsn));
         return true;
     }

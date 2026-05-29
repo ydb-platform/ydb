@@ -176,7 +176,7 @@ sudo chown -R ydb:ydb /opt/ydb/cfg
 Выполнив специальную команду на каждой машине, инициализируйте эту директорию файлом конфигурации.
 
 ```bash
-sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-config /tmp/config.yaml
+sudo /opt/ydb/bin/ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
 ```
 
 Исходный файл `/tmp/config.yaml` после выполнения этой команды больше не используется, его можно удалить.
@@ -193,15 +193,6 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-con
   
   На шаге 4 дождитесь вывода `ydbd` в этом же терминале.
 
-<<<<<<< HEAD
-  ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config  /opt/ydb/cfg/config.yaml \
-      --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
-  ```
-=======
   1. Переключитесь на пользователя `ydb`:
 
      ```bash
@@ -227,7 +218,6 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-con
      ```
 
      При успешном старте в выводе появится, в частности, `Determined node ID: ...`. Если [проверка `web.pem`](#tls-copy-cert) не пройдена, здесь будет ошибка `Permission denied` для `/opt/ydb/certs/web.pem`.
->>>>>>> ef92ba5423f ([Backport MAIN] PR #41066 [YDBDOCS-2112] Нужно пофиксить документацию по результатам https://github.com/ydb-platform/ydb/issues/39503 (#41287))
 
 * С использованием systemd
 
@@ -347,25 +337,7 @@ echo $?
 
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`. Поочередно выполните команды ниже. Не вставляйте все строки разом вместе с `sudo su - ydb` — иначе следующие команды могут выполниться не от пользователя `ydb`.
 
-<<<<<<< HEAD
-  ```bash
-  sudo su - ydb
-  cd /opt/ydb
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --grpcs-port 2136 --grpc-ca /opt/ydb/certs/ca.crt \
-      --ic-port 19002 --ca /opt/ydb/certs/ca.crt \
-      --mon-port 8766 --mon-cert /opt/ydb/certs/web.pem \
-      --yaml-config  /opt/ydb/cfg/config.yaml \
-      --tenant /Root/testdb \
-      --grpc-cert /opt/ydb/certs/node.crt \
-      --grpc-key /opt/ydb/certs/node.key \
-      --node-broker grpcs://<ydb-static-node1>:2135 \
-      --node-broker grpcs://<ydb-static-node2>:2135 \
-      --node-broker grpcs://<ydb-static-node3>:2135
-  ```
-=======
   После шага 1 дождитесь приглашения `ydb@...$`.
->>>>>>> ef92ba5423f ([Backport MAIN] PR #41066 [YDBDOCS-2112] Нужно пофиксить документацию по результатам https://github.com/ydb-platform/ydb/issues/39503 (#41287))
 
   На шаге 4 дождитесь вывода `ydbd` в этом же терминале. В команде ниже замените `<ydb-static-node1>`, `<ydb-static-node2>`, `<ydb-static-node3>` на FQDN трёх любых серверов со статическими узлами.
 

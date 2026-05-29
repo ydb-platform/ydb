@@ -3849,7 +3849,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     BLOG_D("Handle TEvShrinkStoragePool");
     const auto& record = ev->Get()->Record;
     auto& pool = GetStoragePool(record.GetStoragePool());
-    if (pool.ConsoleVersion < record.GetVersion()) {
+    if (pool.ConsoleVersion <= record.GetVersion()) {
         pool.ConsoleVersion = record.GetVersion();
     } else {
         BLOG_W("Got outdated TEvShrinkStoragePool request");

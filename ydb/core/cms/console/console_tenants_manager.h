@@ -460,6 +460,7 @@ public:
             REMOVING_SUBDOMAIN,
             REMOVING_POOLS,
             CONFIGURING_SUBDOMAIN,
+            REMOVING_GROUPS,
         };
 
         enum EAction {
@@ -1017,6 +1018,7 @@ public:
             HFuncTraced(TEvTenantSlotBroker::TEvSlotStats, Handle);
             HFuncTraced(TEvTenantSlotBroker::TEvTenantState, Handle);
             HFuncTraced(TEvHive::TEvShrinkStoragePoolDone, Handle);
+            HFuncTraced(TEvPrivate::TEvGroupsDecommitted, Handle);
 
         default:
             Y_ABORT("TTenantsManager::StateWork unexpected event type: %" PRIx32 " event: %s",

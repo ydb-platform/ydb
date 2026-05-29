@@ -1189,7 +1189,6 @@ private:
     TActorId OwnerId;
     TTenantsManager::TTenant::TPtr Tenant;
     TTenantsManager::TStoragePool::TPtr Pool;
-    ui64 HiveId = 72057594037968897;
     TActorId HivePipe;
 
 public:
@@ -1223,7 +1222,7 @@ public:
         record.MutableSubDomain()->SetPathId(Tenant->DomainId.LocalPathId);
         record.SetStoragePool(Pool->Config.GetName());
         record.SetNewSize(Pool->Config.GetNumGroups());
-        record.SetVersion(Tenant->SubdomainVersion);
+        record.SetVersion(Tenant->Generation);
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
                     "Send TEvHive::TEvShrinkStoragePool: "
@@ -1279,7 +1278,7 @@ public:
     void OpenHivePipe(const TActorContext &ctx) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, AppData()->DomainsInfo->GetHive(), pipeConfig);
         HivePipe = ctx.Register(pipe);
     }
 
@@ -1323,6 +1322,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateWork);
         SendRequests(ctx);
+        CheckCompletion(ctx);
     }
 
     void SendRequests(const TActorContext &ctx) {
@@ -1367,6 +1367,10 @@ public:
                     break;
             }
         }
+        CheckCompletion(ctx);
+    }
+
+    void CheckCompletion(const TActorContext& ctx) {
         if (GroupsDone == Groups.size()) {
             ReplyAndDie(ctx);
         }
@@ -1707,7 +1711,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
 
 bool TTenantsManager::TTenant::IsConfiguringState(EState state)
 {
-    return state == CONFIGURING_SUBDOMAIN;
+    return state == CONFIGURING_SUBDOMAIN || state == REMOVING_GROUPS;
 }
 
 bool TTenantsManager::TTenant::IsCreatingState(EState state)
@@ -2259,9 +2263,7 @@ void TTenantsManager::OnTenantSlotBrokerPipeDestroyed(const TActorContext &ctx)
 
 void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorContext &ctx)
 {
-    BLOG_TRACE("AllocateTenantPools");
     if (!tenant->HasPoolsToCreate()) {
-        BLOG_TRACE("AllocateTenantPools - no pools to create");
         if (tenant->State == TTenant::CREATING_POOLS)
             TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::CREATING_SUBDOMAIN), ctx);
         return;
@@ -2273,7 +2275,6 @@ void TTenantsManager::AllocateTenantPools(TTenant::TPtr tenant, const TActorCont
         return;
 
     for (auto &pr : tenant->StoragePools) {
-        BLOG_TRACE("AllocateTenantPools: " << pr.first << " " << pr.second->State << " " << pr.second->AllocatedNumGroups << " " << pr.second->GetGroups() << " " << pr.second->Worker);
         if (pr.second->State != TStoragePool::ALLOCATED && !pr.second->Worker) {
             if (pr.second->AllocatedNumGroups > pr.second->GetGroups() || pr.second->State == TStoragePool::SHRINKING) {
                 pr.second->Worker = ctx.RegisterWithSameMailbox(new TInitiaiteShrinkPool(SelfId(), tenant, pr.second));
@@ -2393,6 +2394,8 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::CONFIGURING);
     else if (tenant->IsRunning())
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
+    else if (tenant->State == TTenant::REMOVING_GROUPS)
+        status.set_state(Ydb::Cms::GetDatabaseStatusResult::REMOVING_STORAGE_UNITS);
     else if (tenant->IsConfiguring())
         status.set_state(Ydb::Cms::GetDatabaseStatusResult::PENDING_RESOURCES);
     else if (tenant->IsCreating())
@@ -2533,7 +2536,8 @@ void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorCon
     } else if (tenant->State == TTenant::CREATING_SUBDOMAIN) {
         CreateTenantSubDomain(tenant, ctx);
     } else if (tenant->State == TTenant::CONFIGURING_SUBDOMAIN
-               || tenant->State == TTenant::RUNNING) {
+               || tenant->State == TTenant::RUNNING
+               || tenant->State == TTenant::REMOVING_GROUPS) {
         // Tenant created using older CMS version has no
         // subdomain key fields filled. Check if update is
         // required.
@@ -3110,7 +3114,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
     }
 
     while (!decommitRowset.EndOfSet()) {
-        // TODO: remove old entries
+        // TODO: remove old entries after some time
         DecommitedGroups.insert(decommitRowset.GetValue<Schema::DecommitedGroups::GroupId>());
         if (!decommitRowset.EndOfSet()) {
             return false;
@@ -3719,8 +3723,8 @@ void TTenantsManager::Handle(TEvPrivate::TEvPoolShrinking::TPtr &ev, const TActo
 {
     auto tenant = ev->Get()->Tenant;
     auto pool = ev->Get()->Pool;
-    pool->Worker = TActorId();
 
+    TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::REMOVING_GROUPS), ctx);
     TxProcessor->ProcessTx(CreateTxUpdatePoolState(tenant, pool, ev->Sender,
                                                    TStoragePool::SHRINKING),
                            ctx);
@@ -3944,6 +3948,9 @@ void TTenantsManager::Handle(TEvPrivate::TEvGroupsDecommitted::TPtr &ev, const T
     auto groups = std::move(ev->Get()->Groups);
 
     TxProcessor->ProcessTx(CreateDecommitGroups(tenant, pool, groups), ctx);
+    if (!tenant->HasPoolsToCreate()) {
+        TxProcessor->ProcessTx(CreateTxUpdateTenantState(tenant->Path, TTenant::RUNNING), ctx);
+    }
 }
 
 void TTenantsManager::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx)
@@ -4019,6 +4026,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
 
 void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const TActorContext &ctx)
 {
+    BLOG_TRACE("Handle TEvShrinkStoragePoolDone " << ev->Get()->Record.ShortDebugString());
     const auto &poolName = ev->Get()->Record.GetStoragePool();
     const auto split = SplitString(poolName, ":");
     Y_ABORT_UNLESS(split.size() == 2);

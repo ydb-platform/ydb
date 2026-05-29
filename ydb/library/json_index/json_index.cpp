@@ -89,17 +89,38 @@ bool IsPredicateType(EJsonPathItemType type) {
 }
 
 TStringBuf GetPathPrefix(TStringBuf pathToken) {
-    if (const auto pos = pathToken.find('\0'); pos != TStringBuf::npos) {
-        return pathToken.SubStr(0, pos);
+    size_t pos = 0;
+    while (pos < pathToken.size()) {
+        size_t encodedSize = 0;
+        size_t shift = 0;
+        while (pos < pathToken.size()) {
+            const ui8 byte = static_cast<ui8>(pathToken[pos++]);
+            if (byte == 0) {
+                return pathToken.SubStr(0, pos - 1);
+            }
+            encodedSize |= static_cast<size_t>(byte & 0x7F) << shift;
+            if ((byte & 0x80) == 0) {
+                break;
+            }
+            shift += 7;
+        }
+        if (encodedSize == 0 || encodedSize - 1 > pathToken.size() - pos) {
+            return pathToken;
+        }
+        pos += encodedSize - 1;
     }
     return pathToken;
 }
 
+bool HasLiteralSuffix(TStringBuf pathToken) {
+    return GetPathPrefix(pathToken).size() != pathToken.size();
+}
+
 bool IsPathPrefixAncestor(const TToken& ancestor, const TToken& descendant) {
-    const bool ancestorHasSuffix = ancestor.PathToken.find('\0') != TStringBuf::npos || !ancestor.ParamName.empty();
+    const bool ancestorHasSuffix = HasLiteralSuffix(ancestor.PathToken) || !ancestor.ParamName.empty();
     const TStringBuf ancestorPath = GetPathPrefix(ancestor.PathToken);
     const TStringBuf descendantPath = GetPathPrefix(descendant.PathToken);
-    return !ancestorHasSuffix && !descendantPath.empty() && descendantPath.StartsWith(ancestorPath);
+    return !ancestorHasSuffix && (!descendantPath.empty() || ancestorPath.empty()) && descendantPath.StartsWith(ancestorPath);
 }
 
 // Remove redundant tokens based on prefix (ancestor/descendant) relationships

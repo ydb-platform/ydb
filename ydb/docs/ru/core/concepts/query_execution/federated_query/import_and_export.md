@@ -39,7 +39,7 @@ SELECT * FROM postgresql_datasource.source_table
 - [MySQL](experimental_external_connectors/mysql.md#query)
 - [PostgreSQL](experimental_external_connectors/postgresql.md#query)
 - [S3](s3/external_table.md)
-- [{{ ydb-short-name }}](ydb.md#query)
+- [{{ ydb-short-name }}](experimental_external_connectors/ydb.md#query)
 
 ## Экспорт данных {#export}
 

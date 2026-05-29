@@ -44,7 +44,7 @@ SELECT * FROM ydb_datasource.`<table_name>`
 где:
 
 - `ydb_datasource` - идентификатор внешнего источника данных;
-- `<table_name>` - полное имя таблицы внутри [иерархии](../../architecture.md#ydb-hierarchy) каталогов в базе данных {{ ydb-short-name }}, например, `table`, `dir1/table1` или `dir1/dir2/table3`.
+- `<table_name>` - полное имя таблицы внутри [иерархии](../../../architecture.md#ydb-hierarchy) каталогов в базе данных {{ ydb-short-name }}, например, `table`, `dir1/table1` или `dir1/dir2/table3`.
 
 В случае, если таблица находится на верхнем уровне иерархии (не принадлежит ни одному из каталогов), допускается не заключать имя таблицы в обратные апострофы "\`":
 

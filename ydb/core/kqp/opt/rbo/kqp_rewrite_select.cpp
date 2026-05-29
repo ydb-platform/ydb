@@ -970,9 +970,10 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, const TString& resultC
             colName = TInfoUnit(member.Name().StringValue());
         }
 
-        const auto distinctAggTraits = BuildAggregationTraits(colName.GetFullName(), "distinct", colName.GetFullName(), ctx, pos);
+        const auto fullColName = colName.GetFullName();
+        const auto distinctAggTraits = BuildAggregationTraits(fullColName, "distinct", fullColName, ctx, pos);
         distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
-        distinctAggregationTraitsPostAggregate.KeyColumns.push_back(colName);
+        distinctAggregationTraitsPostAggregate.KeyColumns.push_back(fullColName);
     }
 }
 
@@ -1031,11 +1032,19 @@ void ProcessAggregationsInResultItems(TExprNode::TPtr result, const TStructExprT
 
     // Distinct post aggregate for group by keys.
     if (distinctAll) {
+        // distinct f(a), b group by b => f(a) as f, b group by b -> select f, b group by f, b.
+        THashSet<TString> distinctSet;
+        for (const auto& key: distinctAggregationTraitsPostAggregate.KeyColumns) {
+            distinctSet.insert(key.GetFullName());
+        }
+
         for (const auto& key : aggTraits.KeyColumns) {
             const auto colName = key.GetFullName();
-            const auto distinctAggTraits = BuildAggregationTraits(colName, "distinct", colName, ctx, pos);
-            distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
-            distinctAggregationTraitsPostAggregate.KeyColumns.push_back(colName);
+            if (!distinctSet.contains(colName)) {
+                const auto distinctAggTraits = BuildAggregationTraits(colName, "distinct", colName, ctx, pos);
+                distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
+                distinctAggregationTraitsPostAggregate.KeyColumns.push_back(colName);
+            }
         }
     }
 }

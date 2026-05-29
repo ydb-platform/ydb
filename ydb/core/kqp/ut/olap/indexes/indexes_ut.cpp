@@ -230,36 +230,70 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        auto skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+        struct TQueryResult {
+            ui64 CountResult;
+            bool MinMaxIndexUsed;
+        };
 
+        auto runQuery = [&](TString text) -> TQueryResult {
+            ui64 skippedAndApprovedBeforeQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+            auto ysonArrayWithOneInteger = runDMLQuery(text);
+            ui64 skippedAndApprovedAfterQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+            
+            return TQueryResult {
+                .CountResult = NYT::NodeFromYsonString(ysonArrayWithOneInteger).AsList()[0].AsList()[0].AsUint64(),
+                .MinMaxIndexUsed = skippedAndApprovedBeforeQuery < skippedAndApprovedAfterQuery
+            };
+        };
 
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resLess = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` < "Value_500000";
-        )"), "[[944450u]]");
-        Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
-
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resLess.CountResult, 944450, "incorrect result for query with '<' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resLess.MinMaxIndexUsed, "query with '<' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resGreater = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
-        )"), "[[555549u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resGreater.CountResult, 555549, "incorrect result for query with '>' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resGreater.MinMaxIndexUsed, "query with '>' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resLessOrEqual = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` <= "Value_500000";
-        )"), "[[944451u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resLessOrEqual.CountResult, 944451, "incorrect result for query with '<=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resLessOrEqual.MinMaxIndexUsed, "query with '<=' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resGreaterOrEqual = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000";
-        )"), "[[555550u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resGreaterOrEqual.CountResult, 555550, "incorrect result for query with '>=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resGreaterOrEqual.MinMaxIndexUsed, "query with '>=' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        TQueryResult resBetween = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` BETWEEN "Value_500000" AND "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resBetween.CountResult, 2, "incorrect result for query with 'BETWEEN' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resBetween.MinMaxIndexUsed, "query with 'BETWEEN' filter over min_max-indexed column doesn't use min_max index");
+
+        TQueryResult resAnd = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" AND `value` <= "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resAnd.CountResult, 2, "incorrect result for query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resAnd.MinMaxIndexUsed, "query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resOr = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" OR `value` <= "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resOr.CountResult, 1500000, "incorrect result for query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resOr.MinMaxIndexUsed, "query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resNeq = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` != "Value_500000";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resNeq.CountResult, 1499999, "incorrect result for query with '!=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resNeq.MinMaxIndexUsed, "query with '!=' filter over min_max-indexed column use min_max index, but it shouldn't");
+        
     }
 
     Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {

@@ -70,9 +70,6 @@ static void AssertColumnAndIndexEntityIdsDisjoint(
         UNIT_ASSERT_C(!columnIds.contains(indexId),
             contextLabel << ": index '" << index.GetName() << "' id " << indexId
                          << " overlaps with a column id (max column id is " << maxColumnId << ")");
-        UNIT_ASSERT_C(indexId > maxColumnId,
-            contextLabel << ": index '" << index.GetName() << "' id " << indexId
-                         << " must be greater than max column id " << maxColumnId);
     }
 }
 
@@ -82,6 +79,17 @@ static void AssertTableEntityIdsDisjoint(TKikimrRunner& kikimr, const TString& t
     UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), contextLabel);
     AssertColumnAndIndexEntityIdsDisjoint(
         desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema(), contextLabel);
+}
+
+static ui32 GetColumnIdByName(const NKikimrSchemeOp::TColumnTableSchema& schema, const TString& name)
+{
+    for (const auto& column : schema.GetColumns()) {
+        if (column.GetName() == name) {
+            UNIT_ASSERT(column.HasId());
+            return column.GetId();
+        }
+    }
+    ythrow yexception() << "column not found: " << name;
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
@@ -604,6 +612,48 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
 
         AssertTableEntityIdsDisjoint(kikimr, tablePath, "after ALTER TABLE ADD INDEX on table created with indexes");
+    }
+
+    Y_UNIT_TEST(ColumnAndIndexEntityIdsDoNotOverlapOnAlterAddColumnAfterCreateWithManyIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalMinMaxIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString tablePath = "/Root/olapTableEntityIdDisjointAddColumn";
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableEntityIdDisjointAddColumn`
+            (
+                timestamp Timestamp NOT NULL,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (uid) WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter ON (uid)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01),
+                INDEX idx_minmax LOCAL USING min_max ON (uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertTableEntityIdsDisjoint(kikimr, tablePath, "after CREATE TABLE with three indexes on two columns");
+
+        ExecQuery(kikimr, UseQueryService,
+            "ALTER TABLE `/Root/olapTableEntityIdDisjointAddColumn` ADD COLUMN extra Utf8;");
+
+        auto desc = kikimr.GetTestClient().Ls(tablePath);
+        const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+        AssertColumnAndIndexEntityIdsDisjoint(schema, "after ALTER TABLE ADD COLUMN");
+        const ui32 extraColumnId = GetColumnIdByName(schema, "extra");
+        ui32 maxIndexId = 0;
+        for (const auto& index : schema.GetIndexes()) {
+            maxIndexId = Max(maxIndexId, index.GetId());
+        }
+        UNIT_ASSERT_C(extraColumnId > maxIndexId,
+            "new column id " << extraColumnId << " must be greater than max index id " << maxIndexId);
     }
 
     Y_UNIT_TEST(LocalMinMaxIndexCannotBeUsedInTableView, EUseQueryService) {

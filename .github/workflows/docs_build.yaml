@@ -13,6 +13,7 @@ on:
 
 jobs:
   add-label:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,7 +31,13 @@ jobs:
             })
             
   build-docs:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.state == 'open'
+    needs: add-label
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' || 
+       (github.event_name == 'pull_request_target' && 
+        github.event.pull_request.state == 'open' &&
+        needs.add-label.result == 'success'))
     concurrency:
       group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
@@ -39,10 +46,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pull_number || github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+
+      - name: Get commit SHA for manual run
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "CHECKOUT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
-          revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
+          revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ github.event_name == 'workflow_dispatch' && env.CHECKOUT_SHA || github.event.pull_request.head.sha }}"
           src-root: "./ydb/docs"
           cli-version: stable

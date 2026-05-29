@@ -68,10 +68,6 @@ ui64 TPartitionBlobEncoder::GetBodySizeBefore(TInstant expirationTimestamp) cons
 }
 
 bool TPartitionBlobEncoder::IsGreaterThanKey(const TKey& key, ui64 offset, ui32 partNo) const {
-    if (key.HasOffsetDelta()) {
-        return offset < key.GetOffset() || (offset >= key.GetOffset() && offset < key.GetOffset() + *key.GetOffsetDelta() && partNo < key.GetPartNo());
-    }
-
     return offset < key.GetOffset() || (offset == key.GetOffset() && partNo < key.GetPartNo());
 }
 

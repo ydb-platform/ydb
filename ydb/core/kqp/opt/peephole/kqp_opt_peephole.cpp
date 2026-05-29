@@ -303,31 +303,29 @@ private:
 
 // Validate that infinite sources handled only by supported functions
 bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<bool>& visitedNodes, bool& hasErrors, TExprContext& ctx) {
-    const auto [it, inserted] = visitedNodes.emplace(node.Get(), false);
-    if (!inserted || hasErrors) {
+    if (const auto [it, inserted] = visitedNodes.emplace(node.Get(), false); !inserted || hasErrors) {
         return it->second;
     }
 
-    const bool isStreaming = node->GetConstraint<TStreamingConstraintNode>();
-    it->second = isStreaming;
+    bool isStreaming = node->GetConstraint<TStreamingConstraintNode>();
 
     // Validate that all sub-nodes are not streaming
     for (const auto& child : node->Children()) {
         if (ValidateStreamingConstraintsInternal(child, visitedNodes, hasErrors, ctx)) {
-            it->second = true;
+            isStreaming = true;
         }
         if (hasErrors) {
             break;
         }
     }
 
-    if (node->IsCallable() && !isStreaming && it->second && !hasErrors) {
+    if (node->IsCallable() && !node->GetConstraint<TStreamingConstraintNode>() && isStreaming && !hasErrors) {
         hasErrors = true;
         YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing: '" << node->Content() << "'"));
     }
 
-    return it->second;
+    return visitedNodes[node.Get()] = isStreaming;
 }
 
 bool ValidateStreamingConstraints(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, TExprContext& ctx) {

@@ -149,7 +149,7 @@ public:
         }, Hndl(&ConstraintDqJoin));
         AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&ConstraintDqJoin));
         AddHandler({TDqPhyBlockHashJoin::CallableName()}, Hndl(&ConstraintDqBlockHashJoin));
-        AddHandler({"BlockHashJoinCore"}, Hndl(&ConstraintDqBlockHashJoinCore));
+        AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&ConstraintDqBlockHashJoinCore));
         AddHandler({
             TDqPrecompute::CallableName(),
             TDqPhyPrecompute::CallableName(),
@@ -388,14 +388,12 @@ TStatus ConstraintDqJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (lStreaming || rStreaming) {
-            if (joinType.IsAtom("Full") || joinType.IsAtom("Exclusion")) {
-                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), TStringBuilder() << "Streaming inputs are not supported for DqJoin " << joinType.Content()));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+        if (joinType.IsAtom("Full") || joinType.IsAtom("Exclusion")) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), TStringBuilder() << "Streaming inputs are not supported for DqJoin " << joinType.Content()));
+            return IGraphTransformer::TStatus::Error;
         }
+
+        input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
     }
 
     return TStatus::Ok;

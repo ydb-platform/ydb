@@ -2128,24 +2128,29 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
     PQ_ENSURE(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
 
-    ui64 bytesQuotaUsage = 0;
-    ui64 messagesQuotaUsage = 0;
+    ui64 bytesThrottledMicroseconds = 0;
+    ui64 messagesThrottledMicroseconds = 0;
     bool hasWriteQuotaUsage = false;
 
     if (TotalPartitionWriteSpeed) {
-        bytesQuotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE, bytesQuotaUsage);
+        const ui64 avgQuotaBytes = AvgQuotaBytes[1].GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE,
+            avgQuotaBytes * 100 / TotalPartitionWriteSpeed / 60);
+        bytesThrottledMicroseconds = avgQuotaBytes * 1000000 / TotalPartitionWriteSpeed / 60;
         hasWriteQuotaUsage = true;
     }
 
     if (TotalPartitionWriteSpeedInMessages) {
-        messagesQuotaUsage = ui64(AvgQuotaMessages.GetValue()) * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, messagesQuotaUsage);
+        const ui64 avgQuotaMessages = AvgQuotaMessages.GetValue();
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE,
+            avgQuotaMessages * 100 / TotalPartitionWriteSpeedInMessages / 60);
+        messagesThrottledMicroseconds = avgQuotaMessages * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
         hasWriteQuotaUsage = true;
     }
 
     if (hasWriteQuotaUsage) {
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, Max(bytesQuotaUsage, messagesQuotaUsage));
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE,
+            Max(bytesThrottledMicroseconds, messagesThrottledMicroseconds));
     }
 
     ui64 storageSize = StorageSize(ctx);

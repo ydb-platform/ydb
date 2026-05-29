@@ -428,6 +428,7 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCreateCheckpo
             return;
         }
         auto& checkpoint = it->second;
+        Metrics.AllCheckpointsSizeBytes->Set(ev->Get()->AllCheckpointsSizeBytes);
 
         InjectCheckpoint(checkpointId, checkpoint.GetType());
     }

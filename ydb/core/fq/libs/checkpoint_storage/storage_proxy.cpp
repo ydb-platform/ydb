@@ -62,6 +62,7 @@ using TStorageProxyMetricsPtr = TIntrusivePtr<TStorageProxyMetrics>;
 struct TRequestContext : public TThrRefBase {
     TInstant StartTime = TInstant::Now();
     const TStorageProxyMetricsPtr Metrics;
+    ui64 AllCheckpointsSizeBytes = 0;
     
     TRequestContext(const TStorageProxyMetricsPtr& metrics)
         : Metrics(metrics) {
@@ -303,14 +304,15 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
                (const NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult>& resultFuture) {
             auto [totalGraphCheckpointsSize, issues] = resultFuture.GetValue();
 
-            if (!issues && totalGraphCheckpointsSize > totalGraphCheckpointsSizeLimit) {
-                TStringStream ss;
-                ss << "Graph checkpoints size limit exceeded: limit " << totalGraphCheckpointsSizeLimit << ", current checkpoints size: " << totalGraphCheckpointsSize;
-                issues.AddIssue(std::move(ss.Str()));
-            }
             if (issues) {
                 context->IncError();
                 return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
+            }
+            context->AllCheckpointsSizeBytes = totalGraphCheckpointsSize;
+            if (totalGraphCheckpointsSize > totalGraphCheckpointsSizeLimit) {
+                TStringStream ss;
+                ss << "Graph checkpoints size limit exceeded: limit " << totalGraphCheckpointsSizeLimit << ", current checkpoints size: " << totalGraphCheckpointsSize;
+                issues.AddIssue(std::move(ss.Str()));
             }
             if (std::holds_alternative<TString>(graphDesc)) {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<TString>(graphDesc), ECheckpointStatus::Pending);
@@ -326,7 +328,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
                 context]
                (const NThreading::TFuture<ICheckpointStorage::TCreateCheckpointResult>& resultFuture) {
             auto [graphDescId, issues] = resultFuture.GetValue();
-            auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(checkpointId, std::move(issues), std::move(graphDescId));
+            auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(checkpointId, std::move(issues), std::move(graphDescId), context->AllCheckpointsSizeBytes);
             if (response->Issues) {
                 context->IncError();
                 LOG_STREAMS_STORAGE_SERVICE_AS_WARN(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Failed to create checkpoint: " << response->Issues.ToString());
@@ -605,7 +607,7 @@ void TStorageProxy::HandleDelayedRequestError(THolder<IEventHandle>& ev, NYql::T
         case TEvCheckpointStorage::TEvCreateCheckpointRequest::EventType: {
             LOG_STREAMS_STORAGE_SERVICE_WARN("Send TEvCreateCheckpointResponse with issues: " << issues.ToOneLineString());
             auto event = IEventHandle::Release<TEvCheckpointStorage::TEvCreateCheckpointRequest>(ev);
-            auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(event->CheckpointId, std::move(issues), TString());
+            auto response = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointResponse>(event->CheckpointId, std::move(issues), TString(), 0);
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             break;
         }

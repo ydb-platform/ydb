@@ -10,6 +10,7 @@ namespace NFq {
 struct TPendingCheckpointStats {
     const TInstant CreatedAt = TInstant::Now();
     ui64 StateSize = 0;
+    ui64 AllCheckpointsSize = 0;
     bool Aborted = false;
 };
 

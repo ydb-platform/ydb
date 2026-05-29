@@ -13,6 +13,7 @@
 
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/scope.h>
@@ -3456,7 +3457,7 @@ TNodePtr TSqlTranslation::TypeNodeOrBind(const TRule_type_name_or_bind& node) {
 TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
     // type_name:
     //     type_name_composite
-    //   | (type_name_decimal | type_name_simple) QUESTION*;
+    //   | (type_name_decimal | type_name_simple | type_name_null) QUESTION*;
     if (node.Alt_case() == TRule_type_name::kAltTypeName1) {
         return TypeNode(node.GetAlt_type_name1().GetRule_type_name_composite1());
     }
@@ -3475,6 +3476,10 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
         case TRule_type_name::TAlt2::TBlock1::kAlt2: {
             auto& simpleType = block.GetAlt2().GetRule_type_name_simple1();
             result = TypeSimple(simpleType, false);
+            break;
+        }
+        case TRule_type_name::TAlt2::TBlock1::kAlt3: {
+            result = new TCallNodeImpl(pos, "NullType", {});
             break;
         }
         case TRule_type_name::TAlt2::TBlock1::ALT_NOT_SET:
@@ -5379,12 +5384,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 TNodePtr TSqlTranslation::IfStatement(const TRule_if_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
 
-    if (!isEvaluate &&
-        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            GetPos(stmt.GetToken2()),
-            "IF without EVALUATE",
-            GetMaxLangVersion()))
-    {
+    if (!isEvaluate && !Ctx_.EnsureAvailable(GetPos(stmt.GetToken2()), NYql::NFeature::IfWithoutEvaluate)) {
         return {};
     }
 
@@ -5414,21 +5414,11 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     bool isEvaluate = stmt.HasBlock1();
     bool isParallel = stmt.HasBlock2();
 
-    if (isParallel &&
-        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            GetPos(stmt.GetBlock2().GetToken1()),
-            "PARALLEL FOR",
-            GetMaxLangVersion()))
-    {
+    if (isParallel && !Ctx_.EnsureAvailable(GetPos(stmt.GetBlock2().GetToken1()), NYql::NFeature::ParallelFor)) {
         return {};
     }
 
-    if (!isEvaluate &&
-        !Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            GetPos(stmt.GetToken3()),
-            "FOR without EVALUATE",
-            GetMaxLangVersion()))
-    {
+    if (!isEvaluate && !Ctx_.EnsureAvailable(GetPos(stmt.GetToken3()), NYql::NFeature::ForWithoutEvaluate)) {
         return {};
     }
 
@@ -6468,7 +6458,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
 
     EYqlSelect mode = prevMode;
 
-    if (position && Ctx_.IsBackwardCompatibleFeatureAvailable(YqlSelectLangVersion())) {
+    if (position && Ctx_.IsAvailable(NYql::NFeature::YqlSelect)) {
         if (const auto hint = Ctx_.PullHintForToken(*position, "yqlselect")) {
             if (auto result = ParseYqlSelectHint(*hint)) {
                 mode = *result;
@@ -6488,9 +6478,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
-    if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-            Ctx_.Pos(), "YqlSelect", YqlSelectLangVersion()))
-    {
+    if (!Ctx_.EnsureAvailable(Ctx_.Pos(), NYql::NFeature::YqlSelect)) {
         return nullptr;
     }
 

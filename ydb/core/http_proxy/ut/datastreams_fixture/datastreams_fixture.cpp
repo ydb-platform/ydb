@@ -920,7 +920,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     as->RegisterLocalService(MakeHttpProxyID(), actorId);
 
     GRpcServer = MakeHolder<NYdbGrpc::TGRpcServer>(opts);
-    GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, credentialsProvider, Counters));
+    GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, Counters));
 
     GRpcServer->Start();
 

@@ -926,6 +926,7 @@ Y_UNIT_TEST(TypeName) {
         {.Kind = TypeName, .Content = "Flow<>", .CursorShift = 1},
         {.Kind = TypeName, .Content = "Linear<>", .CursorShift = 1},
         {.Kind = TypeName, .Content = "List<>", .CursorShift = 1},
+        {.Kind = TypeName, .Content = "Null"},
         {.Kind = TypeName, .Content = "Optional<>", .CursorShift = 1},
         {.Kind = TypeName, .Content = "Resource<>", .CursorShift = 1},
         {.Kind = TypeName, .Content = "Set<>", .CursorShift = 1},
@@ -942,6 +943,24 @@ Y_UNIT_TEST(TypeName) {
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT CAST (1 AS "), expected);
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<"), expected);
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<#>"), expected);
+}
+
+Y_UNIT_TEST(NullAsTypeName) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TVector<TCandidate> expected = {
+            {.Kind = TypeName, .Content = "Null"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT CAST(x AS Nul#)"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT List<Nul#>"), expected);
+    }
+    {
+        TVector<TCandidate> expected = {
+            {.Kind = Keyword, .Content = "NULL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Nul#"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM a WHERE Nul#"), expected);
+    }
 }
 
 Y_UNIT_TEST(TypeNameAsArgument) {

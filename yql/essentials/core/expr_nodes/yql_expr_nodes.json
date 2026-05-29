@@ -2788,6 +2788,11 @@
                 {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
                 {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TCoTableSource",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "TableSource"}
         }
     ]
 }

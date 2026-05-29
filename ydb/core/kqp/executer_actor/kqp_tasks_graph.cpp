@@ -482,23 +482,6 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 }
 
 void AppendMKQLValueToToken(TString& token, NKikimr::NMiniKQL::TType* type, NUdf::TUnboxedValue value) {
-    while (true) {
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-            if (!value) {
-                NJsonIndex::AppendJsonIndexLiteral(token, NBinaryJson::EEntryType::Null);
-                return;
-            }
-            type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType();
-            value = value.GetOptionalValue();
-            continue;
-        }
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tagged) {
-            type = static_cast<NKikimr::NMiniKQL::TTaggedType*>(type)->GetBaseType();
-            continue;
-        }
-        break;
-    }
-
     if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::Data) {
         LOG_W("Cannot append parameter value to token, unexpected type: " << static_cast<int>(type->GetKind()));
         return;
@@ -628,35 +611,36 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(const NKqpProto::TKqpFullText
     }
 
     auto [type, value] = *paramPtr;
-    while (true) {
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-            if (!value) {
-                return {baseToken};
-            }
-            type = static_cast<NKikimr::NMiniKQL::TOptionalType*>(type)->GetItemType();
-            value = value.GetOptionalValue();
-            continue;
-        }
-        if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tagged) {
-            type = static_cast<NKikimr::NMiniKQL::TTaggedType*>(type)->GetBaseType();
-            continue;
-        }
-        break;
-    }
-
-    if (type->GetKind() != NKikimr::NMiniKQL::TType::EKind::List) {
-        return {ResolveFullTextQueryToken(token, stageInfo)};
-    }
-
     TVector<TString> result;
 
-    NUdf::TUnboxedValue item;
-    auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
-    auto iter = value.GetListIterator();
-    while (iter.Next(item)) {
-        TString currentToken = baseToken;
-        AppendMKQLValueToToken(currentToken, itemType, std::move(item));
-        result.emplace_back(std::move(currentToken));
+    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
+        NUdf::TUnboxedValue item;
+        auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
+        auto iter = value.GetListIterator();
+        while (iter.Next(item)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, itemType, std::move(item));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple) {
+        auto* tupleType = static_cast<NKikimr::NMiniKQL::TTupleType*>(type);
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, tupleType->GetElementType(i), value.GetElement(i));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Dict) {
+        auto* dictType = static_cast<NKikimr::NMiniKQL::TDictType*>(type);
+        auto* keyType = dictType->GetKeyType();
+        NUdf::TUnboxedValue key;
+        auto iter = value.GetKeysIterator();
+        while (iter.Next(key)) {
+            TString currentToken = baseToken;
+            AppendMKQLValueToToken(currentToken, keyType, std::move(key));
+            result.emplace_back(std::move(currentToken));
+        }
+    } else {
+        return {ResolveFullTextQueryToken(token, stageInfo)};
     }
 
     return result.empty() ? TVector<TString>{baseToken} : result;

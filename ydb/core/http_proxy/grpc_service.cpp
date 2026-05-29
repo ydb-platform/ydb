@@ -122,10 +122,9 @@ private:
     TString RequestId;
 };
 
-TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
                                  TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
     : ActorSystem_(system)
-    , CredentialsProvider_(credentialsProvider)
     , Counters_(counters)
 {
 

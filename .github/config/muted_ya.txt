@@ -1,3 +1,4 @@
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_PDiskFallback
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
@@ -15,16 +16,15 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3o
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/client/ut TFlatTest.SplitEmptyToMany
 ydb/core/client/ut unittest.[*/*] chunk
+ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
+ydb/core/mind/hive/ut THiveTestWithTenants.TestSetDown
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.BasicWriteReadDirectPBufferFilling
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.RandomWritesDirectPBufferFilling
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.RandomWritesPBufferReplication
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldRestorePartitionAfterRestart
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadBlocksInDifferentRegionsDirectPBufferFilling
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadFromHandoffPersistentBuffers
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadMultipleBlocksDirectPBufferFilling
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
@@ -37,7 +37,7 @@ ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
 ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
-ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
@@ -66,7 +66,6 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_deduplication[T
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks[True-1-no_shared-kikimr0]
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_dynamic_node_start_with_seed_nodes
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
@@ -79,8 +78,10 @@ ydb/tests/functional/secrets test_secrets.py.test_drop_without_grants
 ydb/tests/functional/secrets test_secrets_usage.py.test_create_eds_with_single_secret_with_fail
 ydb/tests/functional/split_merge/by_load test_split_merge_by_load.py.test_split_merge_by_load[tenant_db-follower]
 ydb/tests/functional/split_merge/by_load test_split_merge_by_load.py.test_split_merge_by_load[tenant_db-leader]
-ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_solomon
+ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

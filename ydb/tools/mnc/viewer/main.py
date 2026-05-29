@@ -19,6 +19,7 @@ from ydb.tools.mnc.lib import agent_client
 from ydb.tools.mnc.viewer.commands import TabCommands, ViewerCommands
 from ydb.tools.mnc.viewer.widgets import (
     AgentHostStatus,
+    AgentsPane,
     AgentsState,
     ClusterConfigPane,
     ConfigCandidate,
@@ -26,6 +27,7 @@ from ydb.tools.mnc.viewer.widgets import (
     InvalidPathModal,
     MncConfigForm,
     OverviewPane,
+    OverviewAgentsCard,
     OverviewStatusCard,
     PathPickerScreen,
     ViewerState,
@@ -36,6 +38,7 @@ MNC_CONFIG_PATH = os.path.join(os.environ.get("HOME", "/"), ".mnc", "mnc.yaml")
 DEFAULT_GIT_YDB_ROOT = os.path.join(os.environ.get("HOME", "/"), "ydbwork", "ydb")
 DEFAULT_EDITOR = "vi"
 
+
 class Viewer(App):
     COMMANDS = App.COMMANDS | {ViewerCommands}
 
@@ -45,21 +48,23 @@ class Viewer(App):
         Binding("t", "open_tab_picker", "Tabs", priority=True),
         Binding("ctrl+w", "close_tab", "Close tab", priority=True),
     ]
-    
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._created_tabs: set[str] = set()
-        self._available_tab_order = ["general", "mnc-config", "cluster-config"]
+        self._available_tab_order = ["general", "mnc-config", "cluster-config", "agents"]
         self._opened_tab_order = ["general"]
         self._tab_titles = {
             "general": "Overview",
             "mnc-config": "MNC Config",
             "cluster-config": "Cluster Config",
+            "agents": "Agents",
         }
         self._tab_descriptions = {
             "general": "Overview viewer and cluster state",
             "mnc-config": "Read and edit MNC Config",
             "cluster-config": "Select and inspect cluster config",
+            "agents": "Inspect agents on selected cluster hosts",
         }
         self._editing_config_field: Optional[ConfigFieldItem] = None
         self._mnc_config = self._load_mnc_config()
@@ -168,7 +173,12 @@ class Viewer(App):
         try:
             self.query_one(OverviewPane).refresh_state()
         except NoMatches:
-            return
+            pass
+
+        try:
+            self.query_one(AgentsPane).refresh_state()
+        except NoMatches:
+            pass
 
     def _refresh_mnc_config_status(self) -> None:
         self._state.mnc_config_ok = self._mnc_config_ok()
@@ -297,7 +307,7 @@ class Viewer(App):
         self._bump_navigation_generation()
         tabs.active = next_tab
         self._focus_active_tab_content(next_tab)
-        
+
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
         if self._editing_config_field is not None:
             return False
@@ -306,7 +316,7 @@ class Viewer(App):
             tabs = self.query_one("#tabs", TabbedContent)
             return tabs.active in self._created_tabs
         return True
-    
+
     def on_tabbed_content_tab_activated(
         self,
         event: TabbedContent.TabActivated,
@@ -336,19 +346,27 @@ class Viewer(App):
     async def _open_tab(self, tab_id: str, title: str, content: Widget) -> None:
         tabs = self.query_one("#tabs", TabbedContent)
         if tab_id in self._opened_tab_order:
-            self._bump_navigation_generation()
+            generation = self._bump_navigation_generation()
             tabs.active = tab_id
             self._focus_active_tab_content(tab_id)
+            self._keep_active_tab(tab_id, generation)
             return
 
-        self._bump_navigation_generation()
+        generation = self._bump_navigation_generation()
         self._created_tabs.add(tab_id)
         self._opened_tab_order.append(tab_id)
 
         await tabs.add_pane(TabPane(title, content, id=tab_id))
         self._disable_tab_header_focus()
         tabs.active = tab_id
+        self._focus_active_tab_content(tab_id)
+        self._keep_active_tab(tab_id, generation)
         self.refresh_bindings()
+
+    def _keep_active_tab(self, tab_id: str, generation: int) -> None:
+        self._restore_active_tab(tab_id, generation)
+        self.call_later(self._restore_active_tab, tab_id, generation)
+        self.set_timer(0.01, lambda: self._restore_active_tab(tab_id, generation))
 
     async def action_open_mnc_config(self) -> None:
         await self._open_tab(
@@ -370,8 +388,15 @@ class Viewer(App):
             ),
         )
 
+    async def action_open_agents(self) -> None:
+        await self._open_tab(
+            "agents",
+            self._tab_titles["agents"],
+            AgentsPane(self._state),
+        )
+
     async def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if isinstance(event.item, OverviewStatusCard):
+        if isinstance(event.item, (OverviewStatusCard, OverviewAgentsCard)):
             if event.item.action is not None:
                 await self.run_action(event.item.action)
         elif isinstance(event.item, ConfigFieldItem):
@@ -472,7 +497,7 @@ class Viewer(App):
         if result.returncode != 0:
             return f"Editor exited with status {result.returncode}"
         return None
-        
+
     async def action_close_tab(self) -> None:
         tabs = self.query_one("#tabs", TabbedContent)
         if tabs.active in self._created_tabs:

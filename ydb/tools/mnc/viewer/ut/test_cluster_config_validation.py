@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from textual.widgets import ListView
+from textual.widgets import ListView, TabbedContent
 
 from ydb.tools.mnc.viewer.main import Viewer
 from ydb.tools.mnc.viewer.widgets import (
@@ -39,6 +39,39 @@ class ClusterConfigValidationTest(unittest.TestCase):
 
 
 class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
+    async def test_general_keeps_single_highlighted_card(self):
+        app = Viewer()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            status_row = app.query_one("#overview-status-row", ListView)
+            agents_list = app.query_one("#overview-agents-list", ListView)
+            self.assertEqual(status_row.index, 0)
+            self.assertIsNone(agents_list.index)
+
+            await pilot.press("down")
+            self.assertIsNone(status_row.index)
+            self.assertEqual(agents_list.index, 0)
+            self.assertIs(app.screen.focused, agents_list)
+
+            await pilot.press("up")
+            self.assertEqual(status_row.index, 0)
+            self.assertIsNone(agents_list.index)
+
+    async def test_selecting_agents_overview_card_opens_agents_tab(self):
+        app = Viewer()
+
+        async with app.run_test() as pilot:
+            await pilot.click("#overview-agents-title", offset=(1, 0))
+            await self._wait_for_active_tab(app, pilot, "agents")
+
+            tabs = app.query_one("#tabs", TabbedContent)
+            self.assertEqual(tabs.active, "agents")
+            self.assertIn("agents", app._opened_tab_order)
+            for _ in range(3):
+                await pilot.pause()
+                self.assertEqual(tabs.active, "agents")
+
     async def test_selecting_cluster_config_updates_general_status(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = os.path.join(tmp_dir, "cluster.yaml")
@@ -203,3 +236,10 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
                 return
             await pilot.pause()
         self.fail(f"agents status did not become {status}: {app._state.agents.status}")
+
+    async def _wait_for_active_tab(self, app, pilot, tab_id):
+        for _ in range(10):
+            if app.query_one("#tabs", TabbedContent).active == tab_id:
+                return
+            await pilot.pause()
+        self.fail(f"active tab did not become {tab_id}")

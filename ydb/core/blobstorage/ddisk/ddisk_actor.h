@@ -30,6 +30,8 @@
 #include <atomic>
 #include <queue>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimrBlobStorage::NDDisk::NInternal {
     class TChunkMapLogRecord;
     class TPersistentBufferChunkMapLogRecord;
@@ -660,6 +662,7 @@ namespace NKikimr::NDDisk {
 
         ui64 NextSyncId = 1;
         THashMap<ui64, TSyncInFlight> SyncsInFlight; // syncId -> TSyncInFlight
+        THashSet<ui64> SyncReadCookiesInFlight;
         TSegmentManager SegmentManager;
 
         void Handle(TEvSyncWithPersistentBuffer::TPtr ev);

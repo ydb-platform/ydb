@@ -1,4 +1,4 @@
-#include "kqp_json_index_corpus.h"
+#include "kqp_indexes_json_corpus.h"
 
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>

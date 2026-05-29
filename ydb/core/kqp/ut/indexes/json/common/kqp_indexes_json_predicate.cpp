@@ -1,4 +1,4 @@
-#include "kqp_json_index_predicate.h"
+#include "kqp_indexes_json_predicate.h"
 
 #include <fmt/format.h>
 #include <util/random/mersenne.h>

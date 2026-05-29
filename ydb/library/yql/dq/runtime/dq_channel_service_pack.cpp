@@ -54,7 +54,7 @@ public:
 
     void Flush(bool finished) override {
         if (Packer.PackedSizeEstimate() > 0) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), finished));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, finished));
         } else if (finished) {
             Buffer->SendFinish();
         }
@@ -63,19 +63,19 @@ public:
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         Flush(false);
-        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
+        Buffer->Push(TDataChunk(std::move(checkpoint)));
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
         Flush(false);
-        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
+        Buffer->Push(TDataChunk(std::move(watermark)));
     }
-    
+
     void Push(NUdf::TUnboxedValue&& value) override {
         Packer.AddItem(value);
         Rows++;
         if (Packer.PackedSizeEstimate() > MaxChunkBytes) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), false));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, false));
             Rows = 0;
         }
     }
@@ -103,7 +103,7 @@ public:
 
     void Flush(bool finished) override {
         if (Packer.PackedSizeEstimate() > 0) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), finished));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, finished));
         } else if (finished) {
             Buffer->SendFinish();
         }
@@ -116,12 +116,12 @@ public:
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         Flush(false);
-        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
+        Buffer->Push(TDataChunk(std::move(checkpoint)));
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
         Flush(false);
-        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
+        Buffer->Push(TDataChunk(std::move(watermark)));
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
@@ -131,7 +131,7 @@ public:
             values[i] = {};
         }
         if (Packer.PackedSizeEstimate() > MaxChunkBytes) {
-            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, Buffer->GetLeading(), false));
+            Buffer->Push(TDataChunk(Packer.Finish(), Rows, TransportVersion, PackerVersion, false));
             Rows = 0;
         }
     }
@@ -163,11 +163,11 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
+        Buffer->Push(TDataChunk(std::move(checkpoint)));
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
+        Buffer->Push(TDataChunk(std::move(watermark)));
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
@@ -176,7 +176,7 @@ public:
         for (ui32 i = 0; i < width; ++i) {
             values[i] = {};
         }
-        Buffer->Push(TDataChunk(Packer.Finish(), rows, TransportVersion, PackerVersion, Buffer->GetLeading(), false));
+        Buffer->Push(TDataChunk(Packer.Finish(), rows, TransportVersion, PackerVersion, false));
     }
 };
 

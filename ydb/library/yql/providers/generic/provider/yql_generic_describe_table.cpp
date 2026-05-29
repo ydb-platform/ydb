@@ -99,7 +99,6 @@ void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescri
     }
 
     // 2. Client provided service account creds that must be converted into IAM-token
-    Y_ENSURE(State_->CredentialsFactory, "CredentialsFactory is not initialized");
     auto structuredTokenJSON = TStructuredTokenBuilder()
                                    .SetServiceAccountIdAuth(clusterConfig.GetServiceAccountId(),
                                                             clusterConfig.GetServiceAccountIdSignature())

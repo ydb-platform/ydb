@@ -354,7 +354,7 @@ protected:
                         // Save maxId to resume delta stream from the middle
                         maxId = Delta.GetMaxId();
                     }
-                    UploadSegment();
+                    UploadSegment(false);
                 } else {
                     break;
                 }
@@ -362,14 +362,14 @@ protected:
         }
     }
 
-    void UploadSegment()
+    void UploadSegment(bool isLast)
     {
         auto buf = Delta.GetBuf();
         if (buf.size()) {
             auto maxId = Delta.GetMaxId();
             TVector<TCell> uploadKey = {
                 TCell(LastToken),
-                TCell::Make(maxId),
+                TCell::Make(isLast ? UINT64_MAX : maxId),
                 TCell::Make(UINT64_MAX),
             };
             TVector<TCell> uploadValue = {
@@ -383,7 +383,7 @@ protected:
 
     void FinishToken(bool last)
     {
-        UploadSegment();
+        UploadSegment(true);
         if (last && SkipLastToken) {
             return;
         }

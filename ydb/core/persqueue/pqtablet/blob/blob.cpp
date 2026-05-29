@@ -15,6 +15,7 @@ namespace {
 struct TSharedPackedDataStats {
     ui32 LiveBatchCount = 0;
     ui64 LivePayloadSize = 0;
+    bool ShouldMaterialize = false;
 };
 
 bool ShouldMaterializeSharedData(const TPackedBatchDataOwner& owner, const TSharedPackedDataStats& stats)
@@ -23,10 +24,14 @@ bool ShouldMaterializeSharedData(const TPackedBatchDataOwner& owner, const TShar
         return false;
     }
 
+    // A materialized batch gets its own small heap allocation. The estimate is
+    // deliberately conservative: it accounts for allocator rounding plus local
+    // buffer metadata without depending on a particular allocator size class.
     static constexpr ui64 PerOwnedBatchOverheadEstimate = 256;
+    static constexpr ui32 MinDroppedBatchRatio = 2;
     const ui64 materializedBytesEstimate = stats.LivePayloadSize + stats.LiveBatchCount * PerOwnedBatchOverheadEstimate;
 
-    return stats.LiveBatchCount * 2 <= owner.InitialBatchCount
+    return stats.LiveBatchCount * MinDroppedBatchRatio <= owner.InitialBatchCount
         && owner.Data.size() > materializedBytesEstimate;
 }
 
@@ -412,13 +417,18 @@ void THead::MaterializeRetainedSharedData() {
         }
     }
 
-    for (const auto& [owner, stats] : owners) {
-        if (!ShouldMaterializeSharedData(*owner, stats)) {
+    for (auto& [owner, stats] : owners) {
+        stats.ShouldMaterialize = ShouldMaterializeSharedData(*owner, stats);
+    }
+
+    for (auto& batch : Batches) {
+        if (!batch.Packed) {
             continue;
         }
 
-        for (auto& batch : Batches) {
-            if (batch.Packed && batch.PackedData.SharedOwner() == owner) {
+        if (const auto* owner = batch.PackedData.SharedOwner()) {
+            const auto it = owners.find(owner);
+            if (it != owners.end() && it->second.ShouldMaterialize) {
                 batch.PackedData.Materialize();
             }
         }

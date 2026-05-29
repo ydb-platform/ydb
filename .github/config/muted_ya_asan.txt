@@ -1,5 +1,6 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_PDiskFallback
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
 ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotLogUnknownSync
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_16Segments
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_1Segment
@@ -67,6 +68,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.DifferentContentTypes
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.DoubleCreateStream
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ErroneousRequestGetRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestCreateStream
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecordsCbor
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecordsLongStreamName
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestPutRecords
@@ -83,6 +85,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumer
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestRequestBadJson
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestRequestNoAuthorization
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestRequestWithIAM
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestUnauthorizedPutRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestWrongRequest
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestWrongStream
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestWrongStream2
@@ -97,6 +100,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithAllAttr
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithAllAttributes_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithBadQueueName_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithEmptyName
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithSameNameAndSameParams
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithTags
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithWrongAttribute
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithWrongBody
@@ -139,8 +143,10 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueExistin
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueExistingTopicWithSharedConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueExistingTopicWithStreamingConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueFifo
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithBadQueueName
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithSameNameAndSameParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithSecurityToken
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteMessageIdempotence
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueue
@@ -154,6 +160,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesFifoWithConsumersRetentionExtended
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesFifoWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStd0Consumers
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq0Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq3Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdWithConsumersRetentionExtended
@@ -188,6 +195,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesMultiple
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesNonExistentQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRedrivePolicy
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesRetentionPeriod
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestDeleteQueue
@@ -236,6 +244,7 @@ ydb/core/kqp/ut/olap/types KqpOlapJson.BloomCategoryIndexesVariants[false,true,1
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertReturning-UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpReturning.ReturningColumnsOrder+EnableIndexStreamWrite
 ydb/core/kqp/ut/pg KqpPg.TempTablesDrop
+ydb/core/kqp/ut/pg KqpPg.TempTablesWithCache
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.UnionAll
@@ -354,6 +363,7 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPDLQMoverTests.MoveToDLQ_TopicNo
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPExternalCommitTest.OffsetsCommitViaExplicitCommitRequest
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPExternalCommitTest.OffsetsCommitViaExplicitCommitRequestStreamingConsumer
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
+ydb/core/persqueue/public/describer/ut TDescriberTests.CDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
@@ -384,6 +394,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.Simple_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_Topic_offset+middle_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_LB_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk WithSDK.ReadWithBadConsumer
+ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
@@ -480,12 +491,14 @@ ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
+ydb/core/viewer/tests test.py.TestViewer.test_transfer_describe
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_nodes_deleted_tablets
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/ut Viewer.PutRecordViewer
 ydb/core/viewer/ut Viewer.QueryExecuteScript
 ydb/core/ymq/actor/cloud_events/cloud_events_ut unittest.sole chunk
+ydb/core/ymq/actor/yc_search_ut TIndexProcesorTests.TestSingleCreateQueueEvent
 ydb/library/actors/core/ut TWriteJsonLogTest.MemLogAdapter
 ydb/library/actors/core/ut TWriteJsonLogTest.WriteComponent
 ydb/library/actors/core/ut TWriteJsonLogTest.WriteJson

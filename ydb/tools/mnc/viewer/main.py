@@ -899,7 +899,12 @@ class Viewer(App):
         self.call_after_refresh(self._focus_mnc_config_fields)
 
     def _focus_mnc_config_fields(self) -> None:
-        self.query_one("#mnc-config-fields", ListView).focus()
+        try:
+            self.query_one(MncConfigForm).focus_config_fields()
+        except NoMatches:
+            fields = self.query_one("#mnc-config-fields", ListView)
+            fields.index = 0
+            fields.focus()
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         deploy_flag_option = mnc_deploy_flag_option_from_checkbox_id(event.checkbox.id)

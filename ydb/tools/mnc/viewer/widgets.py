@@ -41,6 +41,11 @@ MNC_DEPLOY_FLAG_OPTIONS = (
     MncDeployFlagOption("transit-binary", "Transit binary through first node", "transit_bin_through_first_node"),
     MncDeployFlagOption("secure-mode", "Secure mode", "secure"),
 )
+MNC_DEPLOY_FLAG_OPTION_ROWS = (
+    MNC_DEPLOY_FLAG_OPTIONS[:2],
+    MNC_DEPLOY_FLAG_OPTIONS[2:4],
+    MNC_DEPLOY_FLAG_OPTIONS[4:],
+)
 
 
 def mnc_deploy_flag_checkbox_id(option_id: str) -> str:
@@ -598,23 +603,61 @@ class ConfigFieldItem(ListItem):
         self.input.disabled = True
 
 
+class MncConfigFieldsList(ListView, can_focus=True, can_focus_children=False, inherit_bindings=False):
+    BINDINGS = [
+        Binding("enter", "select_cursor", "Select", show=False),
+    ]
+
+    def key_down(self, event: Key) -> None:
+        form = self.parent
+        if hasattr(form, "focus_deploy_flag"):
+            form.focus_deploy_flag(0, 0)
+            event.stop()
+
+
+class MncDeployFlagCheckbox(Checkbox):
+    def _form(self):
+        parent = self.parent
+        while parent is not None:
+            if hasattr(parent, "move_deploy_flag_from"):
+                return parent
+            parent = parent.parent
+        return None
+
+    def _move(self, event: Key, row_delta: int = 0, col_delta: int = 0) -> None:
+        form = self._form()
+        if form is not None and form.move_deploy_flag_from(self.id, row_delta, col_delta):
+            event.stop()
+
+    def key_up(self, event: Key) -> None:
+        self._move(event, row_delta=-1)
+
+    def key_down(self, event: Key) -> None:
+        self._move(event, row_delta=1)
+
+    def key_left(self, event: Key) -> None:
+        self._move(event, col_delta=-1)
+
+    def key_right(self, event: Key) -> None:
+        self._move(event, col_delta=1)
+
+
 class MncConfigForm(Vertical):
     DEFAULT_CSS = """
     MncConfigForm {
         height: 1fr;
+        padding: 0 1 1 1;
     }
 
     #mnc-config-fields {
         height: auto;
-        background: $surface;
-    }
-
-    #mnc-config-fields:dark {
-        background: $panel-darken-1;
+        margin: 1 2 0 2;
+        background: transparent;
     }
 
     #mnc-config-fields > ConfigFieldItem {
-        height: 3;
+        height: 5;
+        background: transparent;
     }
 
     #mnc-config-fields > ConfigFieldItem.-highlight {
@@ -622,28 +665,44 @@ class MncConfigForm(Vertical):
         color: $block-cursor-blurred-foreground;
     }
 
-    #mnc-config-fields > ConfigFieldItem.-highlight .config-field-title,
-    #mnc-config-fields > ConfigFieldItem.-highlight .config-field-value {
-        background: $primary-background;
+    #mnc-config-fields > ConfigFieldItem.-highlight .config-field-row {
+        background: $surface;
+        border: tall blank;
+    }
+
+    #mnc-config-fields:focus > ConfigFieldItem.-highlight .config-field-row {
+        background: $block-cursor-blurred-background;
+        border: tall $primary;
     }
 
     #mnc-config-fields > ConfigFieldItem.-highlight .config-field-title,
     #mnc-config-fields > ConfigFieldItem.-highlight Input {
-        color: $block-cursor-blurred-foreground;
+        color: $text;
+    }
+
+    #mnc-config-fields:focus > ConfigFieldItem.-highlight .config-field-title,
+    #mnc-config-fields:focus > ConfigFieldItem.-highlight Input {
+        color: $block-cursor-foreground;
         text-style: bold;
     }
 
     .config-field-row {
-        height: 3;
+        height: 5;
         width: 100%;
+        padding: 0 2;
+        background: $surface;
+        border: tall blank;
+    }
+
+    .config-field-row:dark {
+        background: $panel-darken-1;
     }
 
     .config-field-title {
         width: 22;
         height: 3;
-        padding-left: 2;
         margin-right: 1;
-        background: $background;
+        background: transparent;
         content-align: left middle;
         text-style: bold;
     }
@@ -652,7 +711,7 @@ class MncConfigForm(Vertical):
         width: 1fr;
         height: 3;
         padding: 0 1;
-        background: $background;
+        background: transparent;
     }
 
     .config-field-row Input {
@@ -671,8 +730,8 @@ class MncConfigForm(Vertical):
 
     #mnc-deploy-flags {
         height: auto;
-        margin-top: 1;
-        padding: 1 2;
+        margin: 1 2 0 2;
+        padding: 0 2 1 2;
         background: $surface;
     }
 
@@ -687,13 +746,30 @@ class MncConfigForm(Vertical):
     }
 
     .config-checkbox {
-        height: auto;
+        height: 3;
         width: 1fr;
+        padding: 0 1;
         background: transparent;
+        color: $text;
+    }
+
+    .config-checkbox:focus {
+        background: $block-cursor-blurred-background;
+        color: $block-cursor-blurred-foreground;
+        text-style: bold;
+    }
+
+    .config-checkbox > .toggle--label {
+        color: $text;
+    }
+
+    .config-checkbox:focus > .toggle--label {
+        color: $block-cursor-blurred-foreground;
+        text-style: bold;
     }
 
     .config-checkbox-row {
-        height: auto;
+        height: 3;
         width: 100%;
         margin-bottom: 1;
     }
@@ -705,27 +781,23 @@ class MncConfigForm(Vertical):
         self._default_git_ydb_root = default_git_ydb_root
 
     def compose(self) -> ComposeResult:
-        yield ListView(
+        yield MncConfigFieldsList(
             ConfigFieldItem(
                 "git_ydb_root",
                 CONFIG_FIELD_TITLES["git_ydb_root"],
                 self._config.get("git_ydb_root", self._default_git_ydb_root),
                 path_picker=True,
             ),
+            initial_index=0,
             id="mnc-config-fields",
         )
         deploy_flags = set(self._config.get("deploy_flags") or [])
-        deploy_flag_rows = (
-            MNC_DEPLOY_FLAG_OPTIONS[:2],
-            MNC_DEPLOY_FLAG_OPTIONS[2:4],
-            MNC_DEPLOY_FLAG_OPTIONS[4:],
-        )
         yield Vertical(
             Label("Deploy flags", classes="config-group-title"),
             *(
                 Horizontal(
                     *(
-                        Checkbox(
+                        MncDeployFlagCheckbox(
                             option.title,
                             value=mnc_deploy_flag_option_value(option, deploy_flags),
                             id=mnc_deploy_flag_checkbox_id(option.option_id),
@@ -735,10 +807,48 @@ class MncConfigForm(Vertical):
                     ),
                     classes="config-checkbox-row",
                 )
-                for row in deploy_flag_rows
+                for row in MNC_DEPLOY_FLAG_OPTION_ROWS
             ),
             id="mnc-deploy-flags",
         )
+
+    def focus_config_fields(self) -> None:
+        fields = self.query_one("#mnc-config-fields", ListView)
+        fields.index = 0
+        fields.focus()
+
+    def focus_deploy_flag(self, row: int, column: int) -> None:
+        row = max(0, min(row, len(MNC_DEPLOY_FLAG_OPTION_ROWS) - 1))
+        column = max(0, min(column, len(MNC_DEPLOY_FLAG_OPTION_ROWS[row]) - 1))
+        option = MNC_DEPLOY_FLAG_OPTION_ROWS[row][column]
+        self.query_one("#" + mnc_deploy_flag_checkbox_id(option.option_id), Checkbox).focus()
+
+    def move_deploy_flag_from(self, checkbox_id: Optional[str], row_delta: int = 0, col_delta: int = 0) -> bool:
+        position = self._deploy_flag_position(checkbox_id)
+        if position is None:
+            return False
+
+        row, column = position
+        if row_delta < 0 and row == 0:
+            self.focus_config_fields()
+            return True
+        if row_delta > 0 and row == len(MNC_DEPLOY_FLAG_OPTION_ROWS) - 1:
+            return True
+
+        target_row = max(0, min(row + row_delta, len(MNC_DEPLOY_FLAG_OPTION_ROWS) - 1))
+        target_column = max(0, min(column + col_delta, len(MNC_DEPLOY_FLAG_OPTION_ROWS[target_row]) - 1))
+        self.focus_deploy_flag(target_row, target_column)
+        return True
+
+    def _deploy_flag_position(self, checkbox_id: Optional[str]) -> Optional[tuple[int, int]]:
+        option = mnc_deploy_flag_option_from_checkbox_id(checkbox_id)
+        if option is None:
+            return None
+        for row_index, row in enumerate(MNC_DEPLOY_FLAG_OPTION_ROWS):
+            for column_index, row_option in enumerate(row):
+                if row_option.option_id == option.option_id:
+                    return row_index, column_index
+        return None
 
 
 @dataclass

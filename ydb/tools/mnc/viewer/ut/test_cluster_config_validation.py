@@ -400,6 +400,38 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertIn("secure", app._mnc_config["deploy_flags"])
 
+    async def test_settings_arrow_navigation_moves_between_fields_and_deploy_flags(self):
+        app = Viewer()
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_mnc_config")
+            await pilot.pause()
+
+            fields = app.query_one("#mnc-config-fields", ListView)
+            self.assertIs(app.screen.focused, fields)
+            self.assertEqual(fields.index, 0)
+
+            await pilot.press("down")
+            self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-rebuild-binary", Checkbox))
+
+            await pilot.press("right")
+            self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-strip-binary", Checkbox))
+
+            await pilot.press("down")
+            self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-transit-binary", Checkbox))
+
+            await pilot.press("down")
+            self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-secure-mode", Checkbox))
+
+            await pilot.press("up")
+            self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-redeploy-binary", Checkbox))
+
+            await pilot.press("up")
+            self.assertIs(app.screen.focused, app.query_one("#mnc-deploy-flag-rebuild-binary", Checkbox))
+
+            await pilot.press("up")
+            self.assertIs(app.screen.focused, fields)
+
     async def test_operations_prepare_deploy_context_before_install(self):
         app = Viewer()
         app._mnc_config = {"git_ydb_root": "/repo", "deploy_flags": ["do_not_strip", "secure"]}

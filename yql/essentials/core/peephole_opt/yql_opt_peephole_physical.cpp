@@ -8859,6 +8859,25 @@ TExprNode::TPtr ExpandFulltextBuiltin(const TExprNode::TPtr& node, TExprContext&
         .Build();
 }
 
+TExprNode::TPtr ExpandHybridRankBuiltin(const TExprNode::TPtr& node, TExprContext& ctx) {
+    // Reaching peephole means the KQP optimizer did not rewrite HybridRank into the RRF merge stage.
+    // Fail with a clear error instead of silently returning a wrong (unranked) result.
+    TString error = "HybridRank could not be rewritten: it requires a fulltext index and a vector index "
+        "on the table (named via the Indexes argument) matching the FullTextScore and Knn distance columns";
+    auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
+        ctx.NewCallable(node->Pos(), "OptionalType", {
+            ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), "Double", TNodeFlags::Default) }) }) });
+
+    auto message = ctx.Builder(node->Pos()).Callable("String").Atom(0, error).Seal().Build();
+
+    return ctx.Builder(node->Pos())
+        .Callable("Unwrap")
+            .Add(0, nullNode)
+            .Add(1, message)
+        .Seal()
+        .Build();
+}
+
 template <bool Equals, bool IsDistinct>
 TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto lType = node->Head().GetTypeAnn();
@@ -9370,6 +9389,7 @@ struct TPeepHoleRules {
         {"ToFlow", &DropToFlowDeps},
         {"FulltextScore", &ExpandFulltextBuiltin<true>},
         {"FulltextMatch", &ExpandFulltextBuiltin<false>},
+        {"HybridRank", &ExpandHybridRankBuiltin},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},
         {"CheckedMul", &ExpandCheckedMul},

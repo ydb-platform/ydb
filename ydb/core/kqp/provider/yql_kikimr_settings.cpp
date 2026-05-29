@@ -143,6 +143,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+    REGISTER_SETTING(*this, HybridSearchFactor);
+    REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);
 
     REGISTER_SETTING(*this, DefaultTxMode).Parser(

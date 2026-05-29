@@ -2127,14 +2127,24 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
     PQ_ENSURE(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
 
+    ui64 bytesQuotaUsage = 0;
+    ui64 messagesQuotaUsage = 0;
+    bool hasWriteQuotaUsage = false;
+
     if (TotalPartitionWriteSpeed) {
-        ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, quotaUsage);
+        bytesQuotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES_USAGE, bytesQuotaUsage);
+        hasWriteQuotaUsage = true;
     }
 
     if (TotalPartitionWriteSpeedInMessages) {
-        ui64 quotaUsage = ui64(AvgQuotaMessages.GetValue()) * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
-        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, quotaUsage);
+        messagesQuotaUsage = ui64(AvgQuotaMessages.GetValue()) * 1000000 / TotalPartitionWriteSpeedInMessages / 60;
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES_USAGE, messagesQuotaUsage);
+        hasWriteQuotaUsage = true;
+    }
+
+    if (hasWriteQuotaUsage) {
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, Max(bytesQuotaUsage, messagesQuotaUsage));
     }
 
     ui64 storageSize = StorageSize(ctx);

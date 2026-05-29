@@ -45,8 +45,9 @@ from ydb.tools.mnc.viewer.widgets import (
     OverviewStatusCard,
     PathPickerScreen,
     ViewerState,
+    MNC_DEPLOY_FLAG_OPTIONS,
     mnc_deploy_flag_checkbox_id,
-    mnc_deploy_flag_from_checkbox_id,
+    mnc_deploy_flag_option_from_checkbox_id,
 )
 
 
@@ -901,27 +902,22 @@ class Viewer(App):
         self.query_one("#mnc-config-fields", ListView).focus()
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
-        deploy_flag = mnc_deploy_flag_from_checkbox_id(event.checkbox.id)
-        if deploy_flag is None:
+        deploy_flag_option = mnc_deploy_flag_option_from_checkbox_id(event.checkbox.id)
+        if deploy_flag_option is None:
             return
-        if event.value:
-            opposite_flag = scheme_common.opposite_deploy_flags.get(deploy_flag)
-            if opposite_flag is not None:
-                try:
-                    self.query_one("#" + mnc_deploy_flag_checkbox_id(opposite_flag), Checkbox).value = False
-                except NoMatches:
-                    pass
         self._save_mnc_deploy_flags()
 
     def _save_mnc_deploy_flags(self) -> None:
         deploy_flags = []
-        for flag in scheme_common.deploy_flags:
+        for option in MNC_DEPLOY_FLAG_OPTIONS:
             try:
-                checkbox = self.query_one("#" + mnc_deploy_flag_checkbox_id(flag), Checkbox)
+                checkbox = self.query_one("#" + mnc_deploy_flag_checkbox_id(option.option_id), Checkbox)
             except NoMatches:
                 continue
             if checkbox.value:
-                deploy_flags.append(flag)
+                deploy_flags.append(option.enabled_flag)
+            elif option.disabled_flag is not None:
+                deploy_flags.append(option.disabled_flag)
         self._mnc_config["deploy_flags"] = deploy_flags
         self._save_mnc_config()
 

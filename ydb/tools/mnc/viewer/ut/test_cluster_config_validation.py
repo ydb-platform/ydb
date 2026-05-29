@@ -5,6 +5,7 @@ from unittest import mock
 
 import rich.console
 from textual.command import CommandPalette
+from textual.css.query import NoMatches
 from textual.widgets import Button, Checkbox, Input, ListView, TabbedContent
 
 from ydb.tools.mnc.lib import agent_client, deploy_ctx, progress
@@ -374,20 +375,30 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_settings_save_deploy_flags_from_checkboxes(self):
         app = Viewer()
+        app._mnc_config = {"git_ydb_root": "/repo", "deploy_flags": []}
         app._save_mnc_config = lambda: None
 
         async with app.run_test() as pilot:
             await app.run_action("open_mnc_config")
             await pilot.pause()
 
-            app.query_one("#mnc-deploy-flag-do_not_strip", Checkbox).value = True
+            self.assertTrue(app.query_one("#mnc-deploy-flag-strip-binary", Checkbox).value)
+            with self.assertRaises(NoMatches):
+                app.query_one("#mnc-deploy-flag-do_not_strip", Checkbox)
+
+            app.query_one("#mnc-deploy-flag-strip-binary", Checkbox).value = False
             await pilot.pause()
             self.assertIn("do_not_strip", app._mnc_config["deploy_flags"])
+            self.assertNotIn("do_strip", app._mnc_config["deploy_flags"])
 
-            app.query_one("#mnc-deploy-flag-do_strip", Checkbox).value = True
+            app.query_one("#mnc-deploy-flag-strip-binary", Checkbox).value = True
             await pilot.pause()
             self.assertIn("do_strip", app._mnc_config["deploy_flags"])
             self.assertNotIn("do_not_strip", app._mnc_config["deploy_flags"])
+
+            app.query_one("#mnc-deploy-flag-secure-mode", Checkbox).value = True
+            await pilot.pause()
+            self.assertIn("secure", app._mnc_config["deploy_flags"])
 
     async def test_operations_prepare_deploy_context_before_install(self):
         app = Viewer()

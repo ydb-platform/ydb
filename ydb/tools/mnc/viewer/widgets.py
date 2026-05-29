@@ -25,14 +25,41 @@ CONFIG_FIELD_TITLES = {
 MNC_DEPLOY_FLAG_CHECKBOX_PREFIX = "mnc-deploy-flag-"
 
 
-def mnc_deploy_flag_checkbox_id(flag: str) -> str:
-    return MNC_DEPLOY_FLAG_CHECKBOX_PREFIX + flag
+@dataclass(frozen=True)
+class MncDeployFlagOption:
+    option_id: str
+    title: str
+    enabled_flag: str
+    disabled_flag: Optional[str] = None
+    default_enabled: bool = False
 
 
-def mnc_deploy_flag_from_checkbox_id(checkbox_id: Optional[str]) -> Optional[str]:
+MNC_DEPLOY_FLAG_OPTIONS = (
+    MncDeployFlagOption("rebuild-binary", "Rebuild binary", "do_rebuild", "do_not_rebuild", True),
+    MncDeployFlagOption("strip-binary", "Strip binary", "do_strip", "do_not_strip", True),
+    MncDeployFlagOption("redeploy-binary", "Redeploy binary", "do_redeploy_bin", "do_not_redeploy_bin", True),
+    MncDeployFlagOption("transit-binary", "Transit binary through first node", "transit_bin_through_first_node"),
+    MncDeployFlagOption("secure-mode", "Secure mode", "secure"),
+)
+
+
+def mnc_deploy_flag_checkbox_id(option_id: str) -> str:
+    return MNC_DEPLOY_FLAG_CHECKBOX_PREFIX + option_id
+
+
+def mnc_deploy_flag_option_from_checkbox_id(checkbox_id: Optional[str]) -> Optional[MncDeployFlagOption]:
     if checkbox_id is None or not checkbox_id.startswith(MNC_DEPLOY_FLAG_CHECKBOX_PREFIX):
         return None
-    return checkbox_id[len(MNC_DEPLOY_FLAG_CHECKBOX_PREFIX):]
+    option_id = checkbox_id[len(MNC_DEPLOY_FLAG_CHECKBOX_PREFIX):]
+    return next((option for option in MNC_DEPLOY_FLAG_OPTIONS if option.option_id == option_id), None)
+
+
+def mnc_deploy_flag_option_value(option: MncDeployFlagOption, deploy_flags: set[str]) -> bool:
+    if option.enabled_flag in deploy_flags:
+        return True
+    if option.disabled_flag is not None and option.disabled_flag in deploy_flags:
+        return False
+    return option.default_enabled
 
 
 def _status_class(status: str) -> str:
@@ -661,8 +688,14 @@ class MncConfigForm(Vertical):
 
     .config-checkbox {
         height: auto;
-        margin-bottom: 1;
+        width: 1fr;
         background: transparent;
+    }
+
+    .config-checkbox-row {
+        height: auto;
+        width: 100%;
+        margin-bottom: 1;
     }
     """
 
@@ -682,16 +715,27 @@ class MncConfigForm(Vertical):
             id="mnc-config-fields",
         )
         deploy_flags = set(self._config.get("deploy_flags") or [])
+        deploy_flag_rows = (
+            MNC_DEPLOY_FLAG_OPTIONS[:2],
+            MNC_DEPLOY_FLAG_OPTIONS[2:4],
+            MNC_DEPLOY_FLAG_OPTIONS[4:],
+        )
         yield Vertical(
             Label("Deploy flags", classes="config-group-title"),
             *(
-                Checkbox(
-                    flag,
-                    value=flag in deploy_flags,
-                    id=mnc_deploy_flag_checkbox_id(flag),
-                    classes="config-checkbox",
+                Horizontal(
+                    *(
+                        Checkbox(
+                            option.title,
+                            value=mnc_deploy_flag_option_value(option, deploy_flags),
+                            id=mnc_deploy_flag_checkbox_id(option.option_id),
+                            classes="config-checkbox",
+                        )
+                        for option in row
+                    ),
+                    classes="config-checkbox-row",
                 )
-                for flag in mnc_scheme.common.deploy_flags
+                for row in deploy_flag_rows
             ),
             id="mnc-deploy-flags",
         )

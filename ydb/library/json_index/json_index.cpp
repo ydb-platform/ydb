@@ -125,7 +125,7 @@ void PruneRedundantTokens(TTokens& tokens, TCollectResult::ETokensMode mode) {
     } else {
         // AND: keep maximal tokens (leaves). Token is redundant if a longer token that starts with it is already kept
         for (const auto& token : std::ranges::reverse_view(tokens)) {
-             if (token.ParamName.empty() && lastKept.has_value() && lastKept->PathToken.StartsWith(token.PathToken)) {
+            if (token.ParamName.empty() && lastKept.has_value() && lastKept->PathToken.StartsWith(token.PathToken)) {
                 continue;
             }
 

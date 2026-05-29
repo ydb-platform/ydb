@@ -534,8 +534,10 @@ public:
             return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
         }
 
-        bool AcceptsNewSlots() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
+        bool AcceptsNewSlots(bool allowInactive = false) const {
+            const bool allowByStatus = (Status == NKikimrBlobStorage::EDriveStatus::ACTIVE) ||
+                    (allowInactive && Status == NKikimrBlobStorage::EDriveStatus::INACTIVE);
+            return allowByStatus
                 && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED
                 && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS;
         }

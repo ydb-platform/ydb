@@ -1231,12 +1231,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
     }
 
-    Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoinShuffleMode, TStreamingTestFixture) {
+    Y_UNIT_TEST_TWIN_F(StreamingQueryWithStreamLookupJoinShuffleMode, WithFeatureFlag, TStreamingTestFixture) {
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
             setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
             setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinShuffleMode(WithFeatureFlag);
         }
 
         constexpr ui64 maxPartitions = 2;
@@ -1246,7 +1247,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             // TODO NYql::NDq::EShuffleMode::Hash,
         };
         ui64 maxTasks = 3;
-        ui64 combinations = maxPartitions*maxTasks*shuffleModes.size();
+        ui64 combinations = (WithFeatureFlag ? maxPartitions*maxTasks*shuffleModes.size() : 1);
         const auto connectorClient = SetupMockConnectorClient();
 
         constexpr char inputTopicName[] = "sljShuffleInputTopicName";
@@ -1277,8 +1278,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             SetupMockConnectorTableDescription(connectorClient, {
                 .TableName = ydbTable,
                 .Columns = columns,
-                .DescribeCount = 2*combinations,
-                .ListSplitsCount = (1 + 2*2)*combinations,
+                .DescribeCount = 2*(combinations + !WithFeatureFlag),
+                // 1 for table/topic discovery, 1 for LoadMeta
+                .ListSplitsCount = (1 + 2*2)*combinations + (!WithFeatureFlag),
+                // 1 for LoadMeta, (regular + fullscan) for each each of 2 lookups
+                // without feature flag, only one LoadMeta
                 .ValidateListSplitsArgs = false
             });
 
@@ -1312,6 +1316,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             AlterTopic(inputTopicName, NYdb::NTopic::TAlterTopicSettings{}.AlterPartitioningSettings(partitions, partitions));
             for (ui64 tasks = 1; tasks <= maxTasks; ++tasks) {
                 for (auto shuffleMode : shuffleModes) {
+                    bool expectedSuccess = WithFeatureFlag || shuffleMode == NYql::NDq::EShuffleMode::Off;
                     constexpr char queryName[] = "streamingQuery";
                     ExecQuery(fmt::format(R"(
                         CREATE STREAMING QUERY `{query_name}` AS
@@ -1348,7 +1353,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         "shuffle_mode"_a = ToString(shuffleMode),
                         "ttl"_a = (tasks > 1 && partitions > 1 && shuffleMode != NYql::NDq::EShuffleMode::Off ? TDuration::Minutes(10) : TDuration::Seconds(1)).Seconds(),
                         "tasks"_a = tasks
-                    ));
+                    ),
+                    expectedSuccess ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+                    expectedSuccess ? TStringBuilder() : TStringBuilder() << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << shuffleMode);
+                    if (!expectedSuccess) {
+                        return;
+                    }
                     // Different scenarious:
                     // Unshuffled: second portion must come after expiring TTL (otherwise it will reuse cache)
                     // Shuffled: second portion lands in different task, so two lookups performed anyway

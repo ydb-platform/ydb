@@ -316,4 +316,5 @@ message TFeatureFlags {
     optional bool EnableTopicMessagesBatching = 274 [default = false];
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
+    optional bool EnableDqSourceStreamLookupJoinShuffleMode = 277 [default = false];
 }

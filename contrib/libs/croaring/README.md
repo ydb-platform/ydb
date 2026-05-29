@@ -1,6 +1,6 @@
 # CRoaring
 
-[![Ubuntu-CI](https://github.com/RoaringBitmap/CRoaring/actions/workflows/ubuntu-noexcept-ci.yml/badge.svg)](https://github.com/RoaringBitmap/CRoaring/actions/workflows/ubuntu-noexcept-ci.yml) [![VS17-CI](https://github.com/RoaringBitmap/CRoaring/actions/workflows/vs17-ci.yml/badge.svg)](https://github.com/RoaringBitmap/CRoaring/actions/workflows/vs17-ci.yml)
+[![Ubuntu-CI](https://github.com/RoaringBitmap/CRoaring/actions/workflows/ubuntu-noexcept-ci.yml/badge.svg)](https://github.com/RoaringBitmap/CRoaring/actions/workflows/ubuntu-noexcept-ci.yml) [![VS18-CI](https://github.com/RoaringBitmap/CRoaring/actions/workflows/vs18-ci.yml/badge.svg)](https://github.com/RoaringBitmap/CRoaring/actions/workflows/vs18-ci.yml)
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/croaring.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:croaring)
 
 [![Doxygen Documentation](https://img.shields.io/badge/docs-doxygen-green.svg)](http://roaringbitmap.github.io/CRoaring/)
@@ -89,7 +89,7 @@ of the latest hardware. Roaring bitmaps are already available on a variety of pl
 
 - Linux, macOS, FreeBSD, Windows (MSYS2 and Microsoft Visual studio).
 - We test the library with ARM, x64/x86 and POWER processors. We only support little endian systems (big endian systems are vanishingly rare).
-- Recent C compiler supporting the C11 standard (GCC 7 or better, LLVM 8 or better (clang), Xcode 11 or better, Microsoft Visual Studio 2022 or better, Intel oneAPI Compiler 2023.2 or better), there is also an optional C++ class that requires a C++ compiler supporting the C++11 standard.
+- Recent C compiler supporting the C11 standard (GCC 7 or better, LLVM 8 or better (clang), Xcode 11 or better, Microsoft Visual Studio 2022 or better, Intel oneAPI Compiler 2023.2 or better), there is also an optional C++ class that requires a C++ compiler supporting the C++11 standard. We support [Fil-C, the memory-safe C/C++ compiler](https://fil-c.org).
 - CMake (to contribute to the project, users can rely on amalgamation/unity builds if they do not wish to use CMake).
 - The CMake system assumes that git is available.
 - Under x64 systems, the library provides runtime dispatch so that optimized functions are called based on the detected CPU features. It works with GCC, clang (version 9 and up) and Visual Studio (2017 and up). Other systems (e.g., ARM) do not need runtime dispatch.
@@ -506,6 +506,8 @@ cmake -B buildnoavx -D ROARING_DISABLE_AVX=ON -D ENABLE_ROARING_MICROBENCHMARKS=
 cmake --build buildnoavx
 ./buildnoavx/microbenchmarks/bench
 ```
+
+Please see `microbenchmarks/README.md` for more details.
 
 # Custom memory allocators
 For general users, CRoaring would apply default allocator without extra codes. But global memory hook is also provided for those who want a custom memory allocator. Here is an example:
@@ -1174,7 +1176,15 @@ https://groups.google.com/forum/#!forum/roaring-bitmaps
 
 # Contributing
 
-When contributing a change to the project, please run `tools/run-clangcldocker.sh` after making any changes. A github action runs on all PRs to ensure formatting is consistent with this.
+When contributing a change to the project, please run `tools/run-clangcldocker.sh` after making any changes if you have docker and bash. A github action runs on all PRs to ensure formatting is consistent with this.
+
+If you are using AI, please review our [AI usage policy](AI_USAGE_POLICY.md).
+
+For large PRs, prefer smaller incremental PRs or request staged review.
+
+Contributions are licensed under the project’s license. Ensure your work complies and does not infringe on third-party rights.
+
+A compiler or static-analyzer warning is not a bug. Do not report such cases as bugs. We do accept pull requests if you want to silence warnings issued by code analyzers, however.
 
 # Stars
 

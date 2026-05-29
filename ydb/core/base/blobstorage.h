@@ -980,6 +980,8 @@ struct TEvBlobStorage {
         EvInterpilePutResult,
         EvNodeWardenListLocalDDisks,
         EvNodeWardenListLocalDDisksResult,
+        EvNodeWardenAcquireBlobDepotS3Router,
+        EvNodeWardenReleaseBlobDepotS3Router,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

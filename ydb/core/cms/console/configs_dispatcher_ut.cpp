@@ -973,6 +973,441 @@ config:
         controlValue = icb.DataShardControls.EnableLockedWrites.AtomicLoad()->Get();
         UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
     }
+
+    // Tests for the "skip unchanged YAML" optimization
+    // (PR #41360: continue when !isYamlChanged && !yamlConfigTurnedOff && not-StateInit)
+
+    // Test 1: A YAML subscriber must NOT be notified when a non-YAML proto-config
+    // item changes and the YAML content itself is unchanged.
+    //
+    // Scenario: yaml_config_enabled is on; a LogConfig subscriber (yaml kind) drains
+    // its initial notification; then a NetClassifier proto-item is added (non-yaml kind,
+    // not subscribed by the yaml subscriber).  The TEvConfigSubscriptionNotification that
+    // arrives has isYamlChanged=false, so the new `continue` must fire and the yaml
+    // subscriber receives zero new notifications.
+    Y_UNIT_TEST(TestYamlSubscriberSkipsUnchangedYamlOnNonYamlEvent) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        // Install yaml config with yaml_config_enabled: true (LogConfig kind is yaml kind)
+        TString yamlConfig = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                if (ev->GetTypeRewrite() == TEvPrivate::EvGotNotification) {
+                    ++notifications;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        // Add a yaml subscriber (LogConfigItem is NOT in NON_YAML_KINDS -> Yaml=true)
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+
+        // Drain the initial notification that every new subscriber receives
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT(notifications >= 0); // initial notification counted
+
+        // Now start counting fresh
+        runtime.SetObserverFunc(observer);
+        notifications = 0;
+
+        // Trigger a proto-config change for a NON-yaml kind (NetClassifier) that the
+        // yaml subscriber does not subscribe to.  This produces a
+        // TEvConfigSubscriptionNotification with isYamlChanged=false.
+        ITEM_NET_CLASSIFIER_1.MutableConfig()->MutableNetClassifierDistributableConfig()->SetLastUpdateTimestamp(42);
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(ITEM_NET_CLASSIFIER_1));
+
+        // CheckConfigure synchronously drains through the dispatcher's Handle.
+        // The yaml subscriber must receive zero notifications: the optimization skipped it.
+        UNIT_ASSERT_VALUES_EQUAL_C(notifications, 0,
+            "yaml subscriber should not be notified when yaml content is unchanged");
+    }
+
+    // Test 2: A YAML subscriber MUST still be notified when the actual YAML body changes.
+    // Regression guard: the `continue` must NOT fire when isYamlChanged=true.
+    Y_UNIT_TEST(TestYamlSubscriberStillNotifiedOnActualYamlChange) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        TString yamlConfig1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                if (ev->GetTypeRewrite() == TEvPrivate::EvGotNotification) {
+                    ++notifications;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+
+        // Drain initial notification
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        runtime.SetObserverFunc(observer);
+        notifications = 0;
+
+        // Replace yaml with different cluster_name -> isYamlChanged=true
+        TString yamlConfig2 = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
+
+config:
+  log_config:
+    cluster_name: cluster2
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
+
+        // Subscriber must receive a notification with the updated log config
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_C(notifications > 0,
+            "yaml subscriber must be notified when yaml content actually changes");
+
+        // Only assert on ClusterName — DefaultLevel may be inherited from shared global
+        // state (ITEM_DOMAIN_LOG_1 is modified by other tests in the suite).
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Config.GetLogConfig().GetClusterName(), "cluster2",
+            "yaml subscriber must receive updated ClusterName from new yaml config");
+    }
+
+    // Test 3: A YAML subscriber MUST be notified when yaml_config_enabled is turned off
+    // (yamlConfigTurnedOff=true), even though the yaml text may not have changed otherwise.
+    // This verifies the `!yamlConfigTurnedOff` branch of the optimization guard.
+    Y_UNIT_TEST(TestYamlSubscriberNotifiedOnYamlTurnedOff) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        // Set up initial proto-config that will serve as fallback when yaml is disabled
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("proto_cluster");
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        TString yamlConfigOn = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: yaml_cluster
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfigOn);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                if (ev->GetTypeRewrite() == TEvPrivate::EvGotNotification) {
+                    ++notifications;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+
+        // Drain initial notification (subscriber sees yaml_cluster)
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT(reply->Config.GetLogConfig().GetClusterName() == "yaml_cluster");
+
+        runtime.SetObserverFunc(observer);
+        notifications = 0;
+
+        // Now turn off yaml_config_enabled: yamlConfigTurnedOff becomes true
+        TString yamlConfigOff = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
+
+config:
+  log_config:
+    cluster_name: yaml_cluster
+  yaml_config_enabled: false
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfigOff);
+
+        // Subscriber must be notified because yamlConfigTurnedOff=true bypasses the guard
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_C(notifications > 0,
+            "yaml subscriber must be notified when yaml_config_enabled is turned off");
+    }
+
+    // Test 4: A YAML subscriber must NOT receive a redundant notification when the
+    // same yaml content is replaced again (isYamlChanged=false because the yaml text
+    // is byte-identical).  This makes explicit the invariant already implicit in
+    // TestYamlEndToEnd (the double-replace at line 762).
+    Y_UNIT_TEST(TestYamlSubscriberNoRedundantNotificationOnIdenticalYamlReplace) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        // Use a fixed yaml string; re-applying the exact same bytes yields isYamlChanged=false
+        TString yamlConfig = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                if (ev->GetTypeRewrite() == TEvPrivate::EvGotNotification) {
+                    ++notifications;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+
+        // Drain the mandatory initial notification
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        runtime.SetObserverFunc(observer);
+        notifications = 0;
+
+        // Replace with the byte-identical yaml: dispatcher sees newYamlConfig == MainYamlConfig
+        // so isYamlChanged=false, and the new `continue` must fire.
+        // CheckReplaceConfig synchronously drives the dispatcher's Handle.
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(notifications, 0,
+            "yaml subscriber must not receive a redundant notification when yaml is byte-identical");
+    }
+
+    // Regression for the pending-update-loss corner case (raised by Copilot review on PR #41360):
+    // 1. yaml V1->V2, subscriber is held -> dispatcher sets UpdateInProcess and sends V2.
+    // 2. A non-yaml event arrives while the subscriber is still held. With the bare optimization
+    //    the loop at configs_dispatcher.cpp:1160-1163 clears UpdateInProcess, then `continue`
+    //    skips re-creating it, so the subscriber's eventual ACK is dropped (cookie/no-update path).
+    // 3. After unhold + ACK, subscription->CurrentConfig stays at V1 while the subscriber has V2.
+    // 4. A subsequent yaml V2->V3 whose filtered content equals V1 then makes CompareConfigs
+    //    return equal, so no notification is sent and the subscriber is stuck at V2.
+    //
+    // The fix is to defer clearing UpdateInProcess until after the skip decision: when we are
+    // going to `continue`, leave the in-flight update intact so the held ACK can complete.
+    Y_UNIT_TEST(TestYamlSubscriberPendingUpdateNotLostOnNonYamlEvent) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        TString yamlV1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlV1);
+
+        TActorId subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        // Drain initial notification at V1
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Config.GetLogConfig().GetClusterName(), "cluster1");
+
+        // Hold subscriber so its ACK to the next notification is deferred
+        HoldSubscriber(runtime, subscriber);
+
+        // yaml V1 -> V2: held subscriber receives the notification but cannot ACK yet
+        TString yamlV2 = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
+
+config:
+  log_config:
+    cluster_name: cluster2
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlV2);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Config.GetLogConfig().GetClusterName(), "cluster2");
+
+        // Non-yaml event while still held. Without the fix, this clears UpdateInProcess and
+        // the optimization's `continue` prevents re-creating it.
+        ITEM_NET_CLASSIFIER_1.MutableConfig()->MutableNetClassifierDistributableConfig()->SetLastUpdateTimestamp(99);
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS, MakeAddAction(ITEM_NET_CLASSIFIER_1));
+
+        // Unhold: subscriber drains its queued notification and sends the ACK for V2.
+        // The dequeue-replay also emits a duplicate EvGotNotification(cluster2) to the sink,
+        // so drain it explicitly before issuing the next yaml change.
+        UnholdSubscriber(runtime, subscriber);
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Config.GetLogConfig().GetClusterName(), "cluster2");
+
+        // yaml V2 -> V3 whose filtered LogConfig content equals V1 (cluster1).  With a correct
+        // CurrentConfig (=V2) the dispatcher must send V3 because V2 != V1.  With the bug,
+        // CurrentConfig is the stale V1, so CompareConfigs(V1, V3==V1) returns equal and the
+        // subscriber would silently stay at V2.
+        TString yamlV3 = R"(
+---
+metadata:
+  cluster: ""
+  version: 2
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlV3);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Config.GetLogConfig().GetClusterName(), "cluster1",
+            "yaml subscriber must converge to the latest yaml content even after a non-yaml event "
+            "interleaves with a held update");
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {

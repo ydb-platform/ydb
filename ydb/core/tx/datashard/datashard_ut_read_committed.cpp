@@ -259,6 +259,79 @@ Y_UNIT_TEST(BlockedWritesAndConflicts) {
         "ERROR: STATUS_LOCKS_BROKEN");
 }
 
+Y_UNIT_TEST(CommitAfterDeadlockResolution) {
+    // Test that when two transactions enter a deadlock, one of them is able to commit
+    // after deadlock resolution.
+
+    TTestEnv env;
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
+
+    ExecSQL(server, sender, R"(
+        UPSERT INTO `/Root/table` (key, value) VALUES (1, 100), (2, 200);
+    )");
+
+    TTransactionState tx1(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    TTransactionState tx2(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+
+    // tx1 locks key 1 and updates it.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.LockRows(tableId, shards.at(0), {1}),
+        "OK");
+    UNIT_ASSERT_VALUES_EQUAL(tx1.Locks.size(), 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 101)),
+        "OK");
+
+    // tx2 locks key 2 and updates it.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.LockRows(tableId, shards.at(0), {2}),
+        "OK");
+    UNIT_ASSERT_VALUES_EQUAL(tx2.Locks.size(), 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.Write(tableId, shards.at(0), TWriteOperation::Upsert(2, 202)),
+        "OK");
+
+    // tx1 tries locking key 2 and blocks.
+    auto tx1LockPromise = tx1.SendLockRows(tableId, shards.at(0), {2});
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1LockPromise.NextString(TDuration::Seconds(1)),
+        "<timeout>");
+
+    // tx2 tries locking key 1 and fails.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.LockRows(tableId, shards.at(0), {1}),
+        "ERROR: STATUS_DEADLOCK");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.Rollback(shards.at(0)),
+        "OK"
+    );
+
+    // tx1 unblocks
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1LockPromise.NextString(),
+        "OK");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.Write(tableId, shards.at(0), TWriteOperation::Upsert(2, 201)),
+        "OK");
+
+    // tx1 should be able to commit now.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.WriteCommit(tableId, shards.at(0)),
+        "OK");
+
+    // We should now observe the commit by tx1.
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/table` ORDER BY key;
+        )"),
+        "{ items { int32_value: 1 } items { int32_value: 101 } }, "
+        "{ items { int32_value: 2 } items { int32_value: 201 } }");
+}
+
 } // Y_UNIT_TEST_SUITE(DataShardReadCommitted)
 
 } // namespace NKikimr

@@ -12,6 +12,9 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
+#include <ydb/library/yql/dq/actors/dq.h>
+#include <util/random/random.h>
+
 using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
@@ -23,891 +26,281 @@ void Out<NYql::NDq::EDqFillLevel>(IOutputStream& os, const NYql::NDq::EDqFillLev
     os << static_cast<ui32>(l);
 }
 
-Y_UNIT_TEST_SUITE(Channels20) {
+struct TEvTestPrivate {
+    enum ERole {
+        Producer,
+        Consumer,
+    };
 
-    bool ReadBlocked(std::shared_ptr<IChannelBuffer>& buffer, TDataChunk& data, TDuration timeout = TDuration::Seconds(10)) {
-        auto deadline = TInstant::Now() + timeout;
-        while (true) {
-            if (buffer->Pop(data)) {
-                return true;
-            }
-            Sleep(TDuration::MilliSeconds(10));
-            if (TInstant::Now() > deadline) {
-                return false;
-            }
+    enum EEv {
+        EvStart = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvFinished,
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+    struct TEvStart : public NActors::TEventLocal<TEvStart, EvStart> {
+        TEvStart(NActors::TActorId peerId) : PeerId(peerId) {}
+        NActors::TActorId PeerId;
+    };
+
+    struct TEvFinished : public NActors::TEventLocal<TEvFinished, EvFinished> {
+        TEvFinished(ERole role, bool error) : Role(role), Error(error) {}
+        ERole Role;
+        bool Error;
+    };
+};
+
+struct TWorkerSettings {
+    int StartDelayMs = 10;
+    int MessageCount = 0;
+    int MinMessageSize = 10;
+    int MaxMessageSize = 10000;
+    bool EarlyFinish = false;
+};
+
+class TWorkerActor : public NActors::TActor<TWorkerActor> {
+public:
+    TWorkerActor(std::shared_ptr<IDqChannelService> service, TEvTestPrivate::ERole role, ui32 channelId, const TWorkerSettings& settings)
+        : TActor(&TThis::StateFunc)
+        , Service(service)
+        , Role(role)
+        , ChannelId(channelId)
+        , Settings(settings)
+    {}
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            hFunc(TEvTestPrivate::TEvStart, HandleStart);
+            hFunc(TEvDqCompute::TEvResumeExecution, HandleResume);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbort);
         }
     }
 
-    bool ReadAsyncNotified(NActors::TTestActorRuntime& runtime, NActors::TActorId receiver, std::shared_ptr<IChannelBuffer>& buffer, TDataChunk& data, TDuration timeout = TDuration::Seconds(10)) {
-        if (runtime.RunCall([&buffer, &data] { return buffer->Pop(data); })) {
-            return true;
+    void Run() {
+        if (!Started) {
+            switch (Role) {
+                case TEvTestPrivate::ERole::Producer: {
+                    TChannelFullInfo info(ChannelId, SelfId(), PeerId, 0, 1, TCollectStatsLevel::None);
+                    Buffer = Service->GetOutputBuffer(info, nullptr, nullptr);
+                    break;
+                }
+                case TEvTestPrivate::ERole::Consumer: {
+                    TChannelFullInfo info(ChannelId, PeerId, SelfId(), 0, 1, TCollectStatsLevel::None);
+                    Buffer = Service->GetInputBuffer(info, nullptr);
+                    break;
+                }
+            }
+            Started = true;
         }
 
-        auto resume = runtime.GrabEdgeEvent<TEvDqCompute::TEvResumeExecution>(receiver, timeout)->Release();
-
-        return resume && runtime.RunCall([&buffer, &data] { return buffer->Pop(data); });
-    }
-
-    Y_UNIT_TEST(LocalChannelBackPressure) {
-
-        TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetLocalChannelInflightBytes(512);
-        TKikimrRunner kikimr(settings);
-
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor();
-        auto receiver = runtime.AllocateEdgeActor();
-
-        runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId()), sender, new TEvPrivate::TEvServiceLookup());
-        auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-        auto service = serviceReply->Service;
-
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-        auto senderBuffer = service->GetLocalBuffer(info, nullptr, false, nullptr);
-        auto receiverBuffer = service->GetLocalBuffer(info, nullptr, true, nullptr);
-
-        auto aggregator = std::make_shared<TDqFillAggregator>();
-        senderBuffer->SetFillAggregator(aggregator);
-        UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::NoLimit);
-
-        UNIT_ASSERT(receiverBuffer->IsEmpty());
-
-        while (senderBuffer->GetFillLevel() == EDqFillLevel::NoLimit) {
-            runtime.RunCall([&senderBuffer] {
-                senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
-                return true;
-            });
-        }
-        UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::HardLimit);
-
-        ui64 totalCount = 0;
-        ui64 deltaCount = 0;
-
-        while (true) {
-            TDataChunk data;
-            if (!runtime.RunCall([&receiverBuffer, &data] { return receiverBuffer->Pop(data); })) {
+        switch (Role) {
+            case TEvTestPrivate::ERole::Producer: {
+                if (Buffer->IsFinished()) {
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                    Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, false));
+                    PassAway();
+                    return;
+                }
+                while (Buffer->GetFillLevel() == EDqFillLevel::NoLimit && MessageIndex <= Settings.MessageCount) {
+                    if (MessageIndex == Settings.MessageCount) {
+                        Buffer->SendFinish();
+                    } else {
+                        auto bytes = Settings.MinMessageSize + RandomNumber<ui64>(Settings.MaxMessageSize - Settings.MinMessageSize);
+                        Buffer->Push(TDataChunk(NYql::TChunkedBuffer(TString(bytes, 'a')), 1, false));
+                    }
+                    MessageIndex++;
+                }
                 break;
             }
-            totalCount++;
-            if (aggregator->GetFillLevel() == EDqFillLevel::HardLimit) {
-                deltaCount++;
+            case TEvTestPrivate::ERole::Consumer: {
+                TDataChunk data;
+                while (MessageIndex < Settings.MessageCount && Buffer->Pop(data)) {
+                    MessageIndex++;
+                }
+                if (Settings.EarlyFinish && MessageIndex == Settings.MessageCount) {
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "TEST EARLY FINISH SelfId=" << SelfId() << ", ChannelId=" << ChannelId);
+                    Buffer->EarlyFinish();
+                    MessageIndex++;
+                }
+                if (MessageIndex <= Settings.MessageCount && Buffer->Pop(data)) {
+                    MessageIndex++;
+                }
+                if (Buffer->IsFinished()) {
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, "TEST FINISHED SelfId=" << SelfId() << ", ChannelId=" << ChannelId
+                        << ", Role=" << (Role == TEvTestPrivate::ERole::Producer ? "Producer" : "Consumer"));
+                    Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, false));
+                    PassAway();
+                }
+                break;
             }
-            UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
         }
-        UNIT_ASSERT(receiverBuffer->IsEmpty());
-        // check for hysteresis
-        UNIT_ASSERT(deltaCount * 4 < totalCount);
-        UNIT_ASSERT(deltaCount * 6 > totalCount);
     }
-/*
-    Y_UNIT_TEST(LocalChannelConcurrency) {
-        constexpr ui32 MESSAGE_COUNT = 10;
+
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
+        Run();
+    }
+
+    void HandleResume(TEvDqCompute::TEvResumeExecution::TPtr&) {
+        Run();
+    }
+
+    void HandleStart(TEvTestPrivate::TEvStart::TPtr& ev) {
+        RunnerId = ev->Sender;
+        PeerId = ev->Get()->PeerId;
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
+            "TEST WORKER START SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", PeerId=" << PeerId << ", Role=" << (Role == TEvTestPrivate::ERole::Producer ? "Producer" : "Consumer")
+        );
+        if (Settings.StartDelayMs) {
+            Schedule(TDuration::MilliSeconds(RandomNumber<ui64>(Settings.StartDelayMs) + 1), new NActors::TEvents::TEvWakeup());
+        } else {
+            Run();
+        }
+    }
+
+    void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
+            "TEST WORKER ABORT SelfId=" << SelfId() << ", ChannelId=" << ChannelId << ", " << ev->Get()->GetIssues().ToOneLineString()
+        );
+        Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, true));
+        PassAway();
+    }
+
+    std::shared_ptr<IDqChannelService> Service;
+    std::shared_ptr<IChannelBuffer> Buffer;
+    TEvTestPrivate::ERole Role;
+    ui32 ChannelId;
+    NActors::TActorId PeerId;
+    NActors::TActorId RunnerId;
+    TWorkerSettings Settings;
+    int MessageIndex = 0;
+    bool Started = false;
+};
+
+Y_UNIT_TEST_SUITE(Channels20) {
+
+    void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings) {
 
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetLocalChannelInflightBytes(128);
+        settings.NodeCount = local ? 1 : 2;
+        settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_CHANNELS, NActors::NLog::EPriority::PRI_TRACE);
+        settings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
         TKikimrRunner kikimr(settings);
-
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
-        auto sender = runtime.AllocateEdgeActor();
-        auto receiver = runtime.AllocateEdgeActor();
-
-        runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId()), sender, new TEvPrivate::TEvServiceLookup());
-        auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-        auto service = serviceReply->Service;
-
-        TChannelInfo info(1, sender, receiver);
-        auto senderBuffer = service->GetLocalBuffer(info, false);
-        auto receiverBuffer = service->GetLocalBuffer(info, true);
-
-        TMuxEvent event;
-        ui32 receivedCount = 0;
-        ui32 outputBlockCount = 0;
-        ui32 inputBlockCount = 0;
-        NPar::LocalExecutor().RunAdditionalThreads(2);
-        NPar::LocalExecutor().Exec([&](int) mutable {
-            bool blocked = false;
-            for (ui32 i = 0; i < MESSAGE_COUNT; i++) {
-                // Sleep(TDuration::MicroSeconds(i / (MESSAGE_COUNT / 10)));
-                while (senderBuffer->GetFillLevel() == EDqFillLevel::HardLimit) {
-                    if (!blocked) {
-                        blocked = true;
-                        outputBlockCount++;
-                    }
-                    // Sleep(TDuration::MicroSeconds(i / (MESSAGE_COUNT / 100)));
-                }
-                blocked = false;
-                runtime.RunCall([&senderBuffer] {
-                    senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
-                    return true;
-                });
-            }
-            runtime.RunCall([&senderBuffer] {
-                senderBuffer->Push(TDataChunk(false, true));
-                return true;
-            });
-        }, 0, NPar::TLocalExecutor::MED_PRIORITY);
-        NPar::LocalExecutor().Exec([&](int) mutable {
-            bool blocked = false;
-            while (true) {
-                Sleep(TDuration::MicroSeconds(10 - receivedCount / (MESSAGE_COUNT / 10)));
-                if (receiverBuffer->IsEmpty()) {
-                    if (!blocked) {
-                        blocked = true;
-                        inputBlockCount++;
-                    }
-                    continue;
-                }
-                TDataChunk data;
-                UNIT_ASSERT(runtime.RunCall([&receiverBuffer, &data] { return receiverBuffer->Pop(data); } ));
-                if (data.Finished) {
-                    break;
-                }
-                receivedCount++;
-                blocked = false;
-                UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-            }
-            event.Signal();
-        }, 0, NPar::TLocalExecutor::MED_PRIORITY);
-        event.WaitI();
-        UNIT_ASSERT_VALUES_EQUAL(receivedCount, MESSAGE_COUNT);
-        Cerr << outputBlockCount << " / " << inputBlockCount << Endl;
-    }
-
-    Y_UNIT_TEST(LocalChannelEarlyFinish) {
-        constexpr ui32 MESSAGE_COUNT = 1000;
-
-        TKikimrRunner kikimr(TKikimrSettings{});
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor();
-        auto receiver = runtime.AllocateEdgeActor();
-
-        runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId()), sender, new TEvPrivate::TEvServiceLookup());
-        auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-        auto service = serviceReply->Service;
-
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-        auto senderBuffer = service->GetLocalBuffer(info, false, nullptr);
-        auto receiverBuffer = service->GetLocalBuffer(info, true, nullptr);
-
-        TMuxEvent eventR;
-        TMuxEvent eventS;
-        ui32 sentCount = 0;
-        ui32 receivedCount = 0;
-        NPar::LocalExecutor().RunAdditionalThreads(2);
-        NPar::LocalExecutor().Exec([&](int) mutable {
-            for (ui32 i = 0; i < MESSAGE_COUNT; i++) {
-                sentCount++;
-                runtime.RunCall([&senderBuffer] {
-                    senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
-                    return true;
-                });
-                Sleep(TDuration::MicroSeconds(1));
-                if (senderBuffer->IsEarlyFinished()) {
-                    break;
-                }
-            }
-            eventS.Signal();
-        }, 0, NPar::TLocalExecutor::MED_PRIORITY);
-        NPar::LocalExecutor().Exec([&](int) mutable {
-            while (true) {
-                if (receiverBuffer->IsEmpty()) {
-                    Sleep(TDuration::MicroSeconds(10));
-                    continue;
-                }
-                TDataChunk data;
-                UNIT_ASSERT(runtime.RunCall([&receiverBuffer, &data] { return receiverBuffer->Pop(data); }));
-                if (data.Finished) {
-                    break;
-                }
-                receivedCount++;
-                UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-                if (receivedCount > MESSAGE_COUNT / 4) {
-                    receiverBuffer->EarlyFinish();
-                    break;
-                }
-            }
-            eventR.Signal();
-        }, 0, NPar::TLocalExecutor::MED_PRIORITY);
-        eventS.WaitI();
-        eventR.WaitI();
-        UNIT_ASSERT(sentCount < MESSAGE_COUNT);
-        Cerr << sentCount << " / " << receivedCount << Endl;
-    }
-*/
-    Y_UNIT_TEST(LocalChannelAsyncRead) {
-
-        TKikimrRunner kikimr(TKikimrSettings{});
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor();
-        auto receiver = runtime.AllocateEdgeActor();
-
-        runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId()), sender, new TEvPrivate::TEvServiceLookup());
-        auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-        auto service = serviceReply->Service;
-
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-        auto senderBuffer = service->GetLocalBuffer(info, nullptr, false, nullptr);
-        auto receiverBuffer = service->GetLocalBuffer(info, nullptr, true, nullptr);
-
-        UNIT_ASSERT(receiverBuffer->IsEmpty());
-
-        runtime.RunCall([&senderBuffer] {
-            senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
-            return true;
-        });
-
-        TDataChunk data;
-        UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-    }
-
-    Y_UNIT_TEST(IcChannelTrivial) {
-
-        TVector<NKikimrKqp::TKqpSetting> kqpSettings;
-        TKikimrRunner kikimr(kqpSettings, "", KikimrDefaultUtDomainRoot, 2);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor(0);
-        auto receiver = runtime.AllocateEdgeActor(1);
-
-        std::shared_ptr<IChannelBuffer> senderBuffer;
-        std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-            auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
-        }
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
-            auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
-        }
-
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
-        senderBuffer->Push(TDataChunk(false, true));
-
-        TDataChunk data;
-
-        UNIT_ASSERT(ReadBlocked(receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-        UNIT_ASSERT(ReadBlocked(receiverBuffer, data));
-        UNIT_ASSERT(data.Finished);
-    }
-
-    Y_UNIT_TEST(IcChannelLateBinding) {
-
-        TVector<NKikimrKqp::TKqpSetting> kqpSettings;
-        TKikimrRunner kikimr(kqpSettings, "", KikimrDefaultUtDomainRoot, 2);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor(0);
-        auto receiver = runtime.AllocateEdgeActor(1);
+        auto control0 = runtime.AllocateEdgeActor(0);
+        auto control1 = local ? control0 : runtime.AllocateEdgeActor(1);
 
         std::shared_ptr<TDqChannelService> service0;
         std::shared_ptr<TDqChannelService> service1;
 
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-            service0 = serviceReply->Service;
-        }
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
+        ui32 nodeIndex0 = 0;
+        ui32 nodeIndex1 = local ? 0 : 1;
+
+        runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), control0, new TEvPrivate::TEvServiceLookup(), nodeIndex0);
+        auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(control0)->Release();
+        service0 = serviceReply->Service;
+
+        if (local) {
+            service1 = service0;
+        } else {
+            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), control1, new TEvPrivate::TEvServiceLookup(), nodeIndex1);
+            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(control1)->Release();
             service1 = serviceReply->Service;
         }
 
-        TChannelFullInfo info1(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-        TChannelFullInfo info2(2, sender, receiver, 3, 4, TCollectStatsLevel::None);
+        THashSet<NActors::TActorId> actors;
 
-        std::shared_ptr<IChannelBuffer> senderBuffer1 = service0->GetRemoteOutputBuffer(info1, nullptr, nullptr);
-        std::shared_ptr<IChannelBuffer> senderBuffer2 = service0->GetRemoteOutputBuffer(info2, nullptr, nullptr);
-        std::shared_ptr<IChannelBuffer> receiverBuffer1 = service1->GetRemoteInputBuffer(info1, nullptr);
-
-        senderBuffer2->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
-        senderBuffer1->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
-        senderBuffer2->Push(TDataChunk(false, true));
-        senderBuffer1->Push(TDataChunk(false, true));
-
-        TDataChunk data;
-
-        UNIT_ASSERT(ReadBlocked(receiverBuffer1, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-        UNIT_ASSERT(ReadBlocked(receiverBuffer1, data));
-        UNIT_ASSERT(data.Finished);
-
-        std::shared_ptr<IChannelBuffer> receiverBuffer2 = service1->GetRemoteInputBuffer(info2, nullptr);
-
-        UNIT_ASSERT(ReadBlocked(receiverBuffer2, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-        UNIT_ASSERT(ReadBlocked(receiverBuffer2, data));
-        UNIT_ASSERT(data.Finished);
-    }
-
-    Y_UNIT_TEST(IcChannelAsyncRead) {
-
-        TVector<NKikimrKqp::TKqpSetting> kqpSettings;
-        TKikimrRunner kikimr(kqpSettings, "", KikimrDefaultUtDomainRoot, 2);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor(0);
-        auto receiver = runtime.AllocateEdgeActor(1);
-
-        std::shared_ptr<IChannelBuffer> senderBuffer;
-        std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-            auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
-        }
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
-            auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
-        }
-
-        UNIT_ASSERT(receiverBuffer->IsEmpty());
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, true));
-
-        TDataChunk data;
-        UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-    }
-
-    Y_UNIT_TEST(IcChannelEarlyFinish) {
-
-        TVector<NKikimrKqp::TKqpSetting> kqpSettings;
-        TKikimrRunner kikimr(kqpSettings, "", KikimrDefaultUtDomainRoot, 2);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor(0);
-        auto receiver = runtime.AllocateEdgeActor(1);
-
-        std::shared_ptr<IChannelBuffer> senderBuffer;
-        std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-            auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
-        }
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
-            auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
-        }
-
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
-
-        TDataChunk data;
-        UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-
-        receiverBuffer->EarlyFinish();
-        auto deadline = TInstant::Now() + TDuration::Seconds(10);
-        bool earlyFinished = false;
-        while (TInstant::Now() <= deadline) {
-            if (senderBuffer->IsFinished()) {
-                earlyFinished = true;
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(10));
-        }
-        UNIT_ASSERT(earlyFinished);
-    }
-
-    Y_UNIT_TEST(IcChannelBackPressure) {
-
-        TKikimrSettings settings;
-        settings.SetNodeCount(2);
-        settings.AppConfig.MutableTableServiceConfig()->SetRemoteChannelInflightBytes(10);
-
-        TKikimrRunner kikimr(settings);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor(0);
-        auto receiver = runtime.AllocateEdgeActor(1);
-
-        std::shared_ptr<IChannelBuffer> senderBuffer;
-        std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-            auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
-        }
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
-            auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
-        }
-
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
-
-        auto aggregator = std::make_shared<TDqFillAggregator>();
-        senderBuffer->SetFillAggregator(aggregator);
-        UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::NoLimit);
-
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("ByeBye"), 1, false, true));
-        UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::HardLimit);
-
-        TDataChunk data;
-
-        UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-
-        auto deadline = TInstant::Now() + TDuration::Seconds(10);
-        bool noLimit = false;
-        while (TInstant::Now() <= deadline) {
-            if (aggregator->GetFillLevel() == EDqFillLevel::NoLimit) {
-                noLimit = true;
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(10));
-        }
-        UNIT_ASSERT(noLimit);
-
-        UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "ByeBye");
-    }
-/*
-    Y_UNIT_TEST(IcChannelSessionInflight) {
-
-        TKikimrSettings settings;
-        settings.SetNodeCount(2);
-        settings.AppConfig.MutableTableServiceConfig()->SetNodeSessionIcInflightBytes(8);
-
-        TKikimrRunner kikimr(settings);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        auto sender = runtime.AllocateEdgeActor(0);
-        auto receiver = runtime.AllocateEdgeActor(1);
-
-        std::shared_ptr<IChannelBuffer> senderBuffer;
-        std::shared_ptr<TDebugNodeState> senderState;
-        std::shared_ptr<IChannelBuffer> receiverBuffer;
-        TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-        std::shared_ptr<TDqChannelService> service0;
-        std::shared_ptr<TDqChannelService> service1;
-
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
-            auto service = serviceReply->Service;
-            senderState = service->CreateDebugNodeState(runtime.GetNodeId(1));
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr);
-        }
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
-            auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info);
-        }
-
-        auto aggregator = std::make_shared<TDqFillAggregator>();
-        senderBuffer->SetFillAggregator(aggregator);
-
-        senderState->PauseChannelAck();
-
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
-        UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::NoLimit);
-
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("ByeBye"), 1, false, false));
-        UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::NoLimit);
-
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("IamBack"), 1, false, true));
-        UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::NoLimit);
-
-        TDataChunk data;
-
-        UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
-
-        UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "ByeBye");
-
-        UNIT_ASSERT(!ReadBlocked(receiverBuffer, data));
-
-        senderState->ResumeChannelAck();
-
-        UNIT_ASSERT(ReadBlocked(receiverBuffer, data));
-        UNIT_ASSERT(data.Buffer.Front().Buf == "IamBack");
-    }
-
-    Y_UNIT_TEST(IcChannelSessionWaiters) {
-
-        constexpr ui32 SENDER_COUNT = 10;
-        constexpr ui32 MESSAGE_COUNT = 1000;
-
-        TKikimrSettings settings;
-        settings.SetNodeCount(2);
-        settings.AppConfig.MutableTableServiceConfig()->SetRemoteChannelInflightBytes(400);
-        settings.AppConfig.MutableTableServiceConfig()->SetNodeSessionIcInflightBytes(4);
-
-        TKikimrRunner kikimr(settings);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        runtime.SetLogPriority(NKikimrServices::KQP_CHANNELS, NActors::NLog::PRI_ERROR);
-
-        NActors::TActorId senders[SENDER_COUNT];
-
-        for (ui32 i = 0; i < SENDER_COUNT; i++) {
-            senders[i] = runtime.AllocateEdgeActor(0);
-        }
-
-        auto receiver = runtime.AllocateEdgeActor(1);
-
-        std::shared_ptr<TOutputBuffer> senderBuffers[SENDER_COUNT];
-        std::shared_ptr<TInputBuffer> receiverBuffers[SENDER_COUNT];
-
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
-            auto service = serviceReply->Service;
-            for (ui32 i = 0; i < SENDER_COUNT; i++) {
-                receiverBuffers[i] = service->GetRemoteInputBuffer(TChannelFullInfo(i + 1, senders[i], receiver, 1, 2, TCollectStatsLevel::None));
+        for (auto i = 0; i < count; i ++) {
+            auto channelId = i + 1;
+            if ((i & 1) == 0) {
+                auto producer = runtime.Register(new TWorkerActor(service0, TEvTestPrivate::ERole::Producer, channelId, producerSettings), nodeIndex0);
+                auto consumer = runtime.Register(new TWorkerActor(service1, TEvTestPrivate::ERole::Consumer, channelId, consumerSettings), nodeIndex1);
+                runtime.Send(consumer, control1, new TEvTestPrivate::TEvStart(producer), nodeIndex1, true);
+                runtime.Send(producer, control0, new TEvTestPrivate::TEvStart(consumer), nodeIndex0, true);
+                actors.insert(producer);
+                actors.insert(consumer);
+            } else {
+                auto producer = runtime.Register(new TWorkerActor(service1, TEvTestPrivate::ERole::Producer, channelId, producerSettings), nodeIndex1);
+                auto consumer = runtime.Register(new TWorkerActor(service0, TEvTestPrivate::ERole::Consumer, channelId, consumerSettings), nodeIndex0);
+                runtime.Send(consumer, control0, new TEvTestPrivate::TEvStart(producer), nodeIndex0, true);
+                runtime.Send(producer, control1, new TEvTestPrivate::TEvStart(consumer), nodeIndex1, true);
+                actors.insert(producer);
+                actors.insert(consumer);
             }
         }
 
-        {
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), senders[0], new TEvPrivate::TEvServiceLookup(), 0);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(senders[0])->Release();
-            auto service = serviceReply->Service;
-            for (ui32 i = 0; i < SENDER_COUNT; i++) {
-                senderBuffers[i] = service->GetRemoteOutputBuffer(TChannelFullInfo(i + 1, senders[i], receiver, 1, 2, TCollectStatsLevel::None), nullptr);
+        int finishCount[2][2] = {{0, 0}, {0, 0}};
+        int errorCount = 0;
+        try {
+            for (auto i = 0; i < count; i++) {
+                auto msg0 = runtime.GrabEdgeEvent<TEvTestPrivate::TEvFinished>(control0, TDuration::Seconds(10));
+                actors.erase(msg0->Sender);
+                finishCount[nodeIndex0][msg0->Get()->Role]++;
+                errorCount += msg0->Get()->Error;
+                auto msg1 = runtime.GrabEdgeEvent<TEvTestPrivate::TEvFinished>(control1, TDuration::Seconds(10));
+                actors.erase(msg1->Sender);
+                finishCount[nodeIndex1][msg1->Get()->Role]++;
+                errorCount += msg1->Get()->Error;
             }
-        }
-
-        for (ui32 i = 0; i < SENDER_COUNT; i++) {
-            senderBuffers[i]->SetFillAggregator(std::make_shared<TDqFillAggregator>());
-        }
-
-        TMuxEvent events[SENDER_COUNT];
-        TMuxEvent event;
-
-        auto sendLambda = [](std::shared_ptr<TOutputBuffer>& senderBuffer, TMuxEvent& event) {
-
-            for (ui32 i = 0; i < MESSAGE_COUNT; i++) {
-                while (senderBuffer->Descriptor->Aggregator->GetFillLevel() != EDqFillLevel::NoLimit) {
-                    // Sleep(TDuration::MicroSeconds(1));
+        } catch (NActors::TEmptyEventQueueException&) {
+            if (!actors.empty()) {
+                TStringBuilder builder;
+                builder << "NOT FINISHED ACTORS ";
+                for (auto actorId : actors) {
+                    builder << ' ' << actorId;
                 }
-                senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Piing"), 1, i == 0, false));
-            }
-            senderBuffer->SendFinish();
-            Cerr << TStringBuilder() << "Writer finished " << senderBuffer->Descriptor->PushBytes.load() << " bytes" << Endl;
-            event.Signal();
-        };
-
-        NPar::LocalExecutor().RunAdditionalThreads(SENDER_COUNT + 1);
-        NPar::LocalExecutor().Exec([&](int) mutable {
-            ui32 finished = 0;
-            while (true) {
-                auto received = false;
-                TDataChunk data;
-
-                for (ui32 i = 0; i < SENDER_COUNT; i++) {
-                    if (runtime.RunCall([&receiverBuffers, &data, i=i] { return receiverBuffers[i]->Pop(data); })) {
-                        received = true;
-                        if (data.Finished) {
-                            finished++;
-                        }
-                    }
-                }
-
-                if (finished == 4) {
-                    break;
-                }
-
-                if (!received) {
-                    // Sleep(TDuration::MicroSeconds(2));
-                }
-            }
-            Cerr << TStringBuilder() << "Reader finished {";
-            for (ui32 i = 0; i < SENDER_COUNT; i++) {
-                if (i) {
-                    Cerr << ", ";
-                }
-                Cerr << receiverBuffers[i]->Descriptor->PopBytes.load();
-            }
-            Cerr << "} bytes" << Endl;
-            event.Signal();
-        }, 0, NPar::TLocalExecutor::MED_PRIORITY);
-
-        for (ui32 i = 0; i < SENDER_COUNT; i++) {
-            NPar::LocalExecutor().Exec([&](int index) mutable { sendLambda(senderBuffers[index], events[index]); }, i, NPar::TLocalExecutor::MED_PRIORITY);
-        }
-
-        for (ui32 i = 0; i < SENDER_COUNT; i++) {
-            events[i].WaitI();
-        }
-        event.WaitI();
-    }
-*/
-    Y_UNIT_TEST(CaIntegrationTrivial) {
-
-        TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(1);
-        TKikimrRunner kikimr(settings);
-
-        auto client = kikimr.GetQueryClient();
-
-        auto result = client.ExecuteQuery(R"(
-            PRAGMA ydb.DqChannelVersion = "2";
-            SELECT 1;
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson("[[1]]", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST(CaIntegrationAgg) {
-
-        TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(1);
-        TKikimrRunner kikimr(settings);
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        {
-            const TString query = R"(
-                CREATE TABLE `/Root/Table1` (
-                    k1 Uint32 NOT NULL,
-                    PRIMARY KEY (k1)
-                )
-                PARTITION BY HASH (k1)
-                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto result = session.ExecuteDataQuery(R"(
-            UPSERT INTO `/Root/Table1` (k1) VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            TString query = R"(
-                PRAGMA ydb.DqChannelVersion = "2";
-                SELECT SUM(k1) FROM `/Root/Table1`
-            )";
-
-            NYdb::NTable::TExecDataQuerySettings settings;
-            settings.CollectQueryStats(ECollectQueryStatsMode::Full);
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).GetValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([[[55u]]])");
-        }
-    }
-
-    Y_UNIT_TEST(CaIntegrationIc) {
-
-        TKikimrSettings settings;
-        settings.SetNodeCount(4);
-        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(1);
-
-        TKikimrRunner kikimr(settings);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_ERROR);
-
-        std::shared_ptr<TDqChannelService> services[4];
-        for (auto i = 0u; i < 4; i++) {
-            auto edgeActor = runtime.AllocateEdgeActor(i);
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(i)), edgeActor, new TEvPrivate::TEvServiceLookup(), i);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(edgeActor)->Release();
-            services[i] = serviceReply->Service;
-        }
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        {
-            const TString query = R"(
-                CREATE TABLE `/Root/Table1` (
-                    k1 Uint32 NOT NULL,
-                    PRIMARY KEY (k1)
-                )
-                PARTITION BY HASH (k1)
-                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto result = session.ExecuteDataQuery(R"(
-            UPSERT INTO `/Root/Table1` (k1) VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto client = kikimr.GetQueryClient();
-
-        auto future = client.ExecuteQuery(R"(
-            PRAGMA ydb.DqChannelVersion = "2";
-            SELECT SUM(k1) FROM `/Root/Table1`;
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx());
-
-        while (!future.HasValue()) {
-            // for (auto i = 0u; i < 4; i++) {
-            //     Cerr << Endl << services[i]->GetDebugInfo() << Endl;
-            // }
-            Sleep(TDuration::Seconds(1));
-        }
-
-        auto result = future.GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson("[[[55u]]]", FormatResultSetYson(result.GetResultSet(0)));
-    }
-/*
-    Y_UNIT_TEST(CaIntegrationDataLoss) {
-
-        TKikimrSettings settings;
-        settings.SetNodeCount(4);
-        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableFastChannels(false);
-
-        TKikimrRunner kikimr(settings);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_ERROR);
-        runtime.SetLogPriority(NKikimrServices::KQP_CHANNELS, NActors::NLog::PRI_DEBUG);
-
-        std::shared_ptr<TDqChannelService> services[4];
-        for (auto i = 0u; i < 4; i++) {
-            auto edgeActor = runtime.AllocateEdgeActor(i);
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(i)), edgeActor, new TEvPrivate::TEvServiceLookup(), i);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(edgeActor)->Release();
-            services[i] = serviceReply->Service;
-        }
-
-        for (auto i = 0u; i < 4; i++) {
-            for (auto j = 0u; j < 4; j++) {
-                if (i != j) {
-                    services[i]->CreateDebugNodeState(runtime.GetNodeId(j))->SetLossProbability(0.1, 100, 0, 0);
-                }
+                UNIT_ASSERT_C(false, builder);
             }
         }
 
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        {
-            const TString query = R"(
-                CREATE TABLE `/Root/Table1` (
-                    k1 Uint32 NOT NULL,
-                    PRIMARY KEY (k1)
-                )
-                PARTITION BY HASH (k1)
-                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        if (local) {
+            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Producer], count);
+            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Consumer], count);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Producer], (count + 1) / 2);
+            UNIT_ASSERT_VALUES_EQUAL(finishCount[0][TEvTestPrivate::ERole::Consumer], count / 2);
+            UNIT_ASSERT_VALUES_EQUAL(finishCount[1][TEvTestPrivate::ERole::Producer], count / 2);
+            UNIT_ASSERT_VALUES_EQUAL(finishCount[1][TEvTestPrivate::ERole::Consumer], (count + 1) / 2);
         }
-        {
-            auto result = session.ExecuteDataQuery(R"(
-            UPSERT INTO `/Root/Table1` (k1) VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto client = kikimr.GetQueryClient();
-
-        auto future = client.ExecuteQuery(R"(
-            PRAGMA ydb.UseFastChannels = "true";
-            SELECT SUM(k1) FROM `/Root/Table1`;
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx());
-
-        while (!future.HasValue()) {
-            // for (auto i = 0u; i < 4; i++) {
-            //     Cerr << Endl << services[i]->GetDebugInfo() << Endl;
-            // }
-            Sleep(TDuration::Seconds(1));
-        }
-
-        auto result = future.GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson("[[[55u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        UNIT_ASSERT_VALUES_EQUAL(errorCount, 0);
     }
 
-    Y_UNIT_TEST(CaIntegrationAckLoss) {
-
-        TKikimrSettings settings;
-        settings.SetNodeCount(4);
-        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableFastChannels(false);
-
-        TKikimrRunner kikimr(settings);
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_ERROR);
-
-        std::shared_ptr<TDqChannelService> services[4];
-        for (auto i = 0u; i < 4; i++) {
-            auto edgeActor = runtime.AllocateEdgeActor(i);
-            runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(i)), edgeActor, new TEvPrivate::TEvServiceLookup(), i);
-            auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(edgeActor)->Release();
-            services[i] = serviceReply->Service;
-        }
-
-        for (auto i = 0u; i < 4; i++) {
-            for (auto j = 0u; j < 4; j++) {
-                if (i != j) {
-                    services[i]->CreateDebugNodeState(runtime.GetNodeId(j))->SetLossProbability(0.0, 0, 0.1, 100);
-                }
-            }
-        }
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        {
-            const TString query = R"(
-                CREATE TABLE `/Root/Table1` (
-                    k1 Uint32 NOT NULL,
-                    PRIMARY KEY (k1)
-                )
-                PARTITION BY HASH (k1)
-                WITH (STORE = COLUMN, PARTITION_COUNT = 4);
-            )";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto result = session.ExecuteDataQuery(R"(
-            UPSERT INTO `/Root/Table1` (k1) VALUES (0), (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        auto client = kikimr.GetQueryClient();
-
-        auto future = client.ExecuteQuery(R"(
-            PRAGMA ydb.UseFastChannels = "true";
-            SELECT SUM(k1) FROM `/Root/Table1`;
-        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx());
-
-        while (!future.HasValue()) {
-            // for (auto i = 0u; i < 4; i++) {
-            //     Cerr << Endl << services[i]->GetDebugInfo() << Endl;
-            // }
-            Sleep(TDuration::Seconds(1));
-        }
-
-        auto result = future.GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson("[[[55u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    void LoadTest(int count, bool local, const TWorkerSettings& settings = TWorkerSettings{}) {
+        LoadTest(count, local, settings, settings);
     }
-*/
+
+    Y_UNIT_TEST(EmptyFinish2n) {
+        LoadTest(100, false);
+    }
+
+    Y_UNIT_TEST(SimpleFinish2n) {
+        LoadTest(100, false, TWorkerSettings{ .MessageCount = 100 });
+    }
+
+    Y_UNIT_TEST(EarlyFinish2n) {
+        LoadTest(100, false, TWorkerSettings{ .MessageCount = 100 }, TWorkerSettings{ .MessageCount = 50, .EarlyFinish = true });
+    }
+
+    Y_UNIT_TEST(InstantFinish2n) {
+        LoadTest(100, false, TWorkerSettings{ .MessageCount = 10 }, TWorkerSettings{ .MessageCount = 0, .EarlyFinish = true });
+    }
+
+    Y_UNIT_TEST(EmptyFinish1n) {
+        LoadTest(100, true);
+    }
+
+    Y_UNIT_TEST(SimpleFinish1n) {
+        LoadTest(100, true, TWorkerSettings{ .MessageCount = 100 });
+    }
+
+    Y_UNIT_TEST(EarlyFinish1n) {
+        LoadTest(100, true, TWorkerSettings{ .MessageCount = 100 }, TWorkerSettings{ .MessageCount = 50, .EarlyFinish = true });
+    }
+
+    Y_UNIT_TEST(InstantFinish1n) {
+        LoadTest(100, true, TWorkerSettings{ .MessageCount = 10 }, TWorkerSettings{ .MessageCount = 0, .EarlyFinish = true });
+    }
 }

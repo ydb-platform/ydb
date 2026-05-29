@@ -1,6 +1,7 @@
 #include "agent_impl.h"
 
-#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -16,8 +17,12 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
-            S3WrapperId = Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));
+            // Fire-and-forget acquire: NodeWarden registers the per-node router under its
+            // well-known service id before any later event we send can be processed, so
+            // we can use the service id immediately.
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                new NStorage::TEvNodeWardenAcquireBlobDepotS3Router(TabletId, *S3BackendSettings));
+            S3WrapperId = MakeBlobDepotS3RouterID(TabletId);
             S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
         }
     }

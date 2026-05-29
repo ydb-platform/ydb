@@ -5,6 +5,7 @@
 #include "match_recognize.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/charset/ci_string.h>
@@ -181,12 +182,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (IsInlineScalar_ &&
-            !ctx.EnsureBackwardCompatibleFeatureAvailable(
-                Source_->GetPos(),
-                "Inline subquery",
-                MakeLangVersion(2025, 04)))
-        {
+        if (IsInlineScalar_ && !ctx.EnsureAvailable(Source_->GetPos(), NYql::NFeature::InlineSubquery)) {
             return false;
         }
 

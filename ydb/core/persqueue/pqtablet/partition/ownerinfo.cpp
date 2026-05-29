@@ -20,7 +20,7 @@ namespace NPQ {
         if (Sender) {
             THolder<TEvPersQueue::TEvResponse> response = MakeHolder<TEvPersQueue::TEvResponse>();
             response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
-            response->Record.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+            response->Record.SetErrorCode(NPersQueue::NErrorCode::WRONG_COOKIE);
             response->Record.SetErrorReason(TStringBuilder() << "ownership session is killed by another session with id " << OwnerCookie
                                                              << " partition id " << partition.OriginalPartitionId);
             ctx.Send(Sender, response.Release());

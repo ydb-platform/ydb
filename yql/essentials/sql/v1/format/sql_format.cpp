@@ -1873,6 +1873,10 @@ private:
             }
         }
 
+        if (ForcedTokenStr_.Defined()) {
+            str = *std::exchange(ForcedTokenStr_, Nothing());
+        }
+
         Out(str);
 
         if (TokenIndex_ + 1 >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_ + 1].Line > LastLine_) {
@@ -2798,6 +2802,11 @@ private:
         Visit(msg.GetToken6());
     }
 
+    void VisitTypeNameNull(const TRule_type_name_null& msg) {
+        ForcedTokenStr_ = msg.GetToken1().GetValue();
+        Visit(msg.GetToken1());
+    }
+
     void VisitExtOrderByClause(const TRule_ext_order_by_clause& msg) {
         if (msg.HasBlock1()) {
             Visit(msg.GetBlock1());
@@ -3176,6 +3185,7 @@ private:
     TMarkTokenStack MarkTokenStack_;
     TVector<TTokenInfo> MarkedTokens_;
     ui64 InsideExpr_ = 0;
+    TMaybe<TString> ForcedTokenStr_;
 };
 
 template <typename T>
@@ -3245,6 +3255,7 @@ TStaticData::TStaticData()
           {TRule_select_kind_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindParenthesis)},
           {TRule_cast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCastExpr)},
           {TRule_bitcast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitCastExpr)},
+          {TRule_type_name_null::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTypeNameNull)},
           {TRule_ext_order_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExtOrderByClause)},
           {TRule_key_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitKeyExpr)},
           {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},

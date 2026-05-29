@@ -123,6 +123,6 @@ private:
 TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnnotationContext& typeCtx);
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
-                              ui64& uniqueSourceIdCounter, bool pgSyntax = false, bool generateRoot = false);
+                              ui64& uniqueSourceIdCounter, bool generateRoot = false);
 
 } // namespace NKikimr::NKqp

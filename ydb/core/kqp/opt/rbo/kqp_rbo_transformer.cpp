@@ -42,7 +42,6 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx,
                 .Count(take.Count())
             .Build()
             .ColumnOrder(root.Cast().ColumnOrder())
-            .PgSyntax(root.Cast().PgSyntax())
         .Done().Ptr();
         // clang-format on
     } else {
@@ -51,7 +50,7 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx,
 }
 
 void CollectTopLevelSelects(TExprNode::TPtr input, THashSet<TExprNode*>& topLevelSelects) {
-    if (input->IsCallable("YqlSelect") || input->IsCallable("PgSelect")) {
+    if (input->IsCallable("YqlSelect")) {
         topLevelSelects.insert(input.Get());
         return;
     }
@@ -73,14 +72,10 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
     auto status = OptimizeExpr(
         output, output,
         [this, &topLevelSelects](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
-            // PostgreSQL AST rewrtiting
-            if (TCoPgSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter,  true, true);
-            }
             
             // YQL AST rewriting
-            else if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, false, true);
+            if (TCoYqlSelect::Match(node.Get()) && topLevelSelects.contains(node.Get())) {
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, true);
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else {

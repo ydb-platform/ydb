@@ -2162,8 +2162,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
-        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
+        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_2) {
+        RunTPC_YqlTest(EBenchType::TPCH, 2, true, true);
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_7) {
+        RunTPC_YqlTest(EBenchType::TPCH, 7, true, true);
     }
 
     Y_UNIT_TEST(TPCH_YQL_11) {

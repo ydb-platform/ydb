@@ -993,13 +993,21 @@
             ]
         },
         {
+            "Name": "TKqpOpReplaceAlias",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpReplaceAlias"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Alias", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpOpRoot",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "PgSyntax", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -1041,25 +1049,17 @@
             "Match" : {"Type": "Callable", "Name": "KqpExprSublink"}
         },
         {
-            "Name": "TKqpBooleanSublink",
-            "Base": "TKqpSublinkBase",
-            "Match" : {"Type": "CallableBase"},
-            "Children" : [
-                {"Index": 1, "Name": "ReturnPgBool", "Type": "TCoAtom"}
-            ]
-        },
-        {
             "Name": "TKqpExistsSublink",
-            "Base": "TKqpBooleanSublink",
+            "Base": "TKqpSublinkBase",
             "Match" : {"Type": "Callable", "Name": "KqpExistsSublink"}
         },
         {
             "Name": "TKqpInSublink",
-            "Base": "TKqpBooleanSublink",
+            "Base": "TKqpSublinkBase",
             "Match" : {"Type": "Callable", "Name": "KqpInSublink"},
             "Children" : [
-                {"Index": 2, "Name": "OuterType", "Type": "TExprBase"},
-                {"Index": 3, "Name": "InLambda", "Type": "TExprBase"}
+                {"Index": 1, "Name": "OuterType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "InLambda", "Type": "TExprBase"}
             ]
         },
         {

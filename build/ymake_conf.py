@@ -1506,6 +1506,8 @@ class GnuCompiler(Compiler):
             '-fdata-sections'
         ]
 
+        self.cxx_foptions = []
+
         if self.target.is_arm or self.target.is_powerpc:
             self.c_foptions += [
                 # On linux, ARM and PPC default to unsigned char
@@ -1527,7 +1529,7 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-fexceptions')
 
         if is_positive('NO_CXX_RTTI'):
-            self.c_foptions.append('-fno-rtti')
+            self.cxx_foptions.append('-fno-rtti')
         else:
             # RTTI is enabled by default
             pass
@@ -1690,6 +1692,7 @@ class GnuCompiler(Compiler):
         emit('_DEBUG_INFO_FLAGS', self.debug_info_flags)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
+        emit('_CXX_FOPTIONS', self.cxx_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
